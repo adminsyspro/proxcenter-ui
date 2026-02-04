@@ -42,6 +42,10 @@ Real-time monitoring with health scores, top consumers, and multi-cluster overvi
   <img src="docs/screenshots/inventory.png" alt="Inventory" width="100%">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/inventory-detail.png" alt="Inventory Detail" width="100%">
+</p>
+
 ---
 
 ### 📈 Resource Trends & AI Insights
@@ -56,6 +60,10 @@ Comprehensive resource analysis with historical trends and AI-powered prediction
 
 <p align="center">
   <img src="docs/screenshots/ressources.png" alt="Resource Trends" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/green-it.png" alt="Green IT" width="100%">
 </p>
 
 ---
@@ -88,6 +96,10 @@ Orchestrated node updates with zero-downtime VM migrations.
   <img src="docs/screenshots/rolling-updates.png" alt="Rolling Updates" width="100%">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/rolling-updates-2.png" alt="Rolling Updates Progress" width="100%">
+</p>
+
 ---
 
 ### 🔀 Cross-Cluster Migration
@@ -118,6 +130,10 @@ Centralized firewall management with Zero Trust security model.
   <img src="docs/screenshots/firewall.png" alt="Firewall" width="100%">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/firewall-detail.png" alt="Firewall Rules Detail" width="100%">
+</p>
+
 ---
 
 ### 💾 Backup Monitoring (PBS)
@@ -131,6 +147,10 @@ Monitor and manage Proxmox Backup Server datastores.
 
 <p align="center">
   <img src="docs/screenshots/backup.png" alt="Backup" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/backup-detail.png" alt="Backup Detail" width="100%">
 </p>
 
 ---
@@ -151,6 +171,10 @@ Monitor and manage Ceph distributed storage clusters.
 
 <p align="center">
   <img src="docs/screenshots/ceph-2.png" alt="Ceph Pools" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ceph-3.png" alt="Ceph OSD" width="100%">
 </p>
 
 ---
@@ -186,6 +210,7 @@ Generate professional PDF reports with AI-powered insights.
 
 <p align="center">
   <img src="docs/screenshots/report.png" alt="Report" width="50%">
+  <img src="docs/screenshots/report-detail.png" alt="Report Content" width="50%">
 </p>
 
 ---

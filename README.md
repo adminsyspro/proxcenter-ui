@@ -9,10 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/ProxCenter-Enterprise-orange" alt="ProxCenter Enterprise">
   <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go" alt="Go">
   <img src="https://img.shields.io/badge/Next.js-16+-black?logo=next.js" alt="Next.js">
-  <img src="https://img.shields.io/badge/Proxmox-7.x%20%7C%208.x-E57000" alt="Proxmox">
+  <img src="https://img.shields.io/badge/Proxmox-7.x%20%7C%208.x%20%7C%209.x-E57000" alt="Proxmox">
 </p>
 
 ---
@@ -274,7 +273,7 @@ proxcenter/
 - SQLite3
 
 ### Runtime
-- Proxmox VE 7.0+ or 8.0+
+- Proxmox VE 7.x, 8.x or 9.x
 - Network access to Proxmox API (port 8006)
 
 ## Quick Start

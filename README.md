@@ -234,7 +234,11 @@ Multiple themes and appearance options.
 LDAP and Active Directory integration for enterprise environments.
 
 <p align="center">
-  <img src="docs/screenshots/ldap.png" alt="LDAP" width="100%">
+  <img src="docs/screenshots/login.png" alt="Login" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ldap.png" alt="LDAP Configuration" width="100%">
 </p>
 
 ---

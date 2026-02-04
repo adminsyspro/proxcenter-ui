@@ -1,0 +1,65 @@
+# Binaries
+orchestrator
+license-gen
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/bin/
+/dist/
+/build/
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.html
+
+# Dependency directories
+/vendor/
+
+# Go workspace file
+go.work
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Config with secrets (keep config.yaml.example)
+config.yaml
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+/data/
+
+# Logs
+*.log
+/logs/
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Docker
+docker-compose.override.yml
+
+# Claude artifacts
+.claude/

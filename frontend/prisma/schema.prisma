@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Connection {
+  id          String  @id @default(cuid())
+  name        String
+  type        String  @default("pve")
+  baseUrl     String
+  uiUrl       String?
+  insecureTLS Boolean @default(false)
+  hasCeph     Boolean @default(false)
+  apiTokenEnc String
+  
+  // SSH fields
+  sshEnabled    Boolean @default(false)
+  sshPort       Int     @default(22)
+  sshUser       String  @default("root")
+  sshAuthMethod String?
+  sshKeyEnc     String?
+  sshPassEnc    String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  hosts ManagedHost[]
+  
+  // PAS de @@map ici !
+}
+
+model ManagedHost {
+  id           String      @id @default(cuid())
+  connectionId String?
+  connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  
+  node        String
+  displayName String?
+  enabled     Boolean @default(true)
+  notes       String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([connectionId, node])
+}
+
+model DashboardLayout {
+  id        String   @id @default(cuid())
+  userId    String   @default("default")  // Pour multi-user futur
+  name      String   @default("custom")
+  widgets   String   // JSON array des widgets
+  isActive  Boolean  @default(true)       // Layout actuellement utilisé
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([userId, name])
+}
+
+model Alert {
+  id              String    @id @default(cuid())
+  fingerprint     String    @unique              // Hash unique pour dédupliquer
+  
+  // Infos alerte
+  severity        String                         // crit, warn, info
+  message         String
+  source          String                         // Nom de la connexion/cluster
+  sourceType      String    @default("pve")      // pve, pbs, ceph
+  
+  // Entité concernée
+  entityType      String?                        // node, vm, lxc, storage, datastore
+  entityId        String?                        // ID de l'entité
+  entityName      String?                        // Nom lisible
+  
+  // Métrique
+  metric          String?                        // cpu, ram, storage, health
+  currentValue    Float?                         // Valeur actuelle
+  threshold       Float?                         // Seuil déclenché
+  
+  // Statut
+  status          String    @default("active")   // active, acknowledged, resolved
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+  resolvedAt      DateTime?
+  
+  // Timestamps
+  firstSeenAt     DateTime  @default(now())      // Première occurrence
+  lastSeenAt      DateTime  @default(now())      // Dernière occurrence
+  occurrences     Int       @default(1)          // Nombre de fois vue
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([status])
+  @@index([severity])
+  @@index([source])
+  @@index([lastSeenAt])
+}

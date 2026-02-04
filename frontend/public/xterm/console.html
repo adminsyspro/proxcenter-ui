@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console Terminal</title>
+  <!-- xterm.js CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { 
+      width: 100%; 
+      height: 100%; 
+      overflow: hidden; 
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    #toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px; background: #111; border-bottom: 1px solid #333; flex-shrink: 0;
+    }
+    #toolbar .info { display: flex; align-items: center; gap: 12px; }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+    #status-dot.connected { background: #22c55e; }
+    #status-dot.connecting { background: #f59e0b; }
+    #status-dot.error { background: #ef4444; }
+    #vm-info { color: #fff; font-size: 14px; font-weight: 600; }
+    #console-type { 
+      background: #22c55e; color: #fff; padding: 2px 8px; 
+      border-radius: 4px; font-size: 11px; font-weight: 600; 
+    }
+    #status-text { color: #666; font-size: 12px; }
+    #toolbar .buttons { display: flex; gap: 8px; }
+    button {
+      padding: 6px 12px; font-size: 12px; background: #333; color: #fff;
+      border: 1px solid #444; border-radius: 4px; cursor: pointer;
+    }
+    button:hover { background: #444; }
+    button:disabled { background: #222; color: #666; cursor: not-allowed; }
+    #error-bar {
+      padding: 12px 16px; background: #7f1d1d; color: #fecaca; font-size: 13px; display: none;
+    }
+    #error-bar.visible { display: block; }
+    #terminal-container { 
+      flex: 1; 
+      width: 100%; 
+      background: #000; 
+      position: relative;
+      padding: 4px;
+    }
+    #terminal-container .xterm {
+      height: 100%;
+    }
+    #loading {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: #666;
+    }
+    #loading .icon { font-size: 48px; margin-bottom: 16px; }
+    #loading .text { font-size: 14px; }
+    #loading .subtext { font-size: 12px; margin-top: 8px; color: #555; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="toolbar">
+      <div class="info">
+        <span id="status-dot"></span>
+        <span id="console-type">xterm.js</span>
+        <span id="vm-info">Console</span>
+        <span id="status-text">• Initialisation...</span>
+      </div>
+      <div class="buttons">
+        <button id="btn-switch" title="Basculer vers noVNC">🖥️ noVNC</button>
+        <button id="btn-reconnect">Reconnecter</button>
+        <button id="btn-close">Fermer</button>
+      </div>
+    </div>
+    <div id="error-bar"></div>
+    <div id="terminal-container">
+      <div id="loading">
+        <div class="icon">💻</div>
+        <div class="text" id="loading-text">Chargement...</div>
+        <div class="subtext" id="loading-subtext"></div>
+      </div>
+      <div id="terminal"></div>
+    </div>
+  </div>
+
+  <!-- xterm.js -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+  
+  <script>
+    const statusDot = document.getElementById('status-dot');
+    const vmInfo = document.getElementById('vm-info');
+    const statusText = document.getElementById('status-text');
+    const errorBar = document.getElementById('error-bar');
+    const terminalContainer = document.getElementById('terminal-container');
+    const terminalDiv = document.getElementById('terminal');
+    const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loading-text');
+    const loadingSubtext = document.getElementById('loading-subtext');
+    const btnSwitch = document.getElementById('btn-switch');
+    const btnReconnect = document.getElementById('btn-reconnect');
+    const btnClose = document.getElementById('btn-close');
+    
+    const params = new URLSearchParams(window.location.search);
+    const connId = params.get('connId') || '1';
+    const type = params.get('type');
+    const node = params.get('node');
+    const vmid = params.get('vmid');
+    
+    let terminal = null;
+    let fitAddon = null;
+    let socket = null;
+    
+    document.title = `Terminal - ${type?.toUpperCase()} ${vmid} - ${node}`;
+    vmInfo.textContent = `${type?.toUpperCase()} ${vmid} • ${node}`;
+    
+    function setStatus(status, text) {
+      statusDot.className = status;
+      statusText.textContent = `• ${text}`;
+    }
+    
+    function showError(msg) {
+      errorBar.textContent = msg;
+      errorBar.classList.add('visible');
+    }
+    
+    function hideError() {
+      errorBar.classList.remove('visible');
+    }
+    
+    function initTerminal() {
+      terminal = new Terminal({
+        cursorBlink: true,
+        cursorStyle: 'block',
+        fontSize: 14,
+        fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
+        theme: {
+          background: '#0c0c0c',
+          foreground: '#cccccc',
+          cursor: '#ffffff',
+          cursorAccent: '#000000',
+          selectionBackground: '#264f78',
+          black: '#0c0c0c',
+          red: '#c50f1f',
+          green: '#13a10e',
+          yellow: '#c19c00',
+          blue: '#0037da',
+          magenta: '#881798',
+          cyan: '#3a96dd',
+          white: '#cccccc',
+          brightBlack: '#767676',
+          brightRed: '#e74856',
+          brightGreen: '#16c60c',
+          brightYellow: '#f9f1a5',
+          brightBlue: '#3b78ff',
+          brightMagenta: '#b4009e',
+          brightCyan: '#61d6d6',
+          brightWhite: '#f2f2f2'
+        },
+        allowProposedApi: true,
+        scrollback: 10000,
+      });
+      
+      fitAddon = new FitAddon.FitAddon();
+      terminal.loadAddon(fitAddon);
+      
+      const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+      terminal.loadAddon(webLinksAddon);
+      
+      terminal.open(terminalDiv);
+      fitAddon.fit();
+      
+      // Resize handler
+      window.addEventListener('resize', () => {
+        if (fitAddon) {
+          fitAddon.fit();
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            const dims = { cols: terminal.cols, rows: terminal.rows };
+            // Envoyer la taille au serveur (format Proxmox)
+            socket.send('1:' + dims.cols + ':' + dims.rows + ':');
+          }
+        }
+      });
+      
+      return terminal;
+    }
+    
+    async function connect() {
+      if (!type || !node || !vmid) {
+        showError('Paramètres manquants');
+        setStatus('error', 'Erreur');
+        return;
+      }
+      
+      hideError();
+      setStatus('connecting', 'Connexion...');
+      loading.style.display = 'block';
+      loadingText.textContent = 'Création de la session...';
+      loadingSubtext.textContent = '';
+      
+      try {
+        // Appeler l'API avec ?console=xterm
+        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/console?console=xterm`;
+        console.log('API call:', apiUrl);
+        
+        const res = await fetch(apiUrl, { method: 'POST' });
+        console.log('API status:', res.status);
+        
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+        
+        const json = await res.json();
+        console.log('API response:', json);
+        
+        const { wsUrl, password } = json?.data || {};
+        if (!wsUrl) throw new Error('Session invalide');
+        
+        loadingText.textContent = 'Connexion au terminal...';
+        
+        // Initialiser le terminal
+        if (!terminal) {
+          initTerminal();
+        }
+        
+        // Connexion WebSocket
+        const wsFullUrl = `ws://${window.location.hostname}:3001${wsUrl}`;
+        console.log('WebSocket URL:', wsFullUrl);
+        
+        socket = new WebSocket(wsFullUrl, 'binary');
+        
+        socket.onopen = () => {
+          console.log('WebSocket connected');
+          loading.style.display = 'none';
+          setStatus('connected', 'Connecté');
+          terminal.focus();
+          
+          // Envoyer les dimensions initiales
+          setTimeout(() => {
+            fitAddon.fit();
+            const dims = { cols: terminal.cols, rows: terminal.rows };
+            socket.send('1:' + dims.cols + ':' + dims.rows + ':');
+          }, 100);
+        };
+        
+        socket.onmessage = (event) => {
+          // Les données de Proxmox termproxy sont en format texte
+          if (typeof event.data === 'string') {
+            terminal.write(event.data);
+          } else if (event.data instanceof Blob) {
+            event.data.text().then(text => {
+              terminal.write(text);
+            });
+          } else if (event.data instanceof ArrayBuffer) {
+            const decoder = new TextDecoder();
+            terminal.write(decoder.decode(event.data));
+          }
+        };
+        
+        socket.onclose = (event) => {
+          console.log('WebSocket closed:', event.code, event.reason);
+          setStatus('', 'Déconnecté');
+          loading.style.display = 'block';
+          loadingText.textContent = 'Déconnecté';
+          loadingSubtext.textContent = 'Cliquez sur Reconnecter';
+        };
+        
+        socket.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          showError('Erreur de connexion WebSocket');
+          setStatus('error', 'Erreur');
+        };
+        
+        // Envoyer les entrées clavier au serveur
+        terminal.onData((data) => {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            // Format Proxmox: 0:data_length:data
+            socket.send('0:' + data.length + ':' + data);
+          }
+        });
+        
+      } catch (err) {
+        console.error('Error:', err);
+        showError(err.message);
+        setStatus('error', 'Erreur');
+        loadingText.textContent = 'Erreur';
+        loadingSubtext.textContent = err.message;
+      }
+    }
+    
+    // Basculer vers noVNC
+    btnSwitch.addEventListener('click', () => {
+      const novncUrl = `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`;
+      window.location.href = novncUrl;
+    });
+    
+    btnReconnect.addEventListener('click', () => {
+      if (socket) {
+        socket.close();
+      }
+      if (terminal) {
+        terminal.clear();
+      }
+      connect();
+    });
+    
+    btnClose.addEventListener('click', () => window.close());
+    
+    // Démarrer
+    connect();
+  </script>
+</body>
+</html>

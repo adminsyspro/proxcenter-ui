@@ -1,0 +1,33 @@
+{
+  "updates": {
+    "rollingUpdate": "Mise à jour progressive",
+    "rollingUpdateDescription": "Le Rolling Update permet de mettre à jour les nœuds Proxmox de manière séquentielle, en migrant automatiquement les VMs avant chaque mise à jour pour éviter toute interruption de service.",
+    "refresh": "Actualiser",
+    "nodesStatus": "Statut des nœuds",
+    "node": "Nœud",
+    "version": "Version",
+    "vms": "VMs",
+    "availableUpdates": "Mises à jour disponibles",
+    "estimatedTime": "Temps estimé",
+    "status": "Statut",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "rebootRequired": "Redémarrage requis",
+    "rebootsRequired": "{count} redémarrage(s) requis",
+    "rebootRequiredKernel": "Une mise à jour du kernel nécessite un redémarrage",
+    "summaryUpdates": "{count} mise(s) à jour disponible(s) sur {nodes} nœud(s)",
+    "totalEstimatedTime": "Temps total estimé",
+    "updatesOn": "Mises à jour sur {node}",
+    "packagesToUpdate": "paquets à mettre à jour",
+    "package": "Paquet",
+    "currentVersion": "Version actuelle",
+    "newVersion": "Nouvelle version",
+    "upToDate": "Tous les nœuds sont à jour",
+    "close": "Fermer",
+    "localVmsOn": "VMs avec stockage local sur {node}",
+    "localVmsBlocking": "{count} VM(s) avec stockage local bloquant la migration",
+    "localVmsWithReplication": "{count} VM(s) avec réplication peuvent être migrées",
+    "localVmsBlockingMigration": "Ces VMs empêchent la mise à jour automatique car elles ont un stockage local",
+    "startRollingUpdate": "Démarrer le Rolling Update"
+  }
+}

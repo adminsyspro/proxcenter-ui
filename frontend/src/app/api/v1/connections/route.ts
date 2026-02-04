@@ -1,0 +1,222 @@
+// src/app/api/v1/connections/route.ts
+import { NextResponse } from "next/server"
+
+import { prisma } from "@/lib/db/prisma"
+import { encryptSecret } from "@/lib/crypto/secret"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+
+export const runtime = "nodejs"
+
+// Liste des connexions (sans jamais renvoyer le token ni les secrets SSH)
+// ?type=pve|pbs pour filtrer par type
+// ?hasCeph=true pour filtrer les connexions avec Ceph
+export async function GET(req: Request) {
+  try {
+    // RBAC: Check connection.view permission
+    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
+    if (denied) return denied
+
+    const url = new URL(req.url)
+    const typeFilter = url.searchParams.get('type') // 'pve' | 'pbs' | null
+    const hasCephFilter = url.searchParams.get('hasCeph') // 'true' | null
+
+    const where: any = {}
+
+    if (typeFilter) where.type = typeFilter
+    if (hasCephFilter === 'true') where.hasCeph = true
+
+    const connections = await prisma.connection.findMany({
+      where: Object.keys(where).length > 0 ? where : undefined,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        baseUrl: true,
+        uiUrl: true,
+        insecureTLS: true,
+        hasCeph: true,
+        // SSH fields (sans les secrets)
+        sshEnabled: true,
+        sshPort: true,
+        sshUser: true,
+        sshAuthMethod: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    // Ajouter un indicateur si SSH est configuré (clé ou mot de passe présent)
+    const connectionsWithSSHStatus = await Promise.all(
+      connections.map(async (conn) => {
+        // Vérifier si des credentials SSH sont configurés
+        const fullConn = await prisma.connection.findUnique({
+          where: { id: conn.id },
+          select: { sshKeyEnc: true, sshPassEnc: true }
+        })
+        
+        return {
+          ...conn,
+          sshConfigured: !!(fullConn?.sshKeyEnc || fullConn?.sshPassEnc)
+        }
+      })
+    )
+
+    return NextResponse.json({ data: connectionsWithSSHStatus })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}
+
+// Création d'une connexion
+export async function POST(req: Request) {
+  try {
+    // RBAC: Check connection.manage permission
+    const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE)
+
+    if (denied) return denied
+
+    const body = await req.json().catch(() => null)
+
+    if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+
+    const name = String(body.name ?? "").trim()
+    const type = String(body.type ?? "pve").trim() // 'pve' ou 'pbs', défaut 'pve'
+    const baseUrl = String(body.baseUrl ?? "").trim()
+    const uiUrl = body.uiUrl ? String(body.uiUrl).trim() : null
+    const insecureTLS = !!body.insecureTLS
+    const hasCeph = !!body.hasCeph
+    const apiToken = String(body.apiToken ?? "").trim()
+
+    // SSH fields
+    const sshEnabled = !!body.sshEnabled
+    const sshPort = body.sshPort ? parseInt(String(body.sshPort), 10) : 22
+    const sshUser = body.sshUser ? String(body.sshUser).trim() : 'root'
+    const sshAuthMethod = body.sshAuthMethod ? String(body.sshAuthMethod).trim() : null
+    const sshKey = body.sshKey ? String(body.sshKey).trim() : null
+    const sshPassphrase = body.sshPassphrase ? String(body.sshPassphrase).trim() : null
+    const sshPassword = body.sshPassword ? String(body.sshPassword).trim() : null
+
+    if (!name || !baseUrl || !apiToken) {
+      return NextResponse.json(
+        { error: "name, baseUrl and apiToken are required" },
+        { status: 400 }
+      )
+    }
+
+    if (!['pve', 'pbs'].includes(type)) {
+      return NextResponse.json(
+        { error: "type must be 'pve' or 'pbs'" },
+        { status: 400 }
+      )
+    }
+
+    // Validation SSH
+    if (sshEnabled) {
+      if (!sshAuthMethod || !['key', 'password'].includes(sshAuthMethod)) {
+        return NextResponse.json(
+          { error: "sshAuthMethod must be 'key' or 'password' when SSH is enabled" },
+          { status: 400 }
+        )
+      }
+      
+      if (sshAuthMethod === 'key' && !sshKey) {
+        return NextResponse.json(
+          { error: "sshKey is required when sshAuthMethod is 'key'" },
+          { status: 400 }
+        )
+      }
+      
+      if (sshAuthMethod === 'password' && !sshPassword) {
+        return NextResponse.json(
+          { error: "sshPassword is required when sshAuthMethod is 'password'" },
+          { status: 400 }
+        )
+      }
+      
+      if (sshPort < 1 || sshPort > 65535) {
+        return NextResponse.json(
+          { error: "sshPort must be between 1 and 65535" },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Préparer les données
+    const data: any = {
+      name,
+      type,
+      baseUrl,
+      uiUrl,
+      insecureTLS,
+      hasCeph: type === 'pve' ? hasCeph : false, // Ceph uniquement pour PVE
+      apiTokenEnc: encryptSecret(apiToken),
+      sshEnabled,
+      sshPort,
+      sshUser,
+      sshAuthMethod: sshEnabled ? sshAuthMethod : null,
+    }
+
+    // Chiffrer les secrets SSH si fournis
+    if (sshEnabled && sshAuthMethod === 'key' && sshKey) {
+      data.sshKeyEnc = encryptSecret(sshKey)
+      // La passphrase est optionnelle pour les clés
+      if (sshPassphrase) {
+        data.sshPassEnc = encryptSecret(sshPassphrase)
+      }
+    } else if (sshEnabled && sshAuthMethod === 'password' && sshPassword) {
+      data.sshPassEnc = encryptSecret(sshPassword)
+    }
+
+    const created = await prisma.connection.create({
+      data,
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        baseUrl: true,
+        uiUrl: true,
+        insecureTLS: true,
+        hasCeph: true,
+        sshEnabled: true,
+        sshPort: true,
+        sshUser: true,
+        sshAuthMethod: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "create",
+      category: "connections",
+      resourceType: "connection",
+      resourceId: created.id,
+      resourceName: name,
+      details: { 
+        type, 
+        baseUrl, 
+        insecureTLS, 
+        hasCeph,
+        sshEnabled,
+        sshPort: sshEnabled ? sshPort : undefined,
+        sshUser: sshEnabled ? sshUser : undefined,
+        sshAuthMethod: sshEnabled ? sshAuthMethod : undefined,
+      },
+      status: "success",
+    })
+
+    return NextResponse.json({ 
+      data: {
+        ...created,
+        sshConfigured: sshEnabled && !!(sshKey || sshPassword)
+      }
+    }, { status: 201 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}

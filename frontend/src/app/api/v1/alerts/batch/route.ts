@@ -1,0 +1,35 @@
+import { NextResponse } from 'next/server'
+
+import { prisma } from '@/lib/db/prisma'
+
+export const runtime = 'nodejs'
+
+/**
+ * DELETE /api/v1/alerts/batch
+ * Supprimer des alertes par IDs
+ */
+export async function DELETE(req: Request) {
+  try {
+    const body = await req.json()
+    const { ids } = body
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'ids array is required' }, { status: 400 })
+    }
+
+    const result = await prisma.alert.deleteMany({
+      where: { id: { in: ids } }
+    })
+
+    return NextResponse.json({
+      data: {
+        deleted: result.count,
+        message: `${result.count} alerte(s) supprimée(s)`
+      }
+    })
+  } catch (error: any) {
+    console.error('[alerts/batch] DELETE error:', error)
+    
+return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
+  }
+}

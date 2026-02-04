@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console VNC</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { 
+      width: 100%; 
+      height: 100%; 
+      overflow: hidden; 
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    #toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px; background: #111; border-bottom: 1px solid #333; flex-shrink: 0;
+    }
+    #toolbar .info { display: flex; align-items: center; gap: 12px; }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+    #status-dot.connected { background: #22c55e; }
+    #status-dot.connecting { background: #f59e0b; }
+    #status-dot.error { background: #ef4444; }
+    #vm-info { color: #fff; font-size: 14px; font-weight: 600; }
+    #status-text { color: #666; font-size: 12px; }
+    #toolbar .vm-actions { display: flex; gap: 4px; margin: 0 16px; }
+    #toolbar .vm-actions button {
+      padding: 6px 10px; font-size: 16px; background: transparent; border: none;
+      color: #888; cursor: pointer; border-radius: 4px; display: flex; align-items: center;
+    }
+    #toolbar .vm-actions button:hover { background: #333; color: #fff; }
+    #toolbar .vm-actions button:disabled { color: #444; cursor: not-allowed; }
+    #toolbar .vm-actions button.btn-start { color: #22c55e; }
+    #toolbar .vm-actions button.btn-start:hover { background: #14532d; }
+    #toolbar .vm-actions button.btn-shutdown { color: #f59e0b; }
+    #toolbar .vm-actions button.btn-shutdown:hover { background: #78350f; }
+    #toolbar .vm-actions button.btn-stop { color: #ef4444; }
+    #toolbar .vm-actions button.btn-stop:hover { background: #7f1d1d; }
+    #toolbar .vm-actions button.btn-pause { color: #3b82f6; }
+    #toolbar .vm-actions button.btn-pause:hover { background: #1e3a8a; }
+    #toolbar .vm-actions button.loading { opacity: 0.5; pointer-events: none; }
+    #toolbar .buttons { display: flex; gap: 8px; }
+    button {
+      padding: 6px 12px; font-size: 12px; background: #333; color: #fff;
+      border: 1px solid #444; border-radius: 4px; cursor: pointer;
+    }
+    button:hover { background: #444; }
+    button:disabled { background: #222; color: #666; cursor: not-allowed; }
+    #error-bar {
+      padding: 12px 16px; background: #7f1d1d; color: #fecaca; font-size: 13px; display: none;
+    }
+    #error-bar.visible { display: block; }
+    #screen { flex: 1; width: 100%; background: #000; position: relative; }
+    #loading {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: #666;
+    }
+    #loading .icon { font-size: 48px; margin-bottom: 16px; }
+    #loading .text { font-size: 14px; }
+    #loading .subtext { font-size: 12px; margin-top: 8px; color: #555; }
+    #novnc-instructions {
+      display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: #fca5a5; background: #450a0a; padding: 24px; border-radius: 8px; max-width: 600px;
+    }
+    #novnc-instructions code {
+      display: block; background: #1c1917; padding: 12px; border-radius: 4px; text-align: left; font-size: 12px; margin: 12px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="toolbar">
+      <div class="info">
+        <span id="status-dot"></span>
+        <span id="vm-info">Console</span>
+        <span id="status-text">• Initialisation...</span>
+      </div>
+      <div class="vm-actions">
+        <button id="btn-start" class="btn-start" title="Démarrer">▶</button>
+        <button id="btn-shutdown" class="btn-shutdown" title="Arrêter proprement">⏻</button>
+        <button id="btn-stop" class="btn-stop" title="Arrêter (forcé)">■</button>
+        <button id="btn-pause" class="btn-pause" title="Pause">⏸</button>
+      </div>
+      <div class="buttons">
+        <button id="btn-cad" disabled>Ctrl+Alt+Del</button>
+        <button id="btn-reconnect">Reconnecter</button>
+        <button id="btn-close">Fermer</button>
+      </div>
+    </div>
+    <div id="error-bar"></div>
+    <div id="screen">
+      <div id="loading">
+        <div class="icon">⌨️</div>
+        <div class="text" id="loading-text">Chargement...</div>
+        <div class="subtext" id="loading-subtext"></div>
+      </div>
+      <div id="novnc-instructions">
+        <h3 style="margin-bottom: 12px;">⚠️ noVNC requis</h3>
+        <p>Pour utiliser la console, créez le bundle noVNC :</p>
+        <code>
+npm install @novnc/novnc esbuild<br>
+node bundle-novnc.js
+        </code>
+        <p style="margin-top: 12px; font-size: 12px; color: #a8a29e;">Puis rechargez cette page.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charger noVNC bundle (IIFE) -->
+  <script src="/novnc/rfb.bundle.js"></script>
+  
+  <script>
+    let RFB;
+    
+    function loadNoVNC() {
+      // RFB est exposé sur window par le bundle IIFE
+      RFB = window.RFB;
+      
+      console.log('RFB:', RFB);
+      console.log('RFB type:', typeof RFB);
+      
+      if (typeof RFB !== 'function') {
+        console.error('RFB not found on window, checking noVNC:', window.noVNC);
+        // Fallback
+        if (window.noVNC && window.noVNC.default) {
+          RFB = window.noVNC.default;
+        }
+      }
+      
+      return typeof RFB === 'function';
+    }
+    
+    const statusDot = document.getElementById('status-dot');
+    const vmInfo = document.getElementById('vm-info');
+    const statusText = document.getElementById('status-text');
+    const errorBar = document.getElementById('error-bar');
+    const screen = document.getElementById('screen');
+    const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loading-text');
+    const loadingSubtext = document.getElementById('loading-subtext');
+    const novncInstructions = document.getElementById('novnc-instructions');
+    const btnCad = document.getElementById('btn-cad');
+    const btnReconnect = document.getElementById('btn-reconnect');
+    const btnClose = document.getElementById('btn-close');
+    const btnStart = document.getElementById('btn-start');
+    const btnShutdown = document.getElementById('btn-shutdown');
+    const btnStop = document.getElementById('btn-stop');
+    const btnPause = document.getElementById('btn-pause');
+    
+    const params = new URLSearchParams(window.location.search);
+    const connId = params.get('connId') || '1';
+    const type = params.get('type');
+    const node = params.get('node');
+    const vmid = params.get('vmid');
+    
+    let rfb = null;
+    let vmStatus = 'unknown';  // running, stopped, paused
+    
+    document.title = `Console - ${type?.toUpperCase()} ${vmid} - ${node}`;
+    vmInfo.textContent = `${type?.toUpperCase()} ${vmid} • ${node}`;
+    
+    function setStatus(status, text) {
+      statusDot.className = status;
+      statusText.textContent = `• ${text}`;
+    }
+    
+    // Mettre à jour l'état des boutons selon le status de la VM
+    function updateVmButtons() {
+      const isRunning = vmStatus === 'running';
+      const isStopped = vmStatus === 'stopped';
+      const isPaused = vmStatus === 'paused';
+      
+      btnStart.disabled = isRunning;
+      btnShutdown.disabled = !isRunning;
+      btnStop.disabled = isStopped;
+      btnPause.disabled = !isRunning;
+      
+      // Opacité visuelle
+      btnStart.style.opacity = isRunning ? '0.3' : '1';
+      btnShutdown.style.opacity = !isRunning ? '0.3' : '1';
+      btnStop.style.opacity = isStopped ? '0.3' : '1';
+      btnPause.style.opacity = !isRunning ? '0.3' : '1';
+    }
+    
+    // Récupérer le status de la VM
+    async function fetchVmStatus() {
+      try {
+        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`;
+        const res = await fetch(apiUrl);
+        if (res.ok) {
+          const json = await res.json();
+          vmStatus = json?.data?.status || 'unknown';
+          updateVmButtons();
+        }
+      } catch (err) {
+        console.error('Failed to fetch VM status:', err);
+      }
+    }
+    
+    function showError(msg) {
+      errorBar.textContent = msg;
+      errorBar.classList.add('visible');
+    }
+    
+    function hideError() {
+      errorBar.classList.remove('visible');
+    }
+    
+    async function connect() {
+      if (!type || !node || !vmid) {
+        showError('Paramètres manquants');
+        setStatus('error', 'Erreur');
+        return;
+      }
+      
+      if (!RFB) {
+        showError('noVNC non chargé');
+        setStatus('error', 'Erreur');
+        return;
+      }
+      
+      if (rfb) {
+        try { rfb.disconnect(); } catch {}
+        rfb = null;
+      }
+      
+      hideError();
+      setStatus('connecting', 'Connexion...');
+      loading.style.display = 'block';
+      loadingText.textContent = 'Création de la session...';
+      loadingSubtext.textContent = '';
+      
+      try {
+        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/console`;
+        console.log('API call:', apiUrl);
+        
+        const res = await fetch(apiUrl, { method: 'POST' });
+        console.log('API status:', res.status);
+        
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+        
+        const json = await res.json();
+        console.log('API response:', json);
+        
+        const { wsUrl, password } = json?.data || {};
+        if (!wsUrl || !password) throw new Error('Session invalide');
+        
+        loadingText.textContent = 'Connexion VNC...';
+        
+        const wsFullUrl = `ws://${window.location.hostname}:3001${wsUrl}`;
+        console.log('WebSocket URL:', wsFullUrl);
+        
+        rfb = new RFB(screen, wsFullUrl, { credentials: { password } });
+        
+        rfb.scaleViewport = true;
+        rfb.resizeSession = false;  // Désactivé car cause des erreurs
+        rfb.clipViewport = false;
+        rfb.viewOnly = false;
+        rfb.focusOnClick = true;
+        rfb.qualityLevel = 6;
+        rfb.compressionLevel = 2;
+        rfb.background = '#000';
+        
+        // Debug: log des événements
+        console.log('RFB config:', {
+          scaleViewport: rfb.scaleViewport,
+          resizeSession: rfb.resizeSession,
+          viewOnly: rfb.viewOnly,
+          focusOnClick: rfb.focusOnClick,
+          qualityLevel: rfb.qualityLevel,
+          compressionLevel: rfb.compressionLevel
+        });
+        
+        // Vérifier si viewOnly est bien false
+        if (rfb.viewOnly) {
+          console.error('WARNING: viewOnly is true!');
+        }
+        
+        // Debug: intercepter les événements sur le canvas après connexion
+        setTimeout(() => {
+          const canvas = screen.querySelector('canvas');
+          if (canvas) {
+            canvas.addEventListener('keydown', (e) => {
+              console.log('KEY DOWN:', e.key, e.keyCode);
+            }, true);
+            canvas.addEventListener('mousedown', (e) => {
+              console.log('MOUSE DOWN:', e.button, e.clientX, e.clientY);
+            }, true);
+            canvas.addEventListener('click', (e) => {
+              console.log('CLICK:', e.button, e.clientX, e.clientY);
+            }, true);
+          }
+        }, 500);
+        
+        rfb.addEventListener('connect', () => {
+          console.log('VNC connected');
+          loading.style.display = 'none';
+          setStatus('connected', 'Connecté');
+          btnCad.disabled = false;
+          
+          // Focus agressif sur le canvas
+          const focusCanvas = () => {
+            const canvas = screen.querySelector('canvas');
+            if (canvas) {
+              canvas.setAttribute('tabindex', '0');
+              canvas.style.outline = 'none';
+              canvas.focus({ preventScroll: true });
+              console.log('Canvas focused, activeElement:', document.activeElement.tagName);
+            }
+          };
+          
+          // Focus immédiat et répété
+          focusCanvas();
+          setTimeout(focusCanvas, 100);
+          setTimeout(focusCanvas, 300);
+          setTimeout(focusCanvas, 500);
+          
+          // Capturer tous les clics sur le screen pour focus
+          screen.addEventListener('mousedown', (e) => {
+            focusCanvas();
+          });
+          
+          // Empêcher la perte de focus
+          document.addEventListener('mousedown', (e) => {
+            if (screen.contains(e.target) || e.target === screen) {
+              e.preventDefault();
+              focusCanvas();
+            }
+          });
+        });
+        
+        rfb.addEventListener('disconnect', (e) => {
+          console.log('VNC disconnected:', e.detail);
+          setStatus('', 'Déconnecté');
+          btnCad.disabled = true;
+          loading.style.display = 'block';
+          loadingText.textContent = 'Déconnecté';
+          loadingSubtext.textContent = 'Cliquez sur Reconnecter';
+        });
+        
+        rfb.addEventListener('credentialsrequired', () => {
+          rfb.sendCredentials({ password });
+        });
+        
+        rfb.addEventListener('securityfailure', (e) => {
+          showError(`Sécurité: ${e.detail.reason}`);
+        });
+        
+      } catch (err) {
+        console.error('Error:', err);
+        showError(err.message);
+        setStatus('error', 'Erreur');
+        loadingText.textContent = 'Erreur';
+        loadingSubtext.textContent = err.message;
+      }
+    }
+    
+    btnCad.addEventListener('click', () => {
+      if (rfb) {
+        rfb.sendCtrlAltDel();
+        setTimeout(() => {
+          const canvas = screen.querySelector('canvas');
+          if (canvas) canvas.focus();
+        }, 50);
+      }
+    });
+    
+    // Actions VM
+    async function vmAction(action) {
+      const btn = {
+        start: btnStart,
+        shutdown: btnShutdown,
+        stop: btnStop,
+        suspend: btnPause
+      }[action];
+      
+      if (btn) btn.classList.add('loading');
+      
+      try {
+        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/${action}`;
+        const res = await fetch(apiUrl, { method: 'POST' });
+        
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+        
+        // Rafraîchir l'état après un délai
+        setTimeout(fetchVmStatus, 1500);
+        
+        // Reconnecter après start
+        if (action === 'start') {
+          setTimeout(connect, 3000);
+        }
+      } catch (err) {
+        showError(`Action ${action}: ${err.message}`);
+      } finally {
+        if (btn) btn.classList.remove('loading');
+      }
+    }
+    
+    btnStart.addEventListener('click', () => vmAction('start'));
+    btnShutdown.addEventListener('click', () => vmAction('shutdown'));
+    btnStop.addEventListener('click', () => vmAction('stop'));
+    btnPause.addEventListener('click', () => vmAction('suspend'));
+    
+    btnReconnect.addEventListener('click', connect);
+    btnClose.addEventListener('click', () => window.close());
+    screen.addEventListener('click', () => {
+      const canvas = screen.querySelector('canvas');
+      if (canvas) canvas.focus();
+    });
+    
+    function init() {
+      loadingText.textContent = 'Chargement noVNC...';
+      const loaded = loadNoVNC();
+      
+      // Charger le status de la VM
+      fetchVmStatus();
+      
+      if (loaded) {
+        connect();
+      } else {
+        loading.style.display = 'none';
+        novncInstructions.style.display = 'block';
+        setStatus('error', 'Erreur');
+      }
+    }
+    
+    // Démarrer quand le DOM est prêt
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>

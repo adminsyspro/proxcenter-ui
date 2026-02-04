@@ -1,0 +1,21 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Claude artifacts
+.claude/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+*.iml

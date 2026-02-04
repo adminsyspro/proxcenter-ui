@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" alt="ProxCenter Logo" width="120">
+  <img src="docs/logo.svg" alt="ProxCenter Logo" width="120">
 </p>
 
 <h1 align="center">ProxCenter</h1>
@@ -382,7 +382,7 @@ ProxCenter is proprietary software. Enterprise licenses are available for commer
 ---
 
 <p align="center">
-  <img src="docs/logo.png" alt="ProxCenter" width="60">
+  <img src="docs/logo.svg" alt="ProxCenter" width="60">
   <br>
   <strong>ProxCenter</strong> - Enterprise Proxmox Management Made Simple
 </p>

@@ -1,36 +1,183 @@
-# ProxCenter
+<p align="center">
+  <img src="docs/logo.png" alt="ProxCenter Logo" width="120">
+</p>
 
-**ProxCenter** is an enterprise-grade management platform for Proxmox Virtual Environment (PVE) clusters. It provides a modern web interface for monitoring, managing, and optimizing your virtualization infrastructure.
+<h1 align="center">ProxCenter</h1>
 
-![ProxCenter](https://img.shields.io/badge/ProxCenter-Enterprise-orange)
-![License](https://img.shields.io/badge/License-Proprietary-blue)
-![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)
-![Next.js](https://img.shields.io/badge/Next.js-16+-black?logo=next.js)
+<p align="center">
+  <strong>Enterprise-grade management platform for Proxmox Virtual Environment</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/ProxCenter-Enterprise-orange" alt="ProxCenter Enterprise">
+  <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go" alt="Go">
+  <img src="https://img.shields.io/badge/Next.js-16+-black?logo=next.js" alt="Next.js">
+  <img src="https://img.shields.io/badge/Proxmox-7.x%20%7C%208.x-E57000" alt="Proxmox">
+</p>
+
+---
+
+## Overview
+
+**ProxCenter** provides a modern, unified web interface for monitoring, managing, and optimizing your Proxmox virtualization infrastructure. Manage multiple clusters, automate workload balancing, and gain deep insights into your infrastructure.
+
+<p align="center">
+  <img src="docs/screenshots/ressources.png" alt="Dashboard" width="100%">
+</p>
+
+---
 
 ## Features
 
-### Infrastructure Management
-- **Multi-cluster support** - Manage multiple Proxmox clusters from a single interface
-- **Real-time monitoring** - Live metrics for CPU, memory, storage, and network
-- **VM & Container management** - Start, stop, migrate, and configure VMs and LXC containers
-- **Storage management** - View and manage storage pools across clusters
+### 📊 Infrastructure Monitoring
 
-### Intelligent Resource Management
-- **DRS (Distributed Resource Scheduler)** - Automatic and manual workload balancing
-- **Affinity/Anti-affinity rules** - Control VM placement across nodes
-- **Capacity planning** - Analyze trends and plan for growth
+Real-time monitoring with health scores, capacity predictions, and environmental impact metrics.
 
-### Operations
-- **Rolling updates** - Orchestrated node updates with automatic VM migration
-- **Backup management** - Monitor and manage Proxmox Backup Server (PBS) backups
-- **Firewall management** - Centralized firewall rule management
+- Infrastructure health scoring
+- Resource usage trends and projections
+- Green IT / Environmental impact tracking
+- Multi-cluster overview
 
-### Enterprise Features
-- **PDF Reports** - Generate infrastructure, alerts, utilization, and capacity reports
-- **AI-powered insights** - Optional AI analysis for reports (Ollama, OpenAI, Anthropic)
-- **Email notifications** - Configurable alerts for events, migrations, and maintenance
-- **LDAP/Active Directory** - Enterprise authentication integration
-- **Multi-language** - English and French support
+<p align="center">
+  <img src="docs/screenshots/inventory.png" alt="Inventory" width="100%">
+</p>
+
+---
+
+### ⚖️ DRS - Distributed Resource Scheduler
+
+Intelligent workload balancing across your Proxmox nodes.
+
+- Automatic and manual balancing modes
+- CPU, memory, and storage-aware scheduling
+- Affinity and anti-affinity rules
+- Migration recommendations with one-click execution
+
+<p align="center">
+  <img src="docs/screenshots/drs.png" alt="DRS" width="100%">
+</p>
+
+---
+
+### 🔄 Rolling Updates
+
+Orchestrated node updates with zero-downtime VM migrations.
+
+- Automated pre-migration before updates
+- Progress tracking per node
+- Rollback capabilities
+- Update scheduling
+
+<p align="center">
+  <img src="docs/screenshots/rolling-updates.png" alt="Rolling Updates" width="100%">
+</p>
+
+---
+
+### 🔀 Cross-Cluster Migration
+
+Migrate VMs between different Proxmox clusters seamlessly.
+
+- Cross-cluster VM migration
+- Storage and network mapping
+- Live migration support
+- Migration progress tracking
+
+<p align="center">
+  <img src="docs/screenshots/cross-cluster.png" alt="Cross-Cluster Migration" width="100%">
+</p>
+
+---
+
+### 🛡️ Firewall & Micro-segmentation
+
+Centralized firewall management with Zero Trust security model.
+
+- Security groups management
+- VM-level firewall rules
+- Cluster-wide policies
+- Zero Trust recommendations
+
+<p align="center">
+  <img src="docs/screenshots/firewall.png" alt="Firewall" width="100%">
+</p>
+
+---
+
+### 💾 Backup Monitoring (PBS)
+
+Monitor and manage Proxmox Backup Server datastores.
+
+- Datastore health and capacity
+- Backup job monitoring
+- Verification status
+- Storage statistics
+
+<p align="center">
+  <img src="docs/screenshots/backup.png" alt="Backup" width="100%">
+</p>
+
+---
+
+### 🚨 Alerts & Notifications
+
+Comprehensive alerting system with email notifications.
+
+- Real-time alerts dashboard
+- Configurable thresholds
+- Email notifications (SMTP)
+- Alert history and acknowledgment
+
+<p align="center">
+  <img src="docs/screenshots/alerts.png" alt="Alerts" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/notifications.png" alt="Notifications" width="100%">
+</p>
+
+---
+
+### 📄 Enterprise Reports
+
+Generate professional PDF reports with AI-powered insights.
+
+- Infrastructure reports
+- Capacity planning reports
+- Utilization analysis
+- Multi-language support (EN/FR)
+- AI-powered recommendations (Ollama, OpenAI, Anthropic)
+
+<p align="center">
+  <img src="docs/screenshots/report.png" alt="Report" width="50%">
+</p>
+
+---
+
+### 🎨 Customization
+
+Multiple themes and appearance options.
+
+- Light, Dark, and System modes
+- Multiple color schemes
+- High contrast accessibility option
+- Customizable dashboard
+
+<p align="center">
+  <img src="docs/screenshots/themes.png" alt="Themes" width="100%">
+</p>
+
+---
+
+### 🔐 Enterprise Authentication
+
+LDAP and Active Directory integration for enterprise environments.
+
+<p align="center">
+  <img src="docs/screenshots/ldap.png" alt="LDAP" width="100%">
+</p>
+
+---
 
 ## Architecture
 
@@ -124,8 +271,6 @@ pnpm dev
 
 Open http://localhost:3000 in your browser.
 
-Default credentials are created on first run - check the console output.
-
 ## Configuration
 
 ### Frontend (.env)
@@ -147,26 +292,6 @@ Key settings:
 - `proxmox.proxcenter_db_path` - Path to frontend database
 - `drs.*` - Resource scheduler configuration
 - `notifications.email.*` - SMTP settings for alerts
-
-## Development
-
-### Frontend
-
-```bash
-cd frontend
-pnpm dev          # Development server
-pnpm build        # Production build
-pnpm lint         # Run linter
-```
-
-### Backend
-
-```bash
-cd backend
-go build ./...              # Build all
-go test ./...               # Run tests
-go run ./cmd/orchestrator   # Run directly
-```
 
 ## Production Deployment
 
@@ -192,8 +317,11 @@ ProxCenter is proprietary software. Enterprise licenses are available for commer
 ## Support
 
 - GitHub Issues: [adminsyspro/proxcenter](https://github.com/adminsyspro/proxcenter/issues)
-- Email: support@adminsyspro.com
 
 ---
 
-**ProxCenter** - Enterprise Proxmox Management Made Simple
+<p align="center">
+  <img src="docs/logo.png" alt="ProxCenter" width="60">
+  <br>
+  <strong>ProxCenter</strong> - Enterprise Proxmox Management Made Simple
+</p>

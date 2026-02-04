@@ -22,7 +22,7 @@
 **ProxCenter** provides a modern, unified web interface for monitoring, managing, and optimizing your Proxmox virtualization infrastructure. Manage multiple clusters, automate workload balancing, and gain deep insights into your infrastructure.
 
 <p align="center">
-  <img src="docs/screenshots/ressources.png" alt="Dashboard" width="100%">
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
 </p>
 
 ---
@@ -31,15 +31,31 @@
 
 ### 📊 Infrastructure Monitoring
 
-Real-time monitoring with health scores, capacity predictions, and environmental impact metrics.
+Real-time monitoring with health scores, top consumers, and multi-cluster overview.
 
-- Infrastructure health scoring
-- Resource usage trends and projections
-- Green IT / Environmental impact tracking
-- Multi-cluster overview
+- Clusters and nodes status at a glance
+- CPU, Memory, and Storage utilization gauges
+- Top resource consumers
+- Backup status and alerts overview
 
 <p align="center">
   <img src="docs/screenshots/inventory.png" alt="Inventory" width="100%">
+</p>
+
+---
+
+### 📈 Resource Trends & AI Insights
+
+Comprehensive resource analysis with historical trends and AI-powered predictions.
+
+- Historical resource usage evolution
+- Capacity projections and predictions
+- AI-assisted trend analysis
+- Green IT / Environmental impact metrics
+- Overprovisioning detection
+
+<p align="center">
+  <img src="docs/screenshots/ressources.png" alt="Resource Trends" width="100%">
 </p>
 
 ---

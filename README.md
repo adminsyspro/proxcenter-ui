@@ -135,6 +135,26 @@ Monitor and manage Proxmox Backup Server datastores.
 
 ---
 
+### 🗄️ Ceph Storage Management
+
+Monitor and manage Ceph distributed storage clusters.
+
+- Ceph cluster health and status
+- OSD nodes monitoring
+- Storage pools capacity
+- Performance metrics and IOPS
+- Replication status
+
+<p align="center">
+  <img src="docs/screenshots/ceph-1.png" alt="Ceph Overview" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ceph-2.png" alt="Ceph Pools" width="100%">
+</p>
+
+---
+
 ### 🚨 Alerts & Notifications
 
 Comprehensive alerting system with email notifications.

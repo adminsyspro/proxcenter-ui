@@ -44,7 +44,7 @@ export default function InventoryPage() {
   const [refreshTree, setRefreshTree] = useState<(() => void) | null>(null)
   
   // Mode de vue actuel et listes de données
-  const [viewMode, setViewMode] = useState<ViewMode>('vms')
+  const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hosts, setHosts] = useState<HostItem[]>([])
   const [pools, setPools] = useState<PoolItem[]>([])
   const [tags, setTags] = useState<TagItem[]>([])

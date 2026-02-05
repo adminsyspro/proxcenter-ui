@@ -80,12 +80,16 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copy better-sqlite3 native module (required for Prisma with SQLite)
 COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
-# Copy Prisma adapter and client
+# Copy Prisma adapter, client, config and dependencies
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/prisma ./prisma
-# Note: prisma.config.ts is NOT copied - we use Prisma 6 CLI with --datasource-url flag instead
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+
+# Copy Prisma config dependencies (required by @prisma/config at runtime)
+COPY --from=builder /app/node_modules/effect ./node_modules/effect
+COPY --from=builder /app/node_modules/fast-check ./node_modules/fast-check
 
 # Copy WebSocket proxy and its dependencies
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js

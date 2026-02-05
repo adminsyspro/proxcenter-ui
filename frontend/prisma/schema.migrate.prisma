@@ -1,0 +1,216 @@
+// Schema file for migrations (used with Prisma 6 CLI)
+// This file includes the URL which Prisma 7 doesn't allow in the main schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Connection {
+  id          String  @id @default(cuid())
+  name        String
+  type        String  @default("pve")
+  baseUrl     String
+  uiUrl       String?
+  insecureTLS Boolean @default(false)
+  hasCeph     Boolean @default(false)
+  apiTokenEnc String
+
+  // SSH fields
+  sshEnabled    Boolean @default(false)
+  sshPort       Int     @default(22)
+  sshUser       String  @default("root")
+  sshAuthMethod String?
+  sshKeyEnc     String?
+  sshPassEnc    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hosts ManagedHost[]
+}
+
+model ManagedHost {
+  id           String     @id @default(cuid())
+  connectionId String
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  node         String
+  description  String?
+  tags         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([connectionId, node])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          String    @default("user")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  vmKey     String   @unique
+  vmName    String?
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
+model DashboardLayout {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  layout    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AlertRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  metric      String
+  operator    String
+  threshold   Float
+  duration    Int      @default(300)
+  severity    String   @default("warning")
+  enabled     Boolean  @default(true)
+  scope       String   @default("all")
+  scopeFilter String?
+  notify      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  alerts      Alert[]
+}
+
+model Alert {
+  id           String     @id @default(cuid())
+  ruleId       String?
+  rule         AlertRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  resourceType String
+  resourceId   String
+  resourceName String?
+  metric       String
+  value        Float
+  threshold    Float
+  severity     String
+  status       String     @default("active")
+  message      String?
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  resolvedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  isBuiltIn   Boolean          @default(false)
+  permissions RolePermission[]
+  assignments RoleAssignment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  name        String
+  description String?
+  category    String
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model RoleAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  scope     String   @default("global")
+  scopeId   String?
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId, scope, scopeId])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  userId       String?
+  userEmail    String?
+  action       String
+  resourceType String
+  resourceId   String?
+  resourceName String?
+  details      String?
+  ipAddress    String?
+  userAgent    String?
+  status       String   @default("success")
+}

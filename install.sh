@@ -288,11 +288,12 @@ run_migrations() {
     cd "$INSTALL_DIR"
 
     # Run database sync using prisma db push (simpler than migrate for fresh installs)
-    # Uses globally installed Prisma 6 which accepts --url flag
+    # Uses schema.migrate.prisma which includes URL (compatible with Prisma 6)
     docker run --rm \
         -v proxcenter_data:/app/data \
+        -e DATABASE_URL="file:/app/data/proxcenter.db" \
         "$FRONTEND_IMAGE" \
-        prisma db push --schema /app/prisma/schema.prisma --datasource-url "file:/app/data/proxcenter.db" --accept-data-loss --skip-generate
+        prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate
 
     log_success "Migrations completed"
 }

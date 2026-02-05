@@ -38,6 +38,7 @@ go.work
 .env.local
 .env.*.local
 *.pem
+!internal/license/public_key.pem
 *.key
 
 # Config with secrets (keep config.yaml.example)

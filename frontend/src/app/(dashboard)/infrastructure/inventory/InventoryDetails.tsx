@@ -515,6 +515,7 @@ type DetailsPayload = {
     loadAvg?: string
     ioDelay?: number
     ksmSharing?: number
+    updates?: Array<{ package?: string; version?: string }>
   }
 
   // Données pour les tableaux intégrés

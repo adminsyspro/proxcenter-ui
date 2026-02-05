@@ -88,8 +88,10 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
 # Copy Prisma config dependencies (required by @prisma/config at runtime)
+# Dependency chain: prisma → @prisma/config → effect → fast-check → pure-rand
 COPY --from=builder /app/node_modules/effect ./node_modules/effect
 COPY --from=builder /app/node_modules/fast-check ./node_modules/fast-check
+COPY --from=builder /app/node_modules/pure-rand ./node_modules/pure-rand
 
 # Copy WebSocket proxy and its dependencies
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js

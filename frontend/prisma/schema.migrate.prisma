@@ -36,9 +36,12 @@ model Connection {
 
 model ManagedHost {
   id           String     @id @default(cuid())
-  connectionId String
-  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connectionId String?
+  connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   node         String
+  displayName  String?
+  enabled      Boolean    @default(true)
+  notes        String?
   description  String?
   tags         String?
   createdAt    DateTime   @default(now())
@@ -113,10 +116,14 @@ model Favorite {
 
 model DashboardLayout {
   id        String   @id @default(cuid())
-  userId    String   @unique
-  layout    String
+  userId    String   @default("default")
+  name      String   @default("custom")
+  widgets   String   // JSON array of widgets
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
 }
 
 model AlertRule {

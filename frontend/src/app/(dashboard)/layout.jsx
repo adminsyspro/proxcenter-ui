@@ -13,6 +13,7 @@ import Header from '@components/layout/horizontal/Header'
 import Navbar from '@components/layout/vertical/Navbar'
 import ScrollToTop from '@core/components/scroll-to-top'
 import TasksFooter from '@components/TasksFooter'
+import OnboardingGuard from '@components/OnboardingGuard'
 
 // Util Imports
 import { getMode, getSystemMode } from '@core/utils/serverHelpers'
@@ -32,12 +33,12 @@ const Layout = async props => {
         systemMode={systemMode}
         verticalLayout={
           <VerticalLayout navigation={<Navigation mode={mode} />} navbar={<Navbar />}>
-            {children}
+            <OnboardingGuard>{children}</OnboardingGuard>
           </VerticalLayout>
         }
         horizontalLayout={
           <HorizontalLayout header={<Header />}>
-            {children}
+            <OnboardingGuard>{children}</OnboardingGuard>
           </HorizontalLayout>
         }
       />

@@ -21,6 +21,13 @@ type Config struct {
 	Scheduler     SchedulerConfig     `mapstructure:"scheduler" yaml:"scheduler"`
 	Notifications NotificationsConfig `mapstructure:"notifications" yaml:"notifications"`
 	License       LicenseConfig       `mapstructure:"license" yaml:"license"`
+	Reports       ReportsConfig       `mapstructure:"reports" yaml:"reports"`
+}
+
+type ReportsConfig struct {
+	StoragePath    string `mapstructure:"storage_path" yaml:"storage_path"`
+	RetentionDays  int    `mapstructure:"retention_days" yaml:"retention_days"`
+	CleanupEnabled bool   `mapstructure:"cleanup_enabled" yaml:"cleanup_enabled"`
 }
 
 type LicenseConfig struct {
@@ -374,6 +381,11 @@ func setDefaults() {
 	viper.SetDefault("notifications.enable_reports", true)
 	viper.SetDefault("notifications.min_severity", "warning")
 	viper.SetDefault("notifications.rate_limit_per_hour", 100)
+
+	// Reports defaults
+	viper.SetDefault("reports.storage_path", "./data/reports")
+	viper.SetDefault("reports.retention_days", 90)
+	viper.SetDefault("reports.cleanup_enabled", true)
 }
 
 func (c *Config) Validate() error {

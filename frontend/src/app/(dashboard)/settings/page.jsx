@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import dynamic from 'next/dynamic'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 import { useTranslations } from 'next-intl'
 
@@ -151,6 +152,9 @@ function ConnectionStatus({ connection, autoTest = false }) {
 
 function ConnectionsTab() {
   const t = useTranslations()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const isOnboarding = searchParams.get('onboarding') === 'true'
   const [connTab, setConnTab] = useState(0)
 
   // PVE Connections
@@ -256,6 +260,13 @@ function ConnectionsTab() {
       loadPveConnections()
     } else {
       loadPbsConnections()
+    }
+
+    // En mode onboarding, rediriger vers la page d'accueil après création
+    if (isOnboarding && !editingConn?.id) {
+      // Supprimer le cookie app_status pour forcer un refresh
+      document.cookie = 'app_status=; path=/; max-age=0'
+      router.push('/home')
     }
   }
 
@@ -1600,16 +1611,25 @@ return (
 
 export default function SettingsPage() {
   const t = useTranslations()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [mainTab, setMainTab] = useState(0)
   const { hasFeature, loading: licenseLoading } = useLicense()
 
   const { setPageInfo } = usePageTitle()
 
-  useEffect(() => {
-    setPageInfo(t('settings.title'), t('settings.subtitle'), 'ri-settings-3-line')
+  // Mode onboarding : l'utilisateur doit configurer une connexion
+  const isOnboarding = searchParams.get('onboarding') === 'true'
 
-return () => setPageInfo('', '', '')
-  }, [setPageInfo, t])
+  useEffect(() => {
+    if (isOnboarding) {
+      setPageInfo(t('settings.welcome'), t('settings.welcomeSubtitle'), 'ri-settings-3-line')
+    } else {
+      setPageInfo(t('settings.title'), t('settings.subtitle'), 'ri-settings-3-line')
+    }
+
+    return () => setPageInfo('', '', '')
+  }, [setPageInfo, t, isOnboarding])
 
   // Check if a tab's required feature is available
   const isTabAvailable = (tab) => {
@@ -1631,7 +1651,27 @@ return () => setPageInfo('', '', '')
 
   return (
     <Box sx={{ p: 0 }}>
-      <Card variant='outlined' sx={{ height: 'calc(100vh - 145px)' }}>
+      {/* Onboarding Banner */}
+      {isOnboarding && (
+        <Alert
+          severity="info"
+          sx={{
+            mb: 2,
+            borderRadius: 2,
+            '& .MuiAlert-icon': { fontSize: 28 }
+          }}
+          icon={<i className="ri-rocket-line" style={{ fontSize: 24 }} />}
+        >
+          <Typography variant="subtitle1" fontWeight={600}>
+            {t('settings.onboardingTitle')}
+          </Typography>
+          <Typography variant="body2">
+            {t('settings.onboardingMessage')}
+          </Typography>
+        </Alert>
+      )}
+
+      <Card variant='outlined' sx={{ height: isOnboarding ? 'calc(100vh - 220px)' : 'calc(100vh - 145px)' }}>
         <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 0 }}>
           {/* Main Tabs */}
           <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 2 }}>

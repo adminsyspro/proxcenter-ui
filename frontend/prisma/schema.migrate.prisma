@@ -138,23 +138,38 @@ model AlertRule {
 }
 
 model Alert {
-  id           String     @id @default(cuid())
-  ruleId       String?
-  rule         AlertRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
-  resourceType String
-  resourceId   String
-  resourceName String?
-  metric       String
-  value        Float
-  threshold    Float
-  severity     String
-  status       String     @default("active")
-  message      String?
+  id             String     @id @default(cuid())
+  fingerprint    String     @unique
+  ruleId         String?
+  rule           AlertRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  // Alert info
+  severity       String
+  message        String
+  source         String
+  sourceType     String     @default("pve")
+
+  // Entity info
+  entityType     String?
+  entityId       String?
+  entityName     String?
+
+  // Metric info
+  metric         String?
+  currentValue   Float?
+  threshold      Float?
+
+  // Status tracking
+  status         String     @default("active")
+  occurrences    Int        @default(1)
+  firstSeenAt    DateTime   @default(now())
+  lastSeenAt     DateTime   @default(now())
   acknowledgedAt DateTime?
   acknowledgedBy String?
-  resolvedAt   DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  resolvedAt     DateTime?
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 model Role {

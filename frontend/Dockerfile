@@ -86,16 +86,12 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/prisma ./prisma
 
-# Copy Prisma CLI binary and make it available globally (for migrations)
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-RUN ln -s /app/node_modules/.bin/prisma /usr/local/bin/prisma
-
 # Copy WebSocket proxy and its dependencies
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 
-# Install concurrently for running both servers
-RUN npm install -g concurrently
+# Install concurrently for running both servers and prisma CLI for migrations
+RUN npm install -g concurrently prisma
 
 # Switch to non-root user
 USER nextjs

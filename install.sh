@@ -292,7 +292,7 @@ run_migrations() {
         -v proxcenter_data:/app/data \
         -e DATABASE_URL=file:/app/data/proxcenter.db \
         "$FRONTEND_IMAGE" \
-        npx prisma migrate deploy
+        prisma migrate deploy
 
     log_success "Migrations completed"
 }

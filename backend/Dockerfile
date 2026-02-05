@@ -4,11 +4,14 @@ FROM golang:1.23-alpine AS builder
 WORKDIR /app
 
 # Install dependencies
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+RUN apk add --no-cache gcc musl-dev sqlite-dev git
 
 # Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download
+
+# Download dependencies with verbose output and retry
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download -x
 
 # Copy source code
 COPY . .

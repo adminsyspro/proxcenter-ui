@@ -59,8 +59,8 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
 
     db.prepare(
-      `INSERT INTO User (id, email, password, name, role, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, 'admin', ?, ?)`
+      `INSERT INTO User (id, email, password, name, role, enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)`
     ).run(id, email.toLowerCase().trim(), hashedPassword, name || null, now, now)
 
     return NextResponse.json({

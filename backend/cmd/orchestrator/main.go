@@ -87,23 +87,8 @@ func main() {
 
 	// Initialize notifications service
 	notifSettings := notifications.NotificationSettings{
-		EnableAlerts:      cfg.Notifications.EnableAlerts,
-		EnableMigrations:  cfg.Notifications.EnableMigrations,
-		EnableBackups:     cfg.Notifications.EnableBackups,
-		EnableMaintenance: cfg.Notifications.EnableMaintenance,
-		EnableReports:     cfg.Notifications.EnableReports,
-		MinSeverity:       cfg.Notifications.MinSeverity,
-		RateLimitPerHour:  cfg.Notifications.RateLimitPerHour,
-	}
-
-	notifService, err := notifications.NewService(db.DB(), notifSettings)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize notifications service")
-	}
-
-	// Configure email if enabled
-	if cfg.Notifications.Email.Enabled {
-		emailProvider := notifications.NewEmailProvider(notifications.EmailConfig{
+		Email: notifications.EmailConfig{
+			Enabled:           cfg.Notifications.Email.Enabled,
 			SMTPHost:          cfg.Notifications.Email.SMTPHost,
 			SMTPPort:          cfg.Notifications.Email.SMTPPort,
 			SMTPUser:          cfg.Notifications.Email.SMTPUser,
@@ -114,8 +99,19 @@ func main() {
 			UseStartTLS:       cfg.Notifications.Email.UseStartTLS,
 			SkipVerify:        cfg.Notifications.Email.SkipVerify,
 			DefaultRecipients: cfg.Notifications.Email.DefaultRecipients,
-		})
-		notifService.SetEmailProvider(emailProvider)
+		},
+		EnableAlerts:      cfg.Notifications.EnableAlerts,
+		EnableMigrations:  cfg.Notifications.EnableMigrations,
+		EnableBackups:     cfg.Notifications.EnableBackups,
+		EnableMaintenance: cfg.Notifications.EnableMaintenance,
+		EnableReports:     cfg.Notifications.EnableReports,
+		MinSeverity:       notifications.NotificationSeverity(cfg.Notifications.MinSeverity),
+		RateLimitPerHour:  cfg.Notifications.RateLimitPerHour,
+	}
+
+	notifService, err := notifications.NewService(db.DB(), notifSettings)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize notifications service")
 	}
 
 	// Initialize license validator
@@ -208,8 +204,7 @@ func registerScheduledTasks(sched *scheduler.Scheduler, cfg *config.Config, metr
 	// DRS evaluation (if enabled)
 	if cfg.DRS.Enabled {
 		sched.Register("drs", cfg.Scheduler.DRSInterval, func(ctx context.Context) error {
-			_, err := drsEngine.Evaluate(ctx)
-			return err
+			return drsEngine.Evaluate(ctx)
 		})
 	}
 

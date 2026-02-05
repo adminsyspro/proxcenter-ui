@@ -92,7 +92,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Mettre à jour last_login_at
-        db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(
+        db.prepare("UPDATE User SET last_login_at = ? WHERE id = ?").run(
           new Date().toISOString(),
           user.id
         )
@@ -161,7 +161,7 @@ export const authOptions: NextAuthOptions = {
 
           // Mettre à jour les infos LDAP, avatar et last_login_at
           db.prepare(
-            "UPDATE users SET name = ?, avatar = ?, ldap_dn = ?, last_login_at = ?, updated_at = ? WHERE id = ?"
+            "UPDATE User SET name = ?, avatar = ?, ldap_dn = ?, last_login_at = ?, updated_at = ? WHERE id = ?"
           ).run(ldapUser.name, ldapUser.avatar, ldapUser.dn, now, now, user.id)
         }
 

@@ -32,9 +32,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
         r.color as role_color,
         g.email as granted_by_email
       FROM rbac_user_roles ur
-      JOIN users u ON u.id = ur.user_id
+      JOIN User u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
-      LEFT JOIN users g ON g.id = ur.granted_by
+      LEFT JOIN User g ON g.id = ur.granted_by
       WHERE ur.id = ?
     `).get(id) as any
 
@@ -76,7 +76,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     const assignment = db.prepare(`
       SELECT ur.*, u.email as user_email, r.name as role_name
       FROM rbac_user_roles ur
-      JOIN users u ON u.id = ur.user_id
+      JOIN User u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
       WHERE ur.id = ?
     `).get(id) as any
@@ -141,7 +141,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const assignment = db.prepare(`
       SELECT ur.*, u.email as user_email, r.name as role_name
       FROM rbac_user_roles ur
-      JOIN users u ON u.id = ur.user_id
+      JOIN User u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
       WHERE ur.id = ?
     `).get(id) as any
@@ -200,7 +200,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const updated = db.prepare(`
       SELECT ur.*, u.email as user_email, r.name as role_name, r.color as role_color
       FROM rbac_user_roles ur
-      JOIN users u ON u.id = ur.user_id
+      JOIN User u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
       WHERE ur.id = ?
     `).get(id) as any

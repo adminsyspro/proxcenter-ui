@@ -39,9 +39,9 @@ export async function GET(req: NextRequest) {
         r.is_system as role_is_system,
         g.email as granted_by_email
       FROM rbac_user_roles ur
-      JOIN users u ON u.id = ur.user_id
+      JOIN User u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
-      LEFT JOIN users g ON g.id = ur.granted_by
+      LEFT JOIN User g ON g.id = ur.granted_by
       WHERE 1=1
     `
     const params: any[] = []

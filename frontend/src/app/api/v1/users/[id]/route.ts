@@ -98,7 +98,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     values.push(new Date().toISOString())
     values.push(id)
 
-    db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`).run(...values)
+    db.prepare(`UPDATE User SET ${updates.join(", ")} WHERE id = ?`).run(...values)
 
     // Récupérer l'utilisateur mis à jour
     const updatedUser = db

@@ -24,6 +24,7 @@ const publicApiRoutes = [
   "/api/health",
   "/api/v1/auth/setup",
   "/api/v1/auth/providers",
+  "/api/v1/app/status",
   "/api/internal", // API internes (proxy WS, etc.)
 ]
 
@@ -40,8 +41,7 @@ function getLocaleFromHeader(request: NextRequest): string {
 
   const matchedLocale = browserLocales.find(l => locales.includes(l))
 
-  
-return matchedLocale || defaultLocale
+  return matchedLocale || defaultLocale
 }
 
 // Get locale from cookie or header
@@ -100,8 +100,8 @@ export async function middleware(request: NextRequest) {
       const loginUrl = new URL("/login", request.url)
 
       loginUrl.searchParams.set("callbackUrl", pathname)
-      
-return NextResponse.redirect(loginUrl)
+
+      return NextResponse.redirect(loginUrl)
     }
 
     return response
@@ -129,8 +129,8 @@ return NextResponse.redirect(loginUrl)
     const loginUrl = new URL("/login", request.url)
 
     loginUrl.searchParams.set("callbackUrl", pathname)
-    
-return NextResponse.redirect(loginUrl)
+
+    return NextResponse.redirect(loginUrl)
   }
 
   // Utilisateur authentifié, continuer

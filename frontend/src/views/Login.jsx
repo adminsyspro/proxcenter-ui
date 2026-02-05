@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import {
-  Alert, Box, Button, Checkbox, Divider, FormControl, FormControlLabel,
+  Alert, Box, Button, Checkbox, CircularProgress, Divider, FormControl, FormControlLabel,
   IconButton, InputAdornment, InputLabel, MenuItem, Select, TextField, Typography, alpha, useTheme
 } from '@mui/material'
 import Logo from '@components/layout/shared/Logo'
@@ -22,12 +22,27 @@ export default function LoginPage() {
   const [authMethod, setAuthMethod] = useState('local')
   const [isPasswordShown, setIsPasswordShown] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [checkingSetup, setCheckingSetup] = useState(true)
   const [error, setError] = useState('')
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
+
+  // Vérifier si le setup initial est requis
+  useEffect(() => {
+    fetch('/api/v1/app/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.setupRequired) {
+          router.push('/setup')
+        } else {
+          setCheckingSetup(false)
+        }
+      })
+      .catch(() => setCheckingSetup(false))
+  }, [router])
 
   useEffect(() => {
     fetch('/api/v1/auth/providers')
@@ -49,6 +64,17 @@ export default function LoginPage() {
       else if (result?.ok) { router.push(callbackUrl); router.refresh() }
     } catch { setError(t('auth.loginError')) }
     finally { setLoading(false) }
+  }
+
+  // Afficher un loader pendant la vérification du setup
+  if (checkingSetup) {
+    return (
+      <LoginBackground>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <CircularProgress />
+        </Box>
+      </LoginBackground>
+    )
   }
 
   return (

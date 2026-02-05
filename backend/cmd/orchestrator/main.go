@@ -122,7 +122,12 @@ func main() {
 	}
 
 	// Initialize reports service
-	reportsService, err := reports.NewService(db.DB(), reports.Config{}, pveManager, metricsCollector, alertsService, notifService)
+	reportsConfig := reports.Config{
+		StoragePath:    cfg.Reports.StoragePath,
+		RetentionDays:  cfg.Reports.RetentionDays,
+		CleanupEnabled: cfg.Reports.CleanupEnabled,
+	}
+	reportsService, err := reports.NewService(db.DB(), reportsConfig, pveManager, metricsCollector, alertsService, notifService)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to initialize reports service")
 	}

@@ -649,6 +649,10 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Account settings",
+    "welcome": "Welcome to ProxCenter",
+    "welcomeSubtitle": "Configure your first Proxmox connection",
+    "onboardingTitle": "Initial setup required",
+    "onboardingMessage": "To start using ProxCenter, please add at least one connection to a Proxmox VE or PBS server.",
     "licenseManagement": "Manage your ProxCenter license to access advanced features.",
     "freeLicense": "Free license with limited features",
     "includedFeatures": "Included features:",

@@ -1,25 +1,6 @@
-// Component Imports
-import Providers from '@components/Providers'
-import BlankLayout from '@layouts/BlankLayout'
-import NotFound from '@views/NotFound'
+import { notFound } from 'next/navigation'
 
-// Util Imports
-import { getSystemMode, getServerMode } from '@core/utils/serverHelpers'
-
-const NotFoundPage = async () => {
-  // Type guard to ensure lang is a valid Locale
-  // Vars
-  const direction = 'ltr'
-  const systemMode = await getSystemMode()
-  const mode = await getServerMode()
-
-  return (
-    <Providers direction={direction}>
-      <BlankLayout systemMode={systemMode}>
-        <NotFound mode={mode} />
-      </BlankLayout>
-    </Providers>
-  )
+// Cette page catch-all redirige vers le not-found.jsx racine
+export default function CatchAllNotFound() {
+  notFound()
 }
-
-export default NotFoundPage

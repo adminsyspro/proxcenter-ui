@@ -287,13 +287,52 @@ run_migrations() {
 
     cd "$INSTALL_DIR"
 
+    # Create the volume first to ensure it exists
+    docker volume create proxcenter_data 2>/dev/null || true
+
+    # Initialize the data directory with correct permissions
+    # Run as root first to set up the directory, then chown to nextjs (UID 1001)
+    log_info "Initializing database directory..."
+    docker run --rm \
+        --user root \
+        -v proxcenter_data:/app/data \
+        "$FRONTEND_IMAGE" \
+        sh -c "mkdir -p /app/data && chown -R 1001:1001 /app/data && chmod 755 /app/data"
+
     # Run database sync using prisma db push (simpler than migrate for fresh installs)
     # Uses schema.migrate.prisma which includes URL (compatible with Prisma 6)
+    log_info "Creating database schema..."
+
+    # First verify the schema file exists
     docker run --rm \
+        -v proxcenter_data:/app/data \
+        "$FRONTEND_IMAGE" \
+        sh -c "ls -la /app/prisma/*.prisma 2>&1 || echo 'No prisma schema files found'"
+
+    # Run the migration with full output
+    if ! docker run --rm \
         -v proxcenter_data:/app/data \
         -e DATABASE_URL="file:/app/data/proxcenter.db" \
         "$FRONTEND_IMAGE" \
-        prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate
+        sh -c "echo 'DATABASE_URL='\"file:/app/data/proxcenter.db\" && prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1"; then
+        log_warning "Prisma db push failed, trying alternative method..."
+
+        # Alternative: use npx prisma
+        if ! docker run --rm \
+            -v proxcenter_data:/app/data \
+            -e DATABASE_URL="file:/app/data/proxcenter.db" \
+            "$FRONTEND_IMAGE" \
+            sh -c "npx prisma@6 db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1"; then
+            log_error "Database migration failed. Check the error above."
+        fi
+    fi
+
+    # Verify the database was created
+    log_info "Verifying database..."
+    docker run --rm \
+        -v proxcenter_data:/app/data \
+        "$FRONTEND_IMAGE" \
+        sh -c "ls -la /app/data/ && sqlite3 /app/data/proxcenter.db '.tables' 2>/dev/null || echo 'Could not list tables (sqlite3 may not be installed)'"
 
     log_success "Migrations completed"
 }

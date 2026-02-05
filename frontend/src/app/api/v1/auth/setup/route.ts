@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const db = getDb()
 
     // Vérifier s'il y a déjà des utilisateurs
-    const count = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number }
+    const count = db.prepare("SELECT COUNT(*) as count FROM User").get() as { count: number }
 
     if (count.count > 0) {
       return NextResponse.json(
@@ -59,8 +59,8 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
 
     db.prepare(
-      `INSERT INTO users (id, email, password, name, role, auth_provider, enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'admin', 'credentials', 1, ?, ?)`
+      `INSERT INTO User (id, email, password, name, role, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, 'admin', ?, ?)`
     ).run(id, email.toLowerCase().trim(), hashedPassword, name || null, now, now)
 
     return NextResponse.json({
@@ -90,7 +90,7 @@ return NextResponse.json(
 export async function GET() {
   try {
     const db = getDb()
-    const count = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number }
+    const count = db.prepare("SELECT COUNT(*) as count FROM User").get() as { count: number }
 
     return NextResponse.json({
       setupRequired: count.count === 0,

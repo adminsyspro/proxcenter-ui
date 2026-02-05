@@ -26,7 +26,7 @@ export function hasPermission(check: PermissionCheck): boolean {
   const db = getDb()
 
   // First, check if user is admin in the legacy system (users.role = 'admin')
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(userId) as any
 
   if (user?.role === "admin") {
     return true
@@ -84,7 +84,7 @@ export function getEffectivePermissions(userId: string, resourceType?: string, r
   const permissions = new Set<string>()
 
   // Check legacy admin role
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(userId) as any
 
   if (user?.role === "admin") {
     // Return all permissions
@@ -150,7 +150,7 @@ export function getAccessibleResources(userId: string, permission: string): { sc
   const resources: { scope_type: string; scope_target: string | null }[] = []
 
   // Check legacy admin
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(userId) as any
 
   if (user?.role === "admin") {
     return [{ scope_type: "global", scope_target: null }]
@@ -319,7 +319,7 @@ export async function getRBACContext(): Promise<{ userId: string; isAdmin: boole
   }
 
   const db = getDb()
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(session.user.id) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(session.user.id) as any
 
   return {
     userId: session.user.id,
@@ -371,7 +371,7 @@ export async function requireAdmin(): Promise<NextResponse | null> {
   }
 
   const db = getDb()
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(session.user.id) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(session.user.id) as any
 
   if (user?.role !== "admin") {
     return NextResponse.json(
@@ -395,7 +395,7 @@ export function filterVmsByPermission<T extends { id?: string; connId?: string; 
   const db = getDb()
 
   // Check if user is admin
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(userId) as any
 
   if (user?.role === "admin") {
     return vms // Admin sees everything
@@ -444,7 +444,7 @@ export function filterNodesByPermission<T extends { connId: string; node: string
   const db = getDb()
 
   // Check if user is admin
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
+  const user = db.prepare("SELECT role FROM User WHERE id = ?").get(userId) as any
 
   if (user?.role === "admin") {
     return nodes

@@ -50,7 +50,7 @@ export const authOptions: NextAuthOptions = {
         // Chercher l'utilisateur
         const user = db
           .prepare(
-            "SELECT id, email, password, name, avatar, role, auth_provider, enabled FROM users WHERE email = ?"
+            "SELECT id, email, password, name, avatar, role, auth_provider, enabled FROM User WHERE email = ?"
           )
           .get(email) as any
 
@@ -139,7 +139,7 @@ export const authOptions: NextAuthOptions = {
 
         // Chercher ou créer l'utilisateur
         let user = db
-          .prepare("SELECT id, email, name, role, enabled FROM users WHERE email = ?")
+          .prepare("SELECT id, email, name, role, enabled FROM User WHERE email = ?")
           .get(email) as any
 
         const now = new Date().toISOString()
@@ -149,7 +149,7 @@ export const authOptions: NextAuthOptions = {
           const id = nanoid()
 
           db.prepare(
-            `INSERT INTO users (id, email, name, avatar, role, auth_provider, ldap_dn, enabled, created_at, updated_at, last_login_at)
+            `INSERT INTO User (id, email, name, avatar, role, auth_provider, ldap_dn, enabled, created_at, updated_at, last_login_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
           ).run(id, email, ldapUser.name, ldapUser.avatar, "viewer", "ldap", ldapUser.dn, now, now, now)
 

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const db = getDb()
 
     // Vérifier que l'utilisateur existe
-    const user = db.prepare("SELECT id, email, role FROM users WHERE id = ?").get(targetUserId) as any
+    const user = db.prepare("SELECT id, email, role FROM User WHERE id = ?").get(targetUserId) as any
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })

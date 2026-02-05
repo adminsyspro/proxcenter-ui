@@ -22,13 +22,13 @@ export async function GET() {
     const users = db
       .prepare(
         `SELECT id, email, name, role, auth_provider, enabled, last_login_at, created_at, updated_at 
-         FROM users ORDER BY created_at DESC`
+         FROM User ORDER BY created_at DESC`
       )
       .all()
 
     // Compter les admins
     const adminCount = db
-      .prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")
+      .prepare("SELECT COUNT(*) as count FROM User WHERE role = 'admin'")
       .get() as { count: number }
 
     return NextResponse.json({
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     const db = getDb()
 
     // Vérifier si l'email existe déjà
-    const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email.toLowerCase())
+    const existing = db.prepare("SELECT id FROM User WHERE email = ?").get(email.toLowerCase())
 
     if (existing) {
       return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
 
     db.prepare(
-      `INSERT INTO users (id, email, password, name, role, auth_provider, enabled, created_at, updated_at)
+      `INSERT INTO User (id, email, password, name, role, auth_provider, enabled, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'user', 'credentials', 1, ?, ?)`
     ).run(id, email.toLowerCase().trim(), hashedPassword, name || null, now, now)
 

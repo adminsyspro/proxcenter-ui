@@ -124,8 +124,8 @@ export function getDb() {
     CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled ON alert_rules(enabled);
     CREATE INDEX IF NOT EXISTS idx_alert_rules_metric ON alert_rules(metric);
 
-    -- Table des alertes actives/historique
-    CREATE TABLE IF NOT EXISTS alerts (
+    -- Table des alertes déclenchées par les règles (distinct de la table Prisma "alerts")
+    CREATE TABLE IF NOT EXISTS alert_instances (
       id TEXT PRIMARY KEY,
       rule_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
@@ -146,10 +146,10 @@ export function getDb() {
       acknowledged_by TEXT,
       FOREIGN KEY (rule_id) REFERENCES alert_rules(id) ON DELETE CASCADE
     );
-    CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
-    CREATE INDEX IF NOT EXISTS idx_alerts_rule_id ON alerts(rule_id);
-    CREATE INDEX IF NOT EXISTS idx_alerts_triggered_at ON alerts(triggered_at);
-    CREATE INDEX IF NOT EXISTS idx_alerts_entity ON alerts(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_alert_instances_status ON alert_instances(status);
+    CREATE INDEX IF NOT EXISTS idx_alert_instances_rule_id ON alert_instances(rule_id);
+    CREATE INDEX IF NOT EXISTS idx_alert_instances_triggered_at ON alert_instances(triggered_at);
+    CREATE INDEX IF NOT EXISTS idx_alert_instances_entity ON alert_instances(entity_type, entity_id);
   `)
 
   // Migration pour créer la table favorites si elle n'existe pas

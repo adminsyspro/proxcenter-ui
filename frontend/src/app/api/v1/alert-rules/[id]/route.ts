@@ -159,8 +159,8 @@ export async function DELETE(req: Request, { params }: Params) {
       return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
     }
 
-    // Supprimer aussi les alertes liées
-    db.prepare(`DELETE FROM alerts WHERE rule_id = ?`).run(id)
+    // Supprimer aussi les alertes déclenchées par cette règle
+    db.prepare(`DELETE FROM alert_instances WHERE rule_id = ?`).run(id)
     db.prepare(`DELETE FROM alert_rules WHERE id = ?`).run(id)
 
     return NextResponse.json({ message: 'Règle supprimée' })

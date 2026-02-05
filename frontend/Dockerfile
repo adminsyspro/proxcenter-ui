@@ -95,8 +95,9 @@ COPY --from=builder /app/node_modules/effect ./node_modules/effect
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 
-# Install concurrently for running both servers and prisma CLI for migrations
-RUN npm install -g concurrently prisma
+# Install concurrently for running both servers and prisma 6.x CLI for migrations
+# (Prisma 7 requires complex config file setup, v6 works with DATABASE_URL env var)
+RUN npm install -g concurrently prisma@6
 
 # Switch to non-root user
 USER nextjs

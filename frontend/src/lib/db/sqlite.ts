@@ -198,7 +198,8 @@ export function getDb() {
       name TEXT NOT NULL UNIQUE,
       category TEXT NOT NULL,
       description TEXT,
-      is_dangerous INTEGER NOT NULL DEFAULT 0
+      is_dangerous INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_rbac_permissions_category ON rbac_permissions(category);
 
@@ -302,12 +303,13 @@ export function getDb() {
   ]
 
   // Utiliser INSERT OR IGNORE pour ajouter les permissions manquantes sans erreur
+  const now = new Date().toISOString()
   const insertPerm = db.prepare(
-    'INSERT OR IGNORE INTO rbac_permissions (id, name, category, description, is_dangerous) VALUES (?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO rbac_permissions (id, name, category, description, is_dangerous, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   )
-  
+
   for (const p of allPermissions) {
-    insertPerm.run(p.id, p.name, p.category, p.description, p.is_dangerous || 0)
+    insertPerm.run(p.id, p.name, p.category, p.description, p.is_dangerous || 0, now)
   }
 
   // Insérer les rôles système par défaut si la table est vide

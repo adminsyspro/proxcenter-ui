@@ -18,6 +18,8 @@ NC='\033[0m' # No Color
 INSTALL_DIR="/opt/proxcenter"
 REPO_URL="https://github.com/adminsyspro/proxcenter.git"
 BRANCH="main"
+FRONTEND_IMAGE="ghcr.io/adminsyspro/proxcenter-frontend:latest"
+ORCHESTRATOR_IMAGE="ghcr.io/adminsyspro/proxcenter-orchestrator:latest"
 
 # ============================================
 # Helper Functions
@@ -219,6 +221,9 @@ NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 # NextAuth Configuration
 NEXTAUTH_URL=http://$SERVER_IP:3000
 
+# Image version (latest, v1.0.0, sha-xxx)
+VERSION=latest
+
 # Optional: Grafana admin password (for monitoring profile)
 GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)
 EOF
@@ -249,23 +254,29 @@ create_orchestrator_config() {
 }
 
 # ============================================
-# Build and Start Services
+# Pull and Start Services
 # ============================================
 
-build_images() {
-    log_info "Building Docker images (this may take a few minutes)..."
+pull_images() {
+    log_info "Pulling Docker images..."
 
     cd "$INSTALL_DIR"
-    docker compose build --no-cache
+    docker compose pull
 
-    log_success "Docker images built successfully"
+    log_success "Docker images pulled successfully"
 }
 
 run_migrations() {
     log_info "Running database migrations..."
 
     cd "$INSTALL_DIR"
-    docker compose --profile setup run --rm migrate
+
+    # Run migrations using the frontend image
+    docker run --rm \
+        -v proxcenter_data:/app/data \
+        -e DATABASE_URL=file:/app/data/proxcenter.db \
+        "$FRONTEND_IMAGE" \
+        npx prisma migrate deploy
 
     log_success "Migrations completed"
 }
@@ -326,7 +337,7 @@ print_success() {
     echo "  - View logs:     docker compose -f $INSTALL_DIR/docker-compose.yml logs -f"
     echo "  - Stop:          docker compose -f $INSTALL_DIR/docker-compose.yml down"
     echo "  - Restart:       docker compose -f $INSTALL_DIR/docker-compose.yml restart"
-    echo "  - Update:        cd $INSTALL_DIR && git pull && docker compose up -d --build"
+    echo "  - Update:        docker compose -f $INSTALL_DIR/docker-compose.yml pull && docker compose -f $INSTALL_DIR/docker-compose.yml up -d"
     echo ""
     echo "Configuration files:"
     echo "  - Environment:   $INSTALL_DIR/.env"
@@ -370,9 +381,9 @@ main() {
 
     echo ""
 
-    # Build and start
-    log_info "Building and starting services..."
-    build_images
+    # Pull and start
+    log_info "Pulling and starting services..."
+    pull_images
     run_migrations
     start_services
 

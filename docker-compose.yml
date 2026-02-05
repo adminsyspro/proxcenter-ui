@@ -5,9 +5,7 @@ services:
   # Frontend (Next.js + WebSocket Proxy)
   # ========================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
     container_name: proxcenter-frontend
     restart: unless-stopped
     ports:
@@ -25,9 +23,6 @@ services:
       - proxcenter_data:/app/data
     networks:
       - proxcenter
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -39,9 +34,7 @@ services:
   # Orchestrator (Go backend)
   # ========================================
   orchestrator:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/adminsyspro/proxcenter-orchestrator:${VERSION:-latest}
     container_name: proxcenter-orchestrator
     restart: unless-stopped
     expose:
@@ -54,34 +47,12 @@ services:
       - ./config/orchestrator.yaml:/app/config.yaml:ro
     networks:
       - proxcenter
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
-
-  # ========================================
-  # Database Migration (runs once at startup)
-  # ========================================
-  migrate:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: builder
-    container_name: proxcenter-migrate
-    environment:
-      - DATABASE_URL=file:/app/data/proxcenter.db
-    volumes:
-      - proxcenter_data:/app/data
-    networks:
-      - proxcenter
-    command: ["npx", "prisma", "migrate", "deploy"]
-    profiles:
-      - setup
 
   # ========================================
   # Prometheus (optional monitoring)

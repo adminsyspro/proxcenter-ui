@@ -32,6 +32,9 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source code
 COPY . .
 
+# Rebuild better-sqlite3 native module for this platform
+RUN npm rebuild better-sqlite3
+
 # Now run postinstall scripts (build:icons) - source files are available
 RUN npm run build:icons
 

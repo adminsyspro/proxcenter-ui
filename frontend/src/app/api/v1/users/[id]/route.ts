@@ -24,7 +24,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const user = db
       .prepare(
         `SELECT id, email, name, role, auth_provider, enabled, last_login_at, created_at, updated_at 
-         FROM User WHERE id = ?`
+         FROM users WHERE id = ?`
       )
       .get(id)
 
@@ -56,7 +56,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const db = getDb()
 
     // Vérifier que l'utilisateur existe
-    const user = db.prepare("SELECT * FROM User WHERE id = ?").get(id) as any
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
@@ -98,13 +98,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     values.push(new Date().toISOString())
     values.push(id)
 
-    db.prepare(`UPDATE User SET ${updates.join(", ")} WHERE id = ?`).run(...values)
+    db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`).run(...values)
 
     // Récupérer l'utilisateur mis à jour
     const updatedUser = db
       .prepare(
         `SELECT id, email, name, role, auth_provider, enabled, last_login_at, created_at, updated_at 
-         FROM User WHERE id = ?`
+         FROM users WHERE id = ?`
       )
       .get(id) as any
 
@@ -147,7 +147,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const db = getDb()
 
     // Vérifier que l'utilisateur existe
-    const user = db.prepare("SELECT * FROM User WHERE id = ?").get(id) as any
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
@@ -166,7 +166,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     db.prepare("DELETE FROM rbac_user_permissions WHERE user_id = ?").run(id)
 
     // Supprimer l'utilisateur
-    db.prepare("DELETE FROM User WHERE id = ?").run(id)
+    db.prepare("DELETE FROM users WHERE id = ?").run(id)
 
     // Audit
     const { audit } = await import("@/lib/audit")

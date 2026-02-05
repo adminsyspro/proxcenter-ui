@@ -39,9 +39,9 @@ export async function GET(req: NextRequest) {
         r.is_system as role_is_system,
         g.email as granted_by_email
       FROM rbac_user_roles ur
-      JOIN User u ON u.id = ur.user_id
+      JOIN users u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
-      LEFT JOIN User g ON g.id = ur.granted_by
+      LEFT JOIN users g ON g.id = ur.granted_by
       WHERE 1=1
     `
     const params: any[] = []
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
     const db = getDb()
 
     // Vérifier que l'utilisateur existe
-    const user = db.prepare("SELECT id, email FROM User WHERE id = ?").get(user_id) as any
+    const user = db.prepare("SELECT id, email FROM users WHERE id = ?").get(user_id) as any
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })

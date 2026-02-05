@@ -54,8 +54,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
         u.name,
         g.email as granted_by_email
       FROM rbac_user_roles ur
-      JOIN User u ON u.id = ur.user_id
-      LEFT JOIN User g ON g.id = ur.granted_by
+      JOIN users u ON u.id = ur.user_id
+      LEFT JOIN users g ON g.id = ur.granted_by
       WHERE ur.role_id = ?
       ORDER BY ur.granted_at DESC
     `).all(id)

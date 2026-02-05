@@ -516,6 +516,16 @@ type DetailsPayload = {
     ioDelay?: number
     ksmSharing?: number
     updates?: Array<{ package?: string; version?: string }>
+    subscription?: {
+      status?: string
+      nextDueDate?: string
+      productName?: string
+      key?: string
+      type?: string
+      serverId?: string
+      sockets?: number
+      lastChecked?: string
+    }
   }
 
   // Données pour les tableaux intégrés

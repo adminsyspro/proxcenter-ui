@@ -109,16 +109,25 @@ model Setting {
   id        String   @id @default(cuid())
   key       String   @unique
   value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }
 
 model Favorite {
-  id        String   @id @default(cuid())
-  vmKey     String   @unique
-  vmName    String?
-  userId    String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String?  @map("user_id")
+  vmKey        String   @map("vm_key")
+  connectionId String?  @map("connection_id")
+  node         String?
+  vmType       String?  @map("vm_type")
+  vmid         String?
+  vmName       String?  @map("vm_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, vmKey])
+  @@map("favorites")
 }
 
 model DashboardLayout {
@@ -143,103 +152,151 @@ model AlertRule {
   duration    Int      @default(300)
   severity    String   @default("warning")
   enabled     Boolean  @default(true)
-  scope       String   @default("all")
-  scopeFilter String?
+  scopeType   String   @default("all") @map("scope_type")
+  scopeTarget String?  @map("scope_target")
   notify      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
   alerts      Alert[]
+
+  @@map("alert_rules")
 }
 
 model Alert {
   id             String     @id @default(cuid())
   fingerprint    String     @unique
-  ruleId         String?
+  ruleId         String?    @map("rule_id")
   rule           AlertRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
 
   // Alert info
   severity       String
   message        String
   source         String
-  sourceType     String     @default("pve")
+  sourceType     String     @default("pve") @map("source_type")
 
   // Entity info
-  entityType     String?
-  entityId       String?
-  entityName     String?
+  entityType     String?    @map("entity_type")
+  entityId       String?    @map("entity_id")
+  entityName     String?    @map("entity_name")
 
   // Metric info
   metric         String?
-  currentValue   Float?
+  currentValue   Float?     @map("current_value")
   threshold      Float?
 
   // Status tracking
   status         String     @default("active")
   occurrences    Int        @default(1)
-  firstSeenAt    DateTime   @default(now())
-  lastSeenAt     DateTime   @default(now())
-  acknowledgedAt DateTime?
-  acknowledgedBy String?
-  resolvedAt     DateTime?
+  firstSeenAt    DateTime   @default(now()) @map("first_seen_at")
+  lastSeenAt     DateTime   @default(now()) @map("last_seen_at")
+  acknowledgedAt DateTime?  @map("acknowledged_at")
+  acknowledgedBy String?    @map("acknowledged_by")
+  resolvedAt     DateTime?  @map("resolved_at")
 
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@map("alerts")
 }
 
-model Role {
-  id          String           @id @default(cuid())
-  name        String           @unique
+model RbacRole {
+  id          String               @id @default(cuid())
+  name        String               @unique
   description String?
-  isBuiltIn   Boolean          @default(false)
-  permissions RolePermission[]
-  assignments RoleAssignment[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  isSystem    Boolean              @default(false) @map("is_system")
+  color       String?
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  permissions RbacRolePermission[]
+  userRoles   RbacUserRole[]
+
+  @@map("rbac_roles")
 }
 
-model Permission {
-  id          String           @id @default(cuid())
-  code        String           @unique
-  name        String
+model RbacPermission {
+  id          String               @id @default(cuid())
+  name        String               @unique
   description String?
   category    String
-  roles       RolePermission[]
-  createdAt   DateTime         @default(now())
+  isDangerous Boolean              @default(false) @map("is_dangerous")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  roles       RbacRolePermission[]
+  userPerms   RbacUserPermission[]
+
+  @@map("rbac_permissions")
 }
 
-model RolePermission {
-  id           String     @id @default(cuid())
-  roleId       String
-  permissionId String
-  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+model RbacRolePermission {
+  id           String         @id @default(cuid())
+  roleId       String         @map("role_id")
+  permissionId String         @map("permission_id")
+  role         RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
+  @@map("rbac_role_permissions")
 }
 
-model RoleAssignment {
-  id        String   @id @default(cuid())
-  userId    String
-  roleId    String
-  scope     String   @default("global")
-  scopeId   String?
-  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+model RbacUserRole {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  roleId      String    @map("role_id")
+  scopeType   String    @default("global") @map("scope_type")
+  scopeTarget String?   @map("scope_target")
+  grantedBy   String?   @map("granted_by")
+  grantedAt   DateTime  @default(now()) @map("granted_at")
+  expiresAt   DateTime? @map("expires_at")
+  role        RbacRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, roleId, scope, scopeId])
+  @@unique([userId, roleId, scopeType, scopeTarget])
+  @@map("rbac_user_roles")
+}
+
+model RbacUserPermission {
+  id           String         @id @default(cuid())
+  userId       String         @map("user_id")
+  permissionId String         @map("permission_id")
+  scopeType    String         @default("global") @map("scope_type")
+  scopeTarget  String?        @map("scope_target")
+  grantedBy    String?        @map("granted_by")
+  grantedAt    DateTime       @default(now()) @map("granted_at")
+  expiresAt    DateTime?      @map("expires_at")
+  permission   RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId, scopeType, scopeTarget])
+  @@map("rbac_user_permissions")
 }
 
 model AuditLog {
   id           String   @id @default(cuid())
   timestamp    DateTime @default(now())
-  userId       String?
-  userEmail    String?
+  userId       String?  @map("user_id")
+  userEmail    String?  @map("user_email")
   action       String
-  resourceType String
-  resourceId   String?
-  resourceName String?
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  resourceName String?  @map("resource_name")
   details      String?
-  ipAddress    String?
-  userAgent    String?
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
   status       String   @default("success")
+
+  @@map("audit_logs")
+}
+
+model LdapConfig {
+  id              String   @id @default("default")
+  enabled         Boolean  @default(false)
+  url             String?
+  bindDn          String?  @map("bind_dn")
+  bindPasswordEnc String?  @map("bind_password_enc")
+  baseDn          String?  @map("base_dn")
+  userFilter      String?  @map("user_filter")
+  emailAttribute  String?  @map("email_attribute")
+  nameAttribute   String?  @map("name_attribute")
+  tlsInsecure     Boolean  @default(false) @map("tls_insecure")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("ldap_config")
 }

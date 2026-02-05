@@ -40,9 +40,9 @@ export default function InventoryPage() {
   const [err, setErr] = useState<string | null>(null)
 
   const [connections, setConnections] = useState<Connection[]>([])
-  const [selection, setSelection] = useState<InventorySelection | null>(null)
+  const [selection, setSelection] = useState<InventorySelection | null>({ type: 'root', id: 'root' })
   const [refreshTree, setRefreshTree] = useState<(() => void) | null>(null)
-  
+
   // Mode de vue actuel et listes de données
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hosts, setHosts] = useState<HostItem[]>([])
@@ -257,6 +257,13 @@ return () => setPageInfo('', '', '')
     void loadFavorites()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Quand on passe en mode tree, sélectionner automatiquement 'root' pour afficher la vue arborescente
+  useEffect(() => {
+    if (viewMode === 'tree' && (!selection || selection.type !== 'root')) {
+      setSelection({ type: 'root', id: 'root' })
+    }
+  }, [viewMode])
 
   // Gestion du resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

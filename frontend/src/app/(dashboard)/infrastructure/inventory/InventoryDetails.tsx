@@ -402,6 +402,9 @@ export type InventorySelection =
   | { type: 'node'; id: string }
   | { type: 'vm'; id: string }
   | { type: 'storage'; id: string }
+  | { type: 'pbs'; id: string }
+  | { type: 'pbs-datastore'; id: string }
+  | { type: 'datastore'; id: string }
 
 type Kpi = { label: string; value: string; hint?: string }
 type KV = { k: string; v: string }
@@ -560,6 +563,31 @@ type DetailsPayload = {
 
   // Ceph health status
   cephHealth?: string  // HEALTH_OK, HEALTH_WARN, HEALTH_ERR
+
+  // All VMs data for cluster view
+  allVms?: Array<{
+    id: string
+    connId: string
+    connName?: string
+    node: string
+    vmid: number | string
+    name: string
+    status: string
+    type: 'qemu' | 'lxc'
+    template?: boolean
+    cpu?: number
+    cpuPct?: number
+    ram?: number
+    memPct?: number
+    maxmem?: number
+    disk?: number
+    maxdisk?: number
+    uptime?: number
+    tags?: string[]
+    isCluster?: boolean
+  }>
+  vmsCount?: number
+  clusterName?: string | null
 
   // PBS (Proxmox Backup Server) data
   pbsInfo?: {
@@ -3143,10 +3171,10 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       status: statusData ? 'ok' : 'crit',
       tags: [],
       kpis: [
-        { label: 'Datastores', value: datastoresData.length },
-        { label: 'Backups', value: totalBackups },
-        { label: 'VMs', value: totalVms },
-        { label: 'CTs', value: totalCts },
+        { label: 'Datastores', value: String(datastoresData.length) },
+        { label: 'Backups', value: String(totalBackups) },
+        { label: 'VMs', value: String(totalVms) },
+        { label: 'CTs', value: String(totalCts) },
       ],
       metrics: {
         storage: { label: 'Storage', pct: usagePercent, used: totalUsed, max: totalSize },
@@ -5721,13 +5749,13 @@ function RootInventoryView({
   pbsServers?: { connId: string; name: string; status: string; backupCount: number }[]
   onVmClick: (vm: VmRow) => void
   onVmAction: (vm: VmRow, action: any) => void
-  onMigrate: (vm: { connId: string; node: string; type: string; vmid: string; name: string }) => void
+  onMigrate: (vm: { connId: string; node: string; type: string; vmid: string | number; name: string }) => void
   onNodeClick: (connId: string, node: string) => void
   onSelect?: (sel: InventorySelection) => void
   favorites?: Set<string>
-  onToggleFavorite?: (connId: string, node: string, vmType: string, vmid: string, vmName?: string) => void
+  onToggleFavorite?: (vm: { id: string; connId: string; node: string; type: string; vmid: string | number; name?: string }) => void
   migratingVmIds?: Set<string>
-  onLoadTrendsBatch?: (vms: Array<{ connId: string; node: string; vmid: string }>) => Promise<Record<string, TrendPoint[]>>
+  onLoadTrendsBatch?: (vms: VmRow[]) => Promise<Record<string, TrendPoint[]>>
   showIpSnap?: boolean
   ipSnapLoading?: boolean
   onLoadIpSnap?: () => void
@@ -5752,6 +5780,18 @@ function RootInventoryView({
   // État pour sections collapsed - par défaut tout est replié (on stocke les IDs dépliés, pas repliés)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
   const [expandedHosts, setExpandedHosts] = useState<Set<string>>(new Set())
+
+  // Wrapper pour onToggleFavorite qui passe le VmRow directement
+  const handleToggleFavorite = useCallback((vm: VmRow) => {
+    onToggleFavorite?.({
+      id: vm.id,
+      connId: vm.connId,
+      node: vm.node,
+      type: vm.type,
+      vmid: vm.vmid,
+      name: vm.name
+    })
+  }, [onToggleFavorite])
   
   // Helper pour calculer les stats CPU/RAM d'un groupe de VMs
   const calculateStats = (vms: AllVmItem[]) => {
@@ -6060,7 +6100,7 @@ function RootInventoryView({
                               onMigrate={onMigrate}
                               maxHeight={300}
                               favorites={favorites}
-                              onToggleFavorite={onToggleFavorite}
+                              onToggleFavorite={handleToggleFavorite}
                               migratingVmIds={migratingVmIds}
                             />
                           </Box>
@@ -6159,7 +6199,7 @@ export default function InventoryDetails({
   onLoadIpSnap?: () => void
   onRefresh?: () => Promise<void>  // Callback pour rafraîchir les données
   favorites?: Set<string>  // Favoris partagés depuis le parent
-  onToggleFavorite?: (connId: string, node: string, vmType: string, vmid: string, vmName?: string) => void
+  onToggleFavorite?: (vm: { connId: string; node: string; type: string; vmid: string | number; name?: string }) => void
   migratingVmIds?: Set<string>  // IDs des VMs en cours de migration
 }) {
   const t = useTranslations()
@@ -6344,8 +6384,8 @@ export default function InventoryDetails({
 
     // Si la prop onToggleFavorite est fournie, l'utiliser
     if (propToggleFavorite) {
-      propToggleFavorite(vm.connId, vm.node, vm.type, vmidStr, vm.name)
-      
+      propToggleFavorite({ connId: vm.connId, node: vm.node, type: vm.type, vmid: vm.vmid, name: vm.name })
+
 return
     }
     
@@ -8945,7 +8985,7 @@ return
   }, [selection?.type, selection?.id, clusterTab, clusterCephLoaded, clusterCephLoading, loadClusterCeph])
 
   // Calculer les tendances Ceph basées sur l'historique
-  const cephTrends = useMemo(() => {
+  const cephTrends = useMemo((): { read_bytes: 'stable' | 'up' | 'down'; write_bytes: 'stable' | 'up' | 'down'; read_iops: 'stable' | 'up' | 'down'; write_iops: 'stable' | 'up' | 'down' } => {
     if (clusterCephPerfHistory.length < 5) {
       return { read_bytes: 'stable', write_bytes: 'stable', read_iops: 'stable', write_iops: 'stable' }
     }
@@ -10522,7 +10562,12 @@ return vm?.isCluster ?? false
             clusterPveVersion={selection?.type === 'cluster' ? clusterPveVersion : undefined}
             connId={selection?.type === 'node' ? parseNodeId(selection.id).connId : undefined}
             nodeName={selection?.type === 'node' ? parseNodeId(selection.id).node : undefined}
-            onRefreshSubscription={() => loadDetailData(selection!)}
+            onRefreshSubscription={async () => {
+              if (selection) {
+                const payload = await fetchDetails(selection)
+                setData(payload)
+              }
+            }}
             cephHealth={data.cephHealth}
             nodesOnline={data.nodesData?.filter(n => n.status === 'online').length}
             nodesTotal={data.nodesData?.length}
@@ -10739,24 +10784,14 @@ return vm?.isCluster ?? false
                             </Box>
                           </Box>
 
-                          {/* Server Load (nodes) ou Disk I/O (VMs) */}
+                          {/* Disk I/O (VMs) */}
                           <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                             <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                              {selection?.type === 'node' ? 'Server Load' : 'Disk I/O'}
+                              Disk I/O
                             </Typography>
                             <Box sx={{ height: 160 }}>
                               <ResponsiveContainer width="100%" height="100%">
-                                {selection?.type === 'node' ? (
-                                  <AreaChart data={series}>
-                                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                    <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
-                                    <Tooltip
-                                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                      formatter={(v: any) => [Number(v).toFixed(2), 'Load']}
-                                    />
-                                    <Area type="monotone" dataKey="loadAvg" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} connectNulls />
-                                  </AreaChart>
-                                ) : (
+                                {(
                                   <AreaChart data={series}>
                                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -13636,7 +13671,7 @@ return (
                           </Typography>
                           <Grid container spacing={3}>
                               {/* Status */}
-                              <Grid item xs={4} sx={{ textAlign: 'center' }}>
+                              <Grid size={4} sx={{ textAlign: 'center' }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Status</Typography>
                                 <Box sx={{ 
                                   width: 48, 
@@ -13659,7 +13694,7 @@ return (
                                 </Typography>
                               </Grid>
                               {/* Nodes */}
-                              <Grid item xs={4} sx={{ textAlign: 'center' }}>
+                              <Grid size={4} sx={{ textAlign: 'center' }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Nodes</Typography>
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
@@ -13679,7 +13714,7 @@ return (
                                 </Box>
                               </Grid>
                               {/* Ceph */}
-                              <Grid item xs={4} sx={{ textAlign: 'center' }}>
+                              <Grid size={4} sx={{ textAlign: 'center' }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Ceph</Typography>
                                 <Box sx={{ 
                                   width: 48, 
@@ -13714,7 +13749,7 @@ return (
                             </Typography>
                             <Grid container spacing={2}>
                               {/* Virtual Machines */}
-                              <Grid item xs={6}>
+                              <Grid size={6}>
                                 <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Virtual Machines</Typography>
                                 {(() => {
                                   const allVms = (data as any).allVms || []
@@ -13744,7 +13779,7 @@ return (
                                 })()}
                               </Grid>
                               {/* LXC Containers */}
-                              <Grid item xs={6}>
+                              <Grid size={6}>
                                 <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>LXC Containers</Typography>
                                 {(() => {
                                   const allVms = (data as any).allVms || []
@@ -13802,7 +13837,7 @@ return (
                                 return (
                                   <>
                                     {/* CPU */}
-                                    <Grid item xs={12} md={4} sx={{ textAlign: 'center' }}>
+                                    <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: 'center' }}>
                                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>CPU</Typography>
                                       <Box sx={{ position: 'relative', display: 'inline-flex', mb: 1 }}>
                                         <CircularProgress
@@ -13821,7 +13856,7 @@ return (
                                       </Typography>
                                     </Grid>
                                     {/* Memory */}
-                                    <Grid item xs={12} md={4} sx={{ textAlign: 'center' }}>
+                                    <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: 'center' }}>
                                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Memory</Typography>
                                       <Box sx={{ position: 'relative', display: 'inline-flex', mb: 1 }}>
                                         <CircularProgress
@@ -13840,7 +13875,7 @@ return (
                                       </Typography>
                                     </Grid>
                                     {/* Storage */}
-                                    <Grid item xs={12} md={4} sx={{ textAlign: 'center' }}>
+                                    <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: 'center' }}>
                                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Storage</Typography>
                                       <Box sx={{ position: 'relative', display: 'inline-flex', mb: 1 }}>
                                         <CircularProgress
@@ -14016,10 +14051,10 @@ return (
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                   <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                                    CPU: {node.cpuPct?.toFixed(1) || 0}%
+                                    CPU: {node.cpu?.toFixed(1) || 0}%
                                   </Typography>
                                   <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                                    RAM: {node.memPct?.toFixed(1) || 0}%
+                                    RAM: {node.ram?.toFixed(1) || 0}%
                                   </Typography>
                                 </Box>
                               </Box>

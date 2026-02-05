@@ -144,6 +144,7 @@ export type InventorySelection =
   | { type: 'storage'; id: string } // (réservé)
   | { type: 'pbs'; id: string } // id = pbsConnectionId (serveur PBS)
   | { type: 'datastore'; id: string } // id = pbsConnectionId:datastoreName
+  | { type: 'pbs-datastore'; id: string } // alias for datastore
 
 export type ViewMode = 'tree' | 'vms' | 'hosts' | 'pools' | 'tags' | 'templates' | 'favorites'
 
@@ -204,7 +205,7 @@ type Props = {
   onTagsChange?: (tags: TagItem[]) => void    // callback pour passer les tags groupés
   onPbsServersChange?: (pbs: TreePbsServer[]) => void  // callback pour passer les PBS
   favorites?: Set<string>  // favoris partagés depuis le parent
-  onToggleFavorite?: (connId: string, node: string, vmType: string, vmid: string, vmName?: string) => void
+  onToggleFavorite?: (vm: { connId: string; node: string; type: string; vmid: string | number; name?: string }) => void
   migratingVmIds?: Set<string>  // Set de vmIds en cours de migration (format: "connId:vmid")
 }
 
@@ -631,10 +632,10 @@ return
   }
 
   // Ajouter/Supprimer un favori
-  const toggleFavorite = async (connId: string, node: string, vmType: string, vmid: string, vmName?: string) => {
+  const toggleFavorite = async (connId: string, node: string, vmType: string, vmid: string | number, vmName?: string) => {
     // Si la prop onToggleFavorite est fournie, l'utiliser
     if (onToggleFavorite) {
-      onToggleFavorite(connId, node, vmType, vmid, vmName)
+      onToggleFavorite({ connId, node, type: vmType, vmid, name: vmName })
       
 return
     }

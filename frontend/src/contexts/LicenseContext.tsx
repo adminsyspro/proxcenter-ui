@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 
 // Features disponibles
 export const Features = {
@@ -15,9 +15,36 @@ export const Features = {
   CEPH_REPLICATION: 'ceph_replication',
   LDAP: 'ldap',
   REPORTS: 'reports',
+} as const
+
+type FeatureId = typeof Features[keyof typeof Features]
+
+interface LicenseStatus {
+  licensed: boolean
+  expired: boolean
+  edition?: string
+  features?: string[]
+  [key: string]: any
 }
 
-const LicenseContext = createContext({
+interface Feature {
+  id: string
+  enabled: boolean
+  [key: string]: any
+}
+
+interface LicenseContextValue {
+  status: LicenseStatus | null
+  loading: boolean
+  error: string | null
+  isLicensed: boolean
+  isEnterprise: boolean
+  features: Feature[]
+  hasFeature: (featureId: FeatureId | string) => boolean
+  refresh: () => Promise<void>
+}
+
+const LicenseContext = createContext<LicenseContextValue>({
   status: null,
   loading: true,
   error: null,
@@ -25,14 +52,14 @@ const LicenseContext = createContext({
   isEnterprise: false,
   features: [],
   hasFeature: () => false,
-  refresh: () => {},
+  refresh: async () => {},
 })
 
-export function LicenseProvider({ children }) {
-  const [status, setStatus] = useState(null)
-  const [features, setFeatures] = useState([])
+export function LicenseProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<LicenseStatus | null>(null)
+  const [features, setFeatures] = useState<Feature[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   const loadLicenseStatus = useCallback(async () => {
     try {
@@ -44,7 +71,7 @@ export function LicenseProvider({ children }) {
       } else {
         setError('Failed to load license status')
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to load license status:', e)
       setError(e?.message || 'Failed to load license status')
     }
@@ -72,10 +99,10 @@ export function LicenseProvider({ children }) {
     refresh()
   }, [refresh])
 
-  const isLicensed = status?.licensed && !status?.expired
+  const isLicensed = Boolean(status?.licensed && !status?.expired)
   const isEnterprise = status?.edition === 'enterprise'
 
-  const hasFeature = useCallback((featureId) => {
+  const hasFeature = useCallback((featureId: FeatureId | string): boolean => {
     if (!isLicensed) return false
 
     // Si pas de features dans le statut, vérifier dans la liste des features

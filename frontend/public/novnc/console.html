@@ -252,7 +252,9 @@ node bundle-novnc.js
         
         loadingText.textContent = 'Connexion VNC...';
         
-        const wsFullUrl = `ws://${window.location.hostname}:3001${wsUrl}`;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // wsUrl comes from API as "/ws/console/{sessionId}", nginx proxies /api/internal/ws/* to ws-proxy
+        const wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
         console.log('WebSocket URL:', wsFullUrl);
         
         rfb = new RFB(screen, wsFullUrl, { credentials: { password } });

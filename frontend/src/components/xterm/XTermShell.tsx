@@ -109,8 +109,9 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, pvePort = 
         wsRef.current.close()
       }
 
-      // Connexion WebSocket via le proxy ws-proxy.js sur port 3001
-      let proxyWsUrl = `ws://${window.location.hostname}:3001/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
+      // Connexion WebSocket via le proxy ws-proxy.js (passé par nginx en production)
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      let proxyWsUrl = `${wsProtocol}//${window.location.host}/api/internal/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
       
       // Ajouter le token API si disponible
       if (apiToken) {

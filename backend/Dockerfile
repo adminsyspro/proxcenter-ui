@@ -6,18 +6,12 @@ WORKDIR /app
 # Install dependencies
 RUN apk add --no-cache gcc musl-dev sqlite-dev git
 
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies with verbose output and retry
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download -x
-
-# Copy source code
+# Copy everything and build in one step
 COPY . .
 
-# Build
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o orchestrator ./cmd/orchestrator
+# Download and build
+RUN go mod download && \
+    CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o orchestrator ./cmd/orchestrator
 
 # Runtime stage
 FROM alpine:3.19
@@ -33,9 +27,9 @@ RUN adduser -D -g '' appuser
 # Create data directory
 RUN mkdir -p /app/data && chown appuser:appuser /app/data
 
-# Copy binary
+# Copy binary and config
 COPY --from=builder /app/orchestrator .
-COPY --from=builder /app/config.yaml .
+COPY --from=builder /app/config.yaml* ./
 
 # Switch to non-root user
 USER appuser

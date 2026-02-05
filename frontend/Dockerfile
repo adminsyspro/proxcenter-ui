@@ -11,10 +11,10 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ sqlite-dev
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package.json ./
 
-# Install dependencies (skip postinstall to avoid tsx requirement during install)
-RUN npm install --ignore-scripts
+# Install all dependencies (including devDependencies for build)
+RUN npm install --legacy-peer-deps
 
 # ========================================
 # Stage 2: Builder
@@ -31,9 +31,6 @@ COPY --from=deps /app/node_modules ./node_modules
 
 # Copy source code
 COPY . .
-
-# Run postinstall scripts now that everything is in place
-RUN npm run build:icons || true
 
 # Generate Prisma client
 RUN npx prisma generate

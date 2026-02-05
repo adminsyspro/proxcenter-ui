@@ -68,7 +68,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
 
-  @@map("User")
+  @@map("users")
 }
 
 model Account {

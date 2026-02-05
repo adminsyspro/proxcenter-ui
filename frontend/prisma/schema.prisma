@@ -269,13 +269,15 @@ model AuditLog {
   userId       String?  @map("user_id")
   userEmail    String?  @map("user_email")
   action       String
-  resourceType String   @map("resource_type")
+  category     String
+  resourceType String?  @map("resource_type")
   resourceId   String?  @map("resource_id")
   resourceName String?  @map("resource_name")
   details      String?
   ipAddress    String?  @map("ip_address")
   userAgent    String?  @map("user_agent")
   status       String   @default("success")
+  errorMessage String?  @map("error_message")
 
   @@map("audit_logs")
 }

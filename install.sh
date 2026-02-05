@@ -265,7 +265,7 @@ create_orchestrator_config() {
         sed -i "s|cors_origins:|cors_origins:\n    - \"http://$SERVER_IP:3000\"|g" "$INSTALL_DIR/config/orchestrator.yaml"
     fi
 
-    chmod 600 "$INSTALL_DIR/config/orchestrator.yaml"
+    chmod 644 "$INSTALL_DIR/config/orchestrator.yaml"
     log_success "Orchestrator configuration created"
 }
 

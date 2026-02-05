@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/db/prisma"
+import { getDb } from "@/lib/db/sqlite"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
-    // Verify database connectivity
-    await prisma.$queryRaw`SELECT 1`
+    // Verify database connectivity using direct SQLite connection
+    const db = getDb()
+    db.prepare("SELECT 1").get()
 
     return NextResponse.json({
       status: "healthy",

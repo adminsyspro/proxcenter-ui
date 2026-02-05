@@ -1,0 +1,152 @@
+version: "3.8"
+
+services:
+  # ========================================
+  # Frontend (Next.js + WebSocket Proxy)
+  # ========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: proxcenter-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Next.js
+      - "3001:3001"  # WebSocket proxy (noVNC/xterm)
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/proxcenter.db
+      - APP_SECRET=${APP_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - APP_URL=http://localhost:3000
+      - WS_PORT=3001
+    volumes:
+      - proxcenter_data:/app/data
+    networks:
+      - proxcenter
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ========================================
+  # Orchestrator (Go backend)
+  # ========================================
+  orchestrator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: proxcenter-orchestrator
+    restart: unless-stopped
+    expose:
+      - "8080"  # Internal only, not exposed to host
+    environment:
+      - CONFIG_FILE=/app/config.yaml
+    volumes:
+      - proxcenter_data:/app/shared_data:ro  # Read-only access to frontend DB
+      - orchestrator_data:/app/data          # Orchestrator's own DB
+      - ./config/orchestrator.yaml:/app/config.yaml:ro
+    networks:
+      - proxcenter
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # ========================================
+  # Database Migration (runs once at startup)
+  # ========================================
+  migrate:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: proxcenter-migrate
+    environment:
+      - DATABASE_URL=file:/app/data/proxcenter.db
+    volumes:
+      - proxcenter_data:/app/data
+    networks:
+      - proxcenter
+    command: ["npx", "prisma", "migrate", "deploy"]
+    profiles:
+      - setup
+
+  # ========================================
+  # Prometheus (optional monitoring)
+  # ========================================
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: proxcenter-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - proxcenter
+    profiles:
+      - monitoring
+
+  # ========================================
+  # Grafana (optional monitoring)
+  # ========================================
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: proxcenter-grafana
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - proxcenter
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  proxcenter:
+    driver: bridge
+    name: proxcenter
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  proxcenter_data:
+    name: proxcenter_data
+  orchestrator_data:
+    name: orchestrator_data
+  prometheus_data:
+    name: prometheus_data
+  grafana_data:
+    name: grafana_data

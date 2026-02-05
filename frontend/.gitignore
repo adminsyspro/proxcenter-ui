@@ -41,8 +41,8 @@ src/assets/iconify-icons/generated-icons.js
 src/assets/iconify-icons/generated-icons.css
 
 # Database & data
-db/
-data/
+/db/
+/data/
 *.db
 *.db-journal
 *.db-shm

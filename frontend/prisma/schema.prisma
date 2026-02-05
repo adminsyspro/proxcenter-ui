@@ -6,6 +6,12 @@ datasource db {
   provider = "sqlite"
 }
 
+// ============================================
+// Modèles gérés par Prisma
+// Les autres tables (users, sessions, RBAC, audit_logs, etc.)
+// sont créées et gérées par sqlite.ts
+// ============================================
+
 model Connection {
   id          String  @id @default(cuid())
   name        String
@@ -31,99 +37,19 @@ model Connection {
 }
 
 model ManagedHost {
-  id           String     @id @default(cuid())
+  id           String      @id @default(cuid())
   connectionId String?
   connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   node         String
   displayName  String?
-  enabled      Boolean    @default(true)
+  enabled      Boolean     @default(true)
   notes        String?
   description  String?
   tags         String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   @@unique([connectionId, node])
-}
-
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime? @map("email_verified")
-  image         String?
-  avatar        String?
-  password      String?
-  role          String    @default("user")
-  authProvider  String?   @map("auth_provider")
-  ldapDn        String?   @map("ldap_dn")
-  enabled       Boolean   @default(true)
-  lastLoginAt   DateTime? @map("last_login_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  accounts      Account[]
-  sessions      Session[]
-
-  @@map("users")
-}
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-model Setting {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("settings")
-}
-
-model Favorite {
-  id           String   @id @default(cuid())
-  userId       String?  @map("user_id")
-  vmKey        String   @map("vm_key")
-  connectionId String?  @map("connection_id")
-  node         String?
-  vmType       String?  @map("vm_type")
-  vmid         String?
-  vmName       String?  @map("vm_name")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@unique([userId, vmKey])
-  @@map("favorites")
 }
 
 model DashboardLayout {
@@ -138,163 +64,41 @@ model DashboardLayout {
   @@unique([userId, name])
 }
 
-model AlertRule {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  metric      String
-  operator    String
-  threshold   Float
-  duration    Int      @default(300)
-  severity    String   @default("warning")
-  enabled     Boolean  @default(true)
-  scopeType   String   @default("all") @map("scope_type")
-  scopeTarget String?  @map("scope_target")
-  notify      Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  alerts      Alert[]
-
-  @@map("alert_rules")
-}
-
 model Alert {
-  id             String     @id @default(cuid())
-  fingerprint    String     @unique
-  ruleId         String?    @map("rule_id")
-  rule           AlertRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  id             String    @id @default(cuid())
+  fingerprint    String    @unique
 
   // Alert info
   severity       String
   message        String
   source         String
-  sourceType     String     @default("pve") @map("source_type")
+  sourceType     String    @default("pve") @map("source_type")
 
   // Entity info
-  entityType     String?    @map("entity_type")
-  entityId       String?    @map("entity_id")
-  entityName     String?    @map("entity_name")
+  entityType     String?   @map("entity_type")
+  entityId       String?   @map("entity_id")
+  entityName     String?   @map("entity_name")
 
   // Metric info
   metric         String?
-  currentValue   Float?     @map("current_value")
+  currentValue   Float?    @map("current_value")
   threshold      Float?
 
   // Status tracking
-  status         String     @default("active")
-  occurrences    Int        @default(1)
-  firstSeenAt    DateTime   @default(now()) @map("first_seen_at")
-  lastSeenAt     DateTime   @default(now()) @map("last_seen_at")
-  acknowledgedAt DateTime?  @map("acknowledged_at")
-  acknowledgedBy String?    @map("acknowledged_by")
-  resolvedAt     DateTime?  @map("resolved_at")
+  status         String    @default("active")
+  occurrences    Int       @default(1)
+  firstSeenAt    DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt     DateTime  @default(now()) @map("last_seen_at")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  acknowledgedBy String?   @map("acknowledged_by")
+  resolvedAt     DateTime? @map("resolved_at")
 
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
+  @@index([status])
+  @@index([severity])
+  @@index([source])
+  @@index([lastSeenAt])
   @@map("alerts")
-}
-
-model RbacRole {
-  id          String               @id @default(cuid())
-  name        String               @unique
-  description String?
-  isSystem    Boolean              @default(false) @map("is_system")
-  color       String?
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
-  permissions RbacRolePermission[]
-  userRoles   RbacUserRole[]
-
-  @@map("rbac_roles")
-}
-
-model RbacPermission {
-  id          String               @id @default(cuid())
-  name        String               @unique
-  description String?
-  category    String
-  isDangerous Boolean              @default(false) @map("is_dangerous")
-  createdAt   DateTime             @default(now()) @map("created_at")
-  roles       RbacRolePermission[]
-  userPerms   RbacUserPermission[]
-
-  @@map("rbac_permissions")
-}
-
-model RbacRolePermission {
-  id           String         @id @default(cuid())
-  roleId       String         @map("role_id")
-  permissionId String         @map("permission_id")
-  role         RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission   RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@unique([roleId, permissionId])
-  @@map("rbac_role_permissions")
-}
-
-model RbacUserRole {
-  id          String    @id @default(cuid())
-  userId      String    @map("user_id")
-  roleId      String    @map("role_id")
-  scopeType   String    @default("global") @map("scope_type")
-  scopeTarget String?   @map("scope_target")
-  grantedBy   String?   @map("granted_by")
-  grantedAt   DateTime  @default(now()) @map("granted_at")
-  expiresAt   DateTime? @map("expires_at")
-  role        RbacRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, roleId, scopeType, scopeTarget])
-  @@map("rbac_user_roles")
-}
-
-model RbacUserPermission {
-  id           String         @id @default(cuid())
-  userId       String         @map("user_id")
-  permissionId String         @map("permission_id")
-  scopeType    String         @default("global") @map("scope_type")
-  scopeTarget  String?        @map("scope_target")
-  grantedBy    String?        @map("granted_by")
-  grantedAt    DateTime       @default(now()) @map("granted_at")
-  expiresAt    DateTime?      @map("expires_at")
-  permission   RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, permissionId, scopeType, scopeTarget])
-  @@map("rbac_user_permissions")
-}
-
-model AuditLog {
-  id           String   @id @default(cuid())
-  timestamp    DateTime @default(now())
-  userId       String?  @map("user_id")
-  userEmail    String?  @map("user_email")
-  action       String
-  category     String
-  resourceType String?  @map("resource_type")
-  resourceId   String?  @map("resource_id")
-  resourceName String?  @map("resource_name")
-  details      String?
-  ipAddress    String?  @map("ip_address")
-  userAgent    String?  @map("user_agent")
-  status       String   @default("success")
-  errorMessage String?  @map("error_message")
-
-  @@map("audit_logs")
-}
-
-model LdapConfig {
-  id              String   @id @default("default")
-  enabled         Boolean  @default(false)
-  url             String?
-  bindDn          String?  @map("bind_dn")
-  bindPasswordEnc String?  @map("bind_password_enc")
-  baseDn          String?  @map("base_dn")
-  userFilter      String?  @map("user_filter")
-  emailAttribute  String?  @map("email_attribute")
-  nameAttribute   String?  @map("name_attribute")
-  tlsInsecure     Boolean  @default(false) @map("tls_insecure")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  @@map("ldap_config")
 }

@@ -116,7 +116,7 @@ ENV DATABASE_URL="file:/app/data/proxcenter.db"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
 
 # Start both Next.js server and WebSocket proxy
 CMD ["concurrently", "--names", "next,ws", "--prefix", "[{name}]", "node server.js", "node ws-proxy.js"]

@@ -1,6 +1,6 @@
-# Binaries
-orchestrator
-license-gen
+# Binaries (only at root, not in cmd/)
+/orchestrator
+/license-gen
 *.exe
 *.exe~
 *.dll

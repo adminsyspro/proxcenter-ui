@@ -45,6 +45,9 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# Create data directory for SQLite (needed during build for page data collection)
+RUN mkdir -p /app/data
+
 RUN npm run build
 
 # ========================================

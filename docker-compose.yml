@@ -17,6 +17,7 @@ services:
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - APP_URL=http://localhost:3000
       - WS_PORT=3001
+      - ORCHESTRATOR_URL=http://orchestrator:8080
     volumes:
       - proxcenter_data:/app/data
     networks:

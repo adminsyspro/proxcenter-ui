@@ -249,7 +249,8 @@
       "storagePools": "Storages",
       "cephStatus": "Ceph Status",
       "zerotrustScore": "Zero Trust Overview",
-      "zerotrustSecuritygroups": "Security Groups"
+      "zerotrustSecuritygroups": "Security Groups",
+      "vmStatusWaffle": "VM Status (Waffle)"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number of clusters and nodes",
@@ -270,7 +271,8 @@
       "storagePools": "PVE storages list",
       "cephStatus": "Ceph cluster status",
       "zerotrustScore": "Security score by cluster (firewall + policies)",
-      "zerotrustSecuritygroups": "Security Groups list by cluster"
+      "zerotrustSecuritygroups": "Security Groups list by cluster",
+      "vmStatusWaffle": "Waffle view of VMs by cluster and status"
     }
   },
   "alerts": {

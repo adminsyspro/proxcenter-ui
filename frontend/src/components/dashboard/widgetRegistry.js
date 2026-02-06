@@ -27,6 +27,9 @@ const QuickStatsWidget = dynamic(() => import('./widgets/QuickStatsWidget'), { s
 const ZeroTrustScoreWidget = dynamic(() => import('./widgets/ZeroTrustScoreWidget'), { ssr: false })
 const ZeroTrustSecurityGroupsWidget = dynamic(() => import('./widgets/ZeroTrustSecurityGroupsWidget'), { ssr: false })
 
+// VM Status Waffle Chart
+const VmStatusWaffleWidget = dynamic(() => import('./widgets/VmStatusWaffleWidget'), { ssr: false })
+
 export const WIDGET_REGISTRY = {
   'kpi-clusters': {
     type: 'kpi-clusters',
@@ -240,6 +243,21 @@ export const WIDGET_REGISTRY = {
     minSize: { w: 3, h: 3 },
     maxSize: { w: 6, h: 6 },
     component: ZeroTrustSecurityGroupsWidget,
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VM STATUS WAFFLE CHART
+  // ═══════════════════════════════════════════════════════════════════════════
+  'vm-status-waffle': {
+    type: 'vm-status-waffle',
+    name: 'VM Status (Waffle)',
+    description: 'Vue waffle des VMs par cluster et status',
+    icon: 'ri-grid-fill',
+    category: 'infrastructure',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 3 },
+    maxSize: { w: 12, h: 8 },
+    component: VmStatusWaffleWidget,
   },
 }
 

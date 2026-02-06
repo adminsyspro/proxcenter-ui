@@ -7674,6 +7674,7 @@ return next
   const [backupsError, setBackupsError] = useState<string | null>(null)
   const [backupsStats, setBackupsStats] = useState<any>(null)
   const [backupsPreloaded, setBackupsPreloaded] = useState(false)
+  const backupsLoadedForIdRef = React.useRef<string | null>(null) // Track which selection ID backups were loaded for
   const [selectedBackup, setSelectedBackup] = useState<any>(null)
 
   // État pour les onglets node (host standalone)
@@ -8372,12 +8373,38 @@ return []
         
 return
       } else {
-        const files = (json.data?.files || []).map((f: any) => ({
-          ...f,
-          browsable: f.type === 'directory' || f.type === 'virtual' || 
-                     f.leaf === false || f.leaf === 0 ||
-                     (f.leaf === undefined && f.type !== 'file'),
-        }))
+        const files = (json.data?.files || []).map((f: any) => {
+          // Les fichiers .img.fidx sont des images de disques bruts PBS
+          // Ils ne supportent pas le file-restore (seuls .pxar.fidx le supportent)
+          // Le nom peut commencer par / (ex: /drive-scsi0.img.fidx)
+          const fileName = (f.name || '').replace(/^\//, '') // Enlever le / initial
+          const isRawDiskImage = fileName && (
+            fileName.endsWith('.img.fidx') ||
+            fileName.endsWith('.raw.fidx') ||
+            fileName.endsWith('.img') ||
+            /^drive-.*\.(img|raw)?\.?fidx$/i.test(fileName) // ex: drive-scsi1.img.fidx, drive-virtio0.fidx
+          )
+
+          // Seuls les .pxar peuvent être explorés (archives de fichiers)
+          const isPxarArchive = fileName && (
+            fileName.endsWith('.pxar.fidx') ||
+            fileName.endsWith('.pxar.didx') ||
+            fileName.includes('.pxar')
+          )
+
+          const browsable = !isRawDiskImage && (
+            isPxarArchive ||
+            f.type === 'directory' || f.type === 'virtual' ||
+            f.leaf === false || f.leaf === 0 ||
+            (f.leaf === undefined && f.type !== 'file')
+          )
+
+          return {
+            ...f,
+            browsable,
+            isRawDiskImage,
+          }
+        })
 
         setExplorerArchives(files)
         if (json.error) setExplorerError(json.error)
@@ -8403,7 +8430,27 @@ return
       if (json.error && !json.data) {
         setExplorerError(json.error)
       } else {
-        setExplorerArchives(json.data?.files || [])
+        // Ajouter la détection des images disques pour le mode PBS aussi
+        const files = (json.data?.files || []).map((f: any) => {
+          const fileName = (f.name || f.filename || '').replace(/^\//, '')
+          const isRawDiskImage = fileName && (
+            fileName.endsWith('.img.fidx') ||
+            fileName.endsWith('.raw.fidx') ||
+            fileName.endsWith('.img') ||
+            /^drive-.*\.(img|raw)?\.?fidx$/i.test(fileName)
+          )
+          const isPxarArchive = fileName && (
+            fileName.endsWith('.pxar.fidx') ||
+            fileName.endsWith('.pxar.didx') ||
+            fileName.includes('.pxar')
+          )
+          return {
+            ...f,
+            browsable: !isRawDiskImage && (isPxarArchive || f.browsable !== false),
+            isRawDiskImage,
+          }
+        })
+        setExplorerArchives(files)
         if (json.error) setExplorerError(json.error)
       }
     } catch (e: any) {
@@ -8453,6 +8500,19 @@ return
   // Naviguer dans une archive/dossier
   const browseArchive = useCallback(async (archiveName: string, path = '/') => {
     if (!selectedBackup || !selection) return
+
+    // Vérifier si c'est une image disque (non explorable)
+    const fileName = (archiveName || '').replace(/^\//, '')
+    const isRawDiskImage = fileName && (
+      fileName.endsWith('.img.fidx') ||
+      fileName.endsWith('.raw.fidx') ||
+      fileName.endsWith('.img') ||
+      /^drive-.*\.(img|raw)?\.?fidx$/i.test(fileName)
+    )
+    if (isRawDiskImage) {
+      setExplorerError('Les images disques brutes (.img.fidx) ne peuvent pas être explorées. Seules les archives .pxar supportent la restauration fichier par fichier.')
+      return
+    }
 
     setExplorerLoading(true)
     setExplorerError(null)
@@ -9180,6 +9240,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
       setBackupsStats(null)
       setBackupsError(null)
       setBackupsPreloaded(false)
+      // Note: backupsLoadedForIdRef est géré dans l'effet de chargement des backups
       setGuestInfo(null)
 
       // Réinitialiser les états HA
@@ -9355,15 +9416,30 @@ return () => {
 
   const canShowRrd = selection && (selection.type === 'node' || selection.type === 'vm')
 
-  // Charger les backups quand on sélectionne l'onglet Sauvegardes (index 4) OU pré-charger pour le badge
+  // Charger les backups quand on sélectionne une VM (pré-chargement pour le badge)
   useEffect(() => {
-    if (selection?.type === 'vm' && !backupsPreloaded && !backupsLoading) {
-      const { type, vmid } = parseVmId(selection.id)
-
-      loadBackups(vmid, type)
-      setBackupsPreloaded(true)
+    // Charger les backups uniquement si la sélection a changé
+    // On utilise une ref pour tracker l'ID de la dernière sélection chargée
+    if (selection?.type !== 'vm') {
+      backupsLoadedForIdRef.current = null
+      return
     }
-  }, [selection?.type, selection?.id, backupsPreloaded, backupsLoading, loadBackups])
+
+    const currentSelectionId = selection.id
+
+    // Si on a déjà chargé pour cette sélection, ne pas recharger
+    if (backupsLoadedForIdRef.current === currentSelectionId) {
+      return
+    }
+
+    // Marquer comme chargé pour cette sélection AVANT d'appeler loadBackups
+    // pour éviter les doubles appels
+    backupsLoadedForIdRef.current = currentSelectionId
+
+    const { type, vmid } = parseVmId(selection.id)
+    loadBackups(vmid, type)
+    setBackupsPreloaded(true)
+  }, [selection?.type, selection?.id, loadBackups])
 
   // Charger les snapshots quand une VM est sélectionnée (pré-chargement pour le badge)
   useEffect(() => {
@@ -12846,7 +12922,8 @@ return (
                                         primary={file.name}
                                         secondary={
                                           file.type === 'virtual' ? 'Drive / Partition' :
-                                          file.browsable ? 'Cliquer pour explorer' : 
+                                          file.isRawDiskImage ? 'Image disque (non explorable)' :
+                                          file.browsable ? 'Cliquer pour explorer' :
                                           file.sizeFormatted || 'Non explorable'
                                         }
                                       />

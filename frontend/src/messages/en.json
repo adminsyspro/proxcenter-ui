@@ -1522,6 +1522,24 @@
     "creating": "Creating...",
     "adminRightsInfo": "This account will have full administrator rights on ProxCenter."
   },
+  "bulkActions": {
+    "startAllVms": "Start all VMs",
+    "shutdownAllVms": "Shutdown all VMs (ACPI)",
+    "stopAllVms": "Force stop all VMs",
+    "migrateAllVms": "Migrate all VMs",
+    "confirmStartAll": "Start all stopped VMs on this node?",
+    "confirmShutdownAll": "Gracefully shutdown all running VMs on this node?",
+    "confirmStopAll": "Force stop all running VMs on this node? This may cause data loss.",
+    "confirmMigrateAll": "Migrate all VMs from this node to another node?",
+    "selectTargetNode": "Select target node",
+    "targetNode": "Target node",
+    "startingVms": "Starting VMs",
+    "stoppingVms": "Stopping VMs",
+    "migratingVms": "Migrating VMs",
+    "vmsStarted": "{count} VMs started",
+    "vmsStopped": "{count} VMs stopped",
+    "vmsMigrated": "{count} VMs migrated"
+  },
   "vmActions": {
     "start": "Start",
     "stop": "Stop",

@@ -6308,7 +6308,7 @@ export default function InventoryDetails({
   const [editOptionSaving, setEditOptionSaving] = useState(false)
   
   // État pour la migration depuis la table (VM sélectionnée pour migrer)
-  const [tableMigrateVm, setTableMigrateVm] = useState<{ connId: string; node: string; type: string; vmid: string; name: string; status: string } | null>(null)
+  const [tableMigrateVm, setTableMigrateVm] = useState<{ connId: string; node: string; type: string; vmid: string; name: string; status: string; isCluster: boolean } | null>(null)
 
   // État pour le clonage depuis la table (VM/Template sélectionné pour cloner)
   const [tableCloneVm, setTableCloneVm] = useState<{ connId: string; node: string; type: string; vmid: string; name: string } | null>(null)
@@ -6906,7 +6906,8 @@ return next
       type: vm.type,
       vmid: String(vm.vmid),
       name: vm.name || `VM ${vm.vmid}`,
-      status: vm.status || 'unknown'
+      status: vm.status || 'unknown',
+      isCluster: vm.isCluster ?? false
     })
   }, [])
 
@@ -10127,12 +10128,8 @@ return
   }
 
   const onMigrate = () => {
-    // Vérifier si la VM est dans un cluster
-    if (selectedVmIsCluster) {
-      setMigrateDialogOpen(true)
-    } else {
-      alert(t('common.notAvailable'))
-    }
+    // Ouvrir le dialog de migration (cross-cluster toujours disponible, même pour standalone)
+    setMigrateDialogOpen(true)
   }
 
   const onClone = () => setCloneDialogOpen(true)
@@ -14188,6 +14185,7 @@ return (
                       onSelect?.({ type: 'node', id: node.id })
                     }}
                     onBulkAction={handleNodeBulkAction}
+                    showMigrateOption={data.nodesData.length > 1}
                   />
                 )}
 
@@ -20233,6 +20231,7 @@ return (
               vmid={vmid}
               vmStatus={data?.vmRealStatus || data?.status || 'unknown'}
               vmType={type as 'qemu' | 'lxc'}
+              isCluster={selectedVmIsCluster}
             />
             
             {/* Dialog de clonage */}
@@ -20265,6 +20264,7 @@ return (
           vmid={tableMigrateVm.vmid}
           vmStatus={tableMigrateVm.status}
           vmType={tableMigrateVm.type as 'qemu' | 'lxc'}
+          isCluster={tableMigrateVm.isCluster}
         />
       )}
       

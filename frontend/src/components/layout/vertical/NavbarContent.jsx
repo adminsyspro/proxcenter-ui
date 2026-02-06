@@ -160,6 +160,9 @@ const NavbarContent = () => {
   const [notifCount, setNotifCount] = useState(0)
   const [notifStats, setNotifStats] = useState({ crit: 0, warn: 0 })
 
+  // DRS recommendations state
+  const [drsRecommendations, setDrsRecommendations] = useState([])
+
   // License expiration notification
   const licenseExpirationNotif = licenseStatus?.licensed &&
     licenseStatus?.expiration_warn &&
@@ -181,21 +184,41 @@ const NavbarContent = () => {
     releaseUrl: updateInfo.releaseUrl
   } : null
 
-  // Combined notifications (update + license + alerts)
+  // DRS recommendations as notifications (only pending ones)
+  const drsNotifications = drsRecommendations
+    .filter(r => r.status === 'pending')
+    .slice(0, 5)
+    .map(r => ({
+      id: `drs-${r.id}`,
+      message: t('drs.recommendationNotif', {
+        vm: r.vm_name,
+        source: r.source_node,
+        target: r.target_node
+      }),
+      severity: r.priority === 'critical' ? 'crit' : r.priority === 'high' ? 'warn' : 'info',
+      source: 'DRS',
+      isDrsNotif: true,
+      recommendation: r
+    }))
+
+  // Combined notifications (update + license + DRS + alerts)
   const allNotifications = [
     ...(updateNotif ? [updateNotif] : []),
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
+    ...drsNotifications,
     ...notifications
   ]
 
   // Combined count
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0)
+  const drsCount = drsRecommendations.filter(r => r.status === 'pending').length
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
-    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0),
-    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0),
-    info: (updateNotif ? 1 : 0)
+    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
+    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
+    info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
+    drs: drsCount
   }
 
   const openLang = Boolean(langAnchor)
@@ -211,7 +234,7 @@ const NavbarContent = () => {
       if (res.ok) {
         const json = await res.json()
         const alerts = json.data || []
-        
+
         // Mapper les champs de l'orchestrator vers le format attendu par l'UI
         const mappedAlerts = alerts.map(a => ({
           id: a.id,
@@ -222,23 +245,32 @@ const NavbarContent = () => {
           firstSeenAt: a.first_seen_at,
           occurrences: a.occurrences || 1
         }))
-        
+
         setNotifications(mappedAlerts)
-        
+
         // Compter les critiques et warnings
         const critCount = alerts.filter(a => a.severity === 'critical').length
         const warnCount = alerts.filter(a => a.severity === 'warning').length
-        
+
         setNotifStats({
           crit: critCount,
           warn: warnCount
         })
         setNotifCount(alerts.length)
       }
+
+      // Récupérer les recommandations DRS si la feature est disponible
+      if (hasFeature(Features.DRS)) {
+        const drsRes = await fetch('/api/v1/orchestrator/drs/recommendations', { cache: 'no-store' })
+        if (drsRes.ok) {
+          const drsData = await drsRes.json()
+          setDrsRecommendations(Array.isArray(drsData) ? drsData : [])
+        }
+      }
     } catch (e) {
       console.error('Failed to fetch notifications:', e)
     }
-  }, [])
+  }, [hasFeature])
 
   // Acquitter une alerte depuis la cloche (via orchestrator)
   const handleAcknowledge = async (e, alertId) => {
@@ -752,6 +784,14 @@ return () => clearInterval(interval)
                 sx={{ height: 20, fontSize: '0.6rem' }}
               />
             )}
+            {totalNotifStats.drs > 0 && (
+              <Chip
+                size='small'
+                label={`${totalNotifStats.drs} DRS`}
+                color='primary'
+                sx={{ height: 20, fontSize: '0.6rem' }}
+              />
+            )}
           </Box>
         </Box>
         <Divider />
@@ -907,6 +947,81 @@ return () => clearInterval(interval)
                           sx={{
                             opacity: 0.7,
                             '&:hover': { opacity: 1, color: `${licenseColor}.main` }
+                          }}
+                        >
+                          <i className='ri-arrow-right-line' style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                )
+              }
+
+              // Handle DRS recommendation notification
+              if (notif.isDrsNotif) {
+                const drsColor = notif.severity === 'crit' ? 'error' : notif.severity === 'warn' ? 'warning' : 'info'
+                const rec = notif.recommendation
+                return (
+                  <Box
+                    key={notif.id}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      py: 1.5,
+                      px: 2,
+                      borderLeft: '3px solid',
+                      borderColor: 'primary.main',
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: 'action.hover' }
+                    }}
+                    onClick={() => {
+                      setNotifAnchor(null)
+                      router.push('/automation/drs')
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <i className='ri-swap-line' style={{
+                        color: 'var(--mui-palette-primary-main)',
+                        fontSize: 20
+                      }} />
+                    </ListItemIcon>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant='body2' sx={{
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.8rem'
+                      }}>
+                        {rec.vm_name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                        <Chip
+                          size='small'
+                          label='DRS'
+                          color='primary'
+                          sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
+                        />
+                        <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem' }}>
+                          {rec.source_node} → {rec.target_node}
+                        </Typography>
+                      </Box>
+                      <Typography variant='caption' sx={{ opacity: 0.5, fontSize: '0.6rem', display: 'block', mt: 0.25 }}>
+                        {rec.reason}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', ml: 1 }}>
+                      <Tooltip title={t('drs.viewRecommendations')}>
+                        <IconButton
+                          size='small'
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setNotifAnchor(null)
+                            router.push('/automation/drs')
+                          }}
+                          sx={{
+                            opacity: 0.7,
+                            '&:hover': { opacity: 1, color: 'primary.main' }
                           }}
                         >
                           <i className='ri-arrow-right-line' style={{ fontSize: 16 }} />

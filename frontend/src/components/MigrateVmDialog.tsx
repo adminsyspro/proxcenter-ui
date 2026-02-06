@@ -129,6 +129,7 @@ type MigrateVmDialogProps = {
   vmid: string
   vmStatus: string
   vmType?: 'qemu' | 'lxc'
+  isCluster?: boolean // false = standalone node, only show cross-cluster migration
 }
 
 export type CrossClusterMigrateParams = {
@@ -157,17 +158,18 @@ function TabPanel({ children, value, index, ...other }: { children?: React.React
   )
 }
 
-export function MigrateVmDialog({ 
-  open, 
-  onClose, 
-  onMigrate, 
+export function MigrateVmDialog({
+  open,
+  onClose,
+  onMigrate,
   onCrossClusterMigrate,
-  connId, 
-  currentNode, 
-  vmName, 
-  vmid, 
+  connId,
+  currentNode,
+  vmName,
+  vmid,
   vmStatus,
-  vmType = 'qemu'
+  vmType = 'qemu',
+  isCluster = true
 }: MigrateVmDialogProps) {
   const t = useTranslations()
   const { hasFeature, loading: licenseLoading } = useLicense()
@@ -247,7 +249,8 @@ export function MigrateVmDialog({
   // Reset states when dialog opens
   useEffect(() => {
     if (open) {
-      setActiveTab(0)
+      // If standalone (not cluster), default to cross-cluster tab
+      setActiveTab(isCluster ? 0 : 1)
       setError(null)
       setSelectedNode('')
       setSelectedRemoteConn('')
@@ -806,56 +809,86 @@ export function MigrateVmDialog({
       </DialogTitle>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
-        <Tabs 
-          value={activeTab} 
-          onChange={(_, v) => setActiveTab(v)}
-          sx={{
-            minHeight: 42,
-            '& .MuiTab-root': {
+        {isCluster ? (
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            sx={{
               minHeight: 42,
-              textTransform: 'none',
-              fontWeight: 500,
-            }
-          }}
-        >
-          <Tab 
-            icon={<i className="ri-server-line" style={{ fontSize: 16 }} />}
-            iconPosition="start"
-            label="Migration locale"
-            sx={{ gap: 1 }}
-          />
-          <Tab
-            icon={<i className="ri-global-line" style={{ fontSize: 16, opacity: crossClusterAvailable ? 1 : 0.4 }} />}
-            iconPosition="start"
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: crossClusterAvailable ? 1 : 0.5 }}>
-                {t('hardware.crossCluster.tabLabel')}
-                {crossClusterAvailable ? (
-                  <Chip
-                    label={t('hardware.crossCluster.beta')}
-                    size="small"
-                    color="warning"
-                    sx={{ height: 18, fontSize: '0.6rem' }}
-                  />
-                ) : (
-                  <Chip
-                    label="Enterprise"
-                    size="small"
-                    sx={{
-                      height: 20,
-                      fontSize: '0.65rem',
-                      fontWeight: 600,
-                      bgcolor: 'primary.main',
-                      color: 'primary.contrastText'
-                    }}
-                  />
-                )}
-              </Box>
-            }
-            sx={{ gap: 1 }}
-            disabled={!onCrossClusterMigrate || !crossClusterAvailable}
-          />
-        </Tabs>
+              '& .MuiTab-root': {
+                minHeight: 42,
+                textTransform: 'none',
+                fontWeight: 500,
+              }
+            }}
+          >
+            <Tab
+              icon={<i className="ri-server-line" style={{ fontSize: 16 }} />}
+              iconPosition="start"
+              label={t('hardware.localMigration')}
+              sx={{ gap: 1 }}
+            />
+            <Tab
+              icon={<i className="ri-global-line" style={{ fontSize: 16, opacity: crossClusterAvailable ? 1 : 0.4 }} />}
+              iconPosition="start"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: crossClusterAvailable ? 1 : 0.5 }}>
+                  {t('hardware.crossCluster.tabLabel')}
+                  {crossClusterAvailable ? (
+                    <Chip
+                      label={t('hardware.crossCluster.beta')}
+                      size="small"
+                      color="warning"
+                      sx={{ height: 18, fontSize: '0.6rem' }}
+                    />
+                  ) : (
+                    <Chip
+                      label="Enterprise"
+                      size="small"
+                      sx={{
+                        height: 20,
+                        fontSize: '0.65rem',
+                        fontWeight: 600,
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText'
+                      }}
+                    />
+                  )}
+                </Box>
+              }
+              sx={{ gap: 1 }}
+              disabled={!onCrossClusterMigrate || !crossClusterAvailable}
+            />
+          </Tabs>
+        ) : (
+          /* Standalone: only cross-cluster migration available */
+          <Box sx={{ py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className="ri-global-line" style={{ fontSize: 18 }} />
+            <Typography variant="subtitle2" fontWeight={600}>
+              {t('hardware.crossCluster.tabLabel')}
+            </Typography>
+            {crossClusterAvailable ? (
+              <Chip
+                label={t('hardware.crossCluster.beta')}
+                size="small"
+                color="warning"
+                sx={{ height: 18, fontSize: '0.6rem' }}
+              />
+            ) : (
+              <Chip
+                label="Enterprise"
+                size="small"
+                sx={{
+                  height: 20,
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText'
+                }}
+              />
+            )}
+          </Box>
+        )}
       </Box>
       
       <DialogContent sx={{ minHeight: 400 }}>

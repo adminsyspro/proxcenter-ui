@@ -115,6 +115,7 @@ type NodesTableProps = {
   onBulkAction?: (node: NodeRow, action: BulkAction) => void
   compact?: boolean
   maxHeight?: number | string
+  showMigrateOption?: boolean // Only show migrate in cluster with multiple nodes
 }
 
 /* -----------------------------
@@ -127,7 +128,8 @@ export default function NodesTable({
   onNodeClick,
   onBulkAction,
   compact = false,
-  maxHeight = 400
+  maxHeight = 400,
+  showMigrateOption = true
 }: NodesTableProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -344,14 +346,17 @@ export default function NodesTable({
             <ListItemText>{t('bulkActions.stopAllVms')}</ListItemText>
           </MenuItem>
 
-          <Divider />
-
-          <MenuItem onClick={() => handleBulkAction('migrate-all')}>
-            <ListItemIcon>
-              <MoveUpIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
-          </MenuItem>
+          {showMigrateOption && (
+            <>
+              <Divider />
+              <MenuItem onClick={() => handleBulkAction('migrate-all')}>
+                <ListItemIcon>
+                  <MoveUpIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
+              </MenuItem>
+            </>
+          )}
         </Menu>
       )}
     </Box>

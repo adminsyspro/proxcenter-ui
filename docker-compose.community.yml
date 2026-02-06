@@ -1,0 +1,50 @@
+# ============================================
+# ProxCenter Community Edition
+# Frontend only - No orchestrator required
+# ============================================
+
+services:
+  # ========================================
+  # Frontend (Next.js + WebSocket Proxy)
+  # ========================================
+  frontend:
+    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
+    container_name: proxcenter-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Next.js
+      - "3001:3001"  # WebSocket proxy (noVNC/xterm)
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/proxcenter.db
+      - APP_SECRET=${APP_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - APP_URL=${APP_URL:-http://localhost:3000}
+      - WS_PORT=3001
+      # No ORCHESTRATOR_URL = Community mode
+    volumes:
+      - proxcenter_data:/app/data
+    networks:
+      - proxcenter
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  proxcenter:
+    driver: bridge
+    name: proxcenter
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  proxcenter_data:
+    name: proxcenter_data

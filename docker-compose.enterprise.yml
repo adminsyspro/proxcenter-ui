@@ -1,0 +1,80 @@
+# ============================================
+# ProxCenter Enterprise Edition
+# Full stack with orchestrator backend
+# ============================================
+
+services:
+  # ========================================
+  # Frontend (Next.js + WebSocket Proxy)
+  # ========================================
+  frontend:
+    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
+    container_name: proxcenter-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Next.js
+      - "3001:3001"  # WebSocket proxy (noVNC/xterm)
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/proxcenter.db
+      - APP_SECRET=${APP_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - APP_URL=${APP_URL:-http://localhost:3000}
+      - WS_PORT=3001
+      - ORCHESTRATOR_URL=http://orchestrator:8080
+    volumes:
+      - proxcenter_data:/app/data
+    networks:
+      - proxcenter
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ========================================
+  # Orchestrator (Go Backend)
+  # ========================================
+  orchestrator:
+    image: ghcr.io/adminsyspro/proxcenter-orchestrator:${VERSION:-latest}
+    container_name: proxcenter-orchestrator
+    restart: unless-stopped
+    environment:
+      - APP_SECRET=${APP_SECRET}
+      - LICENSE_KEY=${LICENSE_KEY:-}
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+    volumes:
+      - orchestrator_data:/app/data
+      - proxcenter_data:/app/shared_data:ro
+      - ./config/orchestrator.yaml:/app/config/orchestrator.yaml:ro
+    networks:
+      - proxcenter
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  proxcenter:
+    driver: bridge
+    name: proxcenter
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  proxcenter_data:
+    name: proxcenter_data
+  orchestrator_data:
+    name: orchestrator_data

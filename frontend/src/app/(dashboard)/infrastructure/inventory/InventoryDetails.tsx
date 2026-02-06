@@ -998,21 +998,19 @@ function VmActions({
 
       <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-      {/* Migrate - uniquement pour les clusters */}
-      {isCluster ? (
-        <MuiTooltip title={t('audit.actions.migrate')}>
-          <span>
-            <IconButton
-              size="small"
-              onClick={onMigrate}
-              disabled={disabled}
-              sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}
-            >
-              <MoveUpIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </MuiTooltip>
-      ) : null}
+      {/* Migrate - toujours visible (cross-cluster disponible même pour standalone) */}
+      <MuiTooltip title={t('audit.actions.migrate')}>
+        <span>
+          <IconButton
+            size="small"
+            onClick={onMigrate}
+            disabled={disabled}
+            sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}
+          >
+            <MoveUpIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </MuiTooltip>
 
       {/* Clone */}
       <MuiTooltip title={t('audit.actions.clone')}>

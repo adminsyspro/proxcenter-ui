@@ -1178,13 +1178,13 @@ return (
                   </IconButton>
                 </Tooltip>
                 
-                {/* Migrate - seulement si cluster */}
-                {onMigrate && vm.isCluster && (
+                {/* Migrate - toujours disponible (cross-cluster pour standalone) */}
+                {onMigrate && (
                   <Tooltip title={t('vmActions.migrate')}>
-                    <IconButton 
+                    <IconButton
                       size='small'
                       onClick={(e) => { e.stopPropagation(); onMigrate(vm) }}
-                      sx={{ 
+                      sx={{
                         color: 'text.secondary',
                         p: 0.5,
                         '&:hover': { bgcolor: 'secondary.main', color: 'white' }
@@ -1334,13 +1334,13 @@ return (
                 </span>
               </Tooltip>
               
-              {/* Migrate - seulement si cluster et callback fourni */}
-              {onMigrate && vm.isCluster && (
+              {/* Migrate - toujours disponible (cross-cluster pour standalone) */}
+              {onMigrate && (
                 <Tooltip title={t('vmActions.migrate')}>
-                  <IconButton 
+                  <IconButton
                     size='small'
                     onClick={(e) => { e.stopPropagation(); onMigrate(vm) }}
-                    sx={{ 
+                    sx={{
                       color: 'text.secondary',
                       p: 0.5,
                       '&:hover': { bgcolor: 'secondary.main', color: 'white' }
@@ -1811,7 +1811,7 @@ return [
 
           <Divider key="divider2" />,
 
-          contextMenu?.vm.isCluster && onMigrate && (
+          onMigrate && (
             <MenuItem key="migrate" onClick={handleContextMigrate}>
               <ListItemIcon>
                 <MoveUpIcon fontSize="small" />

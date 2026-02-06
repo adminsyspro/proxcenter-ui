@@ -27,7 +27,14 @@ declare module "next-auth" {
 }
 
 declare module "next-auth/jwt" {
-  interface JWT extends AuthUser {}
+  interface JWT {
+    id: string
+    email: string
+    name: string | null
+    // avatar is NOT stored in JWT to keep cookie size small
+    role: UserRole
+    authProvider: "credentials" | "ldap"
+  }
 }
 
 export const authOptions: NextAuthOptions = {
@@ -182,24 +189,35 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.email = user.email
         token.name = user.name
-        token.avatar = user.avatar
+        // Don't store avatar in JWT to keep cookie size small
+        // Avatar will be fetched from DB in session callback
         token.role = user.role
         token.authProvider = user.authProvider
       }
 
-      
+
 return token
     },
     async session({ session, token }) {
+      // Fetch avatar from DB instead of storing in JWT (avoids large cookies)
+      let avatar: string | null = null
+      try {
+        const db = getDb()
+        const user = db.prepare("SELECT avatar FROM users WHERE id = ?").get(token.id) as any
+        avatar = user?.avatar || null
+      } catch (e) {
+        // Ignore DB errors for avatar fetch
+      }
+
       session.user = {
         id: token.id as string,
         email: token.email as string,
         name: token.name as string | null,
-        avatar: token.avatar as string | null,
+        avatar,
         role: token.role as UserRole,
         authProvider: token.authProvider as "credentials" | "ldap",
       }
-      
+
 return session
     },
   },

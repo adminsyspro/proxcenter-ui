@@ -231,8 +231,10 @@
         
         // Connexion WebSocket
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // wsUrl comes from API as "/ws/console/{sessionId}", nginx proxies /api/internal/ws/* to ws-proxy
-        const wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
+        // wsUrl comes from API as "/ws/shell?..." - connect directly to WebSocket proxy on port 3001
+        const wsPort = window.WS_PORT || '3001';
+        const wsHost = window.location.hostname + ':' + wsPort;
+        const wsFullUrl = `${wsProtocol}//${wsHost}${wsUrl}`;
         console.log('WebSocket URL:', wsFullUrl);
         
         socket = new WebSocket(wsFullUrl, 'binary');

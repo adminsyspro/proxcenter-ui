@@ -83,11 +83,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Checkout orchestrator repo
+      - name: Checkout backend repo
         uses: actions/checkout@v4
         with:
-          repository: adminsyspro/proxcenter-orchestrator
-          path: orchestrator
+          repository: adminsyspro/proxcenter-backend
+          path: backend
           token: ${{ secrets.ORCHESTRATOR_PAT }}
 
       - name: Set up Docker Buildx
@@ -116,8 +116,8 @@ jobs:
       - name: Build and push Orchestrator
         uses: docker/build-push-action@v5
         with:
-          context: ./orchestrator
-          file: ./orchestrator/Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

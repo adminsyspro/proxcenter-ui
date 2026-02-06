@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go" alt="Go">
-  <img src="https://img.shields.io/badge/Next.js-16+-black?logo=next.js" alt="Next.js">
+  <img src="https://img.shields.io/badge/Next.js-15+-black?logo=next.js" alt="Next.js">
   <img src="https://img.shields.io/badge/Proxmox-7.x%20%7C%208.x%20%7C%209.x-E57000" alt="Proxmox">
+  <img src="https://img.shields.io/badge/License-Community%20%7C%20Enterprise-blue" alt="License">
 </p>
 
 ---
@@ -23,6 +23,39 @@
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
 </p>
+
+---
+
+## Quick Start
+
+### Community Edition (Free)
+
+```bash
+curl -fsSL https://proxcenter.io/install/community | sudo bash
+```
+
+Features included:
+- Dashboard & Inventory
+- VM/CT Management (Start, Stop, Console)
+- Backups & Snapshots browsing
+- Storage Management
+- Multi-cluster support
+
+### Enterprise Edition
+
+```bash
+curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YOUR_TOKEN
+```
+
+Additional features:
+- DRS (Distributed Resource Scheduler)
+- RBAC & LDAP/Active Directory
+- Advanced Monitoring & AI Insights
+- Automated Jobs & Reports
+- Email Notifications
+- Priority Support
+
+[Get your Enterprise license →](https://proxcenter.io/pricing)
 
 ---
 
@@ -47,7 +80,7 @@ Real-time monitoring with health scores, top consumers, and multi-cluster overvi
 
 ---
 
-### 📈 Resource Trends & AI Insights
+### 📈 Resource Trends & AI Insights <sup>Enterprise</sup>
 
 Comprehensive resource analysis with historical trends and AI-powered predictions.
 
@@ -67,7 +100,7 @@ Comprehensive resource analysis with historical trends and AI-powered prediction
 
 ---
 
-### ⚖️ DRS - Distributed Resource Scheduler
+### ⚖️ DRS - Distributed Resource Scheduler <sup>Enterprise</sup>
 
 Intelligent workload balancing across your Proxmox nodes.
 
@@ -82,7 +115,7 @@ Intelligent workload balancing across your Proxmox nodes.
 
 ---
 
-### 🔄 Rolling Updates
+### 🔄 Rolling Updates <sup>Enterprise</sup>
 
 Orchestrated node updates with zero-downtime VM migrations.
 
@@ -101,7 +134,7 @@ Orchestrated node updates with zero-downtime VM migrations.
 
 ---
 
-### 🔀 Cross-Cluster Migration
+### 🔀 Cross-Cluster Migration <sup>Enterprise</sup>
 
 Migrate VMs between different Proxmox clusters seamlessly.
 
@@ -116,7 +149,7 @@ Migrate VMs between different Proxmox clusters seamlessly.
 
 ---
 
-### 🛡️ Firewall & Micro-segmentation
+### 🛡️ Firewall & Micro-segmentation <sup>Enterprise</sup>
 
 Centralized firewall management with Zero Trust security model.
 
@@ -178,7 +211,7 @@ Monitor and manage Ceph distributed storage clusters.
 
 ---
 
-### 🚨 Alerts & Notifications
+### 🚨 Alerts & Notifications <sup>Enterprise</sup>
 
 Comprehensive alerting system with email notifications.
 
@@ -197,7 +230,7 @@ Comprehensive alerting system with email notifications.
 
 ---
 
-### 📄 Enterprise Reports
+### 📄 Enterprise Reports <sup>Enterprise</sup>
 
 Generate professional PDF reports with AI-powered insights.
 
@@ -229,7 +262,7 @@ Multiple themes and appearance options.
 
 ---
 
-### 🔐 Enterprise Authentication
+### 🔐 Enterprise Authentication <sup>Enterprise</sup>
 
 LDAP and Active Directory integration for enterprise environments.
 
@@ -243,144 +276,66 @@ LDAP and Active Directory integration for enterprise environments.
 
 ---
 
-## Architecture
-
-```
-proxcenter/
-├── frontend/          # Next.js web application
-│   ├── src/
-│   │   ├── app/       # Next.js App Router
-│   │   ├── components/
-│   │   └── lib/
-│   └── prisma/        # Database schema
-│
-└── backend/           # Go orchestrator service
-    ├── cmd/
-    │   └── orchestrator/
-    └── internal/
-        ├── api/       # REST API handlers
-        ├── drs/       # Resource scheduler
-        ├── metrics/   # Metrics collection
-        ├── proxmox/   # Proxmox API client
-        ├── reports/   # PDF report generation
-        └── ...
-```
-
 ## Requirements
 
-### Frontend
-- Node.js 18+ or 20+
-- pnpm (recommended) or npm
-
-### Backend
-- Go 1.24+
-- SQLite3
-
-### Runtime
+- Docker & Docker Compose
 - Proxmox VE 7.x, 8.x or 9.x
 - Network access to Proxmox API (port 8006)
 
-## Quick Start
+## Installation
 
-### 1. Clone the repository
+### Docker (Recommended)
 
+**Community:**
 ```bash
-git clone https://github.com/adminsyspro/proxcenter.git
-cd proxcenter
+curl -fsSL https://proxcenter.io/install/community | sudo bash
 ```
 
-### 2. Configure the Backend
-
+**Enterprise:**
 ```bash
-cd backend
-
-# Copy example configuration
-cp config.yaml.example config.yaml
-
-# Edit config.yaml with your settings
-# Important: Set app_secret to match frontend APP_SECRET
-
-# Build the orchestrator
-go build -o orchestrator ./cmd/orchestrator
-
-# Create data directory
-mkdir -p data
-
-# Run the orchestrator
-./orchestrator
+curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YOUR_TOKEN
 ```
 
-### 3. Configure the Frontend
+### Manual Installation
 
-```bash
-cd frontend
-
-# Copy example environment
-cp .env.example .env
-
-# Edit .env with your settings
-# Important: Set APP_SECRET (must match backend config)
-
-# Install dependencies
-pnpm install
-
-# Initialize the database
-pnpm prisma migrate deploy
-
-# Run development server
-pnpm dev
-```
-
-### 4. Access ProxCenter
-
-Open http://localhost:3000 in your browser.
+See [docs/manual-installation.md](docs/manual-installation.md) for manual installation instructions.
 
 ## Configuration
 
-### Frontend (.env)
+After installation, ProxCenter runs at `http://your-server:3000`.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | SQLite database path | `file:./data/proxcenter.db` |
-| `APP_SECRET` | Encryption key for credentials | Required |
-| `NEXTAUTH_SECRET` | NextAuth.js session secret | Required |
-| `NEXTAUTH_URL` | Application URL | `http://localhost:3000` |
-| `ORCHESTRATOR_URL` | Backend API URL | `http://localhost:8080` |
+Configuration files are located in `/opt/proxcenter/`:
+- `.env` - Environment variables
+- `config/orchestrator.yaml` - Backend configuration (Enterprise only)
 
-### Backend (config.yaml)
-
-See `backend/config.yaml.example` for all available options.
-
-Key settings:
-- `proxmox.app_secret` - Must match frontend `APP_SECRET`
-- `proxmox.proxcenter_db_path` - Path to frontend database
-- `drs.*` - Resource scheduler configuration
-- `notifications.email.*` - SMTP settings for alerts
-
-## Production Deployment
-
-### Using Docker
+## Management Commands
 
 ```bash
-cd backend
-docker-compose up -d
+cd /opt/proxcenter
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+
+# Update to latest version
+docker compose pull && docker compose up -d
+
+# Restart services
+docker compose restart
 ```
-
-### Manual Deployment
-
-1. Build frontend: `cd frontend && pnpm build`
-2. Build backend: `cd backend && go build -o orchestrator ./cmd/orchestrator`
-3. Configure reverse proxy (nginx/traefik)
-4. Set up systemd services
-5. Configure SSL certificates
 
 ## License
 
-ProxCenter is proprietary software. Enterprise licenses are available for commercial use.
+- **Community Edition**: Free for personal and commercial use
+- **Enterprise Edition**: Commercial license required - [proxcenter.io/pricing](https://proxcenter.io/pricing)
 
 ## Support
 
-- GitHub Issues: [adminsyspro/proxcenter](https://github.com/adminsyspro/proxcenter/issues)
+- Documentation: [docs.proxcenter.io](https://docs.proxcenter.io)
+- Community: [GitHub Issues](https://github.com/adminsyspro/proxcenter-ui/issues)
+- Enterprise Support: [support@proxcenter.io](mailto:support@proxcenter.io)
 
 ---
 

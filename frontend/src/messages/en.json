@@ -394,7 +394,10 @@
     "unlock": "Unlock",
     "vmNotLocked": "This VM is not locked",
     "unlockError": "Cannot unlock VM",
-    "unlockHint": "Run this command on the Proxmox node:"
+    "unlockHint": "Run this command on the Proxmox node:",
+    "snapshotCreated": "Snapshot created successfully",
+    "snapshotDeleted": "Snapshot deleted successfully",
+    "snapshotRestored": "Snapshot restored successfully"
   },
   "inventoryPage": {
     "newTag": "New tag...",
@@ -1532,7 +1535,14 @@
     "clone": "Clone",
     "details": "Details",
     "deployFromTemplate": "Deploy from this template",
-    "startOrStop": "Start or Stop"
+    "startOrStop": "Start or Stop",
+    "startSuccess": "Starting VM",
+    "shutdownSuccess": "Shutting down (ACPI)",
+    "stopSuccess": "Force stopping VM",
+    "suspendSuccess": "Suspending VM",
+    "rebootSuccess": "Rebooting VM",
+    "migrateSuccess": "Migration started",
+    "cloneSuccess": "Cloning started"
   },
   "vmConfig": {
     "title": "VM Configuration",

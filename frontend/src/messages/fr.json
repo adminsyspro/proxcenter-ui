@@ -394,7 +394,10 @@
     "unlock": "Déverrouiller",
     "vmNotLocked": "Cette VM n'est pas verrouillée",
     "unlockError": "Impossible de déverrouiller la VM",
-    "unlockHint": "Exécutez cette commande sur le nœud Proxmox :"
+    "unlockHint": "Exécutez cette commande sur le nœud Proxmox :",
+    "snapshotCreated": "Snapshot créé avec succès",
+    "snapshotDeleted": "Snapshot supprimé avec succès",
+    "snapshotRestored": "Snapshot restauré avec succès"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",
@@ -1528,7 +1531,14 @@
     "clone": "Cloner",
     "details": "Détails",
     "deployFromTemplate": "Déployer depuis ce template",
-    "startOrStop": "Démarrer ou Arrêter"
+    "startOrStop": "Démarrer ou Arrêter",
+    "startSuccess": "Démarrage en cours",
+    "shutdownSuccess": "Arrêt en cours (ACPI)",
+    "stopSuccess": "Arrêt forcé en cours",
+    "suspendSuccess": "Mise en pause en cours",
+    "rebootSuccess": "Redémarrage en cours",
+    "migrateSuccess": "Migration en cours",
+    "cloneSuccess": "Clonage en cours"
   },
   "vmConfig": {
     "title": "Configuration VM",

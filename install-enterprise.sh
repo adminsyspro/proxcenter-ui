@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 INSTALL_DIR="/opt/proxcenter"
-COMPOSE_URL="https://raw.githubusercontent.com/adminsyspro/proxcenter/main/docker-compose.enterprise.yml"
+COMPOSE_URL="https://raw.githubusercontent.com/adminsyspro/proxcenter-ui/main/docker-compose.enterprise.yml"
 REGISTRY="ghcr.io"
 REGISTRY_USER="adminsyspro"
 FRONTEND_IMAGE="ghcr.io/adminsyspro/proxcenter-frontend:latest"

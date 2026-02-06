@@ -87,6 +87,7 @@ import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import BackupJobsPanel from './BackupJobsPanel'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import { useToast } from '@/contexts/ToastContext'
 
 /* ------------------------------------------------------------------ */
 /* Tag colors (stable "random")                                       */
@@ -6205,6 +6206,7 @@ export default function InventoryDetails({
   const t = useTranslations()
   const theme = useTheme()
   const { hasFeature, loading: licenseLoading } = useLicense()
+  const toast = useToast()
   const primaryColor = theme.palette.primary.main
   const primaryColorLight = lighten(primaryColor, 0.3)
 
@@ -6794,20 +6796,22 @@ return next
 
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
-    
+
+    toast.success(t('vmActions.migrateSuccess'))
+
     // Désélectionner la VM pour éviter les erreurs 404 pendant la migration
     // Le polling des tâches en cours marquera la VM comme "en cours de migration"
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
     }
-    
+
     // Attendre un peu puis rafraîchir l'inventaire
     await new Promise(resolve => setTimeout(resolve, 1500))
-    
+
     if (onRefresh) {
       await onRefresh()
     }
-  }, [selection, onRefresh, onSelect])
+  }, [selection, onRefresh, onSelect, toast, t])
 
   // Handler pour la migration cross-cluster
   const handleCrossClusterMigrate = useCallback(async (params: CrossClusterMigrateParams) => {
@@ -6837,19 +6841,21 @@ return next
       const err = await res.json().catch(() => ({}))
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
-    
+
+    toast.success(t('vmActions.migrateSuccess'))
+
     // Désélectionner la VM
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
     }
-    
+
     // Attendre puis rafraîchir
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     if (onRefresh) {
       await onRefresh()
     }
-  }, [selection, onRefresh, onSelect])
+  }, [selection, onRefresh, onSelect, toast, t])
 
   // Handler pour le clonage de VM
   const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
@@ -6879,14 +6885,16 @@ return next
 
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
-    
+
+    toast.success(t('vmActions.cloneSuccess'))
+
     // Attendre un peu puis rafraîchir
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     if (onRefresh) {
       await onRefresh()
     }
-  }, [selection, onRefresh])
+  }, [selection, onRefresh, toast, t])
 
   // Handler pour ouvrir le dialog de migration depuis la table
   const handleTableMigrate = useCallback((vm: any) => {
@@ -6930,16 +6938,18 @@ return next
 
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
-    
+
+    toast.success(t('vmActions.migrateSuccess'))
+
     // Attendre un peu puis rafraîchir
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     if (onRefresh) {
       await onRefresh()
     }
-    
+
     setTableMigrateVm(null)
-  }, [tableMigrateVm, onRefresh])
+  }, [tableMigrateVm, onRefresh, toast, t])
 
   // Handler pour la migration cross-cluster depuis la table
   const handleTableCrossClusterMigrate = useCallback(async (params: CrossClusterMigrateParams) => {
@@ -6969,16 +6979,18 @@ return next
       const err = await res.json().catch(() => ({}))
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
-    
+
+    toast.success(t('vmActions.migrateSuccess'))
+
     // Attendre puis rafraîchir
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     if (onRefresh) {
       await onRefresh()
     }
-    
+
     setTableMigrateVm(null)
-  }, [tableMigrateVm, onRefresh])
+  }, [tableMigrateVm, onRefresh, toast, t])
 
   // Handler pour le clonage depuis le tableau
   const handleTableCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
@@ -7019,16 +7031,18 @@ return next
 
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
-    
+
+    toast.success(t('vmActions.cloneSuccess'))
+
     // Attendre un peu puis rafraîchir
     await new Promise(resolve => setTimeout(resolve, 2000))
-    
+
     if (onRefresh) {
       await onRefresh()
     }
-    
+
     setTableCloneVm(null)
-  }, [tableCloneVm, onRefresh])
+  }, [tableCloneVm, onRefresh, toast, t])
 
   // États pour les sauvegardes
   // 0 = Résumé, 1 = Matériel, 2 = Options, 3 = Historique, 4 = Sauvegardes, 5 = Snapshots, 6 = Notes, 7 = Réplication, 8 = HA (si cluster), 9 = Firewall
@@ -8065,21 +8079,25 @@ return explorerFiles.filter((file: any) =>
       
       if (json.error) {
         setSnapshotsError(json.error)
+        toast.error(json.error)
       } else {
         setShowCreateSnapshot(false)
         setNewSnapshotName('')
         setNewSnapshotDesc('')
         setNewSnapshotRam(false)
+        toast.success(t('inventory.snapshotCreated'))
 
         // Recharger après un délai
         setTimeout(loadSnapshots, 2000)
       }
     } catch (e: any) {
-      setSnapshotsError(e.message || t('errors.addError'))
+      const errorMsg = e.message || t('errors.addError')
+      setSnapshotsError(errorMsg)
+      toast.error(errorMsg)
     } finally {
       setSnapshotActionBusy(false)
     }
-  }, [selection, newSnapshotName, newSnapshotDesc, newSnapshotRam, loadSnapshots])
+  }, [selection, newSnapshotName, newSnapshotDesc, newSnapshotRam, loadSnapshots, toast, t])
 
   const deleteSnapshot = useCallback(async (snapname: string) => {
     if (!selection || selection.type !== 'vm') return
@@ -8106,20 +8124,24 @@ return explorerFiles.filter((file: any) =>
           
           if (json.error) {
             setSnapshotsError(json.error)
+            toast.error(json.error)
           } else {
+            toast.success(t('inventory.snapshotDeleted'))
             setTimeout(loadSnapshots, 2000)
           }
 
           setConfirmAction(null)
         } catch (e: any) {
-          setSnapshotsError(e.message || t('errors.deleteError'))
+          const errorMsg = e.message || t('errors.deleteError')
+          setSnapshotsError(errorMsg)
+          toast.error(errorMsg)
         } finally {
           setSnapshotActionBusy(false)
           setConfirmActionLoading(false)
         }
       }
     })
-  }, [selection, loadSnapshots, data?.title])
+  }, [selection, loadSnapshots, data?.title, toast, t])
 
   const rollbackSnapshot = useCallback(async (snapname: string, hasVmstate?: boolean) => {
     if (!selection || selection.type !== 'vm') return
@@ -8146,24 +8168,22 @@ return explorerFiles.filter((file: any) =>
           
           if (json.error) {
             setSnapshotsError(json.error)
+            toast.error(json.error)
           } else {
-            setConfirmAction({
-              action: 'info',
-              title: t('common.success'),
-              message: t('audit.actions.restore'),
-              vmName: data?.title,
-              onConfirm: async () => setConfirmAction(null)
-            })
+            toast.success(t('inventory.snapshotRestored'))
+            setConfirmAction(null)
           }
         } catch (e: any) {
-          setSnapshotsError(e.message || t('errors.updateError'))
+          const errorMsg = e.message || t('errors.updateError')
+          setSnapshotsError(errorMsg)
+          toast.error(errorMsg)
         } finally {
           setSnapshotActionBusy(false)
           setConfirmActionLoading(false)
         }
       }
     })
-  }, [selection, data?.title])
+  }, [selection, data?.title, toast, t])
 
   // ==================== TASKS (Historique des tâches) ====================
   const [tasks, setTasks] = useState<any[]>([])
@@ -9728,6 +9748,8 @@ return (
               throw new Error(err?.error || `HTTP ${res.status}`)
             }
 
+            toast.success(t(`vmActions.${action}Success`))
+
             // Recharger les données après l'action (avec un délai pour laisser Proxmox mettre à jour)
             setTimeout(async () => {
               const payload = await fetchDetails(selection)
@@ -9735,10 +9757,11 @@ return (
               setData(payload)
               setLocalTags(payload.tags || [])
             }, 1500)
-            
+
             setConfirmAction(null)
           } catch (e: any) {
-            alert(`${t('common.error')} (${action}): ${e?.message || e}`)
+            const errorMsg = e?.message || e
+            toast.error(`${t('common.error')} (${action}): ${errorMsg}`)
           } finally {
             setConfirmActionLoading(false)
           }
@@ -9761,6 +9784,8 @@ return
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
+      toast.success(t(`vmActions.${action}Success`))
+
       // Recharger les données après l'action (avec un délai pour laisser Proxmox mettre à jour)
       setTimeout(async () => {
         const payload = await fetchDetails(selection)
@@ -9769,7 +9794,8 @@ return
         setLocalTags(payload.tags || [])
       }, 1500)
     } catch (e: any) {
-      alert(`${t('common.error')} (${action}): ${e?.message || e}`)
+      const errorMsg = e?.message || e
+      toast.error(`${t('common.error')} (${action}): ${errorMsg}`)
     } finally {
       setActionBusy(false)
     }
@@ -9837,10 +9863,12 @@ return
 
               throw new Error(err?.error || `HTTP ${res.status}`)
             }
-            
+
+            toast.success(t(`vmActions.${apiAction}Success`))
             setConfirmAction(null)
           } catch (e: any) {
-            alert(`${t('common.error')} (${apiAction}): ${e?.message || e}`)
+            const errorMsg = e?.message || e
+            toast.error(`${t('common.error')} (${apiAction}): ${errorMsg}`)
           } finally {
             setConfirmActionLoading(false)
           }
@@ -9860,10 +9888,13 @@ return
 
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
+
+      toast.success(t(`vmActions.${apiAction}Success`))
     } catch (e: any) {
-      alert(`${t('common.error')} (${apiAction}) ${vm.name}: ${e?.message || e}`)
+      const errorMsg = e?.message || e
+      toast.error(`${t('common.error')} (${apiAction}) ${vm.name}: ${errorMsg}`)
     }
-  }, [onSelect, t])
+  }, [onSelect, t, toast])
 
   // Handler pour le clic sur une VM dans le tableau (pour afficher les détails)
   const handleVmClick = useCallback((vm: VmRow) => {

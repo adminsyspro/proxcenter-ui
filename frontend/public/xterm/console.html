@@ -231,10 +231,18 @@
         
         // Connexion WebSocket
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // wsUrl comes from API as "/ws/shell?..." - connect directly to WebSocket proxy on port 3001
-        const wsPort = window.WS_PORT || '3001';
-        const wsHost = window.location.hostname + ':' + wsPort;
-        const wsFullUrl = `${wsProtocol}//${wsHost}${wsUrl}`;
+        // wsUrl comes from API as "/ws/shell?..."
+        // Detect if behind nginx (port 443/80) or direct Docker access (port 3000)
+        const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        let wsFullUrl;
+        if (port === '443' || port === '80') {
+          // Behind nginx: use /api/internal/ws/ proxy path
+          wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
+        } else {
+          // Direct Docker: connect to WS proxy on port 3001
+          const wsPort = window.WS_PORT || '3001';
+          wsFullUrl = `${wsProtocol}//${window.location.hostname}:${wsPort}${wsUrl}`;
+        }
         console.log('WebSocket URL:', wsFullUrl);
         
         socket = new WebSocket(wsFullUrl, 'binary');

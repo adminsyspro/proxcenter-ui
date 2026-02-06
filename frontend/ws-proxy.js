@@ -20,7 +20,9 @@ const http = require('http')
 const { WebSocketServer, WebSocket } = require('ws')
 
 const PORT = process.env.WS_PORT || 3001
-const APP_URL = process.env.APP_URL || 'http://localhost:3000'
+// Always use localhost for internal API calls (ws-proxy runs in same container as frontend)
+// APP_URL might be external HTTPS which would fail with self-signed certs
+const INTERNAL_API_URL = 'http://localhost:3000'
 
 // Créer le serveur HTTP
 const server = http.createServer((req, res) => {
@@ -144,8 +146,8 @@ wss.on('connection', async (clientWs, req) => {
     console.log(`[WS] Console session: ${sessionId}`)
     
     try {
-      // Récupérer les infos de session depuis l'API
-      const sessionRes = await fetch(`${APP_URL}/api/internal/console/consume`, {
+      // Récupérer les infos de session depuis l'API (internal call via localhost)
+      const sessionRes = await fetch(`${INTERNAL_API_URL}/api/internal/console/consume`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
@@ -262,7 +264,7 @@ ProxCenter - Control Plane
 ╔════════════════════════════════════════════════════╗
 ║  WebSocket Proxy (noVNC + xterm.js)                ║
 ║  Listening on ws://localhost:${PORT.toString().padEnd(22)}║
-║  App URL: ${APP_URL.padEnd(40)}║
+║  Internal API: ${INTERNAL_API_URL.padEnd(35)}║
 ║                                                    ║
 ║  Routes:                                           ║
 ║    /ws/console/{sessionId} - VM/CT console         ║

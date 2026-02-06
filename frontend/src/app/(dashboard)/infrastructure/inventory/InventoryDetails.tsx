@@ -88,6 +88,7 @@ import BackupJobsPanel from './BackupJobsPanel'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useTaskTracker } from '@/hooks/useTaskTracker'
 
 /* ------------------------------------------------------------------ */
 /* Tag colors (stable "random")                                       */
@@ -6207,6 +6208,7 @@ export default function InventoryDetails({
   const theme = useTheme()
   const { hasFeature, loading: licenseLoading } = useLicense()
   const toast = useToast()
+  const { trackTask } = useTaskTracker()
   const primaryColor = theme.palette.primary.main
   const primaryColorLight = lighten(primaryColor, 0.3)
 
@@ -9741,22 +9743,32 @@ return (
           try {
             const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/${action}`
             const res = await fetch(url, { method: 'POST' })
-            
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}))
+            const json = await res.json()
 
-              throw new Error(err?.error || `HTTP ${res.status}`)
+            if (!res.ok || json.error) {
+              throw new Error(json?.error || `HTTP ${res.status}`)
             }
 
-            toast.success(t(`vmActions.${action}Success`))
-
-            // Recharger les données après l'action (avec un délai pour laisser Proxmox mettre à jour)
-            setTimeout(async () => {
-              const payload = await fetchDetails(selection)
-
-              setData(payload)
-              setLocalTags(payload.tags || [])
-            }, 1500)
+            // Track the task if we got an UPID
+            const upid = json.data
+            if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+              trackTask({
+                upid,
+                connId,
+                node,
+                description: `${data?.title || `VM ${vmid}`}: ${t(`vmActions.${action}`)}`,
+                onSuccess: () => {
+                  // Recharger les données après la completion
+                  fetchDetails(selection).then(payload => {
+                    setData(payload)
+                    setLocalTags(payload.tags || [])
+                  })
+                },
+              })
+            } else {
+              // Pas d'UPID, afficher le toast de succès direct
+              toast.success(t(`vmActions.${action}Success`))
+            }
 
             setConfirmAction(null)
           } catch (e: any) {
@@ -9777,22 +9789,32 @@ return
     try {
       const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/${action}`
       const res = await fetch(url, { method: 'POST' })
+      const json = await res.json()
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-
-        throw new Error(err?.error || `HTTP ${res.status}`)
+      if (!res.ok || json.error) {
+        throw new Error(json?.error || `HTTP ${res.status}`)
       }
 
-      toast.success(t(`vmActions.${action}Success`))
-
-      // Recharger les données après l'action (avec un délai pour laisser Proxmox mettre à jour)
-      setTimeout(async () => {
-        const payload = await fetchDetails(selection)
-
-        setData(payload)
-        setLocalTags(payload.tags || [])
-      }, 1500)
+      // Track the task if we got an UPID
+      const upid = json.data
+      if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+        trackTask({
+          upid,
+          connId,
+          node,
+          description: `${data?.title || `VM ${vmid}`}: ${t(`vmActions.${action}`)}`,
+          onSuccess: () => {
+            // Recharger les données après la completion
+            fetchDetails(selection).then(payload => {
+              setData(payload)
+              setLocalTags(payload.tags || [])
+            })
+          },
+        })
+      } else {
+        // Pas d'UPID, afficher le toast de succès direct
+        toast.success(t(`vmActions.${action}Success`))
+      }
     } catch (e: any) {
       const errorMsg = e?.message || e
       toast.error(`${t('common.error')} (${action}): ${errorMsg}`)
@@ -9857,14 +9879,25 @@ return
           try {
             const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
             const res = await fetch(url, { method: 'POST' })
-            
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}))
+            const json = await res.json()
 
-              throw new Error(err?.error || `HTTP ${res.status}`)
+            if (!res.ok || json.error) {
+              throw new Error(json?.error || `HTTP ${res.status}`)
             }
 
-            toast.success(t(`vmActions.${apiAction}Success`))
+            // Track the task if we got an UPID
+            const upid = json.data
+            if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+              trackTask({
+                upid,
+                connId: vm.connId,
+                node: vm.node,
+                description: `${vm.name}: ${t(`vmActions.${apiAction}`)}`,
+              })
+            } else {
+              toast.success(t(`vmActions.${apiAction}Success`))
+            }
+
             setConfirmAction(null)
           } catch (e: any) {
             const errorMsg = e?.message || e
@@ -9882,19 +9915,29 @@ return
     try {
       const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
       const res = await fetch(url, { method: 'POST' })
+      const json = await res.json()
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-
-        throw new Error(err?.error || `HTTP ${res.status}`)
+      if (!res.ok || json.error) {
+        throw new Error(json?.error || `HTTP ${res.status}`)
       }
 
-      toast.success(t(`vmActions.${apiAction}Success`))
+      // Track the task if we got an UPID
+      const upid = json.data
+      if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+        trackTask({
+          upid,
+          connId: vm.connId,
+          node: vm.node,
+          description: `${vm.name}: ${t(`vmActions.${apiAction}`)}`,
+        })
+      } else {
+        toast.success(t(`vmActions.${apiAction}Success`))
+      }
     } catch (e: any) {
       const errorMsg = e?.message || e
       toast.error(`${t('common.error')} (${apiAction}) ${vm.name}: ${errorMsg}`)
     }
-  }, [onSelect, t, toast])
+  }, [onSelect, t, toast, trackTask])
 
   // Handler pour le clic sur une VM dans le tableau (pour afficher les détails)
   const handleVmClick = useCallback((vm: VmRow) => {

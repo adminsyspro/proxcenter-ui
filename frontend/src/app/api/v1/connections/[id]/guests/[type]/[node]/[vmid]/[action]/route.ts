@@ -71,6 +71,8 @@ export async function POST(_req: Request, ctx: RouteContext) {
 
     return NextResponse.json({
       data: result,
+      node,
+      connId: id,
       message: `Action '${action}' executed on ${type}/${vmid}`
     })
   } catch (e: any) {

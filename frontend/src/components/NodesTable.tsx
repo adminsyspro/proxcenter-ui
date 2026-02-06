@@ -1,18 +1,27 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
   Avatar,
   Box,
   Chip,
+  Divider,
   LinearProgress,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Stack,
   Typography,
   useTheme
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import StopIcon from '@mui/icons-material/Stop'
+import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew'
+import MoveUpIcon from '@mui/icons-material/MoveUp'
 
 /* -----------------------------
   Helpers
@@ -91,10 +100,19 @@ export type NodeRow = {
   ip?: string
 }
 
+export type BulkAction = 'start-all' | 'stop-all' | 'shutdown-all' | 'migrate-all'
+
+type NodeContextMenu = {
+  mouseX: number
+  mouseY: number
+  node: NodeRow
+} | null
+
 type NodesTableProps = {
   nodes: NodeRow[]
   loading?: boolean
   onNodeClick?: (node: NodeRow) => void
+  onBulkAction?: (node: NodeRow, action: BulkAction) => void
   compact?: boolean
   maxHeight?: number | string
 }
@@ -107,11 +125,35 @@ export default function NodesTable({
   nodes,
   loading = false,
   onNodeClick,
+  onBulkAction,
   compact = false,
   maxHeight = 400
 }: NodesTableProps) {
   const theme = useTheme()
   const t = useTranslations()
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<NodeContextMenu>(null)
+
+  const handleContextMenu = useCallback((event: React.MouseEvent, node: NodeRow) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({
+      mouseX: event.clientX,
+      mouseY: event.clientY,
+      node
+    })
+  }, [])
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
+  const handleBulkAction = useCallback((action: BulkAction) => {
+    if (!contextMenu || !onBulkAction) return
+    onBulkAction(contextMenu.node, action)
+    handleCloseContextMenu()
+  }, [contextMenu, onBulkAction, handleCloseContextMenu])
 
   const columns: GridColDef[] = useMemo(() => {
     const cols: GridColDef[] = [
@@ -212,6 +254,19 @@ export default function NodesTable({
         initialState={{
           pagination: { paginationModel: { pageSize: 15 } }
         }}
+        slotProps={{
+          row: {
+            onContextMenu: (event: React.MouseEvent) => {
+              if (!onBulkAction) return
+              event.preventDefault()
+              const rowId = (event.currentTarget as HTMLElement).getAttribute('data-id')
+              const node = nodes.find(n => n.id === rowId)
+              if (node) {
+                handleContextMenu(event, node)
+              }
+            },
+          },
+        }}
         sx={{
           border: 'none',
           '& .MuiDataGrid-main': {
@@ -245,6 +300,60 @@ export default function NodesTable({
           noRowsLabel: t('common.noData'),
         }}
       />
+
+      {/* Context menu for bulk actions */}
+      {onBulkAction && (
+        <Menu
+          open={contextMenu !== null}
+          onClose={handleCloseContextMenu}
+          anchorReference="anchorPosition"
+          anchorPosition={
+            contextMenu !== null
+              ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+              : undefined
+          }
+        >
+          {/* Header */}
+          <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" fontWeight={600}>
+              {contextMenu?.node.name}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+              {contextMenu?.node.vms ?? 0} VMs
+            </Typography>
+          </Box>
+
+          <MenuItem onClick={() => handleBulkAction('start-all')}>
+            <ListItemIcon>
+              <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.startAllVms')}</ListItemText>
+          </MenuItem>
+
+          <MenuItem onClick={() => handleBulkAction('shutdown-all')}>
+            <ListItemIcon>
+              <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.shutdownAllVms')}</ListItemText>
+          </MenuItem>
+
+          <MenuItem onClick={() => handleBulkAction('stop-all')}>
+            <ListItemIcon>
+              <StopIcon fontSize="small" sx={{ color: 'error.main' }} />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.stopAllVms')}</ListItemText>
+          </MenuItem>
+
+          <Divider />
+
+          <MenuItem onClick={() => handleBulkAction('migrate-all')}>
+            <ListItemIcon>
+              <MoveUpIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
+          </MenuItem>
+        </Menu>
+      )}
     </Box>
   )
 }

@@ -1518,6 +1518,24 @@
     "creating": "Création...",
     "adminRightsInfo": "Ce compte aura les droits administrateur complets sur ProxCenter."
   },
+  "bulkActions": {
+    "startAllVms": "Démarrer toutes les VMs",
+    "shutdownAllVms": "Arrêter toutes les VMs (ACPI)",
+    "stopAllVms": "Forcer l'arrêt de toutes les VMs",
+    "migrateAllVms": "Migrer toutes les VMs",
+    "confirmStartAll": "Démarrer toutes les VMs arrêtées sur ce nœud ?",
+    "confirmShutdownAll": "Arrêter proprement toutes les VMs en cours sur ce nœud ?",
+    "confirmStopAll": "Forcer l'arrêt de toutes les VMs en cours sur ce nœud ? Cette action peut causer une perte de données.",
+    "confirmMigrateAll": "Migrer toutes les VMs de ce nœud vers un autre nœud ?",
+    "selectTargetNode": "Sélectionner le nœud cible",
+    "targetNode": "Nœud cible",
+    "startingVms": "Démarrage des VMs",
+    "stoppingVms": "Arrêt des VMs",
+    "migratingVms": "Migration des VMs",
+    "vmsStarted": "{count} VMs démarrées",
+    "vmsStopped": "{count} VMs arrêtées",
+    "vmsMigrated": "{count} VMs migrées"
+  },
   "vmActions": {
     "start": "Démarrer",
     "stop": "Arrêter",

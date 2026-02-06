@@ -3674,7 +3674,7 @@ return
       const connectionsList = connJson.data || []
 
       setConnections(connectionsList)
-      
+
       // 2. Charger les nodes de toutes les connexions en parallèle
       const allNodes: any[] = []
 
@@ -3684,13 +3684,17 @@ return
             const nodesRes = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/nodes`)
             const nodesJson = await nodesRes.json()
             const nodesList = nodesJson.data || []
-            
-            // Ajouter l'info de connexion à chaque node
+
+            // Ajouter l'info de connexion et calculs de pourcentages à chaque node
             nodesList.forEach((node: any) => {
+              const cpuPct = node.maxcpu ? (node.cpu || 0) * 100 : 0
+              const memPct = node.maxmem ? ((node.mem || 0) / node.maxmem) * 100 : 0
               allNodes.push({
                 ...node,
                 connId: conn.id,
                 connName: conn.name,
+                cpuPct,
+                memPct,
               })
             })
           } catch (e) {
@@ -3698,15 +3702,15 @@ return
           }
         })
       )
-      
+
       setNodes(allNodes)
-      
+
       // 3. Sélectionner le premier node par défaut
       if (allNodes.length > 0 && !selectedNode) {
         setSelectedNode(allNodes[0].node)
         setSelectedConnection(allNodes[0].connId)
       }
-      
+
     } catch (e) {
       console.error('Error loading data:', e)
     } finally {
@@ -3714,13 +3718,85 @@ return
     }
   }
 
-  // Quand on sélectionne un node, mettre à jour la connexion associée
-  const handleNodeChange = (nodeName: string) => {
-    setSelectedNode(nodeName)
-    const nodeData = nodes.find(n => n.node === nodeName)
+  // Grouper les nodes par cluster avec stats agrégées
+  const groupedNodes = useMemo(() => {
+    const groups: {
+      connId: string
+      connName: string
+      isCluster: boolean
+      nodes: any[]
+      avgCpu: number
+      avgMem: number
+    }[] = []
 
-    if (nodeData) {
-      setSelectedConnection(nodeData.connId)
+    // Grouper par connexion
+    const connMap = new Map<string, any[]>()
+    nodes.forEach(n => {
+      if (!connMap.has(n.connId)) {
+        connMap.set(n.connId, [])
+      }
+      connMap.get(n.connId)!.push(n)
+    })
+
+    // Créer les groupes avec stats
+    connMap.forEach((nodeList, connId) => {
+      const connName = nodeList[0]?.connName || connId
+      const onlineNodes = nodeList.filter(n => n.status === 'online')
+      const avgCpu = onlineNodes.length > 0
+        ? onlineNodes.reduce((sum, n) => sum + (n.cpuPct || 0), 0) / onlineNodes.length
+        : 0
+      const avgMem = onlineNodes.length > 0
+        ? onlineNodes.reduce((sum, n) => sum + (n.memPct || 0), 0) / onlineNodes.length
+        : 0
+
+      groups.push({
+        connId,
+        connName,
+        isCluster: nodeList.length > 1,
+        nodes: nodeList.sort((a, b) => a.node.localeCompare(b.node)),
+        avgCpu,
+        avgMem,
+      })
+    })
+
+    return groups.sort((a, b) => a.connName.localeCompare(b.connName))
+  }, [nodes])
+
+  // Trouver le meilleur node d'un cluster (moins de charge CPU+RAM)
+  const findBestNode = (connId: string): string | null => {
+    const group = groupedNodes.find(g => g.connId === connId)
+    if (!group) return null
+
+    const onlineNodes = group.nodes.filter(n => n.status === 'online')
+    if (onlineNodes.length === 0) return null
+
+    // Score = CPU% + RAM%, le plus bas est le meilleur
+    const bestNode = onlineNodes.reduce((best, node) => {
+      const score = (node.cpuPct || 0) + (node.memPct || 0)
+      const bestScore = (best.cpuPct || 0) + (best.memPct || 0)
+      return score < bestScore ? node : best
+    })
+
+    return bestNode.node
+  }
+
+  // Quand on sélectionne un node ou cluster
+  const handleNodeChange = (value: string) => {
+    // Check if it's a cluster selection (format: "cluster:connId")
+    if (value.startsWith('cluster:')) {
+      const connId = value.replace('cluster:', '')
+      const bestNode = findBestNode(connId)
+      if (bestNode) {
+        setSelectedNode(bestNode)
+        setSelectedConnection(connId)
+      }
+    } else {
+      // Regular node selection
+      setSelectedNode(value)
+      const nodeData = nodes.find(n => n.node === value)
+      if (nodeData) {
+        setSelectedConnection(nodeData.connId)
+      }
     }
   }
 
@@ -3891,17 +3967,105 @@ return
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Node</InputLabel>
-              <Select value={selectedNode} onChange={(e) => handleNodeChange(e.target.value)} label="Node">
-                {nodes.map(n => (
-                  <MenuItem key={`${n.connId}-${n.node}`} value={n.node}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {n.node}
-                      <Typography component="span" sx={{ opacity: 0.6, fontSize: '0.8em' }}>
-                        ({n.connName})
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
+              <Select
+                value={selectedNode}
+                onChange={(e) => handleNodeChange(e.target.value)}
+                label="Node"
+                MenuProps={{ PaperProps: { sx: { maxHeight: 400 } } }}
+              >
+                {groupedNodes.map(group => [
+                  // Cluster header (si multi-nodes)
+                  group.isCluster && (
+                    <MenuItem
+                      key={`cluster:${group.connId}`}
+                      value={`cluster:${group.connId}`}
+                      sx={{
+                        bgcolor: 'action.hover',
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        '&:hover': { bgcolor: 'action.selected' }
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                        <i className="ri-cloud-fill" style={{ fontSize: 16, color: theme.palette.primary.main }} />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" fontWeight={600}>
+                            {group.connName}
+                            <Typography component="span" sx={{ ml: 1, opacity: 0.6, fontSize: '0.8em' }}>
+                              (auto)
+                            </Typography>
+                          </Typography>
+                        </Box>
+                        <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
+                            <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, group.avgCpu)}%`, height: '100%', bgcolor: group.avgCpu > 80 ? 'error.main' : group.avgCpu > 50 ? 'warning.main' : 'success.main', borderRadius: 1 }} />
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{group.avgCpu.toFixed(0)}%</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>RAM</Typography>
+                            <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, group.avgMem)}%`, height: '100%', bgcolor: group.avgMem > 80 ? 'error.main' : group.avgMem > 50 ? 'warning.main' : 'primary.main', borderRadius: 1 }} />
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{group.avgMem.toFixed(0)}%</Typography>
+                          </Box>
+                        </Stack>
+                      </Box>
+                    </MenuItem>
+                  ),
+                  // Nodes du groupe
+                  ...group.nodes.map(n => (
+                    <MenuItem
+                      key={`${n.connId}-${n.node}`}
+                      value={n.node}
+                      disabled={n.status !== 'online'}
+                      sx={{ pl: group.isCluster ? 4 : 2 }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                        <i
+                          className="ri-server-line"
+                          style={{
+                            fontSize: 14,
+                            color: n.status === 'online' ? theme.palette.success.main : theme.palette.text.disabled
+                          }}
+                        />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" sx={{ opacity: n.status === 'online' ? 1 : 0.5 }}>
+                            {n.node}
+                            {!group.isCluster && (
+                              <Typography component="span" sx={{ ml: 1, opacity: 0.6, fontSize: '0.8em' }}>
+                                ({n.connName})
+                              </Typography>
+                            )}
+                          </Typography>
+                        </Box>
+                        {n.status === 'online' && (
+                          <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
+                              <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${Math.min(100, n.cpuPct || 0)}%`, height: '100%', bgcolor: (n.cpuPct || 0) > 80 ? 'error.main' : (n.cpuPct || 0) > 50 ? 'warning.main' : 'success.main', borderRadius: 1 }} />
+                              </Box>
+                              <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{(n.cpuPct || 0).toFixed(0)}%</Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>RAM</Typography>
+                              <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${Math.min(100, n.memPct || 0)}%`, height: '100%', bgcolor: (n.memPct || 0) > 80 ? 'error.main' : (n.memPct || 0) > 50 ? 'warning.main' : 'primary.main', borderRadius: 1 }} />
+                              </Box>
+                              <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{(n.memPct || 0).toFixed(0)}%</Typography>
+                            </Box>
+                          </Stack>
+                        )}
+                        {n.status !== 'online' && (
+                          <Chip label="offline" size="small" sx={{ height: 18, fontSize: 10 }} />
+                        )}
+                      </Box>
+                    </MenuItem>
+                  ))
+                ]).flat().filter(Boolean)}
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
@@ -4569,7 +4733,7 @@ return
       const connectionsList = connJson.data || []
 
       setConnections(connectionsList)
-      
+
       const allNodes: any[] = []
 
       await Promise.all(
@@ -4578,12 +4742,16 @@ return
             const nodesRes = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/nodes`)
             const nodesJson = await nodesRes.json()
             const nodesList = nodesJson.data || []
-            
+
             nodesList.forEach((node: any) => {
+              const cpuPct = node.maxcpu ? (node.cpu || 0) * 100 : 0
+              const memPct = node.maxmem ? ((node.mem || 0) / node.maxmem) * 100 : 0
               allNodes.push({
                 ...node,
                 connId: conn.id,
                 connName: conn.name,
+                cpuPct,
+                memPct,
               })
             })
           } catch (e) {
@@ -4591,19 +4759,78 @@ return
           }
         })
       )
-      
+
       setNodes(allNodes)
-      
+
       if (allNodes.length > 0 && !selectedNode) {
         setSelectedNode(allNodes[0].node)
         setSelectedConnection(allNodes[0].connId)
       }
-      
+
     } catch (e) {
       console.error('Error loading data:', e)
     } finally {
       setLoadingData(false)
     }
+  }
+
+  // Grouper les nodes par cluster avec stats agrégées
+  const groupedNodes = useMemo(() => {
+    const groups: {
+      connId: string
+      connName: string
+      isCluster: boolean
+      nodes: any[]
+      avgCpu: number
+      avgMem: number
+    }[] = []
+
+    const connMap = new Map<string, any[]>()
+    nodes.forEach(n => {
+      if (!connMap.has(n.connId)) {
+        connMap.set(n.connId, [])
+      }
+      connMap.get(n.connId)!.push(n)
+    })
+
+    connMap.forEach((nodeList, connId) => {
+      const connName = nodeList[0]?.connName || connId
+      const onlineNodes = nodeList.filter(n => n.status === 'online')
+      const avgCpu = onlineNodes.length > 0
+        ? onlineNodes.reduce((sum, n) => sum + (n.cpuPct || 0), 0) / onlineNodes.length
+        : 0
+      const avgMem = onlineNodes.length > 0
+        ? onlineNodes.reduce((sum, n) => sum + (n.memPct || 0), 0) / onlineNodes.length
+        : 0
+
+      groups.push({
+        connId,
+        connName,
+        isCluster: nodeList.length > 1,
+        nodes: nodeList.sort((a, b) => a.node.localeCompare(b.node)),
+        avgCpu,
+        avgMem,
+      })
+    })
+
+    return groups.sort((a, b) => a.connName.localeCompare(b.connName))
+  }, [nodes])
+
+  // Trouver le meilleur node d'un cluster
+  const findBestNode = (connId: string): string | null => {
+    const group = groupedNodes.find(g => g.connId === connId)
+    if (!group) return null
+
+    const onlineNodes = group.nodes.filter(n => n.status === 'online')
+    if (onlineNodes.length === 0) return null
+
+    const bestNode = onlineNodes.reduce((best, node) => {
+      const score = (node.cpuPct || 0) + (node.memPct || 0)
+      const bestScore = (best.cpuPct || 0) + (best.memPct || 0)
+      return score < bestScore ? node : best
+    })
+
+    return bestNode.node
   }
 
   useEffect(() => {
@@ -4620,12 +4847,21 @@ return
     }
   }, [selectedConnection, selectedNode])
 
-  const handleNodeChange = (nodeName: string) => {
-    setSelectedNode(nodeName)
-    const nodeData = nodes.find(n => n.node === nodeName)
-
-    if (nodeData) {
-      setSelectedConnection(nodeData.connId)
+  // Quand on sélectionne un node ou cluster
+  const handleNodeChange = (value: string) => {
+    if (value.startsWith('cluster:')) {
+      const connId = value.replace('cluster:', '')
+      const bestNode = findBestNode(connId)
+      if (bestNode) {
+        setSelectedNode(bestNode)
+        setSelectedConnection(connId)
+      }
+    } else {
+      setSelectedNode(value)
+      const nodeData = nodes.find(n => n.node === value)
+      if (nodeData) {
+        setSelectedConnection(nodeData.connId)
+      }
     }
   }
 
@@ -4748,17 +4984,105 @@ return
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
               <InputLabel>Node</InputLabel>
-              <Select value={selectedNode} onChange={(e) => handleNodeChange(e.target.value)} label="Node">
-                {nodes.map(n => (
-                  <MenuItem key={`${n.connId}-${n.node}`} value={n.node}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {n.node}
-                      <Typography component="span" sx={{ opacity: 0.6, fontSize: '0.8em' }}>
-                        ({n.connName})
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
+              <Select
+                value={selectedNode}
+                onChange={(e) => handleNodeChange(e.target.value)}
+                label="Node"
+                MenuProps={{ PaperProps: { sx: { maxHeight: 400 } } }}
+              >
+                {groupedNodes.map(group => [
+                  // Cluster header (si multi-nodes)
+                  group.isCluster && (
+                    <MenuItem
+                      key={`cluster:${group.connId}`}
+                      value={`cluster:${group.connId}`}
+                      sx={{
+                        bgcolor: 'action.hover',
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        '&:hover': { bgcolor: 'action.selected' }
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                        <i className="ri-cloud-fill" style={{ fontSize: 16, color: theme.palette.primary.main }} />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" fontWeight={600}>
+                            {group.connName}
+                            <Typography component="span" sx={{ ml: 1, opacity: 0.6, fontSize: '0.8em' }}>
+                              (auto)
+                            </Typography>
+                          </Typography>
+                        </Box>
+                        <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
+                            <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, group.avgCpu)}%`, height: '100%', bgcolor: group.avgCpu > 80 ? 'error.main' : group.avgCpu > 50 ? 'warning.main' : 'success.main', borderRadius: 1 }} />
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{group.avgCpu.toFixed(0)}%</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>RAM</Typography>
+                            <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, group.avgMem)}%`, height: '100%', bgcolor: group.avgMem > 80 ? 'error.main' : group.avgMem > 50 ? 'warning.main' : 'primary.main', borderRadius: 1 }} />
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{group.avgMem.toFixed(0)}%</Typography>
+                          </Box>
+                        </Stack>
+                      </Box>
+                    </MenuItem>
+                  ),
+                  // Nodes du groupe
+                  ...group.nodes.map(n => (
+                    <MenuItem
+                      key={`${n.connId}-${n.node}`}
+                      value={n.node}
+                      disabled={n.status !== 'online'}
+                      sx={{ pl: group.isCluster ? 4 : 2 }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                        <i
+                          className="ri-server-line"
+                          style={{
+                            fontSize: 14,
+                            color: n.status === 'online' ? theme.palette.success.main : theme.palette.text.disabled
+                          }}
+                        />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" sx={{ opacity: n.status === 'online' ? 1 : 0.5 }}>
+                            {n.node}
+                            {!group.isCluster && (
+                              <Typography component="span" sx={{ ml: 1, opacity: 0.6, fontSize: '0.8em' }}>
+                                ({n.connName})
+                              </Typography>
+                            )}
+                          </Typography>
+                        </Box>
+                        {n.status === 'online' && (
+                          <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
+                              <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${Math.min(100, n.cpuPct || 0)}%`, height: '100%', bgcolor: (n.cpuPct || 0) > 80 ? 'error.main' : (n.cpuPct || 0) > 50 ? 'warning.main' : 'success.main', borderRadius: 1 }} />
+                              </Box>
+                              <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{(n.cpuPct || 0).toFixed(0)}%</Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+                              <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>RAM</Typography>
+                              <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${Math.min(100, n.memPct || 0)}%`, height: '100%', bgcolor: (n.memPct || 0) > 80 ? 'error.main' : (n.memPct || 0) > 50 ? 'warning.main' : 'primary.main', borderRadius: 1 }} />
+                              </Box>
+                              <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{(n.memPct || 0).toFixed(0)}%</Typography>
+                            </Box>
+                          </Stack>
+                        )}
+                        {n.status !== 'online' && (
+                          <Chip label="offline" size="small" sx={{ height: 18, fontSize: 10 }} />
+                        )}
+                      </Box>
+                    </MenuItem>
+                  ))
+                ]).flat().filter(Boolean)}
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
@@ -5745,6 +6069,8 @@ function RootInventoryView({
   showIpSnap,
   ipSnapLoading,
   onLoadIpSnap,
+  onCreateVm,
+  onCreateLxc,
 }: {
   allVms: AllVmItem[]
   hosts: HostItem[]
@@ -5761,6 +6087,8 @@ function RootInventoryView({
   showIpSnap?: boolean
   ipSnapLoading?: boolean
   onLoadIpSnap?: () => void
+  onCreateVm?: () => void
+  onCreateLxc?: () => void
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -5940,10 +6268,33 @@ function RootInventoryView({
             
             {/* Actions */}
             <Stack direction="row" spacing={1}>
-              <Button size="small" variant="outlined" onClick={expandAll} startIcon={<i className="ri-expand-diagonal-line" />}>
+              {onCreateVm && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<i className="ri-add-line" />}
+                  onClick={onCreateVm}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {t('common.create')} VM
+                </Button>
+              )}
+              {onCreateLxc && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<i className="ri-add-line" />}
+                  onClick={onCreateLxc}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {t('common.create')} LXC
+                </Button>
+              )}
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+              <Button size="small" variant="text" onClick={expandAll} startIcon={<i className="ri-expand-diagonal-line" />}>
                 {t('common.expandAll')}
               </Button>
-              <Button size="small" variant="outlined" onClick={collapseAll} startIcon={<i className="ri-collapse-diagonal-line" />}>
+              <Button size="small" variant="text" onClick={collapseAll} startIcon={<i className="ri-collapse-diagonal-line" />}>
                 {t('common.collapseAll')}
               </Button>
             </Stack>
@@ -10272,6 +10623,8 @@ return vm?.isCluster ?? false
           showIpSnap={showIpSnap}
           ipSnapLoading={ipSnapLoading}
           onLoadIpSnap={onLoadIpSnap}
+          onCreateVm={() => setCreateVmDialogOpen(true)}
+          onCreateLxc={() => setCreateLxcDialogOpen(true)}
         />
       ) : !selection || selection?.type === 'root' ? (
         viewMode === 'vms' && allVms.length > 0 ? (
@@ -10735,6 +11088,30 @@ return vm?.isCluster ?? false
                   </Typography>
                 </Box>
               ) : null}
+
+              {/* Boutons Create VM/LXC pour clusters et hosts */}
+              {(selection?.type === 'cluster' || selection?.type === 'node') && (
+                <Stack direction="row" spacing={1} sx={{ ml: data.hostInfo?.uptime ? 2 : 'auto' }}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<i className="ri-add-line" />}
+                    onClick={() => setCreateVmDialogOpen(true)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {t('common.create')} VM
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<i className="ri-add-line" />}
+                    onClick={() => setCreateLxcDialogOpen(true)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {t('common.create')} LXC
+                  </Button>
+                </Stack>
+              )}
             </Box>
           )}
 

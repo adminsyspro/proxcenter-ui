@@ -10,11 +10,11 @@ WORKDIR /app
 # Install build dependencies for better-sqlite3
 RUN apk add --no-cache python3 make g++ sqlite-dev
 
-# Copy package files
-COPY package.json ./
+# Copy package files (including lock file for reproducible builds)
+COPY package.json package-lock.json ./
 
 # Install dependencies WITHOUT running postinstall (source files not yet available)
-RUN npm install --legacy-peer-deps --ignore-scripts
+RUN npm ci --legacy-peer-deps --ignore-scripts
 
 # ========================================
 # Stage 2: Builder

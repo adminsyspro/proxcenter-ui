@@ -16,6 +16,7 @@ import {
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 
 import ReportGenerator from './components/ReportGenerator'
 import ReportHistory from './components/ReportHistory'
@@ -286,15 +287,16 @@ export default function ReportsPage() {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
-      <Card variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-            <Tab label={t('reports.generate')} />
-            <Tab label={`${t('reports.history')} (${reports.length})`} />
-            <Tab label={`${t('reports.schedules')} (${schedules.length})`} />
-          </Tabs>
-        </Box>
+    <EnterpriseGuard requiredFeature={Features.REPORTS} featureName="Reports">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
+        <Card variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+              <Tab label={t('reports.generate')} />
+              <Tab label={`${t('reports.history')} (${reports.length})`} />
+              <Tab label={`${t('reports.schedules')} (${schedules.length})`} />
+            </Tabs>
+          </Box>
 
         {tab === 0 && (
           <ReportGenerator
@@ -337,6 +339,7 @@ export default function ReportsPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+      </Box>
+    </EnterpriseGuard>
   )
 }

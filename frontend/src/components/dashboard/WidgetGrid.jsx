@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
-import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
+import { ResponsiveGridLayout } from 'react-grid-layout'
 
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
@@ -202,9 +202,26 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
   const [layoutLoaded, setLayoutLoaded] = useState(false)
 
-  // Ref et hook pour la largeur du conteneur (requis par react-grid-layout)
+  // Mesure de la largeur du conteneur (requis par react-grid-layout v2.x)
   const containerRef = useRef(null)
-  const containerWidth = useContainerWidth(containerRef)
+  const [containerWidth, setContainerWidth] = useState(0)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width)
+      }
+    })
+
+    resizeObserver.observe(containerRef.current)
+
+    // Mesure initiale
+    setContainerWidth(containerRef.current.offsetWidth)
+
+    return () => resizeObserver.disconnect()
+  }, [])
 
   // Charger le layout depuis l'API
   useEffect(() => {

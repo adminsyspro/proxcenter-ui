@@ -3606,10 +3606,20 @@ function CreateVmDialog({
   }, [selectedConnection, selectedNode, isoStorage])
 
   // Calculer le prochain VMID disponible (global sur toutes les connexions)
+  // Ne définir le VMID que s'il n'est pas déjà renseigné par l'utilisateur
+  const [vmidInitialized, setVmidInitialized] = useState(false)
+
+  // Réinitialiser le flag quand le dialog s'ouvre
   useEffect(() => {
-    if (allVms.length > 0) {
+    if (open) {
+      setVmidInitialized(false)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (allVms.length > 0 && !vmidInitialized && open) {
       const usedVmids = allVms.map(vm => parseInt(String(vm.vmid), 10))
-      
+
       let nextId = 100
 
       while (usedVmids.includes(nextId)) {
@@ -3618,8 +3628,9 @@ function CreateVmDialog({
 
       setVmid(String(nextId))
       setVmidError(null)
+      setVmidInitialized(true)
     }
-  }, [allVms])
+  }, [allVms, vmidInitialized, open])
 
   // Valider le VMID quand il change
   const handleVmidChange = (value: string) => {

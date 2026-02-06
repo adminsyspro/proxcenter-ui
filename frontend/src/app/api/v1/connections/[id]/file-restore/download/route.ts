@@ -105,7 +105,8 @@ export async function GET(
     const filename = filepath.split('/').pop() || 'download'
 
     // Vérifier si c'est un dossier (sera téléchargé comme .tar.zst)
-    const contentType = pveRes.headers['content-type'] || 'application/octet-stream'
+    const rawContentType = pveRes.headers['content-type']
+    const contentType: string = Array.isArray(rawContentType) ? rawContentType[0] : (rawContentType || 'application/octet-stream')
     const isArchive = contentType.includes('zstd') || contentType.includes('tar') || contentType.includes('application/octet-stream')
 
     // Nom du fichier téléchargé

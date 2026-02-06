@@ -644,7 +644,9 @@
     "createHaGroup": "Create HA group",
     "editHaGroup": "Edit HA group",
     "deleteHaGroup": "Delete HA group",
-    "drsEnabled": "DRS enabled"
+    "drsEnabled": "DRS enabled",
+    "recommendationNotif": "Migration recommended: {vm} from {source} to {target}",
+    "viewRecommendations": "View recommendations"
   },
   "settings": {
     "title": "Settings",

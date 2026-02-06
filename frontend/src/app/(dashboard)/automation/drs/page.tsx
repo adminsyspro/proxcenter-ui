@@ -1324,8 +1324,11 @@ return () => setPageInfo('', '', '')
     useSWR<DRSMigration[]>('/api/v1/orchestrator/drs/migrations', fetcher, { refreshInterval: 10000 })
 
 
-  // Garder toutes les migrations non-null
-  const migrations = ensureArray(migrationsRaw).filter(m => m != null)
+  // Garder toutes les migrations non-null (useMemo pour éviter les re-renders inutiles)
+  const migrations = useMemo(() =>
+    ensureArray(migrationsRaw).filter(m => m != null),
+    [migrationsRaw]
+  )
 
   const { data: metricsData, mutate: mutateMetrics } =
     useSWR<Record<string, ClusterMetrics>>('/api/v1/orchestrator/metrics', fetcher, { refreshInterval: 30000 })
@@ -1442,23 +1445,29 @@ return Object.entries(metricsData)
   }, [clusters])
 
   // Récupérer la progression des migrations actives
-  const activeMigrations = useMemo(() => 
+  const activeMigrations = useMemo(() =>
     migrations.filter(m => m.status === 'running'),
     [migrations]
   )
 
+  // IDs des migrations actives (string stable pour la dépendance)
+  const activeMigrationIds = useMemo(() =>
+    activeMigrations.map(m => m.id).sort().join(','),
+    [activeMigrations]
+  )
+
   // Effet pour mettre à jour la progression des migrations actives
   useEffect(() => {
-    if (activeMigrations.length === 0) {
+    if (!activeMigrationIds) {
       // Seulement réinitialiser si l'objet n'est pas déjà vide
       setMigrationsProgress(prev => {
         if (Object.keys(prev).length === 0) return prev
-        
-return {}
+        return {}
       })
-      
-return
+      return
     }
+
+    const migrationIds = activeMigrationIds.split(',')
 
     // Fonction pour récupérer la progression d'une migration
     const fetchProgress = async (migrationId: string) => {
@@ -1476,15 +1485,15 @@ return
     }
 
     // Récupérer la progression de toutes les migrations actives
-    activeMigrations.forEach(m => fetchProgress(m.id))
+    migrationIds.forEach(id => fetchProgress(id))
 
     // Rafraîchir toutes les 2 secondes
     const interval = setInterval(() => {
-      activeMigrations.forEach(m => fetchProgress(m.id))
+      migrationIds.forEach(id => fetchProgress(id))
     }, 2000)
 
     return () => clearInterval(interval)
-  }, [activeMigrations])
+  }, [activeMigrationIds])
 
   // Fonction pour vérifier la migration quand on ouvre le drawer
   const checkMigration = useCallback(async (rec: DRSRecommendation) => {

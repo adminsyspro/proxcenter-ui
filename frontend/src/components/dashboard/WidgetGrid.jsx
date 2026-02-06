@@ -14,10 +14,6 @@ import {
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory } from './widgetRegistry'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
 
-// Import react-grid-layout styles
-import 'react-grid-layout/css/styles.css'
-import 'react-resizable/css/styles.css'
-
 const ResponsiveGridLayout = GridLayout.WidthProvider(GridLayout.Responsive)
 
 const GRID_COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }

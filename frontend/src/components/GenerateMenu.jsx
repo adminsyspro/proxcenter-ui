@@ -87,20 +87,9 @@ export const GenerateVerticalMenu = ({ menuData }) => {
         const Icon = icon ? <i className={icon} /> : null
         const subMenuPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
 
-        // Ajouter un badge "Enterprise" si feature non disponible (mais garder cliquable)
+        // Ajouter une icône couronne si feature non disponible (mais garder cliquable)
         const subMenuSuffix = !featureAvailable ? (
-          <Chip
-            size='small'
-            label='Enterprise'
-            sx={{
-              height: 20,
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              '& .MuiChip-label': { px: 1.25 }
-            }}
-          />
+          <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
         ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
 
         return (
@@ -122,20 +111,9 @@ export const GenerateVerticalMenu = ({ menuData }) => {
       const Icon = icon ? <i className={icon} /> : null
       const menuItemPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
 
-      // Ajouter un badge "Enterprise" si feature non disponible (mais garder cliquable)
+      // Ajouter une icône couronne si feature non disponible (mais garder cliquable)
       const menuItemSuffix = !featureAvailable ? (
-        <Chip
-          size='small'
-          label='Enterprise'
-          sx={{
-            height: 20,
-            fontSize: '0.65rem',
-            fontWeight: 600,
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            '& .MuiChip-label': { px: 1.25 }
-          }}
-        />
+        <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
       ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
 
       return (
@@ -200,7 +178,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
         const Icon = icon ? <i className={icon} /> : null
         const subMenuPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
         const subMenuSuffix = !featureAvailable ? (
-          <Chip size='small' label='Enterprise' sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, bgcolor: 'primary.main', color: 'primary.contrastText' }} />
+          <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
         ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
 
         return (
@@ -222,7 +200,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
       const Icon = icon ? <i className={icon} /> : null
       const menuItemPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
       const menuItemSuffix = !featureAvailable ? (
-        <Chip size='small' label='Enterprise' sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, bgcolor: 'primary.main', color: 'primary.contrastText' }} />
+        <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
       ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
 
       return (

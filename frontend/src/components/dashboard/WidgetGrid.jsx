@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
-import GridLayout from 'react-grid-layout'
+import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout'
 
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
@@ -13,8 +13,6 @@ import {
 
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory } from './widgetRegistry'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
-
-const ResponsiveGridLayout = GridLayout.WidthProvider(GridLayout.Responsive)
 
 const GRID_COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const ROW_HEIGHT = 60
@@ -203,6 +201,10 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [saving, setSaving] = useState(false)
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
   const [layoutLoaded, setLayoutLoaded] = useState(false)
+
+  // Ref et hook pour la largeur du conteneur (requis par react-grid-layout)
+  const containerRef = useRef(null)
+  const containerWidth = useContainerWidth(containerRef)
 
   // Charger le layout depuis l'API
   useEffect(() => {
@@ -434,34 +436,39 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
       </Box>
 
       {/* Grid avec react-grid-layout */}
-      <Box sx={{
-        flex: 1,
-        '& .react-grid-item.react-grid-placeholder': {
-          bgcolor: 'primary.main',
-          opacity: 0.2,
-          borderRadius: 1,
-        },
-        '& .react-grid-item > .react-resizable-handle': {
-          display: editMode ? 'block' : 'none',
-        },
-        '& .react-grid-item > .react-resizable-handle::after': {
-          borderColor: 'text.disabled',
-        },
-      }}>
-        <ResponsiveGridLayout
-          className="layout"
-          layouts={{ lg: gridLayout }}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-          cols={GRID_COLS}
-          rowHeight={ROW_HEIGHT}
-          margin={MARGIN}
-          isDraggable={editMode}
-          isResizable={editMode}
-          draggableHandle=".widget-drag-handle"
-          onLayoutChange={(newLayout) => handleLayoutChange(newLayout)}
-          useCSSTransforms={true}
-          compactType="vertical"
-        >
+      <Box
+        ref={containerRef}
+        sx={{
+          flex: 1,
+          '& .react-grid-item.react-grid-placeholder': {
+            bgcolor: 'primary.main',
+            opacity: 0.2,
+            borderRadius: 1,
+          },
+          '& .react-grid-item > .react-resizable-handle': {
+            display: editMode ? 'block' : 'none',
+          },
+          '& .react-grid-item > .react-resizable-handle::after': {
+            borderColor: 'text.disabled',
+          },
+        }}
+      >
+        {containerWidth > 0 && (
+          <ResponsiveGridLayout
+            className="layout"
+            width={containerWidth}
+            layouts={{ lg: gridLayout }}
+            breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+            cols={GRID_COLS}
+            rowHeight={ROW_HEIGHT}
+            margin={MARGIN}
+            isDraggable={editMode}
+            isResizable={editMode}
+            draggableHandle=".widget-drag-handle"
+            onLayoutChange={(newLayout) => handleLayoutChange(newLayout)}
+            useCSSTransforms={true}
+            compactType="vertical"
+          >
           {layout.map((config) => (
             <div key={config.id}>
               <WidgetContainer
@@ -474,7 +481,8 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
               />
             </div>
           ))}
-        </ResponsiveGridLayout>
+          </ResponsiveGridLayout>
+        )}
       </Box>
 
       {/* Add Widget Dialog */}

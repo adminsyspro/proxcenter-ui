@@ -225,8 +225,17 @@ const NavbarContent = () => {
   const openNotif = Boolean(notifAnchor)
   const openUser = Boolean(userAnchor)
 
-  // Charger les notifications depuis l'orchestrator
+  // Charger les notifications depuis l'orchestrator (Enterprise seulement)
   const fetchNotifications = useCallback(async () => {
+    // En mode Community, pas d'orchestrator donc pas de notifications
+    if (!isEnterprise) {
+      setNotifications([])
+      setNotifStats({ crit: 0, warn: 0 })
+      setNotifCount(0)
+      setDrsRecommendations([])
+      return
+    }
+
     try {
       // Récupérer les alertes actives depuis l'orchestrator
       const res = await fetch('/api/v1/orchestrator/alerts?status=active&limit=10', { cache: 'no-store' })
@@ -270,7 +279,7 @@ const NavbarContent = () => {
     } catch (e) {
       console.error('Failed to fetch notifications:', e)
     }
-  }, [hasFeature])
+  }, [hasFeature, isEnterprise])
 
   // Acquitter une alerte depuis la cloche (via orchestrator)
   const handleAcknowledge = async (e, alertId) => {

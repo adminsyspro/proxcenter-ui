@@ -37,6 +37,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useLicense, Features } from '@/contexts/LicenseContext'
 
 /* --------------------------------
    Helpers
@@ -99,7 +100,7 @@ return <Chip size='small' label='Local' variant='outlined' icon={<i className='r
    User Dialog - Création/Modification
 -------------------------------- */
 
-function UserDialog({ open, onClose, user, onSave, rbacRoles, t }) {
+function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -266,55 +267,57 @@ return
           }}
         />
 
-        <Autocomplete
-          multiple
-          options={rbacRoles}
-          value={selectedRoles}
-          onChange={(_, newValue) => setSelectedRoles(newValue)}
-          getOptionLabel={(option) => option.name}
-          isOptionEqualToValue={(option, value) => option.id === value.id}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label={t ? t('usersPage.rbacRoles') : 'RBAC Roles'}
-              placeholder={t ? t('usersPage.selectRoles') : 'Select roles...'}
-              helperText={t ? t('usersPage.rolesDefinePermissions') : 'Roles define user permissions'}
-            />
-          )}
-          renderTags={(value, getTagProps) =>
-            value.map((option, index) => (
-              <Chip
-                size='small'
-                label={option.name}
-                {...getTagProps({ index })}
-                key={option.id}
-                sx={{ 
-                  bgcolor: option.color ? `${option.color}20` : undefined,
-                  color: option.color || undefined,
-                }}
+        {showRbac && (
+          <Autocomplete
+            multiple
+            options={rbacRoles}
+            value={selectedRoles}
+            onChange={(_, newValue) => setSelectedRoles(newValue)}
+            getOptionLabel={(option) => option.name}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label={t ? t('usersPage.rbacRoles') : 'RBAC Roles'}
+                placeholder={t ? t('usersPage.selectRoles') : 'Select roles...'}
+                helperText={t ? t('usersPage.rolesDefinePermissions') : 'Roles define user permissions'}
               />
-            ))
-          }
-          renderOption={(props, option) => (
-            <li {...props} key={option.id}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box 
-                  sx={{ 
-                    width: 12, 
-                    height: 12, 
-                    borderRadius: '50%', 
-                    bgcolor: option.color || 'grey.400' 
-                  }} 
+            )}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip
+                  size='small'
+                  label={option.name}
+                  {...getTagProps({ index })}
+                  key={option.id}
+                  sx={{
+                    bgcolor: option.color ? `${option.color}20` : undefined,
+                    color: option.color || undefined,
+                  }}
                 />
-                <Box>
-                  <Typography variant='body2'>{option.name}</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{option.description}</Typography>
+              ))
+            }
+            renderOption={(props, option) => (
+              <li {...props} key={option.id}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box
+                    sx={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      bgcolor: option.color || 'grey.400'
+                    }}
+                  />
+                  <Box>
+                    <Typography variant='body2'>{option.name}</Typography>
+                    <Typography variant='caption' sx={{ opacity: 0.6 }}>{option.description}</Typography>
+                  </Box>
                 </Box>
-              </Box>
-            </li>
-          )}
-          sx={{ mb: 2 }}
-        />
+              </li>
+            )}
+            sx={{ mb: 2 }}
+          />
+        )}
 
         {isEdit && (
           <FormControlLabel
@@ -418,6 +421,8 @@ return
 export default function UsersPage() {
   const { data: session } = useSession()
   const t = useTranslations()
+  const { hasFeature } = useLicense()
+  const showRbac = hasFeature(Features.RBAC)
   const [users, setUsers] = useState([])
   const [rbacRoles, setRbacRoles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -483,8 +488,13 @@ return {
     }
   }
 
-  // Charger les rôles RBAC disponibles
+  // Charger les rôles RBAC disponibles (seulement si la feature est activée)
   const loadRoles = async () => {
+    if (!showRbac) {
+      setRbacRoles([])
+      return
+    }
+
     try {
       const res = await fetch('/api/v1/rbac/roles')
       const data = await res.json()
@@ -500,7 +510,7 @@ return {
   useEffect(() => {
     loadUsers()
     loadRoles()
-  }, [])
+  }, [showRbac])
 
   const handleEdit = (user) => {
     setSelectedUser(user)
@@ -533,12 +543,13 @@ return {
           </Box>
         ),
       },
-      {
+      // Colonne RBAC - seulement si la feature est disponible
+      ...(showRbac ? [{
         field: 'roles',
         headerName: t('navigation.rbacRoles'),
         width: 200,
         renderCell: params => <RoleChips roles={params.row.roles} t={t} />,
-      },
+      }] : []),
       {
         field: 'auth_provider',
         headerName: 'Auth',
@@ -603,7 +614,7 @@ return {
         ),
       },
     ],
-    [t]
+    [t, showRbac]
   )
 
   return (
@@ -662,6 +673,7 @@ return {
         onSave={loadUsers}
         rbacRoles={rbacRoles}
         t={t}
+        showRbac={showRbac}
       />
 
       <DeleteDialog

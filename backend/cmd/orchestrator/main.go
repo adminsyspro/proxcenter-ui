@@ -153,6 +153,18 @@ func main() {
 	sched.Start()
 	eventPoller.Start()
 
+	// Run initial DRS evaluation at startup (don't wait for first interval)
+	if cfg.DRS.Enabled {
+		go func() {
+			// Small delay to let connections initialize
+			time.Sleep(10 * time.Second)
+			log.Info().Msg("Running initial DRS evaluation at startup")
+			if err := drsEngine.Evaluate(context.Background()); err != nil {
+				log.Error().Err(err).Msg("Initial DRS evaluation failed")
+			}
+		}()
+	}
+
 	// Start API server in goroutine
 	go func() {
 		if err := server.Start(); err != nil {

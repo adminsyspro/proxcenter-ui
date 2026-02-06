@@ -250,7 +250,8 @@
       "cephStatus": "Ceph Status",
       "zerotrustScore": "Zero Trust Overview",
       "zerotrustSecuritygroups": "Security Groups",
-      "vmStatusWaffle": "VM Status (Waffle)"
+      "vmStatusWaffle": "VM Status (Waffle)",
+      "resourceTrends": "Tendances Ressources"
     },
     "widgetDescs": {
       "kpiClusters": "Affiche le nombre de clusters et nodes",
@@ -272,7 +273,8 @@
       "cephStatus": "État du cluster Ceph",
       "zerotrustScore": "Score de sécurité par cluster (firewall + policies)",
       "zerotrustSecuritygroups": "Liste des Security Groups par cluster",
-      "vmStatusWaffle": "Vue waffle des VMs par cluster et status"
+      "vmStatusWaffle": "Vue waffle des VMs par cluster et status",
+      "resourceTrends": "Évolution CPU/RAM sur 1h, 24h ou 7j"
     }
   },
   "alerts": {

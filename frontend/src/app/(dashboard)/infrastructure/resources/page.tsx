@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 
 import { useTranslations } from 'next-intl'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features } from '@/contexts/LicenseContext'
 import {
   Alert,
   Box,
@@ -1862,39 +1864,41 @@ return calculateHealthScore(kpis, alerts)
   }, [kpis, alerts])
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 3 }}>
-        <Button variant="outlined" startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />} onClick={() => { loadData(); setAiAnalysis({ summary: '', recommendations: [], loading: false }) }} disabled={loading} sx={{ borderRadius: 2 }}>{t('common.refresh')}</Button>
-      </Stack>
+    <EnterpriseGuard requiredFeature={Features.GREEN_METRICS} featureName="Green Metrics / RSE">
+      <Box sx={{ p: 3 }}>
+        <Stack direction="row" justifyContent="flex-end" sx={{ mb: 3 }}>
+          <Button variant="outlined" startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />} onClick={() => { loadData(); setAiAnalysis({ summary: '', recommendations: [], loading: false }) }} disabled={loading} sx={{ borderRadius: 2 }}>{t('common.refresh')}</Button>
+        </Stack>
 
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+        {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      <Box sx={{ mb: 3 }}>
-        <GlobalHealthScore score={healthScore} kpis={kpis} alerts={alerts} loading={loading} />
+        <Box sx={{ mb: 3 }}>
+          <GlobalHealthScore score={healthScore} kpis={kpis} alerts={alerts} loading={loading} />
+        </Box>
+
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <ProjectionChart data={projectedTrends} loading={loading} period={trendsPeriod} />
+          </Grid>
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <PredictiveAlertsCard alerts={alerts} loading={loading} />
+          </Grid>
+
+          {/* Section Green / RSE */}
+          <Grid size={{ xs: 12 }}>
+            <GreenMetricsCard green={green} loading={loading} />
+          </Grid>
+
+          {/* Section Overprovisioning */}
+          <Grid size={{ xs: 12 }}>
+            <OverprovisioningCard data={overprovisioning} loading={loading} />
+          </Grid>
+
+          <Grid size={{ xs: 12 }}>
+            <AiInsightsCard analysis={aiAnalysis} onAnalyze={runAiAnalysis} loading={loading} />
+          </Grid>
+        </Grid>
       </Box>
-
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <ProjectionChart data={projectedTrends} loading={loading} period={trendsPeriod} />
-        </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <PredictiveAlertsCard alerts={alerts} loading={loading} />
-        </Grid>
-        
-        {/* Section Green / RSE */}
-        <Grid size={{ xs: 12 }}>
-          <GreenMetricsCard green={green} loading={loading} />
-        </Grid>
-
-        {/* Section Overprovisioning */}
-        <Grid size={{ xs: 12 }}>
-          <OverprovisioningCard data={overprovisioning} loading={loading} />
-        </Grid>
-        
-        <Grid size={{ xs: 12 }}>
-          <AiInsightsCard analysis={aiAnalysis} onAnalyze={runAiAnalysis} loading={loading} />
-        </Grid>
-      </Grid>
-    </Box>
+    </EnterpriseGuard>
   )
 }

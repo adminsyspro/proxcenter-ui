@@ -15,6 +15,8 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from "@/contexts/PageTitleContext"
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features } from '@/contexts/LicenseContext'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -1338,14 +1340,15 @@ return () => setPageInfo('', '', '')
   useEffect(() => { loadData() }, [loadData])
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-      {error && <Alert severity='error'>{error}</Alert>}
-      <Card variant='outlined' sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-shield-keyhole-line' />{t('rbacPage.roles')}<Chip label={roles.length} size='small' sx={{ height: 18 }} /></Box>} />
-          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-user-settings-line' />{t('rbacPage.assignments')}<Chip label={assignments.length} size='small' sx={{ height: 18 }} /></Box>} />
-          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-key-line' />{t('rbacPage.permissionsTab')}<Chip label={permissions.length} size='small' sx={{ height: 18 }} /></Box>} />
-        </Tabs>
+    <EnterpriseGuard requiredFeature={Features.RBAC} featureName="RBAC">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+        {error && <Alert severity='error'>{error}</Alert>}
+        <Card variant='outlined' sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-shield-keyhole-line' />{t('rbacPage.roles')}<Chip label={roles.length} size='small' sx={{ height: 18 }} /></Box>} />
+            <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-user-settings-line' />{t('rbacPage.assignments')}<Chip label={assignments.length} size='small' sx={{ height: 18 }} /></Box>} />
+            <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-key-line' />{t('rbacPage.permissionsTab')}<Chip label={permissions.length} size='small' sx={{ height: 18 }} /></Box>} />
+          </Tabs>
         <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}><Typography>{t('common.loading')}</Typography></Box> : (
             <>
@@ -1376,7 +1379,8 @@ return () => setPageInfo('', '', '')
             </>
           )}
         </CardContent>
-      </Card>
-    </Box>
+        </Card>
+      </Box>
+    </EnterpriseGuard>
   )
 }

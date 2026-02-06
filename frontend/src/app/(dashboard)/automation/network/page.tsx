@@ -7,8 +7,8 @@ import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import {
-  Box, Button, Card, CardContent, Chip, Grid, IconButton, 
-  Stack, Tab, Tabs, TextField, Typography, 
+  Box, Button, Card, CardContent, Chip, Grid, IconButton,
+  Stack, Tab, Tabs, TextField, Typography,
   useTheme, alpha, Avatar, Divider, Paper,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Switch, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -18,6 +18,8 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip } from 'recharts'
 
 import { usePageTitle } from "@/contexts/PageTitleContext"
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features } from '@/contexts/LicenseContext'
 import * as firewallAPI from '@/lib/api/firewall'
 import MicrosegmentationTab from '@/components/MicrosegmentationTab'
 
@@ -1231,18 +1233,19 @@ return next
   const monoStyle = { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace', fontSize: 13 }
   
   return (
-    <Box sx={{ minHeight: '100vh', p: 3 }}>
-      
-      {/* Connection Selector - Compact header */}
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Cluster</InputLabel>
-            <Select value={selectedConnection} label="Cluster" onChange={(e) => {
-              setSelectedConnection(e.target.value)
-              setVMFirewallData([])
-              setExpandedVMs(new Set())
-            }}>
+    <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
+      <Box sx={{ minHeight: '100vh', p: 3 }}>
+
+        {/* Connection Selector - Compact header */}
+        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel>Cluster</InputLabel>
+              <Select value={selectedConnection} label="Cluster" onChange={(e) => {
+                setSelectedConnection(e.target.value)
+                setVMFirewallData([])
+                setExpandedVMs(new Set())
+              }}>
               {connections.map((c) => (
                 <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
               ))}
@@ -3580,6 +3583,7 @@ return newSet
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
       </Snackbar>
-    </Box>
+      </Box>
+    </EnterpriseGuard>
   )
 }

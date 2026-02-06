@@ -21,6 +21,7 @@
     "retry": "Retry",
     "refresh": "Refresh",
     "back": "Back",
+    "goBack": "Go back",
     "next": "Next",
     "previous": "Previous",
     "all": "All",
@@ -85,7 +86,13 @@
     "expirationWarning": "Your license expires in {days} days",
     "expiringSoon": "EXPIRING SOON",
     "expiringNotice": "EXPIRING",
-    "renewLicense": "Renew license"
+    "renewLicense": "Renew license",
+    "featureRestricted": "Enterprise Feature",
+    "featureRequiresEnterprise": "The \"{feature}\" feature requires an Enterprise license.",
+    "thisFeatureRequiresEnterprise": "This feature requires an Enterprise license to use.",
+    "upgradeDescription": "Upgrade to the Enterprise edition to unlock all advanced features: DRS, RBAC, Ceph Replication, Green IT, AI, and more.",
+    "upgradeToPro": "Upgrade to Enterprise",
+    "contactSales": "Need help?"
   },
   "vms": {
     "disk": "Disk",

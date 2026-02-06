@@ -15,6 +15,9 @@ export const Features = {
   CEPH_REPLICATION: 'ceph_replication',
   LDAP: 'ldap',
   REPORTS: 'reports',
+  RBAC: 'rbac',
+  JOBS: 'jobs',
+  NOTIFICATIONS: 'notifications',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]

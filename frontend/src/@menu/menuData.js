@@ -100,8 +100,7 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.jobs'),
         icon: 'ri-play-list-2-line',
         href: '/operations/jobs',
-
-        // Accessible à tous - lecture des jobs
+        requiredFeature: 'jobs' // Requires Enterprise license
       },
       {
         label: t('navigation.reports'),
@@ -127,7 +126,8 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.rbacRoles'),
         icon: 'ri-lock-2-line',
         href: '/security/rbac',
-        permissions: ['admin.rbac']
+        permissions: ['admin.rbac'],
+        requiredFeature: 'rbac' // Requires Enterprise license
       },
       {
         label: t('navigation.auditLogs'),

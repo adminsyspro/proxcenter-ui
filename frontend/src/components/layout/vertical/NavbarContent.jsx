@@ -127,7 +127,7 @@ const NavbarContent = () => {
   const { data: session } = useSession()
   const user = session?.user
   const { title, subtitle, icon } = usePageTitle()
-  const { hasFeature, loading: licenseLoading, status: licenseStatus } = useLicense()
+  const { hasFeature, loading: licenseLoading, status: licenseStatus, isEnterprise } = useLicense()
 
   // Check if AI feature is available
   const aiAvailable = !licenseLoading && hasFeature(Features.AI_INSIGHTS)
@@ -442,14 +442,15 @@ return () => window.removeEventListener('keydown', onKeyDown)
     }
   }, [])
 
-  // Fetch PXCore status periodically
+  // Fetch PXCore status periodically (only for Enterprise)
   useEffect(() => {
+    if (!isEnterprise) return
+
     fetchPXCoreStatus()
     const interval = setInterval(fetchPXCoreStatus, 30000)
 
-    
-return () => clearInterval(interval)
-  }, [fetchPXCoreStatus])
+    return () => clearInterval(interval)
+  }, [fetchPXCoreStatus, isEnterprise])
 
   // PXCore status colors and labels
   const getPXCoreInfo = (status, components) => {
@@ -559,68 +560,70 @@ return () => clearInterval(interval)
 
         {/* RIGHT ICONS */}
         <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1 }}>
-          {/* Orchestrator Status Badge */}
-          <Tooltip title={pxcoreInfo.label}>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.5,
-                px: 1,
-                py: 0.25,
-                borderRadius: 1,
-                bgcolor: `${pxcoreInfo.color}15`,
-                transition: 'all 0.2s'
-              }}
-            >
+          {/* Orchestrator Status Badge - Only show for Enterprise */}
+          {isEnterprise && (
+            <Tooltip title={pxcoreInfo.label}>
               <Box
                 sx={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  bgcolor: pxcoreInfo.color,
-                  boxShadow: `0 0 6px ${pxcoreInfo.color}`,
-                  animation: pxcoreStatus.syncing 
-                    ? 'pxcore-sync 0.8s ease-in-out infinite' 
-                    : pxcoreStatus.status === 'healthy' 
-                      ? 'pxcore-glow 2s ease-in-out infinite' 
-                      : 'none',
-                  '@keyframes pxcore-glow': {
-                    '0%, 100%': { 
-                      opacity: 1,
-                      boxShadow: `0 0 6px ${pxcoreInfo.color}`
-                    },
-                    '50%': { 
-                      opacity: 0.6,
-                      boxShadow: `0 0 2px ${pxcoreInfo.color}`
-                    }
-                  },
-                  '@keyframes pxcore-sync': {
-                    '0%, 100%': { 
-                      transform: 'scale(1)',
-                      opacity: 1
-                    },
-                    '50%': { 
-                      transform: 'scale(1.3)',
-                      opacity: 0.5
-                    }
-                  }
-                }}
-              />
-              <Typography 
-                variant='caption' 
-                sx={{ 
-                  fontWeight: 600, 
-                  color: pxcoreInfo.color,
-                  fontSize: '0.7rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 1,
+                  bgcolor: `${pxcoreInfo.color}15`,
+                  transition: 'all 0.2s'
                 }}
               >
-                PXCore
-              </Typography>
-            </Box>
-          </Tooltip>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: pxcoreInfo.color,
+                    boxShadow: `0 0 6px ${pxcoreInfo.color}`,
+                    animation: pxcoreStatus.syncing
+                      ? 'pxcore-sync 0.8s ease-in-out infinite'
+                      : pxcoreStatus.status === 'healthy'
+                        ? 'pxcore-glow 2s ease-in-out infinite'
+                        : 'none',
+                    '@keyframes pxcore-glow': {
+                      '0%, 100%': {
+                        opacity: 1,
+                        boxShadow: `0 0 6px ${pxcoreInfo.color}`
+                      },
+                      '50%': {
+                        opacity: 0.6,
+                        boxShadow: `0 0 2px ${pxcoreInfo.color}`
+                      }
+                    },
+                    '@keyframes pxcore-sync': {
+                      '0%, 100%': {
+                        transform: 'scale(1)',
+                        opacity: 1
+                      },
+                      '50%': {
+                        transform: 'scale(1.3)',
+                        opacity: 0.5
+                      }
+                    }
+                  }}
+                />
+                <Typography
+                  variant='caption'
+                  sx={{
+                    fontWeight: 600,
+                    color: pxcoreInfo.color,
+                    fontSize: '0.7rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5
+                  }}
+                >
+                  PXCore
+                </Typography>
+              </Box>
+            </Tooltip>
+          )}
 
           {/* Lang */}
           <Tooltip title={t('navbar.language')}>

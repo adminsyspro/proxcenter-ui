@@ -11,6 +11,8 @@ import {
 } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features } from '@/contexts/LicenseContext'
 
 
 /* --------------------------------- Network Throughput Chart --------------------------------- */
@@ -279,11 +281,12 @@ return { total, ok, syncing, error, totalSize }
   }, [jobs])
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography variant='h5' sx={{ fontWeight: 700, mb: 0.25 }}>{t('replication.cephReplication')}</Typography>
+    <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Ceph Replication">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        {/* Header */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+          <Box>
+            <Typography variant='h5' sx={{ fontWeight: 700, mb: 0.25 }}>{t('replication.cephReplication')}</Typography>
           <Typography variant='body2' sx={{ color: 'text.secondary' }}>{t('replication.description')}</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -397,6 +400,7 @@ return { total, ok, syncing, error, totalSize }
           )}
         </Box>
       </Drawer>
-    </Box>
+      </Box>
+    </EnterpriseGuard>
   )
 }

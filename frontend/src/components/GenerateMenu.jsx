@@ -2,7 +2,6 @@
 
 // MUI Imports
 import Chip from '@mui/material/Chip'
-import Tooltip from '@mui/material/Tooltip'
 
 // Component Imports
 import { SubMenu as HorizontalSubMenu, MenuItem as HorizontalMenuItem } from '@menu/horizontal-menu'
@@ -14,14 +13,10 @@ import { useRBAC } from '@/contexts/RBACContext'
 // License Hook
 import { useLicense } from '@/contexts/LicenseContext'
 
-// i18n
-import { useTranslations } from 'next-intl'
-
 // Generate a menu from the menu data array
 export const GenerateVerticalMenu = ({ menuData }) => {
   const { hasAnyPermission, loading } = useRBAC()
   const { hasFeature, loading: licenseLoading } = useLicense()
-  const t = useTranslations()
 
   // Fonction pour vérifier si un item doit être affiché (RBAC)
   const canView = (item) => {
@@ -89,10 +84,10 @@ export const GenerateVerticalMenu = ({ menuData }) => {
         // Ne pas afficher le sous-menu s'il n'a pas d'enfants accessibles
         if (filteredChildren.length === 0) return null
 
-        const Icon = icon ? <i className={icon} style={!featureAvailable ? { opacity: 0.4 } : {}} /> : null
+        const Icon = icon ? <i className={icon} /> : null
         const subMenuPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
 
-        // Ajouter un badge "Enterprise" si feature non disponible
+        // Ajouter un badge "Enterprise" si feature non disponible (mais garder cliquable)
         const subMenuSuffix = !featureAvailable ? (
           <Chip
             size='small'
@@ -115,8 +110,6 @@ export const GenerateVerticalMenu = ({ menuData }) => {
             suffix={subMenuSuffix}
             {...rest}
             {...(Icon && { icon: Icon })}
-            disabled={!featureAvailable}
-            rootStyles={!featureAvailable ? { opacity: 0.5, pointerEvents: 'none' } : {}}
           >
             {renderMenuItems(filteredChildren)}
           </VerticalSubMenu>
@@ -126,11 +119,10 @@ export const GenerateVerticalMenu = ({ menuData }) => {
       // If the current item is neither a section nor a sub menu, return a MenuItem component
       const { label, icon, prefix, suffix, permissions, requiredFeature, ...rest } = menuItem
 
-      const href = featureAvailable ? rest.href : undefined
-      const Icon = icon ? <i className={icon} style={!featureAvailable ? { opacity: 0.4 } : {}} /> : null
+      const Icon = icon ? <i className={icon} /> : null
       const menuItemPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
 
-      // Ajouter un badge "Enterprise" si feature non disponible
+      // Ajouter un badge "Enterprise" si feature non disponible (mais garder cliquable)
       const menuItemSuffix = !featureAvailable ? (
         <Chip
           size='small'
@@ -146,30 +138,17 @@ export const GenerateVerticalMenu = ({ menuData }) => {
         />
       ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
 
-      const menuItemContent = (
+      return (
         <VerticalMenuItem
           key={index}
           prefix={menuItemPrefix}
           suffix={menuItemSuffix}
           {...rest}
-          href={href}
           {...(Icon && { icon: Icon })}
-          disabled={!featureAvailable}
-          rootStyles={!featureAvailable ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
         >
           {label}
         </VerticalMenuItem>
       )
-
-      if (!featureAvailable) {
-        return (
-          <Tooltip key={index} title={t('license.enterpriseRequired')} placement='right'>
-            <span>{menuItemContent}</span>
-          </Tooltip>
-        )
-      }
-
-      return menuItemContent
     }).filter(Boolean) // Filtrer les null
   }
 
@@ -180,7 +159,6 @@ export const GenerateVerticalMenu = ({ menuData }) => {
 export const GenerateHorizontalMenu = ({ menuData }) => {
   const { hasAnyPermission, loading } = useRBAC()
   const { hasFeature, loading: licenseLoading } = useLicense()
-  const t = useTranslations()
 
   const canView = (item) => {
     if (loading) return true
@@ -219,7 +197,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
 
         if (filteredChildren.length === 0) return null
 
-        const Icon = icon ? <i className={icon} style={!featureAvailable ? { opacity: 0.4 } : {}} /> : null
+        const Icon = icon ? <i className={icon} /> : null
         const subMenuPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
         const subMenuSuffix = !featureAvailable ? (
           <Chip size='small' label='Enterprise' sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, bgcolor: 'primary.main', color: 'primary.contrastText' }} />
@@ -232,7 +210,6 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
             suffix={subMenuSuffix}
             {...rest}
             {...(Icon && { icon: Icon })}
-            disabled={!featureAvailable}
           >
             {renderMenuItems(filteredChildren)}
           </HorizontalSubMenu>
@@ -242,8 +219,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
       // If the current item is not a sub menu, return a MenuItem component
       const { label, icon, prefix, suffix, permissions, requiredFeature, ...rest } = menuItem
 
-      const href = featureAvailable ? rest.href : undefined
-      const Icon = icon ? <i className={icon} style={!featureAvailable ? { opacity: 0.4 } : {}} /> : null
+      const Icon = icon ? <i className={icon} /> : null
       const menuItemPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
       const menuItemSuffix = !featureAvailable ? (
         <Chip size='small' label='Enterprise' sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, bgcolor: 'primary.main', color: 'primary.contrastText' }} />
@@ -255,9 +231,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
           prefix={menuItemPrefix}
           suffix={menuItemSuffix}
           {...rest}
-          href={href}
           {...(Icon && { icon: Icon })}
-          disabled={!featureAvailable}
         >
           {label}
         </HorizontalMenuItem>

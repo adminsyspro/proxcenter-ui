@@ -34,6 +34,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
   MenuItem,
   Popover,
   Select,
@@ -6071,6 +6072,7 @@ function RootInventoryView({
   onLoadIpSnap,
   onCreateVm,
   onCreateLxc,
+  onBulkAction,
 }: {
   allVms: AllVmItem[]
   hosts: HostItem[]
@@ -6089,6 +6091,7 @@ function RootInventoryView({
   onLoadIpSnap?: () => void
   onCreateVm?: () => void
   onCreateLxc?: () => void
+  onBulkAction?: (host: HostItem, action: BulkAction) => void
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -6110,6 +6113,35 @@ function RootInventoryView({
   // État pour sections collapsed - par défaut tout est replié (on stocke les IDs dépliés, pas repliés)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
   const [expandedHosts, setExpandedHosts] = useState<Set<string>>(new Set())
+
+  // Context menu state for host bulk actions
+  const [hostContextMenu, setHostContextMenu] = useState<{
+    mouseX: number
+    mouseY: number
+    host: HostItem
+    isCluster: boolean
+  } | null>(null)
+
+  const handleHostContextMenu = useCallback((event: React.MouseEvent, host: HostItem, isCluster: boolean) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setHostContextMenu({
+      mouseX: event.clientX,
+      mouseY: event.clientY,
+      host,
+      isCluster,
+    })
+  }, [])
+
+  const handleCloseHostContextMenu = useCallback(() => {
+    setHostContextMenu(null)
+  }, [])
+
+  const handleHostBulkAction = useCallback((action: BulkAction) => {
+    if (!hostContextMenu || !onBulkAction) return
+    onBulkAction(hostContextMenu.host, action)
+    handleCloseHostContextMenu()
+  }, [hostContextMenu, onBulkAction, handleCloseHostContextMenu])
 
   // Wrapper pour onToggleFavorite qui passe le VmRow directement
   const handleToggleFavorite = useCallback((vm: VmRow) => {
@@ -6378,13 +6410,14 @@ function RootInventoryView({
                     return (
                       <Box key={host.key}>
                         {/* Header Host */}
-                        <Box 
+                        <Box
                           onClick={() => toggleHost(host.key)}
-                          sx={{ 
-                            px: 2, 
-                            py: 1, 
-                            display: 'flex', 
-                            alignItems: 'center', 
+                          onContextMenu={(e) => onBulkAction && handleHostContextMenu(e, host, isRealCluster)}
+                          sx={{
+                            px: 2,
+                            py: 1,
+                            display: 'flex',
+                            alignItems: 'center',
                             gap: 1.5,
                             cursor: 'pointer',
                             borderBottom: '1px solid',
@@ -6510,6 +6543,63 @@ function RootInventoryView({
           </>
         )}
       </Stack>
+
+      {/* Context menu for host bulk actions */}
+      {onBulkAction && (
+        <Menu
+          open={hostContextMenu !== null}
+          onClose={handleCloseHostContextMenu}
+          anchorReference="anchorPosition"
+          anchorPosition={
+            hostContextMenu !== null
+              ? { top: hostContextMenu.mouseY, left: hostContextMenu.mouseX }
+              : undefined
+          }
+        >
+          {/* Header */}
+          <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" fontWeight={600}>
+              {hostContextMenu?.host.node}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+              {hostContextMenu?.host.vms.length ?? 0} VMs
+            </Typography>
+          </Box>
+
+          <MenuItem onClick={() => handleHostBulkAction('start-all')}>
+            <ListItemIcon>
+              <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.startAllVms')}</ListItemText>
+          </MenuItem>
+
+          <MenuItem onClick={() => handleHostBulkAction('shutdown-all')}>
+            <ListItemIcon>
+              <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.shutdownAllVms')}</ListItemText>
+          </MenuItem>
+
+          <MenuItem onClick={() => handleHostBulkAction('stop-all')}>
+            <ListItemIcon>
+              <StopIcon fontSize="small" sx={{ color: 'error.main' }} />
+            </ListItemIcon>
+            <ListItemText>{t('bulkActions.stopAllVms')}</ListItemText>
+          </MenuItem>
+
+          {hostContextMenu?.isCluster && (
+            <>
+              <Divider />
+              <MenuItem onClick={() => handleHostBulkAction('migrate-all')}>
+                <ListItemIcon>
+                  <MoveUpIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
+              </MenuItem>
+            </>
+          )}
+        </Menu>
+      )}
     </Box>
   )
 }
@@ -7406,9 +7496,26 @@ return next
     targetNode: string
   }>({ open: false, action: null, node: null, targetNode: '' })
 
-  // Handler pour les actions bulk sur les nodes
+  // Handler pour les actions bulk sur les nodes (depuis NodesTable)
   const handleNodeBulkAction = useCallback((node: NodeRow, action: BulkAction) => {
     setBulkActionDialog({ open: true, action, node, targetNode: '' })
+  }, [])
+
+  // Handler pour les actions bulk depuis la vue Tree (HostItem)
+  const handleHostBulkAction = useCallback((host: HostItem, action: BulkAction) => {
+    // Convertir HostItem vers un format compatible avec NodeRow
+    const nodeRow: NodeRow = {
+      id: host.key,
+      connId: host.connId,
+      node: host.node,
+      name: host.node,
+      status: 'online',
+      cpu: 0,
+      ram: 0,
+      storage: 0,
+      vms: host.vms.length,
+    }
+    setBulkActionDialog({ open: true, action, node: nodeRow, targetNode: '' })
   }, [])
 
   // Exécuter l'action bulk
@@ -10625,6 +10732,7 @@ return vm?.isCluster ?? false
           onLoadIpSnap={onLoadIpSnap}
           onCreateVm={() => setCreateVmDialogOpen(true)}
           onCreateLxc={() => setCreateLxcDialogOpen(true)}
+          onBulkAction={handleHostBulkAction}
         />
       ) : !selection || selection?.type === 'root' ? (
         viewMode === 'vms' && allVms.length > 0 ? (

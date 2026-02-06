@@ -33,10 +33,17 @@ const wss = new WebSocketServer({ server })
 
 wss.on('connection', async (clientWs, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`)
-  const pathParts = url.pathname.split('/')
-  
-  console.log(`[WS] New connection: ${url.pathname}`)
-  
+
+  // Normalize path: strip /api/internal prefix if present (for direct access without nginx)
+  let pathname = url.pathname
+  if (pathname.startsWith('/api/internal/')) {
+    pathname = pathname.replace('/api/internal', '')
+  }
+
+  const pathParts = pathname.split('/')
+
+  console.log(`[WS] New connection: ${url.pathname} -> ${pathname}`)
+
   // Route: /ws/shell?host=...&port=...&ticket=...&node=...&apiToken=...
   if (pathParts[1] === 'ws' && pathParts[2] === 'shell') {
     const host = url.searchParams.get('host')

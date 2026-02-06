@@ -24,7 +24,7 @@ export default function TopConsumersWidget({ data, loading }) {
         <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, mb: 1, display: 'block' }}>
           TOP {t('monitoring.cpu').toUpperCase()}
         </Typography>
-        {topCpu.slice(0, 6).map((vm, idx) => (
+        {topCpu.slice(0, 10).map((vm, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
             <Typography variant='caption' sx={{ 
               width: 100, fontWeight: 500, overflow: 'hidden', 
@@ -52,7 +52,7 @@ export default function TopConsumersWidget({ data, loading }) {
         <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, mb: 1, display: 'block' }}>
           TOP {t('monitoring.memory').toUpperCase()}
         </Typography>
-        {topRam.slice(0, 6).map((vm, idx) => (
+        {topRam.slice(0, 10).map((vm, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
             <Typography variant='caption' sx={{ 
               width: 100, fontWeight: 500, overflow: 'hidden', 

@@ -41,6 +41,8 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features } from '@/contexts/LicenseContext'
 
 /* --------------------------------
    Helpers
@@ -602,18 +604,19 @@ export default function JobsPage() {
   )
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-        <Button
-          variant='outlined'
-          size='small'
-          startIcon={loading ? <CircularProgress size={14} /> : <i className='ri-refresh-line' />}
-          onClick={fetchJobs}
-          disabled={loading}
-        >
-          {t('common.refresh')}
-        </Button>
-      </Box>
+    <EnterpriseGuard requiredFeature={Features.JOBS} featureName="Jobs">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Button
+            variant='outlined'
+            size='small'
+            startIcon={loading ? <CircularProgress size={14} /> : <i className='ri-refresh-line' />}
+            onClick={fetchJobs}
+            disabled={loading}
+          >
+            {t('common.refresh')}
+          </Button>
+        </Box>
 
       {/* Stats */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
@@ -752,6 +755,7 @@ export default function JobsPage() {
         job={selectedJob}
         onAction={handleJobAction}
       />
-    </Box>
+      </Box>
+    </EnterpriseGuard>
   )
 }

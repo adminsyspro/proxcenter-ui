@@ -5,6 +5,9 @@ import { useTranslations } from 'next-intl'
 
 import useSWR from 'swr'
 
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features } from '@/contexts/LicenseContext'
+
 
 import {
   Alert,
@@ -1707,12 +1710,13 @@ return next
   }, [clusters, pendingRecs, migrations])
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 3 }}>
-        <IconButton onClick={handleRefresh} size="small">
-          <RefreshIcon />
-        </IconButton>
+    <EnterpriseGuard requiredFeature={Features.DRS} featureName="DRS (Distributed Resource Scheduler)">
+      <Box sx={{ p: 3 }}>
+        {/* Header Actions */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 3 }}>
+          <IconButton onClick={handleRefresh} size="small">
+            <RefreshIcon />
+          </IconButton>
         <Button
           variant="outlined"
           size="small"
@@ -2173,5 +2177,6 @@ return next
         )}
       </Drawer>
     </Box>
+    </EnterpriseGuard>
   )
 }

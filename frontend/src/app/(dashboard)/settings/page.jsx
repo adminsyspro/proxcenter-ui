@@ -1588,25 +1588,6 @@ function GreenTab() {
 
 /* ==================== GeneralTab Component ==================== */
 
-function GeneralTab() {
-  const t = useTranslations()
-
-
-return (
-    <Box>
-      <Typography variant='body2' sx={{ opacity: 0.7, mb: 3 }}>
-        {t('settings.appSettings')}
-      </Typography>
-
-      <Alert severity='info'>
-        <Typography variant='body2'>
-          {t('settings.generalTabInfo')}
-        </Typography>
-      </Alert>
-    </Box>
-  )
-}
-
 /* ==================== Main Settings Page ==================== */
 
 export default function SettingsPage() {
@@ -1641,12 +1622,11 @@ export default function SettingsPage() {
   const tabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab },
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
-    { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab },
+    { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP },
     { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab },
     { label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS },
     { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS },
-    { label: t('common.configuration'), icon: 'ri-settings-3-line', component: GeneralTab },
   ]
 
   return (

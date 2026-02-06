@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
+import GridLayout from 'react-grid-layout'
 
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
@@ -13,9 +14,15 @@ import {
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory } from './widgetRegistry'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
 
-const GRID_COLS = 12
+// Import react-grid-layout styles
+import 'react-grid-layout/css/styles.css'
+import 'react-resizable/css/styles.css'
+
+const ResponsiveGridLayout = GridLayout.WidthProvider(GridLayout.Responsive)
+
+const GRID_COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const ROW_HEIGHT = 60
-const MARGIN = 12
+const MARGIN = [12, 12]
 
 // Génère un ID unique
 function generateId() {
@@ -29,12 +36,11 @@ function WidgetContainer({
   loading,
   editMode,
   onRemove,
-  onDragStart,
-  onDragEnd,
   t,
 }) {
   const widgetDef = WIDGET_REGISTRY[config.type]
   const WidgetComponent = widgetDef?.component
+
   // Get translated widget name
   const widgetNameKey = config.type.replace(/-([a-z])/g, (m, c) => c.toUpperCase())
   const widgetName = t(`dashboard.widgetNames.${widgetNameKey}`, { defaultValue: widgetDef?.name || config.type })
@@ -48,11 +54,11 @@ function WidgetContainer({
   }
 
   return (
-    <Card 
-      variant='outlined' 
-      sx={{ 
-        height: '100%', 
-        display: 'flex', 
+    <Card
+      variant='outlined'
+      sx={{
+        height: '100%',
+        display: 'flex',
         flexDirection: 'column',
         position: 'relative',
         overflow: 'hidden',
@@ -60,21 +66,20 @@ function WidgetContainer({
         '&:hover': editMode ? { boxShadow: 4 } : {},
       }}
     >
-      {/* Header */}
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between',
-        px: 1.5, 
-        py: 0.75,
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'action.hover',
-        cursor: editMode ? 'move' : 'default',
-      }}
-      draggable={editMode}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      {/* Header - zone de drag */}
+      <Box
+        className="widget-drag-handle"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 1.5,
+          py: 0.75,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'action.hover',
+          cursor: editMode ? 'move' : 'default',
+        }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <i className={widgetDef.icon} style={{ fontSize: 14, opacity: 0.7 }} />
@@ -103,32 +108,6 @@ function WidgetContainer({
           <WidgetComponent config={config} data={data} loading={loading} />
         )}
       </CardContent>
-
-      {/* Resize handle */}
-      {editMode && (
-        <Box 
-          sx={{ 
-            position: 'absolute', 
-            bottom: 0, 
-            right: 0, 
-            width: 16, 
-            height: 16,
-            cursor: 'se-resize',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 3,
-              right: 3,
-              width: 8,
-              height: 8,
-              borderRight: '2px solid',
-              borderBottom: '2px solid',
-              borderColor: 'text.disabled',
-              opacity: 0.5,
-            }
-          }}
-        />
-      )}
     </Card>
   )
 }
@@ -144,11 +123,13 @@ function AddWidgetDialog({ open, onClose, onAdd, t }) {
   // Get translated widget name and description
   const getWidgetName = (widget) => {
     const key = widget.type.replace(/-([a-z])/g, (m, c) => c.toUpperCase())
+
     return t(`dashboard.widgetNames.${key}`, { defaultValue: widget.name })
   }
 
   const getWidgetDesc = (widget) => {
     const key = widget.type.replace(/-([a-z])/g, (m, c) => c.toUpperCase())
+
     return t(`dashboard.widgetDescs.${key}`, { defaultValue: widget.description })
   }
 
@@ -223,11 +204,9 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [editMode, setEditMode] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [layoutMenuAnchor, setLayoutMenuAnchor] = useState(null)
-  const [draggedWidget, setDraggedWidget] = useState(null)
   const [saving, setSaving] = useState(false)
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
   const [layoutLoaded, setLayoutLoaded] = useState(false)
-  const gridRef = useRef(null)
 
   // Charger le layout depuis l'API
   useEffect(() => {
@@ -264,10 +243,10 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   // Sauvegarder le layout via l'API
   const saveLayout = useCallback(async (newLayout) => {
     setLayout(newLayout)
-    
+
     // Sauvegarder aussi en localStorage comme backup
     localStorage.setItem('dashboard-layout', JSON.stringify(newLayout))
-    
+
     // Sauvegarder en base via l'API
     setSaving(true)
 
@@ -277,7 +256,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ widgets: newLayout })
       })
-      
+
       if (!res.ok) {
         throw new Error('Failed to save')
       }
@@ -287,7 +266,44 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [t])
+
+  // Convertir notre layout en format react-grid-layout
+  const gridLayout = layout.map(w => ({
+    i: w.id,
+    x: w.x,
+    y: w.y,
+    w: w.w,
+    h: w.h,
+    minW: w.minW || 2,
+    minH: w.minH || 2,
+    maxW: w.maxW || 12,
+    maxH: w.maxH || 12,
+  }))
+
+  // Handler pour les changements de layout (drag/resize)
+  const handleLayoutChange = useCallback((newGridLayout) => {
+    if (!editMode) return
+
+    // Mettre à jour notre layout avec les nouvelles positions
+    const updatedLayout = layout.map(widget => {
+      const gridItem = newGridLayout.find(g => g.i === widget.id)
+
+      if (gridItem) {
+        return {
+          ...widget,
+          x: gridItem.x,
+          y: gridItem.y,
+          w: gridItem.w,
+          h: gridItem.h,
+        }
+      }
+
+      return widget
+    })
+
+    saveLayout(updatedLayout)
+  }, [editMode, layout, saveLayout])
 
   // Ajouter un widget
   const handleAddWidget = (type) => {
@@ -295,9 +311,9 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
 
     if (!widgetDef) return
 
-    // Trouver une position libre
+    // Trouver une position libre (en bas du layout)
     const maxY = Math.max(...layout.map(w => w.y + w.h), 0)
-    
+
     const newWidget = {
       id: generateId(),
       type,
@@ -307,6 +323,8 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
       h: widgetDef.defaultSize.h,
       minW: widgetDef.minSize.w,
       minH: widgetDef.minSize.h,
+      maxW: widgetDef.maxSize?.w || 12,
+      maxH: widgetDef.maxSize?.h || 12,
     }
 
     saveLayout([...layout, newWidget])
@@ -348,55 +366,6 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
     setLayoutMenuAnchor(null)
   }
 
-  // Drag & Drop handlers
-  const handleDragStart = (e, widgetId) => {
-    setDraggedWidget(widgetId)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  const handleDragEnd = () => {
-    setDraggedWidget(null)
-  }
-
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  const handleDrop = (e, targetId) => {
-    e.preventDefault()
-    if (!draggedWidget || draggedWidget === targetId) return
-
-    const draggedIndex = layout.findIndex(w => w.id === draggedWidget)
-    const targetIndex = layout.findIndex(w => w.id === targetId)
-    
-    if (draggedIndex === -1 || targetIndex === -1) return
-
-    // Swap positions
-    const newLayout = [...layout]
-    const draggedItem = { ...newLayout[draggedIndex] }
-    const targetItem = { ...newLayout[targetIndex] }
-
-    // Swap x, y positions
-    const tempX = draggedItem.x
-    const tempY = draggedItem.y
-
-    draggedItem.x = targetItem.x
-    draggedItem.y = targetItem.y
-    targetItem.x = tempX
-    targetItem.y = tempY
-
-    newLayout[draggedIndex] = draggedItem
-    newLayout[targetIndex] = targetItem
-
-    saveLayout(newLayout)
-    setDraggedWidget(null)
-  }
-
-  // Calculer la hauteur de la grille
-  const maxY = Math.max(...layout.map(w => w.y + w.h), 0)
-  const gridHeight = maxY * ROW_HEIGHT + (maxY + 1) * MARGIN
-
   if (!layoutLoaded) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
@@ -408,10 +377,10 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Toolbar */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'flex-end', 
-        gap: 1, 
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: 1,
         mb: 0.5,
         flexWrap: 'wrap',
         alignItems: 'center'
@@ -442,12 +411,12 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
           </>
         )}
         <Tooltip title={editMode ? t('dashboard.finish') : t('dashboard.customize')}>
-          <IconButton 
+          <IconButton
             onClick={() => setEditMode(!editMode)}
             size='small'
             color={editMode ? 'primary' : 'default'}
-            sx={editMode ? { 
-              bgcolor: 'primary.main', 
+            sx={editMode ? {
+              bgcolor: 'primary.main',
               color: 'primary.contrastText',
               '&:hover': { bgcolor: 'primary.dark' }
             } : {}}
@@ -457,9 +426,9 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
         </Tooltip>
         {onRefresh && (
           <Tooltip title={t('dashboard.refreshData')}>
-            <IconButton 
-              onClick={onRefresh} 
-              disabled={refreshLoading} 
+            <IconButton
+              onClick={onRefresh}
+              disabled={refreshLoading}
               size='small'
             >
               <i className={refreshLoading ? 'ri-loader-4-line' : 'ri-refresh-line'} />
@@ -468,49 +437,48 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
         )}
       </Box>
 
-      {/* Grid */}
-      <Box 
-        ref={gridRef}
-        sx={{ 
-          flex: 1,
-          position: 'relative',
-          minHeight: gridHeight,
-        }}
-      >
-        {layout.map((config) => {
-          const left = (config.x / GRID_COLS) * 100
-          const width = (config.w / GRID_COLS) * 100
-          const top = config.y * ROW_HEIGHT + config.y * MARGIN
-          const height = config.h * ROW_HEIGHT + (config.h - 1) * MARGIN
-
-          return (
-            <Box
-              key={config.id}
-              sx={{
-                position: 'absolute',
-                left: `calc(${left}% + ${MARGIN / 2}px)`,
-                width: `calc(${width}% - ${MARGIN}px)`,
-                top,
-                height,
-                transition: draggedWidget ? 'none' : 'all 0.2s ease',
-                opacity: draggedWidget === config.id ? 0.5 : 1,
-              }}
-              onDragOver={editMode ? handleDragOver : undefined}
-              onDrop={editMode ? (e) => handleDrop(e, config.id) : undefined}
-            >
+      {/* Grid avec react-grid-layout */}
+      <Box sx={{
+        flex: 1,
+        '& .react-grid-item.react-grid-placeholder': {
+          bgcolor: 'primary.main',
+          opacity: 0.2,
+          borderRadius: 1,
+        },
+        '& .react-grid-item > .react-resizable-handle': {
+          display: editMode ? 'block' : 'none',
+        },
+        '& .react-grid-item > .react-resizable-handle::after': {
+          borderColor: 'text.disabled',
+        },
+      }}>
+        <ResponsiveGridLayout
+          className="layout"
+          layouts={{ lg: gridLayout }}
+          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+          cols={GRID_COLS}
+          rowHeight={ROW_HEIGHT}
+          margin={MARGIN}
+          isDraggable={editMode}
+          isResizable={editMode}
+          draggableHandle=".widget-drag-handle"
+          onLayoutChange={(newLayout) => handleLayoutChange(newLayout)}
+          useCSSTransforms={true}
+          compactType="vertical"
+        >
+          {layout.map((config) => (
+            <div key={config.id}>
               <WidgetContainer
                 config={config}
                 data={data}
                 loading={loading}
                 editMode={editMode}
                 onRemove={() => handleRemoveWidget(config.id)}
-                onDragStart={(e) => handleDragStart(e, config.id)}
-                onDragEnd={handleDragEnd}
                 t={t}
               />
-            </Box>
-          )
-        })}
+            </div>
+          ))}
+        </ResponsiveGridLayout>
       </Box>
 
       {/* Add Widget Dialog */}
@@ -543,9 +511,9 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
       </Menu>
 
       {/* Snackbar */}
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={3000} 
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >

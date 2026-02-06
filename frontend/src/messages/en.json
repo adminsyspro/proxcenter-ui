@@ -2529,5 +2529,22 @@
       "friday": "Friday",
       "saturday": "Saturday"
     }
+  },
+  "about": {
+    "title": "About",
+    "description": "Multi-cluster Proxmox management platform",
+    "currentVersion": "Current version",
+    "latestVersion": "Latest version",
+    "updateAvailable": "Update available",
+    "upToDate": "Up to date",
+    "newVersionAvailable": "A new version {version} is available!",
+    "publishedOn": "Published on {date}",
+    "viewRelease": "View release",
+    "changelog": "Version history",
+    "reportBug": "Report a bug",
+    "allReleases": "All releases",
+    "copyright": "All rights reserved.",
+    "updateNotification": "New version available",
+    "updateNotificationBody": "ProxCenter {version} is available. Click to update."
   }
 }

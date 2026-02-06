@@ -30,3 +30,4 @@ config/grafana/
 data/
 *.db
 *.db-journal
+backend/

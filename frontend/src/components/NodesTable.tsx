@@ -242,8 +242,30 @@ export default function NodesTable({
 
   const isAutoHeight = maxHeight === 'auto'
 
+  // Handle context menu via event delegation on the container
+  const handleContainerContextMenu = useCallback((event: React.MouseEvent) => {
+    if (!onBulkAction) return
+
+    // Find the closest row element
+    const target = event.target as HTMLElement
+    const rowElement = target.closest('.MuiDataGrid-row') as HTMLElement | null
+
+    if (rowElement) {
+      event.preventDefault()
+      const rowId = rowElement.getAttribute('data-id')
+      const node = nodes.find(n => n.id === rowId)
+
+      if (node) {
+        handleContextMenu(event, node)
+      }
+    }
+  }, [nodes, onBulkAction, handleContextMenu])
+
   return (
-    <Box sx={{ width: '100%', height: isAutoHeight ? 'auto' : maxHeight }}>
+    <Box
+      sx={{ width: '100%', height: isAutoHeight ? 'auto' : maxHeight }}
+      onContextMenu={handleContainerContextMenu}
+    >
       <DataGrid
         rows={nodes}
         columns={columns}
@@ -255,19 +277,6 @@ export default function NodesTable({
         autoHeight={isAutoHeight}
         initialState={{
           pagination: { paginationModel: { pageSize: 15 } }
-        }}
-        slotProps={{
-          row: {
-            onContextMenu: (event: React.MouseEvent) => {
-              if (!onBulkAction) return
-              event.preventDefault()
-              const rowId = (event.currentTarget as HTMLElement).getAttribute('data-id')
-              const node = nodes.find(n => n.id === rowId)
-              if (node) {
-                handleContextMenu(event, node)
-              }
-            },
-          },
         }}
         sx={{
           border: 'none',

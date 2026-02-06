@@ -40,11 +40,17 @@ import AIChatDrawer from '@components/layout/shared/AIChatDrawer'
 // Tasks Dropdown
 import TasksDropdown from '@components/layout/shared/TasksDropdown'
 
+// About Dialog
+import AboutDialog from '@components/dialogs/AboutDialog'
+
 // Page Title Context
 import { usePageTitle } from '@/contexts/PageTitleContext'
 
 // License Context
 import { useLicense, Features } from '@/contexts/LicenseContext'
+
+// Version config
+import { VERSION } from '@/config/version'
 
 // Fonction pour obtenir les initiales
 const getInitials = (name, email) => {
@@ -137,6 +143,12 @@ const NavbarContent = () => {
   // AI Chat
   const [aiChatOpen, setAiChatOpen] = useState(false)
 
+  // About Dialog
+  const [aboutOpen, setAboutOpen] = useState(false)
+
+  // Version update check
+  const [updateInfo, setUpdateInfo] = useState(null)
+
   // Menus anchors
   const [langAnchor, setLangAnchor] = useState(null)
   const [notifAnchor, setNotifAnchor] = useState(null)
@@ -159,18 +171,31 @@ const NavbarContent = () => {
       isLicenseNotif: true
     } : null
 
-  // Combined notifications (license + alerts)
-  const allNotifications = licenseExpirationNotif
-    ? [licenseExpirationNotif, ...notifications]
-    : notifications
+  // Update available notification
+  const updateNotif = updateInfo?.updateAvailable ? {
+    id: 'version-update',
+    message: t('about.newVersionAvailable', { version: updateInfo.latestVersion }),
+    severity: 'info',
+    source: 'ProxCenter',
+    isUpdateNotif: true,
+    releaseUrl: updateInfo.releaseUrl
+  } : null
+
+  // Combined notifications (update + license + alerts)
+  const allNotifications = [
+    ...(updateNotif ? [updateNotif] : []),
+    ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
+    ...notifications
+  ]
 
   // Combined count
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0)
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0)
 
   // Combined stats
   const totalNotifStats = {
     crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0),
-    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0)
+    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0),
+    info: (updateNotif ? 1 : 0)
   }
 
   const openLang = Boolean(langAnchor)
@@ -297,9 +322,29 @@ const NavbarContent = () => {
     fetchNotifications()
     const interval = setInterval(fetchNotifications, 30000)
 
-    
+
 return () => clearInterval(interval)
   }, [fetchNotifications])
+
+  // Check for version updates on mount and every hour
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        const res = await fetch('/api/v1/version/check', { cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json()
+          setUpdateInfo(data)
+        }
+      } catch (e) {
+        console.error('Failed to check for updates:', e)
+      }
+    }
+
+    checkForUpdates()
+    const interval = setInterval(checkForUpdates, 3600000) // Check every hour
+
+    return () => clearInterval(interval)
+  }, [])
 
   // Charger les notifications quand on ouvre le menu
   const handleOpenNotif = async (e) => {
@@ -728,6 +773,78 @@ return () => clearInterval(interval)
         ) : (
           <Box sx={{ maxHeight: 360, overflow: 'auto' }}>
             {allNotifications.map((notif) => {
+              // Handle update notification specially
+              if (notif.isUpdateNotif) {
+                return (
+                  <Box
+                    key={notif.id}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      py: 1.5,
+                      px: 2,
+                      borderLeft: '3px solid',
+                      borderColor: 'info.main',
+                      cursor: 'pointer',
+                      bgcolor: 'info.lighter',
+                      '&:hover': { bgcolor: 'info.light', opacity: 0.9 }
+                    }}
+                    onClick={() => {
+                      setNotifAnchor(null)
+                      setAboutOpen(true)
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <i className='ri-download-cloud-line' style={{
+                        color: 'var(--mui-palette-info-main)',
+                        fontSize: 20
+                      }} />
+                    </ListItemIcon>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant='body2' sx={{
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.8rem'
+                      }}>
+                        {notif.message}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                        <Chip
+                          size='small'
+                          label={t('about.updateAvailable')}
+                          color='info'
+                          sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
+                        />
+                        <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem' }}>
+                          v{updateInfo?.latestVersion}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', ml: 1 }}>
+                      {notif.releaseUrl && (
+                        <Tooltip title={t('about.viewRelease')}>
+                          <IconButton
+                            size='small'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              window.open(notif.releaseUrl, '_blank')
+                            }}
+                            sx={{
+                              opacity: 0.7,
+                              '&:hover': { opacity: 1, color: 'info.main' }
+                            }}
+                          >
+                            <i className='ri-external-link-line' style={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </Box>
+                )
+              }
+
               // Handle license notification specially
               if (notif.isLicenseNotif) {
                 const licenseColor = notif.severity === 'crit' ? 'error' : 'warning'
@@ -992,6 +1109,28 @@ return () => clearInterval(interval)
 
         <Divider />
 
+        <MenuItem
+          onClick={() => {
+            setUserAnchor(null)
+            setAboutOpen(true)
+          }}
+        >
+          <ListItemIcon>
+            <i className='ri-information-line' />
+          </ListItemIcon>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {t('about.title')}
+            <Chip
+              label={`v${VERSION}`}
+              size='small'
+              sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }}
+              color={updateInfo?.updateAvailable ? 'warning' : 'default'}
+            />
+          </Box>
+        </MenuItem>
+
+        <Divider />
+
         <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
           <ListItemIcon>
             <i className='ri-logout-box-r-line' style={{ color: 'inherit' }} />
@@ -1002,6 +1141,9 @@ return () => clearInterval(interval)
 
       {/* AI Chat Drawer */}
       <AIChatDrawer open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+
+      {/* About Dialog */}
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </>
   )
 }

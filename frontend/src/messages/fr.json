@@ -2501,5 +2501,22 @@
       "friday": "Vendredi",
       "saturday": "Samedi"
     }
+  },
+  "about": {
+    "title": "À propos",
+    "description": "Plateforme de gestion multi-cluster Proxmox",
+    "currentVersion": "Version actuelle",
+    "latestVersion": "Dernière version",
+    "updateAvailable": "Mise à jour disponible",
+    "upToDate": "À jour",
+    "newVersionAvailable": "Une nouvelle version {version} est disponible !",
+    "publishedOn": "Publiée le {date}",
+    "viewRelease": "Voir la release",
+    "changelog": "Historique des versions",
+    "reportBug": "Signaler un bug",
+    "allReleases": "Toutes les releases",
+    "copyright": "Tous droits réservés.",
+    "updateNotification": "Nouvelle version disponible",
+    "updateNotificationBody": "ProxCenter {version} est disponible. Cliquez pour mettre à jour."
   }
 }

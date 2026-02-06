@@ -9,6 +9,7 @@ import { RBACProvider } from '@/contexts/RBACContext'
 import { PageTitleProvider } from '@/contexts/PageTitleContext'
 import { LocaleProvider } from '@/contexts/LocaleContext'
 import { LicenseProvider } from '@/contexts/LicenseContext'
+import { ToastProvider } from '@/contexts/ToastContext'
 
 // i18n
 
@@ -34,7 +35,9 @@ const Providers = async props => {
               <VerticalNavProvider>
                 <SettingsProvider settingsCookie={settingsCookie} mode={mode}>
                   <ThemeProvider direction={direction} systemMode={systemMode}>
-                    {children}
+                    <ToastProvider>
+                      {children}
+                    </ToastProvider>
                   </ThemeProvider>
                 </SettingsProvider>
               </VerticalNavProvider>

@@ -1667,6 +1667,7 @@
     "migrating": "Migrating...",
     "migrate": "Migrate",
     "migrationError": "Error during migration",
+    "localMigration": "Local migration",
     "cloneTitle": "Clone VM {vmName} ({vmid})",
     "vmIdRequired": "VM ID required",
     "vmIdTooLarge": "VM ID too large",

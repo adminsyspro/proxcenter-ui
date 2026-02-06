@@ -267,8 +267,9 @@ function ClusterWaffle({
                 bgcolor: `${theme.palette.success.main}20`,
                 color: theme.palette.success.main,
                 '& .MuiChip-label': { px: 1 },
+                '& .MuiChip-icon': { ml: 1, mr: -0.5 },
               }}
-              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />}
+              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main' }} />}
             />
           )}
           {cluster.stats.paused > 0 && (
@@ -282,8 +283,9 @@ function ClusterWaffle({
                 bgcolor: `${theme.palette.warning.main}20`,
                 color: theme.palette.warning.main,
                 '& .MuiChip-label': { px: 1 },
+                '& .MuiChip-icon': { ml: 1, mr: -0.5 },
               }}
-              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', ml: 1 }} />}
+              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main' }} />}
             />
           )}
           {cluster.stats.stopped > 0 && (
@@ -297,8 +299,9 @@ function ClusterWaffle({
                 bgcolor: `${theme.palette.error.main}20`,
                 color: theme.palette.error.main,
                 '& .MuiChip-label': { px: 1 },
+                '& .MuiChip-icon': { ml: 1, mr: -0.5 },
               }}
-              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'error.main', ml: 1 }} />}
+              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'error.main' }} />}
             />
           )}
           {cluster.stats.template > 0 && (
@@ -312,8 +315,9 @@ function ClusterWaffle({
                 bgcolor: 'action.hover',
                 color: 'text.secondary',
                 '& .MuiChip-label': { px: 1 },
+                '& .MuiChip-icon': { ml: 1, mr: -0.5 },
               }}
-              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'grey.500', ml: 1 }} />}
+              icon={<Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'grey.500' }} />}
             />
           )}
         </Stack>

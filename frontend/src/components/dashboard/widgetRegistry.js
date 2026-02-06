@@ -30,6 +30,9 @@ const ZeroTrustSecurityGroupsWidget = dynamic(() => import('./widgets/ZeroTrustS
 // VM Status Waffle Chart
 const VmStatusWaffleWidget = dynamic(() => import('./widgets/VmStatusWaffleWidget'), { ssr: false })
 
+// Resource Trends Chart
+const ResourceTrendsWidget = dynamic(() => import('./widgets/ResourceTrendsWidget'), { ssr: false })
+
 export const WIDGET_REGISTRY = {
   'kpi-clusters': {
     type: 'kpi-clusters',
@@ -258,6 +261,17 @@ export const WIDGET_REGISTRY = {
     minSize: { w: 4, h: 3 },
     maxSize: { w: 12, h: 8 },
     component: VmStatusWaffleWidget,
+  },
+  'resource-trends': {
+    type: 'resource-trends',
+    name: 'Resource Trends',
+    description: 'Évolution CPU/RAM sur 1h, 24h ou 7j',
+    icon: 'ri-line-chart-line',
+    category: 'resources',
+    defaultSize: { w: 6, h: 4 },
+    minSize: { w: 4, h: 3 },
+    maxSize: { w: 12, h: 6 },
+    component: ResourceTrendsWidget,
   },
 }
 

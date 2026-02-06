@@ -203,24 +203,34 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [layoutLoaded, setLayoutLoaded] = useState(false)
 
   // Mesure de la largeur du conteneur (requis par react-grid-layout v2.x)
-  const containerRef = useRef(null)
-  const [containerWidth, setContainerWidth] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(1200) // Largeur par défaut
+  const resizeObserverRef = useRef(null)
 
-  useEffect(() => {
-    if (!containerRef.current) return
+  const containerRef = useCallback((node) => {
+    // Cleanup previous observer
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect()
+    }
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width)
+    if (!node) return
+
+    const measureWidth = () => {
+      const width = node.getBoundingClientRect().width
+
+      if (width > 0) {
+        setContainerWidth(width)
       }
+    }
+
+    // Mesure immédiate
+    measureWidth()
+
+    // Observer les changements de taille
+    resizeObserverRef.current = new ResizeObserver(() => {
+      measureWidth()
     })
 
-    resizeObserver.observe(containerRef.current)
-
-    // Mesure initiale
-    setContainerWidth(containerRef.current.offsetWidth)
-
-    return () => resizeObserver.disconnect()
+    resizeObserverRef.current.observe(node)
   }, [])
 
   // Charger le layout depuis l'API
@@ -453,26 +463,27 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
       </Box>
 
       {/* Grid avec react-grid-layout */}
-      <Box
+      <div
         ref={containerRef}
-        sx={{
+        style={{
           flex: 1,
-          '& .react-grid-item.react-grid-placeholder': {
-            bgcolor: 'primary.main',
-            opacity: 0.2,
-            borderRadius: 1,
-          },
-          '& .react-grid-item > .react-resizable-handle': {
-            display: editMode ? 'block' : 'none',
-          },
-          '& .react-grid-item > .react-resizable-handle::after': {
-            borderColor: 'text.disabled',
-          },
+          width: '100%',
+          position: 'relative',
         }}
       >
-        {containerWidth > 0 && (
-          <ResponsiveGridLayout
+      <style>{`
+        .react-grid-item.react-grid-placeholder {
+          background-color: var(--mui-palette-primary-main);
+          opacity: 0.2;
+          border-radius: 4px;
+        }
+        .react-grid-item > .react-resizable-handle {
+          display: ${editMode ? 'block' : 'none'};
+        }
+      `}</style>
+        <ResponsiveGridLayout
             className="layout"
+            style={{ width: '100%' }}
             width={containerWidth}
             layouts={{ lg: gridLayout }}
             breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
@@ -498,9 +509,8 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
               />
             </div>
           ))}
-          </ResponsiveGridLayout>
-        )}
-      </Box>
+        </ResponsiveGridLayout>
+      </div>
 
       {/* Add Widget Dialog */}
       <AddWidgetDialog

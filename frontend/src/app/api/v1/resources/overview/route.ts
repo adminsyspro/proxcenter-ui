@@ -13,16 +13,18 @@ async function loadGreenSettings() {
     const db = getDb()
     const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
     const row = stmt.get('green') as { value: string } | undefined
-    
+
     if (row?.value) {
       return JSON.parse(row.value)
     }
-  } catch (e) {
-    console.warn('Failed to load green settings, using defaults:', e)
+  } catch (e: any) {
+    // Silencieux si la table n'existe pas (Community mode)
+    if (!e?.message?.includes('no such table')) {
+      console.warn('Failed to load green settings:', e?.message)
+    }
   }
 
-  
-return null
+  return null
 }
 
 /**

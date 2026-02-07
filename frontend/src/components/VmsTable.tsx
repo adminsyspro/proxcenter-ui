@@ -1795,9 +1795,9 @@ return [
             onClick={() => {
               if (contextMenu?.vm) {
                 const { connId, node, type, vmid } = contextMenu.vm
-                const url = `/infrastructure/console?connId=${connId}&node=${node}&type=${type}&vmid=${vmid}`
+                const url = `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
 
-                window.open(url, '_blank')
+                window.open(url, `console-${vmid}`, 'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no')
               }
 
               handleCloseContextMenu()

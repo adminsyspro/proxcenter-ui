@@ -408,7 +408,11 @@
     "unlockHint": "Run this command on the Proxmox node:",
     "snapshotCreated": "Snapshot created successfully",
     "snapshotDeleted": "Snapshot deleted successfully",
-    "snapshotRestored": "Snapshot restored successfully"
+    "snapshotRestored": "Snapshot restored successfully",
+    "enterMaintenance": "Enter maintenance",
+    "exitMaintenance": "Exit maintenance",
+    "confirmEnterMaintenance": "Do you want to put this node in maintenance mode? VMs will no longer be automatically migrated to this node.",
+    "confirmExitMaintenance": "Do you want to exit maintenance mode for this node?"
   },
   "inventoryPage": {
     "newTag": "New tag...",

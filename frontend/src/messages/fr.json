@@ -408,7 +408,11 @@
     "unlockHint": "Exécutez cette commande sur le nœud Proxmox :",
     "snapshotCreated": "Snapshot créé avec succès",
     "snapshotDeleted": "Snapshot supprimé avec succès",
-    "snapshotRestored": "Snapshot restauré avec succès"
+    "snapshotRestored": "Snapshot restauré avec succès",
+    "enterMaintenance": "Entrer en maintenance",
+    "exitMaintenance": "Sortir de la maintenance",
+    "confirmEnterMaintenance": "Voulez-vous mettre ce nœud en mode maintenance ? Les VMs ne seront plus migrées automatiquement vers ce nœud.",
+    "confirmExitMaintenance": "Voulez-vous sortir ce nœud du mode maintenance ?"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",

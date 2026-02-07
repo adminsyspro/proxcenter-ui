@@ -62,6 +62,7 @@ type NodeData = {
   maxdisk?: number
   uptime?: number
   ip?: string
+  maintenance?: string
 }
 
 type GuestData = {
@@ -203,15 +204,21 @@ export async function GET() {
           }
         }
 
-        // Récupérer les IPs des nodes en parallèle
+        // Récupérer les IPs et config (maintenance) des nodes en parallèle
         const nodeIpPromises = nodes.map(async (node) => {
-          if (!node?.node) return { node: node.node, ip: undefined }
+          if (!node?.node) return { node: node.node, ip: undefined, maintenance: undefined }
 
           try {
-            const networks = await pveFetch<any[]>(
-              connConfig,
-              `/nodes/${encodeURIComponent(node.node)}/network`
-            )
+            const [networks, config] = await Promise.all([
+              pveFetch<any[]>(
+                connConfig,
+                `/nodes/${encodeURIComponent(node.node)}/network`
+              ).catch(() => null),
+              pveFetch<any>(
+                connConfig,
+                `/nodes/${encodeURIComponent(node.node)}/config`
+              ).catch(() => null),
+            ])
 
             let ip: string | undefined
 
@@ -228,7 +235,6 @@ export async function GET() {
                 }
               }
 
-
               // Fallback: prendre la première IP non-loopback
               if (!ip) {
                 for (const iface of networks) {
@@ -240,18 +246,19 @@ export async function GET() {
               }
             }
 
-            
-return { node: node.node, ip }
+            const maintenance = config?.maintenance as string | undefined
+
+            return { node: node.node, ip, maintenance }
           } catch {
-            return { node: node.node, ip: undefined }
+            return { node: node.node, ip: undefined, maintenance: undefined }
           }
         })
         
         const nodeIps = await Promise.all(nodeIpPromises)
-        const nodeIpMap = new Map<string, string | undefined>()
+        const nodeIpMap = new Map<string, { ip?: string; maintenance?: string }>()
 
-        for (const { node, ip } of nodeIps) {
-          if (node) nodeIpMap.set(node, ip)
+        for (const { node, ip, maintenance } of nodeIps) {
+          if (node) nodeIpMap.set(node, { ip, maintenance })
         }
 
         // Créer une map des ressources HA pour lookup rapide
@@ -268,9 +275,11 @@ return { node: node.node, ip }
         
         for (const n of nodes) {
           if (!n?.node) continue
+          const extra = nodeIpMap.get(n.node)
           nodeMap.set(n.node, {
             ...n,
-            ip: nodeIpMap.get(n.node),
+            ip: extra?.ip,
+            maintenance: extra?.maintenance,
             guests: []
           })
         }

@@ -49,7 +49,7 @@ import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/Migrate
 /* Status Icon Component                                              */
 /* ------------------------------------------------------------------ */
 
-function StatusIcon({ status, type, isMigrating }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean }) {
+function StatusIcon({ status, type, isMigrating, maintenance }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; maintenance?: string }) {
   // Pour les nodes: online = vert, offline = croix rouge
   // Pour les VMs: running = vert, stopped/autres = gris, migrating = flèche animée
   
@@ -78,14 +78,31 @@ function StatusIcon({ status, type, isMigrating }: { status?: string; type: 'nod
   }
   
   if (type === 'node') {
+    if (maintenance) {
+      return (
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 14,
+            height: 14,
+            color: '#ff9800',
+          }}
+        >
+          <i className="ri-tools-fill" style={{ fontSize: 14 }} />
+        </Box>
+      )
+    }
     if (status === 'online') {
       return (
-        <PlayArrowIcon 
-          sx={{ 
-            fontSize: 14, 
+        <PlayArrowIcon
+          sx={{
+            fontSize: 14,
             color: '#4caf50',
             filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))'
-          }} 
+          }}
         />
       )
     }
@@ -237,6 +254,7 @@ type TreeCluster = {
     node: string
     status?: string
     ip?: string
+    maintenance?: string
     vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string }[]
   }[]
 }
@@ -281,6 +299,14 @@ type VmContextMenu = {
   status?: string
   isCluster: boolean  // pour savoir si on peut migrer
   template?: boolean  // pour savoir si c'est un template
+} | null
+
+type NodeContextMenu = {
+  mouseX: number
+  mouseY: number
+  connId: string
+  node: string
+  maintenance?: string
 } | null
 
 // Seuils d'alerte (en pourcentage)
@@ -462,6 +488,10 @@ return next
   const [cloneTarget, setCloneTarget] = useState<VmContextMenu>(null)
   const [migrateDialogOpen, setMigrateDialogOpen] = useState(false)
   const [migrateTarget, setMigrateTarget] = useState<VmContextMenu>(null)
+  // Menu contextuel Node (maintenance)
+  const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu>(null)
+  const [maintenanceBusy, setMaintenanceBusy] = useState(false)
+
   const [unlocking, setUnlocking] = useState(false)
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
     open: boolean
@@ -558,6 +588,56 @@ return next
 
   const handleCloseContextMenu = () => {
     setContextMenu(null)
+  }
+
+  const handleNodeContextMenu = (
+    event: React.MouseEvent,
+    connId: string,
+    node: string,
+    maintenance?: string
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setNodeContextMenu({
+      mouseX: event.clientX,
+      mouseY: event.clientY,
+      connId,
+      node,
+      maintenance,
+    })
+  }
+
+  const handleCloseNodeContextMenu = () => {
+    setNodeContextMenu(null)
+  }
+
+  const handleToggleMaintenance = async () => {
+    if (!nodeContextMenu) return
+    const { connId, node, maintenance } = nodeContextMenu
+    const entering = !maintenance
+
+    if (!confirm(entering ? t('inventory.confirmEnterMaintenance') : t('inventory.confirmExitMaintenance'))) {
+      handleCloseNodeContextMenu()
+      return
+    }
+
+    setMaintenanceBusy(true)
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
+        { method: entering ? 'POST' : 'DELETE' }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error('[maintenance] Error:', err?.error || res.statusText)
+      }
+      setReloadTick(x => x + 1)
+    } catch (e: any) {
+      console.error('[maintenance] Error:', e?.message)
+    } finally {
+      setMaintenanceBusy(false)
+      handleCloseNodeContextMenu()
+    }
   }
 
   // Exécuter une action sur la VM
@@ -722,6 +802,7 @@ return next
             node: node.node,
             status: node.status,
             ip: node.ip,
+            maintenance: node.maintenance,
             vms: (node.guests || []).map((guest: any) => ({
               type: String(guest.type || 'qemu'),
               vmid: String(guest.vmid),
@@ -1883,22 +1964,26 @@ return (
               <TreeItem
                 key={`${clu.connId}:${n.node}`}
                 itemId={`node:${clu.connId}:${n.node}`}
+                onContextMenu={(e) => handleNodeContextMenu(e, clu.connId, n.node, n.maintenance)}
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <StatusIcon status={n.status} type="node" />
+                    <StatusIcon status={n.status} type="node" maintenance={n.maintenance} />
                     <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14 }} />
                     <span style={{ fontSize: 14 }}>{clu.name}</span>
                     <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
+                    {n.maintenance && (
+                      <Chip label="MAINT" size="small" sx={{ height: 16, fontSize: 10, bgcolor: '#ff9800', color: '#fff', fontWeight: 700 }} />
+                    )}
                     {/* Warning Ceph */}
                     {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
                       <Tooltip title={`Ceph: ${clu.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
                         <Box component="span" sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
-                          <i 
-                            className={clu.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'} 
-                            style={{ 
-                              fontSize: 14, 
-                              color: clu.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800' 
-                            }} 
+                          <i
+                            className={clu.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'}
+                            style={{
+                              fontSize: 14,
+                              color: clu.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800'
+                            }}
                           />
                         </Box>
                       </Tooltip>
@@ -2006,12 +2091,16 @@ return (
                 <TreeItem
                   key={`${clu.connId}:${n.node}`}
                   itemId={`node:${clu.connId}:${n.node}`}
+                  onContextMenu={(e) => handleNodeContextMenu(e, clu.connId, n.node, n.maintenance)}
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <StatusIcon status={n.status} type="node" />
+                      <StatusIcon status={n.status} type="node" maintenance={n.maintenance} />
                       <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14 }} />
                       <span style={{ fontSize: 14 }}>{n.node}</span>
                       <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
+                      {n.maintenance && (
+                        <Chip label="MAINT" size="small" sx={{ height: 16, fontSize: 10, bgcolor: '#ff9800', color: '#fff', fontWeight: 700 }} />
+                      )}
                     </Box>
                   }
                 >
@@ -2308,6 +2397,38 @@ return (
             <ListItemText>{t('templates.create')}</ListItemText>
           </MenuItem>
         ]}
+      </Menu>
+
+      {/* Menu contextuel Node (maintenance) */}
+      <Menu
+        open={nodeContextMenu !== null}
+        onClose={handleCloseNodeContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          nodeContextMenu !== null
+            ? { top: nodeContextMenu.mouseY, left: nodeContextMenu.mouseX }
+            : undefined
+        }
+      >
+        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="subtitle2" fontWeight={900}>
+            {nodeContextMenu?.node}
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.6 }}>
+            NODE
+          </Typography>
+        </Box>
+        <MenuItem
+          onClick={handleToggleMaintenance}
+          disabled={maintenanceBusy}
+        >
+          <ListItemIcon>
+            <i className={nodeContextMenu?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'} style={{ fontSize: 20, color: nodeContextMenu?.maintenance ? '#4caf50' : '#ff9800' }} />
+          </ListItemIcon>
+          <ListItemText>
+            {nodeContextMenu?.maintenance ? t('inventory.exitMaintenance') : t('inventory.enterMaintenance')}
+          </ListItemText>
+        </MenuItem>
       </Menu>
 
       {/* Dialog de clonage */}

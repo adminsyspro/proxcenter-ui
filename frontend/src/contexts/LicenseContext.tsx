@@ -10,6 +10,7 @@ export const Features = {
   ROLLING_UPDATES: 'rolling_updates',
   AI_INSIGHTS: 'ai_insights',
   PREDICTIVE_ALERTS: 'predictive_alerts',
+  ALERTS: 'alerts',
   GREEN_METRICS: 'green_metrics',
   CROSS_CLUSTER_MIGRATION: 'cross_cluster_migration',
   CEPH_REPLICATION: 'ceph_replication',

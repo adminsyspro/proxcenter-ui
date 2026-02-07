@@ -4,24 +4,32 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Box, Typography, LinearProgress, CircularProgress, alpha, Stack } from '@mui/material'
+import { useLicense } from '@/contexts/LicenseContext'
 
 export default function ZeroTrustCoverageWidget({ data, loading, config }) {
   const t = useTranslations('firewall')
+  const { isEnterprise } = useLicense()
   const [vmData, setVmData] = useState([])
   const [loadingData, setLoadingData] = useState(true)
 
   useEffect(() => {
+    // En mode Community, pas d'orchestrator pour le firewall
+    if (!isEnterprise) {
+      setLoadingData(false)
+      return
+    }
+
     const fetchData = async () => {
       try {
         // Get first PVE connection
         const connRes = await fetch('/api/v1/connections')
         const connJson = await connRes.json()
         const pveConn = connJson.data?.find(c => c.type === 'pve')
-        
+
         if (!pveConn) {
           setLoadingData(false)
-          
-return
+
+          return
         }
 
         // Fetch VMs
@@ -30,7 +38,7 @@ return
         if (vmsRes?.ok) {
           const vmsJson = await vmsRes.json()
           const guests = vmsJson?.data?.vms || []
-          
+
           // Check firewall and rules for each VM (simplified - first 30)
           const vmChecks = await Promise.all(
             guests.slice(0, 30).map(async (vm) => {
@@ -91,14 +99,25 @@ return
     fetchData()
     const interval = setInterval(fetchData, 60000)
 
-    
-return () => clearInterval(interval)
-  }, [])
+    return () => clearInterval(interval)
+  }, [isEnterprise])
 
   if (loadingData) {
     return (
       <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress size={24} />
+      </Box>
+    )
+  }
+
+  // En mode Community, afficher un message
+  if (!isEnterprise) {
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center' }}>
+        <i className='ri-vip-crown-fill' style={{ fontSize: 32, color: 'var(--mui-palette-warning-main)', marginBottom: 8 }} />
+        <Typography variant='caption' sx={{ opacity: 0.6 }}>
+          Enterprise
+        </Typography>
       </Box>
     )
   }

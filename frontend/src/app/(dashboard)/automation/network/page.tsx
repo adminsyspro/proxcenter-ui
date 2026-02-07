@@ -19,7 +19,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip } from 'r
 
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import { Features } from '@/contexts/LicenseContext'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 import * as firewallAPI from '@/lib/api/firewall'
 import MicrosegmentationTab from '@/components/MicrosegmentationTab'
 
@@ -158,6 +158,7 @@ export default function NetworkAutomationPage() {
   const theme = useTheme()
   const { setPageInfo } = usePageTitle()
   const t = useTranslations()
+  const { isEnterprise } = useLicense()
 
   // State
   const [activeTab, setActiveTab] = useState(0)
@@ -274,8 +275,8 @@ export default function NetworkAutomationPage() {
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
   
-  // Load connections with SWR - filter PVE only
-  const { data: connectionsData } = useSWR<{ data: Connection[] }>('/api/v1/connections?type=pve', fetcher)
+  // Load connections with SWR - filter PVE only (only in Enterprise mode)
+  const { data: connectionsData } = useSWR<{ data: Connection[] }>(isEnterprise ? '/api/v1/connections?type=pve' : null, fetcher)
   const connections = connectionsData?.data || []
   
   // Set first connection when loaded
@@ -430,17 +431,17 @@ return () => setPageInfo('', '', '')
   
   // Load host rules when tab 6 is selected (Host Rules) - only if data not already loaded
   useEffect(() => {
-    // Only load if on Host Rules tab and we have nodes but no rules loaded yet
-    if (activeTab === 6 && selectedConnection && nodesList.length > 0 && Object.keys(hostRulesByNode).length === 0) {
+    // Only load if on Host Rules tab and we have nodes but no rules loaded yet (Enterprise only)
+    if (isEnterprise && activeTab === 6 && selectedConnection && nodesList.length > 0 && Object.keys(hostRulesByNode).length === 0) {
       loadHostRules()
     }
-  }, [activeTab, selectedConnection, nodesList, loadHostRules])
-  
+  }, [activeTab, selectedConnection, nodesList, loadHostRules, isEnterprise])
+
   useEffect(() => {
-    if (selectedConnection) {
+    if (isEnterprise && selectedConnection) {
       loadFirewallData()
     }
-  }, [selectedConnection, loadFirewallData])
+  }, [selectedConnection, loadFirewallData, isEnterprise])
   
   // Helper: Check if firewall is enabled on any NIC from VM config
   const checkNICFirewallEnabled = (config: Record<string, any>): boolean => {
@@ -525,9 +526,9 @@ return b.rules.length - a.rules.length
   }, [selectedConnection])
   
   // Load VM rules when on Overview (tab 0) or VM Rules tab (tab 5)
-  // Also reload when connection changes
+  // Also reload when connection changes (Enterprise only)
   useEffect(() => {
-    if ((activeTab === 0 || activeTab === 5) && selectedConnection && !loadingVMRules) {
+    if (isEnterprise && (activeTab === 0 || activeTab === 5) && selectedConnection && !loadingVMRules) {
       // Always reload when on these tabs (vmFirewallData is reset when connection changes)
       if (vmFirewallData.length === 0) {
         loadVMFirewallData()

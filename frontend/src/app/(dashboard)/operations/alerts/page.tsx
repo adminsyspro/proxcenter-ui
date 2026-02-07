@@ -37,6 +37,8 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 
 /* --------------------------------
    Types
@@ -173,6 +175,7 @@ export default function AlertsPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
   const { data: session } = useSession()
+  const { isEnterprise } = useLicense()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
   const [alerts, setAlerts] = useState<AlertData[]>([])
@@ -188,7 +191,7 @@ export default function AlertsPage() {
     storage_warning: 80, storage_critical: 90
   })
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [savingThresholds, setSavingThresholds] = useState(false)
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
   const [orchestratorAvailable, setOrchestratorAvailable] = useState(true)
@@ -231,6 +234,15 @@ return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
   const loadData = async () => {
+    // En mode Community, pas d'orchestrator
+    if (!isEnterprise) {
+      setAlerts([])
+      setSummary({ total_active: 0, critical: 0, warning: 0, info: 0, acknowledged: 0, resolved_today: 0 })
+      setRules([])
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
 
@@ -265,6 +277,8 @@ return () => setPageInfo('', '', '')
   }
 
   const loadThresholds = async () => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch('/api/v1/orchestrator/alerts/thresholds', { cache: 'no-store' })
 
@@ -275,11 +289,13 @@ return () => setPageInfo('', '', '')
   useEffect(() => {
     loadData()
     loadThresholds()
+
+    if (!isEnterprise) return
+
     const interval = setInterval(loadData, 30000)
 
-    
-return () => clearInterval(interval)
-  }, [])
+    return () => clearInterval(interval)
+  }, [isEnterprise])
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(alert => {
@@ -297,6 +313,8 @@ return true
   }, [alerts, search, severityFilter, statusFilter])
 
   const handleClearAll = () => {
+    if (!isEnterprise) return
+
     const activeCount = filteredAlerts.filter(a => a.status === 'active').length
 
     setConfirmDialog({
@@ -319,6 +337,8 @@ return true
   }
 
   const handleSaveThresholds = async () => {
+    if (!isEnterprise) return
+
     try {
       setSavingThresholds(true)
       await fetch('/api/v1/orchestrator/alerts/thresholds', {
@@ -352,6 +372,8 @@ return true
   }
 
   const handleSaveRule = async () => {
+    if (!isEnterprise) return
+
     try {
       setSavingRule(true)
 
@@ -375,6 +397,8 @@ return true
   }
 
   const handleDeleteRule = (id: string) => {
+    if (!isEnterprise) return
+
     setConfirmDialog({
       open: true,
       title: t('common.confirmDelete'),
@@ -394,6 +418,8 @@ return true
   }
 
   const handleToggleRule = async (id: string) => {
+    if (!isEnterprise) return
+
     try {
       await fetch(`/api/v1/orchestrator/alerts/rules/${id}/toggle`, { method: 'POST' })
       loadData()
@@ -403,6 +429,8 @@ return true
   }
 
   const handleAcknowledgeSingle = async (id: string) => {
+    if (!isEnterprise) return
+
     try {
       const userId = session?.user?.name || 'unknown'
 
@@ -419,6 +447,8 @@ return true
   }
 
   const handleResolveSingle = async (id: string) => {
+    if (!isEnterprise) return
+
     try {
       await fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' })
       setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
@@ -506,6 +536,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
   }
 
   return (
+    <EnterpriseGuard requiredFeature={Features.ALERTS} featureName="Alertes">
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
       {!orchestratorAvailable && (
         <Alert severity="warning" sx={{ flexShrink: 0 }}>
@@ -714,5 +745,6 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
         <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
       </Snackbar>
     </Box>
+    </EnterpriseGuard>
   )
 }

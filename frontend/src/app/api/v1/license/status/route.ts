@@ -7,13 +7,10 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 // Default community license status when orchestrator is unavailable
 const DEFAULT_COMMUNITY_STATUS = {
-  licensed: true,
+  licensed: false,
   expired: false,
   edition: 'community',
   features: ['dashboard', 'inventory', 'backups', 'storage'],
-  customer: {
-    name: 'Community User'
-  }
 }
 
 export async function GET() {

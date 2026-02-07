@@ -208,8 +208,7 @@ export async function POST(req: Request) {
     }
     
     if (!responseText) {
-      // Fallback sur recommandations basiques
-      console.log('[resources/analyze] Using basic recommendations')
+      // Fallback sur recommandations basiques (silencieux - normal sans Ollama)
       
 return NextResponse.json({
         data: {

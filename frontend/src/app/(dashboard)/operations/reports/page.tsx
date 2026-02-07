@@ -71,7 +71,7 @@ interface Schedule {
 export default function ReportsPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
-  const { hasFeature, isLicensed } = useLicense()
+  const { hasFeature, isLicensed, isEnterprise } = useLicense()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -140,17 +140,23 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
-    if (hasFeature(Features.REPORTS)) {
-      loadData()
-
-      // Refresh every 30 seconds
-      const interval = setInterval(loadData, 30000)
-
-      return () => clearInterval(interval)
+    // En mode Community, pas d'orchestrator
+    if (!isEnterprise) {
+      setLoading(false)
+      return
     }
-  }, [hasFeature])
+
+    loadData()
+
+    // Refresh every 30 seconds
+    const interval = setInterval(loadData, 30000)
+
+    return () => clearInterval(interval)
+  }, [isEnterprise])
 
   const handleGenerateReport = async (request: any) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch('/api/v1/orchestrator/reports', {
         method: 'POST',
@@ -173,6 +179,8 @@ export default function ReportsPage() {
   }
 
   const handleDeleteReport = async (id: string) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch(`/api/v1/orchestrator/reports/${id}`, {
         method: 'DELETE',
@@ -190,6 +198,8 @@ export default function ReportsPage() {
   }
 
   const handleCreateSchedule = async (request: any) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch('/api/v1/orchestrator/reports/schedules', {
         method: 'POST',
@@ -211,6 +221,8 @@ export default function ReportsPage() {
   }
 
   const handleUpdateSchedule = async (id: string, request: any) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch(`/api/v1/orchestrator/reports/schedules/${id}`, {
         method: 'PUT',
@@ -232,6 +244,8 @@ export default function ReportsPage() {
   }
 
   const handleDeleteSchedule = async (id: string) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch(`/api/v1/orchestrator/reports/schedules/${id}`, {
         method: 'DELETE',
@@ -249,6 +263,8 @@ export default function ReportsPage() {
   }
 
   const handleRunScheduleNow = async (id: string) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch(`/api/v1/orchestrator/reports/schedules/${id}/run`, {
         method: 'POST',
@@ -276,15 +292,7 @@ export default function ReportsPage() {
     )
   }
 
-  if (!hasFeature(Features.REPORTS)) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="warning">
-          {t('license.featureNotAvailable')}
-        </Alert>
-      </Box>
-    )
-  }
+  // EnterpriseGuard gère déjà l'affichage pour les utilisateurs non-Enterprise
 
   return (
     <EnterpriseGuard requiredFeature={Features.REPORTS} featureName="Reports">

@@ -23,6 +23,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useLicense } from '@/contexts/LicenseContext'
 
 import TaskDetailDialog from '@/components/TaskDetailDialog'
 
@@ -151,6 +152,7 @@ function StatCard({ title, value, color, icon }) {
 
 export default function EventsPage() {
   const t = useTranslations()
+  const { isEnterprise } = useLicense()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -181,9 +183,10 @@ return () => setPageInfo('', '', '')
       const eventsData = Array.isArray(json?.data) ? json.data : []
 
       setEvents(eventsData)
-      
+
       // Envoyer les événements à l'orchestrator pour analyse (alertes sur événements)
-      if (eventsData.length > 0) {
+      // Seulement en mode Enterprise
+      if (isEnterprise && eventsData.length > 0) {
         fetch('/api/v1/orchestrator/alerts/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

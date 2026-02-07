@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import { Features } from '@/contexts/LicenseContext'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 
 
 import {
@@ -1292,6 +1292,7 @@ const StorageWarningPanel = ({
 export default function DRSPage() {
   const theme = useTheme()
   const t = useTranslations()
+  const { isEnterprise } = useLicense()
   const [tab, setTab] = useState(0)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -1314,17 +1315,17 @@ return () => setPageInfo('', '', '')
   // État pour la progression des migrations actives
   const [migrationsProgress, setMigrationsProgress] = useState<Record<string, MigrationProgress>>({})
 
-  // Data fetching
+  // Data fetching (only when Enterprise mode is active)
   const { data: status, mutate: mutateStatus, isLoading: statusLoading } =
-    useSWR<DRSStatus>('/api/v1/orchestrator/drs/status', fetcher, { refreshInterval: 10000 })
+    useSWR<DRSStatus>(isEnterprise ? '/api/v1/orchestrator/drs/status' : null, fetcher, { refreshInterval: 10000 })
 
   const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } =
-    useSWR<DRSRecommendation[]>('/api/v1/orchestrator/drs/recommendations', fetcher, { refreshInterval: 15000 })
+    useSWR<DRSRecommendation[]>(isEnterprise ? '/api/v1/orchestrator/drs/recommendations' : null, fetcher, { refreshInterval: 15000 })
 
   const recommendations = ensureArray(recommendationsRaw)
 
   const { data: migrationsRaw, mutate: mutateMigrations, isLoading: migrationsLoading } =
-    useSWR<DRSMigration[]>('/api/v1/orchestrator/drs/migrations', fetcher, { refreshInterval: 10000 })
+    useSWR<DRSMigration[]>(isEnterprise ? '/api/v1/orchestrator/drs/migrations' : null, fetcher, { refreshInterval: 10000 })
 
 
   // Garder toutes les migrations non-null (useMemo pour éviter les re-renders inutiles)
@@ -1334,13 +1335,13 @@ return () => setPageInfo('', '', '')
   )
 
   const { data: metricsData, mutate: mutateMetrics } =
-    useSWR<Record<string, ClusterMetrics>>('/api/v1/orchestrator/metrics', fetcher, { refreshInterval: 30000 })
+    useSWR<Record<string, ClusterMetrics>>(isEnterprise ? '/api/v1/orchestrator/metrics' : null, fetcher, { refreshInterval: 30000 })
 
   const { data: drsSettings, mutate: mutateSettings } =
-    useSWR<DRSSettings>('/api/v1/orchestrator/drs/settings', fetcher)
+    useSWR<DRSSettings>(isEnterprise ? '/api/v1/orchestrator/drs/settings' : null, fetcher)
 
   const { data: affinityRulesRaw, mutate: mutateRules } =
-    useSWR<AffinityRule[]>('/api/v1/orchestrator/drs/rules', fetcher)
+    useSWR<AffinityRule[]>(isEnterprise ? '/api/v1/orchestrator/drs/rules' : null, fetcher)
 
   const affinityRules = ensureArray(affinityRulesRaw)
 

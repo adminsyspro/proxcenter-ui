@@ -42,7 +42,7 @@ import StopIcon from '@mui/icons-material/Stop'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import { Features } from '@/contexts/LicenseContext'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 
 /* --------------------------------
    Helpers
@@ -168,20 +168,20 @@ function getNodeStatusIcon(status) {
    Job Detail Dialog
 -------------------------------- */
 
-function JobDetailDialog({ open, onClose, job, onAction }) {
+function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(false)
 
   // Fetch full job details when dialog opens
   useEffect(() => {
-    if (open && job?.id && job.type === 'rolling_update') {
+    if (open && job?.id && job.type === 'rolling_update' && isEnterprise) {
       fetchJobDetails()
     }
-  }, [open, job?.id])
+  }, [open, job?.id, isEnterprise])
 
   const fetchJobDetails = async () => {
-    if (!job?.id) return
-    
+    if (!job?.id || !isEnterprise) return
+
     setLoading(true)
     try {
       const res = await fetch(`/api/v1/orchestrator/rolling-updates/${job.id}`)
@@ -201,11 +201,11 @@ function JobDetailDialog({ open, onClose, job, onAction }) {
 
   // Auto-refresh if job is running
   useEffect(() => {
-    if (open && job?.status === 'running') {
+    if (open && job?.status === 'running' && isEnterprise) {
       const interval = setInterval(fetchJobDetails, 3000)
       return () => clearInterval(interval)
     }
-  }, [open, job?.status])
+  }, [open, job?.status, isEnterprise])
 
   if (!job) return null
 
@@ -418,6 +418,7 @@ function JobDetailDialog({ open, onClose, job, onAction }) {
 
 export default function JobsPage() {
   const t = useTranslations()
+  const { isEnterprise } = useLicense()
   const [q, setQ] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -425,7 +426,7 @@ export default function JobsPage() {
 
   const [jobs, setJobs] = useState([])
   const [stats, setStats] = useState({ total: 0, running: 0, pending: 0, failed: 0 })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   // Dialog state
@@ -441,6 +442,14 @@ export default function JobsPage() {
 
   // Fetch jobs from API
   const fetchJobs = useCallback(async () => {
+    // En mode Community, pas d'orchestrator
+    if (!isEnterprise) {
+      setJobs([])
+      setStats({ total: 0, running: 0, pending: 0, failed: 0 })
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -460,7 +469,7 @@ export default function JobsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isEnterprise])
 
   // Initial fetch
   useEffect(() => {
@@ -469,14 +478,16 @@ export default function JobsPage() {
 
   // Auto-refresh every 5 seconds if there are running jobs
   useEffect(() => {
-    if (stats.running > 0) {
+    if (stats.running > 0 && isEnterprise) {
       const interval = setInterval(fetchJobs, 5000)
       return () => clearInterval(interval)
     }
-  }, [stats.running, fetchJobs])
+  }, [stats.running, fetchJobs, isEnterprise])
 
   // Handle job action (pause/resume/cancel)
   const handleJobAction = async (jobId, action) => {
+    if (!isEnterprise) return
+
     try {
       const res = await fetch(`/api/v1/orchestrator/rolling-updates/${jobId}/${action}`, {
         method: 'POST',
@@ -754,6 +765,7 @@ export default function JobsPage() {
         onClose={() => setDialogOpen(false)}
         job={selectedJob}
         onAction={handleJobAction}
+        isEnterprise={isEnterprise}
       />
       </Box>
     </EnterpriseGuard>

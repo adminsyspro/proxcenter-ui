@@ -22,17 +22,25 @@ import { useTheme } from '@mui/material/styles'
 // Formatage basique du texte (gras, listes)
 const formatText = (text) => {
   if (!text) return ''
-  
+
+  // Sanitize HTML entities first
+  let formatted = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+  // Then apply markdown transforms
   // Convertir **texte** en gras
-  let formatted = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  
+  formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+
   // Convertir les listes à puces
   formatted = formatted.replace(/^\* /gm, '• ')
   formatted = formatted.replace(/^- /gm, '• ')
-  
+
   // Convertir les listes numérotées
   formatted = formatted.replace(/^(\d+)\. /gm, '$1. ')
-  
+
   return formatted
 }
 

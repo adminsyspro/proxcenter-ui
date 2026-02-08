@@ -29,6 +29,7 @@ import {
   Divider,
   Chip,
 } from '@mui/material'
+import { escapeHtml } from '@/lib/escapeHtml'
 
 // Fonction utilitaire pour formater la taille de stockage
 function formatStorageSize(bytes?: number): string {
@@ -1159,7 +1160,7 @@ return
         {tab === 3 && onMoveStorage && (
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="info" icon={<i className="ri-information-line" />}>
-              <span dangerouslySetInnerHTML={{ __html: t('hardware.moveDiskTo', { storage: disk.storage }) }} />
+              <span dangerouslySetInnerHTML={{ __html: t('hardware.moveDiskTo', { storage: escapeHtml(disk.storage) }) }} />
             </Alert>
             
             {storagesLoading ? (

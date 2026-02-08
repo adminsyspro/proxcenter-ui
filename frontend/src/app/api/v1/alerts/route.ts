@@ -1,7 +1,9 @@
 import crypto from 'crypto'
 
 import { NextResponse } from 'next/server'
+import { getServerSession } from "next-auth"
 
+import { authOptions } from "@/lib/auth/config"
 import { prisma } from '@/lib/db/prisma'
 
 export const runtime = 'nodejs'
@@ -26,6 +28,9 @@ return crypto.createHash('md5').update(data).digest('hex')
  */
 export async function GET(req: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') || 'all' // active, acknowledged, resolved, all
     const severity = searchParams.get('severity') || 'all'
@@ -119,6 +124,9 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const body = await req.json()
     const { severity, message, source, sourceType, entityType, entityId, entityName, metric, currentValue, threshold } = body
 
@@ -172,6 +180,9 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function PATCH(req: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const body = await req.json()
     const { ids, action, userId } = body // action: 'acknowledge', 'resolve', 'reopen'
 
@@ -229,6 +240,9 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function DELETE(req: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const olderThanDays = parseInt(searchParams.get('olderThanDays') || '30')
 

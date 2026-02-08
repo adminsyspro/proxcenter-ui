@@ -2,17 +2,9 @@
 import { NextResponse } from 'next/server'
 
 import { pveFetch } from '@/lib/proxmox/client'
+import { getConnectionById } from '@/lib/connections/getConnection'
 
 export const runtime = 'nodejs'
-
-function getConnection(_id: string) {
-  // Mono-connexion: on lit depuis .env (comme tes autres routes)
-  return {
-    baseUrl: process.env.PVE_BASE_URL!,
-    apiToken: process.env.PVE_API_TOKEN!,
-    insecureDev: process.env.PVE_TLS_INSECURE === '1'
-  }
-}
 
 function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
@@ -20,7 +12,8 @@ function round1(n: number) {
 
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const conn = getConnection(id)
+  const conn = await getConnectionById(id)
+  if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
   // 1) Nom du cluster (best effort)
   let name = 'Proxmox Cluster'

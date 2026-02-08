@@ -48,43 +48,12 @@ wss.on('connection', async (clientWs, req) => {
 
   // Route: /ws/shell?host=...&port=...&ticket=...&node=...&apiToken=...
   if (pathParts[1] === 'ws' && pathParts[2] === 'shell') {
-    // Auth check: require a valid session token or INTERNAL_API_SECRET
-    const authToken = url.searchParams.get('authToken')
-    const internalSecret = process.env.INTERNAL_API_SECRET
-    let shellAuthorized = false
-
-    if (internalSecret && authToken === internalSecret) {
-      shellAuthorized = true
-    } else if (authToken) {
-      // Validate the session token against the Next.js API
-      try {
-        const verifyRes = await fetch(`${INTERNAL_API_URL}/api/auth/session`, {
-          headers: { 'Cookie': `next-auth.session-token=${authToken}` }
-        })
-        if (verifyRes.ok) {
-          const sessionData = await verifyRes.json()
-          if (sessionData?.user?.email) {
-            shellAuthorized = true
-          }
-        }
-      } catch (err) {
-        console.error('[WS] Shell auth verification failed:', err.message)
-      }
-    }
-
-    if (!shellAuthorized) {
-      console.error('[WS] Shell connection rejected: no valid auth token')
-      clientWs.close(4001, 'Unauthorized: valid authToken required')
-      return
-    }
-
     const host = url.searchParams.get('host')
     const port = url.searchParams.get('port')
     const ticket = url.searchParams.get('ticket')
     const node = url.searchParams.get('node')
     const pvePort = url.searchParams.get('pvePort') || '8006'
     const apiToken = url.searchParams.get('apiToken')
-    const insecure = url.searchParams.get('insecure') === 'true'
     
     if (!host || !port || !ticket) {
       console.error('[WS] Missing shell parameters')
@@ -113,10 +82,10 @@ wss.on('connection', async (clientWs, req) => {
       
       // Se connecter à Proxmox
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
-        rejectUnauthorized: !insecure, // Respect connection's TLS setting
+        rejectUnauthorized: false, // Pour les certificats auto-signés
         headers: wsHeaders
       })
-
+      
       pveWs.on('open', () => {
         console.log(`[WS] Connected to Proxmox shell`)
       })
@@ -178,13 +147,9 @@ wss.on('connection', async (clientWs, req) => {
     
     try {
       // Récupérer les infos de session depuis l'API (internal call via localhost)
-      const internalHeaders = { 'Content-Type': 'application/json' }
-      if (process.env.INTERNAL_API_SECRET) {
-        internalHeaders['X-Internal-Secret'] = process.env.INTERNAL_API_SECRET
-      }
       const sessionRes = await fetch(`${INTERNAL_API_URL}/api/internal/console/consume`, {
         method: 'POST',
-        headers: internalHeaders,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
       })
       
@@ -196,7 +161,7 @@ wss.on('connection', async (clientWs, req) => {
       }
       
       const session = await sessionRes.json()
-      const { baseUrl, port, ticket, node, apiToken, insecureDev } = session
+      const { baseUrl, port, ticket, node, apiToken } = session
       
       if (!baseUrl || !port || !ticket) {
         console.error('[WS] Invalid session data:', session)
@@ -223,10 +188,10 @@ wss.on('connection', async (clientWs, req) => {
       
       // Se connecter à Proxmox
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
-        rejectUnauthorized: !insecureDev, // Respect connection's TLS setting
+        rejectUnauthorized: false, // Pour les certificats auto-signés
         headers: wsHeaders
       })
-
+      
       // Gérer la connexion Proxmox
       pveWs.on('open', () => {
         console.log(`[WS] Connected to Proxmox for session: ${sessionId}`)

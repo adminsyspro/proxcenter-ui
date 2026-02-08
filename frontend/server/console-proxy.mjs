@@ -5,13 +5,9 @@ const PORT = Number(process.env.CONSOLE_PROXY_PORT || 3001)
 const NEXT_BASE = process.env.NEXT_BASE_URL || "http://localhost:3000"
 
 async function consumeSession(sessionId) {
-  const headers = { "Content-Type": "application/json" }
-  if (process.env.INTERNAL_API_SECRET) {
-    headers["X-Internal-Secret"] = process.env.INTERNAL_API_SECRET
-  }
   const res = await fetch(`${NEXT_BASE}/api/internal/console/consume`, {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sessionId }),
   })
   if (!res.ok) return null

@@ -1,8 +1,8 @@
 // src/app/api/v1/orchestrator/reports/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getOrchestratorApiKey } from '@/lib/orchestrator/api-key'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
+const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 export const runtime = 'nodejs'
 
@@ -16,9 +16,8 @@ export async function GET(
     const url = `${ORCHESTRATOR_URL}/api/v1/reports/${id}/download`
 
     const headers: Record<string, string> = {}
-    const apiKey = getOrchestratorApiKey()
-    if (apiKey) {
-      headers['X-API-Key'] = apiKey
+    if (ORCHESTRATOR_API_KEY) {
+      headers['X-API-Key'] = ORCHESTRATOR_API_KEY
     }
 
     const response = await fetch(url, {

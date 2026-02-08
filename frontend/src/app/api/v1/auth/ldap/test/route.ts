@@ -7,8 +7,8 @@ import { authOptions } from "@/lib/auth/config"
 
 export const runtime = "nodejs"
 
-import { getOrchestratorApiKey } from '@/lib/orchestrator/api-key'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
+const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 /**
  * POST /api/v1/auth/ldap/test
@@ -110,9 +110,8 @@ async function testLdapViaOrchestrator(config: {
       'Content-Type': 'application/json',
     }
 
-    const apiKey = getOrchestratorApiKey()
-    if (apiKey) {
-      headers['X-API-Key'] = apiKey
+    if (ORCHESTRATOR_API_KEY) {
+      headers['X-API-Key'] = ORCHESTRATOR_API_KEY
     }
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/auth/ldap/test`, {

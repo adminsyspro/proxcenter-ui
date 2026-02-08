@@ -227,38 +227,25 @@ const PREVIEW_DATA = {
   }
 }
 
-// Escape HTML entities to prevent XSS in macro values
-function escapeHtmlEntities(str) {
-  if (str === null || str === undefined) return ''
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
 // Fonction pour remplacer les macros par les valeurs
 function replaceMacros(template, data) {
   if (!template) return ''
-
+  
   let result = template
-
+  
   // Parcourir toutes les catégories de macros
   Object.entries(data).forEach(([category, values]) => {
     if (typeof values === 'object') {
       Object.entries(values).forEach(([key, value]) => {
         const macro = `{{${category}.${key}}}`
-        // Escape HTML in macro values to prevent XSS, except for known safe HTML attributes like colors
-        const safeValue = key === 'severity_color' ? (value || '') : escapeHtmlEntities(value)
-        result = result.replace(new RegExp(macro.replace(/[{}]/g, '\\$&'), 'g'), safeValue)
+        result = result.replace(new RegExp(macro.replace(/[{}]/g, '\\$&'), 'g'), value || '')
       })
     } else {
       const macro = `{{${category}}}`
-      result = result.replace(new RegExp(macro.replace(/[{}]/g, '\\$&'), 'g'), escapeHtmlEntities(values))
+      result = result.replace(new RegExp(macro.replace(/[{}]/g, '\\$&'), 'g'), values || '')
     }
   })
-
+  
   return result
 }
 

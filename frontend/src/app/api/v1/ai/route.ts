@@ -1,51 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from "next-auth"
-import dns from 'node:dns/promises'
-
-import { authOptions } from "@/lib/auth/config"
-
-function isPrivateIP(ip) {
-  const mapped = ip.replace(/^::ffff:/, '')
-  const parts = mapped.split('.').map(Number)
-  if (parts.length === 4 && parts.every(p => !isNaN(p))) {
-    if (parts[0] === 10) return true
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true
-    if (parts[0] === 192 && parts[1] === 168) return true
-    if (parts[0] === 127) return true
-    if (parts[0] === 169 && parts[1] === 254) return true
-    if (parts[0] === 0) return true
-  }
-  if (ip === '::1' || ip === '::') return true
-  if (ip.startsWith('fe80:')) return true
-  if (ip.startsWith('fc') || ip.startsWith('fd')) return true
-  return false
-}
-
-async function checkUrlForSSRF(rawUrl) {
-  let url
-  try { url = new URL(rawUrl) } catch { return "Invalid URL" }
-  if (!['http:', 'https:'].includes(url.protocol)) return "Invalid protocol"
-  if (isPrivateIP(url.hostname)) return "URL must not point to a private/reserved IP address"
-  try {
-    const { address } = await dns.lookup(url.hostname)
-    if (isPrivateIP(address)) return "URL hostname resolves to a private/reserved IP address"
-  } catch {}
-  return null
-}
 
 // POST /api/v1/ai/test - Tester la connexion au LLM
 export async function POST(request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     const settings = await request.json()
-
+    
     if (settings.provider === 'ollama') {
-      // SSRF check on user-provided Ollama URL
-      const ssrfError = await checkUrlForSSRF(settings.ollamaUrl)
-      if (ssrfError) return NextResponse.json({ error: ssrfError }, { status: 400 })
-
       // Test Ollama
       const response = await fetch(`${settings.ollamaUrl}/api/generate`, {
         method: 'POST',

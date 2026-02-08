@@ -43,10 +43,10 @@ export async function POST(req: Request) {
       )
     }
 
-    // Valider le mot de passe (min 12 caractères)
-    if (password.length < 12) {
+    // Valider le mot de passe (min 8 caractères)
+    if (password.length < 8) {
       return NextResponse.json(
-        { error: "Le mot de passe doit contenir au moins 12 caractères" },
+        { error: "Le mot de passe doit contenir au moins 8 caractères" },
         { status: 400 }
       )
     }

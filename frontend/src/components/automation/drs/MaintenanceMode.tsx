@@ -35,7 +35,6 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import ErrorIcon from '@mui/icons-material/Error'
-import { escapeHtml } from '@/lib/escapeHtml'
 
 // ============================================
 // Types
@@ -309,7 +308,7 @@ export default function MaintenanceMode({
                 variant="body1"
                 sx={{ mb: 2 }}
                 dangerouslySetInnerHTML={{
-                  __html: t('drsPage.confirmEnterMaintenance', { nodeName: escapeHtml(selectedNode.name) })
+                  __html: t('drsPage.confirmEnterMaintenance', { nodeName: selectedNode.name })
                 }}
               />
 

@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from "next-auth"
 
-import { authOptions } from "@/lib/auth/config"
 import { getDb } from '@/lib/db/sqlite'
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -256,9 +254,6 @@ ${vms.map((vm: any) => `  - ${vm.name} (${vm.vmid}) sur ${vm.node}`).join('\n')}
 // POST /api/v1/ai/chat/stream - Chat avec streaming
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     const { messages } = await request.json()
     const settings = getAISettings()
     

@@ -5,15 +5,6 @@ import { consumeConsoleSession } from "@/app/api/v1/connections/[id]/guests/[typ
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
-  // Verify internal shared secret to prevent unauthorized access
-  const internalSecret = process.env.INTERNAL_API_SECRET
-  if (internalSecret) {
-    const authHeader = req.headers.get("X-Internal-Secret")
-    if (authHeader !== internalSecret) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-  }
-
   const { sessionId } = await req.json().catch(() => ({}))
 
   if (!sessionId) return NextResponse.json({ error: "Missing sessionId" }, { status: 400 })
@@ -26,7 +17,6 @@ export async function POST(req: Request) {
   return NextResponse.json({
     baseUrl: s.conn?.baseUrl,
     apiToken: s.conn?.apiToken, // Token API pour l'authentification WebSocket
-    insecureDev: !!s.conn?.insecureDev, // Respect connection TLS setting
     port: s.port,
     ticket: s.ticket,
     node: s.node,

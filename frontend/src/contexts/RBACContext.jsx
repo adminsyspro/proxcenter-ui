@@ -107,7 +107,7 @@ export function useRBAC() {
 export function useMenuPermission(requiredPermissions) {
   const { hasAnyPermission, loading } = useRBAC()
   
-  if (loading) return false // Hide during loading for security
+  if (loading) return true // Afficher pendant le chargement
   if (!requiredPermissions || requiredPermissions.length === 0) return true
   
   return hasAnyPermission(requiredPermissions)

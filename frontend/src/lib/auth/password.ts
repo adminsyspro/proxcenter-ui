@@ -33,7 +33,7 @@ return
 
     crypto.pbkdf2(password, salt, ITERATIONS, KEY_LENGTH, DIGEST, (err, derivedKey) => {
       if (err) reject(err)
-      resolve(crypto.timingSafeEqual(derivedKey, Buffer.from(storedHash, 'hex')))
+      resolve(derivedKey.toString("hex") === storedHash)
     })
   })
 }

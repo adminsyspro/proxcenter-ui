@@ -1,9 +1,8 @@
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
 
-import { getOrchestratorApiKey } from './api-key'
-
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
+const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 export interface OrchestratorRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -26,9 +25,8 @@ export async function orchestratorFetch<T>(
     'Content-Type': 'application/json',
   }
 
-  const apiKey = getOrchestratorApiKey()
-  if (apiKey) {
-    headers['X-API-Key'] = apiKey
+  if (ORCHESTRATOR_API_KEY) {
+    headers['X-API-Key'] = ORCHESTRATOR_API_KEY
   }
 
   const controller = new AbortController()

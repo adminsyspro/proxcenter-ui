@@ -92,7 +92,10 @@
     "thisFeatureRequiresEnterprise": "Cette fonctionnalité nécessite une licence Enterprise pour être utilisée.",
     "upgradeDescription": "Passez à l'édition Enterprise pour débloquer toutes les fonctionnalités avancées : DRS, RBAC, Réplication Ceph, Green IT, IA, et plus encore.",
     "upgradeToPro": "Passer à Enterprise",
-    "contactSales": "Besoin d'aide ?"
+    "contactSales": "Besoin d'aide ?",
+    "nodeLimitExceeded": "Limite de nodes dépassée : {current}/{max} nodes — mode lecture seule actif",
+    "nodeLimitWarning": "LIMITE NODES",
+    "nodeLimitUpgrade": "Mettre à niveau votre licence"
   },
   "vms": {
     "disk": "Disque",

@@ -92,7 +92,10 @@
     "thisFeatureRequiresEnterprise": "This feature requires an Enterprise license to use.",
     "upgradeDescription": "Upgrade to the Enterprise edition to unlock all advanced features: DRS, RBAC, Ceph Replication, Green IT, AI, and more.",
     "upgradeToPro": "Upgrade to Enterprise",
-    "contactSales": "Need help?"
+    "contactSales": "Need help?",
+    "nodeLimitExceeded": "Node limit exceeded: {current}/{max} nodes — read-only mode active",
+    "nodeLimitWarning": "NODE LIMIT",
+    "nodeLimitUpgrade": "Upgrade your license"
   },
   "vms": {
     "disk": "Disk",

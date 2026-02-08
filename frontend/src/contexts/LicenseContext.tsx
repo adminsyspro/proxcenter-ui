@@ -109,6 +109,9 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   const hasFeature = useCallback((featureId: FeatureId | string): boolean => {
     if (!isLicensed) return false
 
+    // Core Enterprise features — always available with any Enterprise license
+    if (isEnterprise && featureId === Features.ALERTS) return true
+
     // Si pas de features dans le statut, vérifier dans la liste des features
     if (status?.features && Array.isArray(status.features)) {
       return status.features.includes(featureId)
@@ -117,7 +120,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     // Fallback: vérifier dans la liste des features chargées
     const feature = features.find(f => f.id === featureId)
     return feature?.enabled === true
-  }, [isLicensed, status, features])
+  }, [isLicensed, isEnterprise, status, features])
 
   return (
     <LicenseContext.Provider value={{

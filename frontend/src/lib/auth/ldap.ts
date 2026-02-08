@@ -26,7 +26,6 @@ export interface LdapConfig {
 // Configuration orchestrator
 import { getOrchestratorApiKey } from '@/lib/orchestrator/api-key'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-const ORCHESTRATOR_API_KEY = getOrchestratorApiKey()
 
 /**
  * Vérifie si LDAP est activé
@@ -103,8 +102,9 @@ export async function authenticateLdap(
       'Content-Type': 'application/json',
     }
 
-    if (ORCHESTRATOR_API_KEY) {
-      headers['X-API-Key'] = ORCHESTRATOR_API_KEY
+    const apiKey = getOrchestratorApiKey()
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey
     }
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/auth/ldap/authenticate`, {

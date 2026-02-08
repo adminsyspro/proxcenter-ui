@@ -4,7 +4,6 @@
 import { getOrchestratorApiKey } from './api-key'
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-const ORCHESTRATOR_API_KEY = getOrchestratorApiKey()
 
 export interface OrchestratorRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -27,8 +26,9 @@ export async function orchestratorFetch<T>(
     'Content-Type': 'application/json',
   }
 
-  if (ORCHESTRATOR_API_KEY) {
-    headers['X-API-Key'] = ORCHESTRATOR_API_KEY
+  const apiKey = getOrchestratorApiKey()
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey
   }
 
   const controller = new AbortController()

@@ -4,14 +4,16 @@ import { readFileSync } from 'fs'
 let _cachedKey: string | null = null
 
 export function getOrchestratorApiKey(): string {
-  if (_cachedKey !== null) return _cachedKey
+  // Return cached key if already resolved successfully
+  if (_cachedKey) return _cachedKey
 
+  // 1. Check env var first
   if (process.env.ORCHESTRATOR_API_KEY) {
     _cachedKey = process.env.ORCHESTRATOR_API_KEY
     return _cachedKey
   }
 
-  // Try to read auto-generated key from shared orchestrator data volume
+  // 2. Try to read auto-generated key from shared orchestrator data volume
   const keyPaths = ['/app/orchestrator_data/.api-key', '/app/data/.api-key']
   for (const p of keyPaths) {
     try {
@@ -23,6 +25,6 @@ export function getOrchestratorApiKey(): string {
     } catch { /* file not found, try next */ }
   }
 
-  _cachedKey = ''
+  // Key not found yet — don't cache empty string so we retry next call
   return ''
 }

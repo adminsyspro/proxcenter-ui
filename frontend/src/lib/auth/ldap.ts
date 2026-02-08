@@ -24,8 +24,9 @@ export interface LdapConfig {
 }
 
 // Configuration orchestrator
+import { getOrchestratorApiKey } from '@/lib/orchestrator/api-key'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
+const ORCHESTRATOR_API_KEY = getOrchestratorApiKey()
 
 /**
  * Vérifie si LDAP est activé

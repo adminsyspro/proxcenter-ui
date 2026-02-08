@@ -1,8 +1,10 @@
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
 
+import { getOrchestratorApiKey } from './api-key'
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
+const ORCHESTRATOR_API_KEY = getOrchestratorApiKey()
 
 export interface OrchestratorRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'

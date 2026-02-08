@@ -1,8 +1,9 @@
 // src/app/api/v1/orchestrator/reports/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getOrchestratorApiKey } from '@/lib/orchestrator/api-key'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
+const ORCHESTRATOR_API_KEY = getOrchestratorApiKey()
 
 export const runtime = 'nodejs'
 

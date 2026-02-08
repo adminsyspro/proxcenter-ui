@@ -174,6 +174,18 @@ const NavbarContent = () => {
       isLicenseNotif: true
     } : null
 
+  // Node limit exceeded notification
+  const nodeLimitNotif = licenseStatus?.node_status?.exceeded ? {
+    id: 'node-limit-exceeded',
+    message: t('license.nodeLimitExceeded', {
+      current: licenseStatus.node_status.current_nodes,
+      max: licenseStatus.node_status.max_nodes
+    }),
+    severity: 'crit',
+    source: 'License',
+    isNodeLimitNotif: true
+  } : null
+
   // Update available notification
   const updateNotif = updateInfo?.updateAvailable ? {
     id: 'version-update',
@@ -201,8 +213,9 @@ const NavbarContent = () => {
       recommendation: r
     }))
 
-  // Combined notifications (update + license + DRS + alerts)
+  // Combined notifications (update + node limit + license + DRS + alerts)
   const allNotifications = [
+    ...(nodeLimitNotif ? [nodeLimitNotif] : []),
     ...(updateNotif ? [updateNotif] : []),
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
     ...drsNotifications,
@@ -211,11 +224,11 @@ const NavbarContent = () => {
 
   // Combined count
   const drsCount = drsRecommendations.filter(r => r.status === 'pending').length
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + drsCount
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
-    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
+    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
     warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
     info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
     drs: drsCount
@@ -962,6 +975,73 @@ return () => window.removeEventListener('keydown', onKeyDown)
                           }}
                         >
                           <i className='ri-arrow-right-line' style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                )
+              }
+
+              // Handle node limit exceeded notification
+              if (notif.isNodeLimitNotif) {
+                return (
+                  <Box
+                    key={notif.id}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      py: 1.5,
+                      px: 2,
+                      borderLeft: '3px solid',
+                      borderColor: 'error.main',
+                      cursor: 'pointer',
+                      bgcolor: 'error.lighter',
+                      '&:hover': { bgcolor: 'error.light', opacity: 0.9 }
+                    }}
+                    onClick={() => {
+                      setNotifAnchor(null)
+                      router.push('/settings')
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <i className='ri-server-line' style={{
+                        color: 'var(--mui-palette-error-main)',
+                        fontSize: 20
+                      }} />
+                    </ListItemIcon>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant='body2' sx={{
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.8rem'
+                      }}>
+                        {notif.message}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                        <Chip
+                          size='small'
+                          label={t('license.nodeLimitWarning')}
+                          color='error'
+                          sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
+                        />
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', ml: 1 }}>
+                      <Tooltip title={t('license.nodeLimitUpgrade')}>
+                        <IconButton
+                          size='small'
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            window.open('https://proxcenter.io/account/subscribe', '_blank')
+                          }}
+                          sx={{
+                            opacity: 0.7,
+                            '&:hover': { opacity: 1, color: 'error.main' }
+                          }}
+                        >
+                          <i className='ri-shopping-cart-line' style={{ fontSize: 16 }} />
                         </IconButton>
                       </Tooltip>
                     </Box>

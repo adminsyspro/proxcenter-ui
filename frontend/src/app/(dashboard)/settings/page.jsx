@@ -731,6 +731,43 @@ function LicenseTab() {
             </Typography>
           )}
 
+          {/* Node Quota */}
+          {isLicensed && licenseStatus.limits && (
+            <Box sx={{
+              mt: 2, p: 2, borderRadius: 2,
+              bgcolor: 'action.hover',
+              border: 1, borderColor: 'divider',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 1
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <i className='ri-server-line' style={{ fontSize: 20, opacity: 0.7 }} />
+                <Box>
+                  <Typography variant='subtitle2' fontWeight={700}>
+                    {t('settings.nodeQuota')}
+                  </Typography>
+                  <Typography variant='body2' sx={{ opacity: 0.7 }}>
+                    {licenseStatus.limits.max_nodes > 0
+                      ? `${licenseStatus.limits.max_nodes} node${licenseStatus.limits.max_nodes > 1 ? 's' : ''} ${t('settings.nodesIncluded')}`
+                      : t('settings.unlimitedNodes')
+                    }
+                  </Typography>
+                </Box>
+              </Box>
+              {licenseStatus.limits.max_nodes > 0 && (
+                <Button
+                  variant='outlined'
+                  size='small'
+                  href='https://proxcenter.io/account/subscribe'
+                  target='_blank'
+                  startIcon={<i className='ri-shopping-cart-line' />}
+                >
+                  {t('settings.upgradeNodes')}
+                </Button>
+              )}
+            </Box>
+          )}
+
           <Divider sx={{ my: 2 }} />
 
           <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 1 }}>{t('settings.includedFeatures')}</Typography>

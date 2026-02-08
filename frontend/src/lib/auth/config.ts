@@ -8,6 +8,11 @@ import { getDb } from "@/lib/db/sqlite"
 import { verifyPassword, hashPassword } from "./password"
 import { authenticateLdap, isLdapEnabled } from "./ldap"
 
+// Validate NEXTAUTH_SECRET at runtime (not build time)
+if (typeof window === "undefined" && process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_SECRET) {
+  console.error("CRITICAL: NEXTAUTH_SECRET environment variable is not set. Authentication is insecure!")
+}
+
 export type UserRole = "admin" | "operator" | "viewer"
 
 export interface AuthUser {
@@ -254,7 +259,7 @@ return session
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 jours
+    maxAge: 24 * 60 * 60, // 1 jour
   },
-  secret: process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production",
+  secret: process.env.NEXTAUTH_SECRET,
 }

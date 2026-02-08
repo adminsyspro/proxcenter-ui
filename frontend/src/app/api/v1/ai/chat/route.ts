@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { getServerSession } from "next-auth"
 
+import { authOptions } from "@/lib/auth/config"
 import { getDb } from '@/lib/db/sqlite'
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -42,8 +44,7 @@ async function getConnections() {
       }
     })
 
-    console.log('[AI] Prisma connections found:', connections.length)
-    
+
 return connections
   } catch (e) {
     console.error('Failed to get connections:', e)
@@ -99,8 +100,6 @@ async function fetchProxmoxData(connections: any[]) {
       // Décrypter le token avec la fonction du projet
       const token = decryptSecret(conn.apiTokenEnc)
 
-      console.log('[AI] Fetching from:', conn.name, conn.baseUrl, 'token length:', token?.length)
-      
       // Utiliser pveFetch pour les requêtes Proxmox (gère HTTPS et certificats auto-signés)
       const resources = await pveFetch<any[]>(
         {
@@ -110,12 +109,6 @@ async function fetchProxmoxData(connections: any[]) {
         },
         '/cluster/resources'
       )
-      
-      console.log('[AI] Resources fetched:', resources?.length, 'items')
-
-      if (resources?.length > 0) {
-        console.log('[AI] Resource types:', [...new Set(resources.map((r: any) => r.type))])
-      }
       
       // Process nodes
       const nodes = resources.filter((r: any) => r.type === 'node')
@@ -172,21 +165,8 @@ async function fetchProxmoxData(connections: any[]) {
 async function buildSystemPrompt() {
   const connections = await getConnections()
 
-  console.log('[AI] Connections found:', connections.length, connections.map(c => ({ name: c.name, type: c.type })))
-  
   const alerts = await getActiveAlerts()
   const infraData = await fetchProxmoxData(connections)
-  
-  console.log('[AI] Infrastructure data:', {
-    clusters: infraData.clusters.length,
-    nodes: infraData.nodes.length,
-    vms: infraData.vms.length,
-    summary: infraData.summary
-  })
-  
-  if (infraData.vms.length > 0) {
-    console.log('[AI] Sample VMs:', infraData.vms.slice(0, 3))
-  }
   
   // Trier les VMs par CPU pour trouver les plus gourmandes
   const topCpuVMs = [...infraData.vms]
@@ -205,13 +185,6 @@ async function buildSystemPrompt() {
   
   // VMs en cours d'exécution
   const runningVMs = infraData.vms.filter((vm: any) => vm.status === 'running')
-  
-  console.log('[AI] Stopped VMs count:', stoppedVMs.length)
-  console.log('[AI] Running VMs count:', runningVMs.length)
-
-  if (stoppedVMs.length > 0) {
-    console.log('[AI] Sample stopped VMs:', stoppedVMs.slice(0, 3).map((vm: any) => ({ name: vm.name, status: vm.status })))
-  }
   
   let prompt = `Tu es l'assistant IA de ProxCenter, une plateforme de gestion d'infrastructure Proxmox.
 
@@ -266,8 +239,6 @@ ${Object.entries(byCluster).map(([cluster, vms]) => {
 ${vms.map((vm: any) => `  - ${vm.name} (${vm.type} ${vm.vmid}) sur ${vm.node}`).join('\n')}`
 }).join('\n')}
 `
-    console.log('[AI] Stopped VMs section length:', stoppedVMsSection.length, 'chars')
-    console.log('[AI] Stopped VMs by cluster:', Object.entries(byCluster).map(([c, v]) => `${c}: ${v.length}`))
   }
 
   if (alerts.length > 0) {
@@ -303,17 +274,15 @@ ${runningVMs.length > 20 ? `\n... et ${runningVMs.length - 20} autres VMs/CTs en
 - Pour les actions, explique la procédure mais précise que tu ne peux pas l'exécuter
 `
 
-  console.log('[AI] System prompt length:', prompt.length, 'chars')
-
-  // Log les premières lignes pour debug
-  console.log('[AI] System prompt preview:', prompt.substring(0, 500) + '...')
-
   return prompt
 }
 
 // POST /api/v1/ai/chat - Envoyer un message au LLM
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const { messages } = await request.json()
     const settings = getAISettings()
     

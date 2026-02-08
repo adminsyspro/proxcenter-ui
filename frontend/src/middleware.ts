@@ -92,7 +92,7 @@ export async function middleware(request: NextRequest) {
     // Vérifier le token JWT
     const token = await getToken({
       req: request,
-      secret: process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production"
+      secret: process.env.NEXTAUTH_SECRET!
     })
 
     // Si pas de token, rediriger vers login
@@ -114,7 +114,7 @@ export async function middleware(request: NextRequest) {
   // Vérifier le token JWT pour les API
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production"
+    secret: process.env.NEXTAUTH_SECRET!
   })
 
   // Si pas de token, retourner 401 pour les API

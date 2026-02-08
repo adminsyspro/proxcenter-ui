@@ -61,6 +61,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import HardwareIcon from '@mui/icons-material/Hardware'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { escapeHtml } from '@/lib/escapeHtml'
 
 // Import des nouveaux composants DRS
 import DRSSettingsPanel, { 
@@ -1278,7 +1279,7 @@ const StorageWarningPanel = ({
       {/* Message si pas d'info stockage cible (backend pas encore mis à jour) */}
       {!targetStorage && hasLocalDisks && (
         <Alert severity="info" icon={<StorageIcon />}>
-          <Typography variant="caption" dangerouslySetInnerHTML={{ __html: t('drsPage.checkStorageManually', { node: targetNode }) }} />
+          <Typography variant="caption" dangerouslySetInnerHTML={{ __html: t('drsPage.checkStorageManually', { node: escapeHtml(targetNode) }) }} />
         </Alert>
       )}
     </Stack>

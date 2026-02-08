@@ -61,7 +61,10 @@ export default function LoginPage() {
         ? await signIn('credentials', { email, password, redirect: false, callbackUrl })
         : await signIn('ldap', { username, password, redirect: false, callbackUrl })
       if (result?.error) setError(result.error)
-      else if (result?.ok) { router.push(callbackUrl); router.refresh() }
+      else if (result?.ok) {
+        const safeUrl = callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//') ? callbackUrl : '/'
+        router.push(safeUrl); router.refresh()
+      }
     } catch { setError(t('auth.loginError')) }
     finally { setLoading(false) }
   }

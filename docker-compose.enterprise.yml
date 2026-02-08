@@ -52,7 +52,7 @@ services:
     volumes:
       - orchestrator_data:/app/data
       - proxcenter_data:/app/shared_data:ro
-      - ./config/orchestrator.yaml:/app/config/orchestrator.yaml:ro
+      - ./config/orchestrator.yaml:/app/config.yaml:ro
     networks:
       - proxcenter
     healthcheck:

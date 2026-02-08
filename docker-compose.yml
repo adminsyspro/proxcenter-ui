@@ -20,6 +20,7 @@ services:
       - ORCHESTRATOR_URL=http://orchestrator:8080
     volumes:
       - proxcenter_data:/app/data
+      - orchestrator_data:/app/orchestrator_data:ro  # Read auto-generated API key
     networks:
       - proxcenter
     healthcheck:

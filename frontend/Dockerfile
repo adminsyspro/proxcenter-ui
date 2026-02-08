@@ -17,19 +17,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps --ignore-scripts
 
 # ========================================
-# Stage 2a: Generate icons on native platform (avoids QEMU crash on arm64)
-# ========================================
-FROM --platform=$BUILDPLATFORM node:22-alpine AS icongen
-
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --ignore-scripts
-COPY . .
-RUN npm run build:icons
-
-# ========================================
-# Stage 2b: Builder (runs on target platform)
+# Stage 2: Builder
 # ========================================
 FROM node:22-alpine AS builder
 
@@ -44,11 +32,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source code
 COPY . .
 
-# Copy pre-generated icons CSS (built on native platform, platform-independent)
-COPY --from=icongen /app/src/assets/iconify-icons/generated-icons.css ./src/assets/iconify-icons/generated-icons.css
-
 # Rebuild better-sqlite3 native module for this platform
 RUN npm rebuild better-sqlite3
+
+# Generate icon CSS bundle
+RUN npm run build:icons
 
 # Generate Prisma client
 RUN npx prisma generate

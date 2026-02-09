@@ -164,7 +164,8 @@
     "billing": "Facturation",
     "about": "À propos",
     "templates": "Templates",
-    "reports": "Rapports"
+    "reports": "Rapports",
+    "topology": "Topologie"
   },
   "navbar": {
     "language": "Langue",
@@ -2572,5 +2573,19 @@
     "copyright": "Tous droits réservés.",
     "updateNotification": "Nouvelle version disponible",
     "updateNotificationBody": "ProxCenter {version} est disponible. Cliquez pour mettre à jour."
+  },
+  "topology": {
+    "title": "Topologie",
+    "subtitle": "Carte réseau des clusters Proxmox",
+    "clusters": "Clusters",
+    "nodes": "Nœuds",
+    "vms": "VMs",
+    "cpu": "CPU",
+    "memory": "MEM",
+    "online": "En ligne",
+    "warning": "Avertissement",
+    "offline": "Hors ligne",
+    "noData": "Aucune donnée de topologie disponible. Vérifiez que vos connexions Proxmox sont configurées.",
+    "loading": "Chargement de la topologie..."
   }
 }

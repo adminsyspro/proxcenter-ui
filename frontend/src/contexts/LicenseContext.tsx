@@ -19,6 +19,7 @@ export const Features = {
   RBAC: 'rbac',
   JOBS: 'jobs',
   NOTIFICATIONS: 'notifications',
+  TOPOLOGY: 'topology',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]

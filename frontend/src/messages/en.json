@@ -2602,6 +2602,29 @@
     "updateNotification": "New version available",
     "updateNotificationBody": "ProxCenter {version} is available. Click to update."
   },
+  "cve": {
+    "title": "CVE Scanner",
+    "scanNow": "Scan Now",
+    "scanning": "Scanning...",
+    "noVulnerabilities": "No vulnerabilities detected",
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "columns": {
+      "cveId": "CVE ID",
+      "package": "Package",
+      "installed": "Installed",
+      "fixed": "Fixed in",
+      "severity": "Severity",
+      "node": "Node",
+      "published": "Published"
+    },
+    "lastScan": "Last scan: {date}",
+    "filterBySeverity": "Filter by severity"
+  },
   "topology": {
     "title": "Topology",
     "subtitle": "Proxmox cluster network map",

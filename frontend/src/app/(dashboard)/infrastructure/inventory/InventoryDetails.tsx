@@ -162,6 +162,7 @@ export default function InventoryDetails({
   // Check license features
   const rollingUpdateAvailable = !licenseLoading && hasFeature(Features.ROLLING_UPDATES)
   const crossClusterMigrationAvailable = !licenseLoading && hasFeature(Features.CROSS_CLUSTER_MIGRATION)
+  const cveAvailable = !licenseLoading && hasFeature(Features.CVE_SCANNER)
 
   const [data, setData] = useState<DetailsPayload | null>(null)
   const [loading, setLoading] = useState(false)
@@ -4516,7 +4517,7 @@ return vm?.isCluster ?? false
                 handleSaveClusterNotes, handleTableMigrate, handleTableVmAction, joinClusterDialogOpen, joinClusterInfo,
                 joinClusterPassword, joinInfoDialogOpen, loading, localVmsDialogNode, localVmsDialogOpen,
                 migratingVmIds, newClusterLinks, newClusterName, nodeLocalVms, nodeUpdates,
-                onSelect, primaryColor, rollingUpdateAvailable, rollingUpdateWizardOpen, selection,
+                cveAvailable, onSelect, primaryColor, rollingUpdateAvailable, rollingUpdateWizardOpen, selection,
                 setClusterActionError, setClusterCephTimeframe, setClusterNotesContent, setClusterNotesEditMode, setClusterTab,
                 setCreateClusterDialogOpen, setDeleteHaGroupDialog, setDeleteHaRuleDialog, setEditingHaGroup, setEditingHaRule,
                 setExpandedClusterNodes, setHaGroupDialogOpen, setHaRuleDialogOpen, setHaRuleType, setJoinClusterDialogOpen,
@@ -4531,7 +4532,7 @@ return vm?.isCluster ?? false
           {/* Node Tabs */}
           {selection?.type === 'node' && data.vmsData && (
             <NodeTabs
-              {...{canShowRrd, clusterConfigLoaded, clusterConfigLoading, data, deleteReplicationDialogOpen, deletingReplicationJob,
+              {...{canShowRrd, clusterConfigLoaded, clusterConfigLoading, cveAvailable, data, deleteReplicationDialogOpen, deletingReplicationJob,
                 dnsFormData, editDnsDialogOpen, editHostsDialogOpen, editTimeDialogOpen, editingReplicationJob,
                 error, expandedVmsTable, favorites, handleTableMigrate, handleTableVmAction, hosts,
                 hostsFormData, loadClusterConfig, loadVmTrendsBatch, loading, migratingVmIds,

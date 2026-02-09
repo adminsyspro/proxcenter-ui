@@ -45,6 +45,7 @@ import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import BackupJobsPanel from '../BackupJobsPanel'
+import CveTab from '@/components/CveTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
@@ -83,6 +84,7 @@ export default function ClusterTabs(props: any) {
     clusterStorageLoading,
     clusterTab,
     createClusterDialogOpen,
+    cveAvailable,
     data,
     error,
     expandedClusterNodes,
@@ -243,6 +245,30 @@ export default function ClusterTabs(props: any) {
                       <i className="ri-refresh-line" style={{ fontSize: 16 }} />
                       Rolling Update
                       {!rollingUpdateAvailable && (
+                        <Chip
+                          size="small"
+                          label="Enterprise"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                            ml: 0.5,
+                            '& .MuiChip-label': { px: 0.75 }
+                          }}
+                        />
+                      )}
+                    </Box>
+                  }
+                />
+                <Tab
+                  disabled={!cveAvailable}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: cveAvailable ? 1 : 0.4 }}>
+                      <i className="ri-shield-cross-line" style={{ fontSize: 16 }} />
+                      CVE
+                      {!cveAvailable && (
                         <Chip
                           size="small"
                           label="Enterprise"
@@ -2543,8 +2569,15 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Cluster - Index 10 */}
+                {/* Onglet CVE - Index 10 */}
                 {clusterTab === 10 && (
+                  <Box sx={{ p: 2, overflow: 'auto' }}>
+                    <CveTab connectionId={selection?.id?.split(':')[0] || ''} available={cveAvailable} />
+                  </Box>
+                )}
+
+                {/* Onglet Cluster - Index 11 */}
+                {clusterTab === 11 && (
                   <Box sx={{ p: 2 }}>
                     {clusterConfigLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

@@ -2591,7 +2591,8 @@
       "fixed": "Corrigée dans",
       "severity": "Sévérité",
       "node": "Nœud",
-      "published": "Publiée"
+      "published": "Publiée",
+      "description": "Description"
     },
     "lastScan": "Dernier scan : {date}",
     "filterBySeverity": "Filtrer par sévérité"

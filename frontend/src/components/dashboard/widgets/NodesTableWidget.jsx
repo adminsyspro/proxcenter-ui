@@ -1,12 +1,13 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Chip, LinearProgress,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography
 } from '@mui/material'
 
-export default function NodesTableWidget({ data, loading }) {
+function NodesTableWidget({ data, loading }) {
   const t = useTranslations()
   const nodes = data?.nodes || []
 
@@ -94,3 +95,5 @@ export default function NodesTableWidget({ data, loading }) {
     </TableContainer>
   )
 }
+
+export default React.memo(NodesTableWidget)

@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Card, CardContent, Typography } from '@mui/material'
 
-export default function KpiClustersWidget({ data, loading }) {
+function KpiClustersWidget({ data, loading }) {
   const t = useTranslations()
   const summary = data?.summary || {}
   const hasOffline = summary.nodesOffline > 0
@@ -32,3 +33,5 @@ export default function KpiClustersWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(KpiClustersWidget)

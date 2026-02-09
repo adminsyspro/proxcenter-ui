@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 
 import { useTranslations } from 'next-intl'
 
@@ -44,6 +44,7 @@ const StopIcon = (props) => <i className="ri-stop-fill" style={{ fontSize: props
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
+import { useJobs } from '@/hooks/useJobs'
 
 /* --------------------------------
    Helpers
@@ -214,10 +215,10 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
   const isRunning = job.status === 'running'
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
       fullWidth
       PaperProps={{ sx: { maxHeight: '80vh' } }}
     >
@@ -231,7 +232,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      
+
       <DialogContent dividers>
         <Stack spacing={3}>
           {/* Progress */}
@@ -246,8 +247,8 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                 </Typography>
               )}
             </Box>
-            <LinearProgress 
-              variant="determinate" 
+            <LinearProgress
+              variant="determinate"
               value={job.progress || 0}
               sx={{ height: 8, borderRadius: 1 }}
             />
@@ -342,12 +343,12 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                       <ListItemIcon sx={{ minWidth: 40 }}>
                         {getNodeStatusIcon(ns.status)}
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary={ns.node_name}
                         secondary={
                           <>
                             {ns.status}
-                            {ns.version_before && ns.version_after && 
+                            {ns.version_before && ns.version_after &&
                               ` • ${ns.version_before} → ${ns.version_after}`}
                             {ns.did_reboot && ' • Redémarré'}
                           </>
@@ -372,10 +373,10 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                 </Typography>
                 {loading && <CircularProgress size={16} />}
               </Box>
-              <Box 
-                sx={{ 
-                  maxHeight: 300, 
-                  overflow: 'auto', 
+              <Box
+                sx={{
+                  maxHeight: 300,
+                  overflow: 'auto',
                   bgcolor: 'background.default',
                   borderRadius: 1,
                   p: 1,
@@ -389,11 +390,11 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                   </Typography>
                 ) : (
                   logs.slice(-100).map((log, i) => (
-                    <Box 
+                    <Box
                       key={i}
-                      sx={{ 
-                        color: log.level === 'error' ? 'error.main' : 
-                               log.level === 'warning' ? 'warning.main' : 
+                      sx={{
+                        color: log.level === 'error' ? 'error.main' :
+                               log.level === 'warning' ? 'warning.main' :
                                'text.primary',
                         lineHeight: 1.4,
                       }}
@@ -425,11 +426,6 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
 
-  const [jobs, setJobs] = useState([])
-  const [stats, setStats] = useState({ total: 0, running: 0, pending: 0, failed: 0 })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
   // Dialog state
   const [selectedJob, setSelectedJob] = useState(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -441,49 +437,21 @@ export default function JobsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
-  // Fetch jobs from API
-  const fetchJobs = useCallback(async () => {
-    // En mode Community, pas d'orchestrator
-    if (!isEnterprise) {
-      setJobs([])
-      setStats({ total: 0, running: 0, pending: 0, failed: 0 })
-      setLoading(false)
-      return
-    }
+  // SWR data fetching with conditional refresh interval
+  // Use faster polling (5s) when there are running jobs, otherwise no auto-refresh
+  const { data: jobsResponse, error, isLoading, isValidating, mutate } = useJobs(isEnterprise)
 
-    try {
-      setLoading(true)
-      setError(null)
+  const jobs = jobsResponse?.data || []
+  const stats = jobsResponse?.stats || { total: 0, running: 0, pending: 0, failed: 0 }
+  const loading = isLoading
 
-      const res = await fetch('/api/v1/orchestrator/jobs')
-      const json = await res.json()
-
-      if (!res.ok) {
-        throw new Error(json.error || 'Failed to fetch jobs')
-      }
-
-      setJobs(json.data || [])
-      setStats(json.stats || { total: 0, running: 0, pending: 0, failed: 0 })
-    } catch (e) {
-      console.error('Error fetching jobs:', e)
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [isEnterprise])
-
-  // Initial fetch
-  useEffect(() => {
-    fetchJobs()
-  }, [fetchJobs])
-
-  // Auto-refresh every 5 seconds if there are running jobs
+  // Conditional auto-refresh: 5s when running jobs exist
   useEffect(() => {
     if (stats.running > 0 && isEnterprise) {
-      const interval = setInterval(fetchJobs, 5000)
+      const interval = setInterval(() => mutate(), 5000)
       return () => clearInterval(interval)
     }
-  }, [stats.running, fetchJobs, isEnterprise])
+  }, [stats.running, isEnterprise, mutate])
 
   // Handle job action (pause/resume/cancel)
   const handleJobAction = async (jobId, action) => {
@@ -498,7 +466,7 @@ export default function JobsPage() {
         throw new Error(data.error || `Failed to ${action} job`)
       }
       // Refresh jobs list
-      fetchJobs()
+      mutate()
     } catch (e) {
       console.error(`Error ${action} job:`, e)
     }
@@ -522,7 +490,7 @@ export default function JobsPage() {
         job.target?.toLowerCase().includes(qq)
 
       const matchType = typeFilter === 'all' || job.type === typeFilter
-      
+
       // Handle status filter with aliases
       let matchStatus = statusFilter === 'all'
       if (!matchStatus) {
@@ -622,9 +590,9 @@ export default function JobsPage() {
           <Button
             variant='outlined'
             size='small'
-            startIcon={loading ? <CircularProgress size={14} /> : <i className='ri-refresh-line' />}
-            onClick={fetchJobs}
-            disabled={loading}
+            startIcon={isValidating ? <CircularProgress size={14} /> : <i className='ri-refresh-line' />}
+            onClick={() => mutate()}
+            disabled={isValidating}
           >
             {t('common.refresh')}
           </Button>
@@ -725,8 +693,8 @@ export default function JobsPage() {
             </Box>
           ) : error ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: 2 }}>
-              <Typography color="error">{error}</Typography>
-              <Button onClick={fetchJobs} variant="outlined" size="small">
+              <Typography color="error">{error.message}</Typography>
+              <Button onClick={() => mutate()} variant="outlined" size="small">
                 Réessayer
               </Button>
             </Box>
@@ -739,7 +707,7 @@ export default function JobsPage() {
               pageSizeOptions={[10, 25, 50]}
               disableRowSelectionOnClick
               rowHeight={56}
-              loading={loading}
+              loading={isValidating}
               onRowDoubleClick={handleRowDoubleClick}
               sx={{
                 border: 'none',

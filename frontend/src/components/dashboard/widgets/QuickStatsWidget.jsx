@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography } from '@mui/material'
 
-export default function QuickStatsWidget({ data, loading }) {
+function QuickStatsWidget({ data, loading }) {
   const t = useTranslations()
   const summary = data?.summary || {}
   const pbs = data?.pbs || {}
@@ -74,3 +75,5 @@ export default function QuickStatsWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(QuickStatsWidget)

@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 
 import { Box, Typography, Chip, CircularProgress, alpha, Switch, Stack } from '@mui/material'
 
-export default function ZeroTrustFirewallWidget({ data, loading, config }) {
+function ZeroTrustFirewallWidget({ data, loading, config }) {
   const [firewallData, setFirewallData] = useState(null)
   const [connectionName, setConnectionName] = useState('')
   const [loadingData, setLoadingData] = useState(true)
@@ -110,3 +110,5 @@ return () => clearInterval(interval)
     </Box>
   )
 }
+
+export default React.memo(ZeroTrustFirewallWidget)

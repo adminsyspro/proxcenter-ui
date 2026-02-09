@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
@@ -40,7 +41,7 @@ function GaugeChart({ value, label, subtitle, color, size = 150 }) {
   )
 }
 
-export default function ResourcesGaugesWidget({ data, loading }) {
+function ResourcesGaugesWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const primaryColor = theme.palette.primary.main
@@ -76,3 +77,5 @@ export default function ResourcesGaugesWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(ResourcesGaugesWidget)

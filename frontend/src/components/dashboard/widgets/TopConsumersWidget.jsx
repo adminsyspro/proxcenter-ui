@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, LinearProgress, Typography, useTheme } from '@mui/material'
 
-export default function TopConsumersWidget({ data, loading }) {
+function TopConsumersWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const primaryColor = theme.palette.primary.main
@@ -79,3 +80,5 @@ export default function TopConsumersWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(TopConsumersWidget)

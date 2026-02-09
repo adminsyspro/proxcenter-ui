@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, CircularProgress, List, ListItem, ListItemText, Typography } from '@mui/material'
 
-export default function ActivityFeedWidget({ data, loading, config }) {
+function ActivityFeedWidget({ data, loading, config }) {
   const t = useTranslations()
   const [events, setEvents] = useState([])
   const [loadingEvents, setLoadingEvents] = useState(true)
@@ -126,3 +126,5 @@ return () => clearInterval(interval)
     </List>
   )
 }
+
+export default React.memo(ActivityFeedWidget)

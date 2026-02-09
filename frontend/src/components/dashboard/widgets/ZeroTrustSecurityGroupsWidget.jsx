@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 
 import { Box, Typography, Chip, CircularProgress, alpha, Stack } from '@mui/material'
 
@@ -9,7 +9,7 @@ const GROUP_COLORS = [
   '#ec4899', '#10b981', '#6366f1', '#f97316'
 ]
 
-export default function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
+function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
   const [clustersData, setClustersData] = useState([])
   const [loadingData, setLoadingData] = useState(true)
 
@@ -143,3 +143,5 @@ return (
     </Box>
   )
 }
+
+export default React.memo(ZeroTrustSecurityGroupsWidget)

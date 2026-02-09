@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -27,7 +27,7 @@ const TIMEFRAMES = [
   { value: 'week', label: '7d' },
 ]
 
-export default function ResourceTrendsWidget({ data, loading: dashboardLoading }) {
+function ResourceTrendsWidget({ data, loading: dashboardLoading }) {
   const t = useTranslations()
   const theme = useTheme()
   const [timeframe, setTimeframe] = useState('hour')
@@ -249,3 +249,5 @@ export default function ResourceTrendsWidget({ data, loading: dashboardLoading }
     </Box>
   )
 }
+
+export default React.memo(ResourceTrendsWidget)

@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, List, ListItem, ListItemText, Typography } from '@mui/material'
 
-export default function AlertsListWidget({ data, loading }) {
+function AlertsListWidget({ data, loading }) {
   const t = useTranslations()
   const alerts = data?.alerts || []
 
@@ -75,3 +76,5 @@ return (
     </List>
   )
 }
+
+export default React.memo(AlertsListWidget)

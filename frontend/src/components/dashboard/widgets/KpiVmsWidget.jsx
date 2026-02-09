@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 
-export default function KpiVmsWidget({ data, loading }) {
+function KpiVmsWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const primaryColor = theme.palette.primary.main
@@ -33,3 +34,5 @@ export default function KpiVmsWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(KpiVmsWidget)

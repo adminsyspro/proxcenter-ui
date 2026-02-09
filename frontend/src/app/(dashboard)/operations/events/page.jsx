@@ -24,26 +24,13 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense } from '@/contexts/LicenseContext'
+import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import TaskDetailDialog from '@/components/TaskDetailDialog'
 
 /* --------------------------------
    Helpers
 -------------------------------- */
-
-async function fetchJson(url, init) {
-  const r = await fetch(url, init)
-  const text = await r.text()
-  let json = null
-
-  try {
-    json = text ? JSON.parse(text) : null
-  } catch {}
-
-  if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
-  
-return json
-}
 
 function timeAgo(date, t) {
   const now = new Date()
@@ -153,15 +140,37 @@ function StatCard({ title, value, color, icon }) {
 export default function EventsPage() {
   const t = useTranslations()
   const { isEnterprise } = useLicense()
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
 
   const { setPageInfo } = usePageTitle()
 
+  // SWR data fetching with 30s polling
+  const { data: eventsResponse, error, isLoading, mutate } = useSWRFetch('/api/v1/events?limit=500', {
+    refreshInterval: 30000,
+    onSuccess: (json) => {
+      // Envoyer les événements à l'orchestrator pour analyse (alertes sur événements)
+      // Seulement en mode Enterprise
+      const eventsData = Array.isArray(json?.data) ? json.data : []
+      if (isEnterprise && eventsData.length > 0) {
+        fetch('/api/v1/orchestrator/alerts/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventsData)
+        }).catch(err => {
+          // Silencieux si l'orchestrator n'est pas disponible
+          console.debug('Event processing skipped:', err.message)
+        })
+      }
+    }
+  })
+
+  const events = useMemo(() => {
+    return Array.isArray(eventsResponse?.data) ? eventsResponse.data : []
+  }, [eventsResponse])
+  const loading = isLoading
+
   useEffect(() => {
     setPageInfo(t('events.title'), t('events.title'), 'ri-calendar-event-line')
-    
+
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
@@ -175,48 +184,11 @@ return () => setPageInfo('', '', '')
   const [selectedTask, setSelectedTask] = useState(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const loadEvents = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const json = await fetchJson('/api/v1/events?limit=500', { cache: 'no-store' })
-      const eventsData = Array.isArray(json?.data) ? json.data : []
-
-      setEvents(eventsData)
-
-      // Envoyer les événements à l'orchestrator pour analyse (alertes sur événements)
-      // Seulement en mode Enterprise
-      if (isEnterprise && eventsData.length > 0) {
-        fetch('/api/v1/orchestrator/alerts/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(eventsData)
-        }).catch(err => {
-          // Silencieux si l'orchestrator n'est pas disponible
-          console.debug('Event processing skipped:', err.message)
-        })
-      }
-    } catch (e) {
-      setError(e?.message || String(e))
-      setEvents([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadEvents()
-    const interval = setInterval(loadEvents, 30000) // Refresh toutes les 30s
-
-    
-return () => clearInterval(interval)
-  }, [])
-
   // Liste des connexions uniques
   const connections = useMemo(() => {
     const names = new Set(events.map(e => e.connectionName).filter(Boolean))
 
-    
+
 return ['all', ...Array.from(names)]
   }, [events])
 
@@ -224,7 +196,7 @@ return ['all', ...Array.from(names)]
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()
 
-    
+
 return events.filter(e => {
       const matchQ =
         !qq ||
@@ -238,7 +210,7 @@ return events.filter(e => {
       const matchCategory = categoryFilter === 'all' || e.category === categoryFilter
       const matchConnection = connectionFilter === 'all' || e.connectionName === connectionFilter
 
-      
+
 return matchQ && matchLevel && matchCategory && matchConnection
     })
   }, [events, q, levelFilter, categoryFilter, connectionFilter])
@@ -250,7 +222,7 @@ return matchQ && matchLevel && matchCategory && matchConnection
     const warnings = filtered.filter(e => e.level === 'warning').length
     const running = filtered.filter(e => e.status === 'running').length
 
-    
+
 return { total, errors, warnings, running }
   }, [filtered])
 
@@ -390,7 +362,7 @@ return { total, errors, warnings, running }
           variant='outlined'
           size='small'
           startIcon={<i className='ri-refresh-line' />}
-          onClick={loadEvents}
+          onClick={() => mutate()}
           disabled={loading}
         >
           {t('common.refresh')}
@@ -476,7 +448,7 @@ return { total, errors, warnings, running }
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
           {error ? (
             <Box sx={{ p: 2 }}>
-              <Alert severity='error'>{t('common.error')}: {error}</Alert>
+              <Alert severity='error'>{t('common.error')}: {error.message}</Alert>
             </Box>
           ) : (
             <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>

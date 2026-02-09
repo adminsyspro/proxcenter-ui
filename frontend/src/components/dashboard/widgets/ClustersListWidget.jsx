@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Chip, Typography } from '@mui/material'
 
-export default function ClustersListWidget({ data, loading }) {
+function ClustersListWidget({ data, loading }) {
   const t = useTranslations()
   const clusters = (data?.clusters || []).filter(c => c.isCluster)
 
@@ -54,3 +55,5 @@ export default function ClustersListWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(ClustersListWidget)

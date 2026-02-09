@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import React, { useMemo, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -123,7 +123,7 @@ type NodesTableProps = {
   Component
 ------------------------------ */
 
-export default function NodesTable({
+function NodesTable({
   nodes,
   loading = false,
   onNodeClick,
@@ -372,3 +372,5 @@ export default function NodesTable({
     </Box>
   )
 }
+
+export default React.memo(NodesTable)

@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography } from '@mui/material'
 
-export default function KpiAlertsWidget({ data, loading }) {
+function KpiAlertsWidget({ data, loading }) {
   const t = useTranslations()
   const alertsSummary = data?.alertsSummary || {}
   const hasCrit = alertsSummary.crit > 0
@@ -36,3 +37,5 @@ export default function KpiAlertsWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(KpiAlertsWidget)

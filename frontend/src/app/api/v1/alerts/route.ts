@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/db/prisma'
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
+import { createAlertSchema, patchAlertsSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
 
@@ -104,12 +105,17 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const { severity, message, source, sourceType, entityType, entityId, entityName, metric, currentValue, threshold } = body
+    const rawBody = await req.json()
+    const parseResult = createAlertSchema.safeParse(rawBody)
 
-    if (!severity || !message || !source) {
-      return NextResponse.json({ error: 'severity, message, source are required' }, { status: 400 })
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
+
+    const { severity, message, source, sourceType, entityType, entityId, entityName, metric, currentValue, threshold } = parseResult.data
 
     const fingerprint = generateFingerprint({ severity, source, entityType, entityId, metric })
 
@@ -157,16 +163,17 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function PATCH(req: Request) {
   try {
-    const body = await req.json()
-    const { ids, action, userId } = body // action: 'acknowledge', 'resolve', 'reopen'
+    const rawBody = await req.json()
+    const parseResult = patchAlertsSchema.safeParse(rawBody)
 
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return NextResponse.json({ error: 'ids array is required' }, { status: 400 })
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    if (!['acknowledge', 'resolve', 'reopen'].includes(action)) {
-      return NextResponse.json({ error: 'action must be acknowledge, resolve, or reopen' }, { status: 400 })
-    }
+    const { ids, action, userId } = parseResult.data
 
     let updateData: any = {}
 

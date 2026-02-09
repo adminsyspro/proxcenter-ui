@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { createConnectionSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
 
@@ -74,71 +75,24 @@ export async function POST(req: Request) {
 
     if (denied) return denied
 
-    const body = await req.json().catch(() => null)
+    const rawBody = await req.json().catch(() => null)
 
-    if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
-    const name = String(body.name ?? "").trim()
-    const type = String(body.type ?? "pve").trim() // 'pve' ou 'pbs', défaut 'pve'
-    const baseUrl = String(body.baseUrl ?? "").trim()
-    const uiUrl = body.uiUrl ? String(body.uiUrl).trim() : null
-    const insecureTLS = !!body.insecureTLS
-    const hasCeph = !!body.hasCeph
-    const apiToken = String(body.apiToken ?? "").trim()
+    const parseResult = createConnectionSchema.safeParse(rawBody)
 
-    // SSH fields
-    const sshEnabled = !!body.sshEnabled
-    const sshPort = body.sshPort ? parseInt(String(body.sshPort), 10) : 22
-    const sshUser = body.sshUser ? String(body.sshUser).trim() : 'root'
-    const sshAuthMethod = body.sshAuthMethod ? String(body.sshAuthMethod).trim() : null
-    const sshKey = body.sshKey ? String(body.sshKey).trim() : null
-    const sshPassphrase = body.sshPassphrase ? String(body.sshPassphrase).trim() : null
-    const sshPassword = body.sshPassword ? String(body.sshPassword).trim() : null
-
-    if (!name || !baseUrl || !apiToken) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: "name, baseUrl and apiToken are required" },
+        { error: "Invalid input", details: parseResult.error.flatten() },
         { status: 400 }
       )
     }
 
-    if (!['pve', 'pbs'].includes(type)) {
-      return NextResponse.json(
-        { error: "type must be 'pve' or 'pbs'" },
-        { status: 400 }
-      )
-    }
-
-    // Validation SSH
-    if (sshEnabled) {
-      if (!sshAuthMethod || !['key', 'password'].includes(sshAuthMethod)) {
-        return NextResponse.json(
-          { error: "sshAuthMethod must be 'key' or 'password' when SSH is enabled" },
-          { status: 400 }
-        )
-      }
-      
-      if (sshAuthMethod === 'key' && !sshKey) {
-        return NextResponse.json(
-          { error: "sshKey is required when sshAuthMethod is 'key'" },
-          { status: 400 }
-        )
-      }
-      
-      if (sshAuthMethod === 'password' && !sshPassword) {
-        return NextResponse.json(
-          { error: "sshPassword is required when sshAuthMethod is 'password'" },
-          { status: 400 }
-        )
-      }
-      
-      if (sshPort < 1 || sshPort > 65535) {
-        return NextResponse.json(
-          { error: "sshPort must be between 1 and 65535" },
-          { status: 400 }
-        )
-      }
-    }
+    const {
+      name, type, baseUrl, uiUrl, insecureTLS, hasCeph, apiToken,
+      sshEnabled, sshPort, sshUser, sshAuthMethod,
+      sshKey, sshPassphrase, sshPassword,
+    } = parseResult.data
 
     // Préparer les données
     const data: any = {

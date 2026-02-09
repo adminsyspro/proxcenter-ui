@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/db/prisma'
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
+import { syncAlertsSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
 
@@ -14,12 +15,17 @@ export const runtime = 'nodejs'
  */
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const { alerts } = body // Array des alertes actuelles
+    const rawBody = await req.json()
+    const parseResult = syncAlertsSchema.safeParse(rawBody)
 
-    if (!alerts || !Array.isArray(alerts)) {
-      return NextResponse.json({ error: 'alerts array is required' }, { status: 400 })
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
+
+    const { alerts } = parseResult.data
 
     const now = new Date()
     const currentFingerprints: string[] = []

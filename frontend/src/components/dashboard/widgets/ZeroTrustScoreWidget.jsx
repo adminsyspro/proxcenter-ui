@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 
 import { Box, Typography, Chip, CircularProgress, alpha, Stack, Tooltip } from '@mui/material'
 
-export default function ZeroTrustScoreWidget({ data, loading, config }) {
+function ZeroTrustScoreWidget({ data, loading, config }) {
   const [clusters, setClusters] = useState([])
   const [loadingData, setLoadingData] = useState(true)
 
@@ -182,4 +182,6 @@ return (
     </Box>
   )
 }
+
+export default React.memo(ZeroTrustScoreWidget)
 

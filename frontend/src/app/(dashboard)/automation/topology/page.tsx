@@ -24,8 +24,6 @@ import {
   useTheme,
 } from '@mui/material'
 
-import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import { Features } from '@/contexts/LicenseContext'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import ClusterNode from '@/components/automation/topology/ClusterNode'
 import ProxmoxNode from '@/components/automation/topology/ProxmoxNode'
@@ -203,8 +201,7 @@ export default function TopologyPage() {
   const hasData = nodes.length > 0
 
   return (
-    <EnterpriseGuard requiredFeature={Features.TOPOLOGY} featureName="Topology">
-      <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3 }}>
         {metricsLoading ? (
           <Box sx={{
             display: 'flex',
@@ -286,6 +283,5 @@ export default function TopologyPage() {
           </Box>
         )}
       </Box>
-    </EnterpriseGuard>
   )
 }

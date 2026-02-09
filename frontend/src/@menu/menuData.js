@@ -79,8 +79,7 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.topology'),
         icon: 'ri-mind-map',
         href: '/automation/topology',
-        permissions: ['node.view'],
-        requiredFeature: 'topology'
+        permissions: ['node.view']
       },
     ]
   },

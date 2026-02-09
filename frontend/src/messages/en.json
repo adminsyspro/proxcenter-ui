@@ -1302,7 +1302,8 @@
       "loadingLogs": "Loading logs...",
       "noLogsAvailable": "No logs available",
       "noMatchingLogs": "No logs matching filter",
-      "autoUpdate": "Auto-update every 2s"
+      "autoUpdate": "Auto-update every 2s",
+      "logsTruncated": "Showing last {shown} of {total} log lines"
     },
     "notifications": {
       "enabled": "Notifications enabled",

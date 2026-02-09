@@ -1303,7 +1303,8 @@
       "loadingLogs": "Chargement des logs...",
       "noLogsAvailable": "Aucun log disponible",
       "noMatchingLogs": "Aucun log correspondant au filtre",
-      "autoUpdate": "Mise à jour automatique toutes les 2s"
+      "autoUpdate": "Mise à jour automatique toutes les 2s",
+      "logsTruncated": "Affichage des {shown} dernières lignes sur {total} au total"
     },
     "notifications": {
       "enabled": "Notifications activées",

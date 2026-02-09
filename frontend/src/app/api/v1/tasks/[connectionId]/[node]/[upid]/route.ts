@@ -394,13 +394,24 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     let logs: TaskLogEntry[] = []
 
     try {
-      logs = await pveFetch<TaskLogEntry[]>(
-        connection,
-        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(decodedUpid)}/log?limit=1000`
-      )
+      // Fetch logs in batches to handle long-running tasks (e.g. multi-TiB migrations)
+      const BATCH_SIZE = 5000
+      let start = 0
 
-      if (!Array.isArray(logs)) {
-        logs = []
+      while (true) {
+        const batch = await pveFetch<TaskLogEntry[]>(
+          connection,
+          `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(decodedUpid)}/log?start=${start}&limit=${BATCH_SIZE}`
+        )
+
+        if (!Array.isArray(batch) || batch.length === 0) break
+        logs = logs.concat(batch)
+
+        if (batch.length < BATCH_SIZE) break
+        start += batch.length
+
+        // Safety cap: 100K lines max to prevent infinite loops
+        if (logs.length >= 100000) break
       }
     } catch (e: any) {
       console.warn('Failed to fetch task logs:', e.message)
@@ -430,6 +441,13 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
       }
     }
 
+    // Send at most 5000 log lines to the frontend to avoid huge payloads
+    const MAX_FRONTEND_LOGS = 5000
+    const totalLogLines = logs.length
+    const truncatedLogs = totalLogLines > MAX_FRONTEND_LOGS
+      ? logs.slice(totalLogLines - MAX_FRONTEND_LOGS)
+      : logs
+
     const response = {
       upid: decodedUpid,
       node,
@@ -446,7 +464,8 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
       message: progressData.message,
       speed: progressData.speed,
       eta: progressData.eta,
-      logs: logs.map(l => ({ n: l?.n || 0, t: l?.t || '' }))
+      totalLogLines,
+      logs: truncatedLogs.map(l => ({ n: l?.n || 0, t: l?.t || '' }))
     }
 
     return NextResponse.json(response)

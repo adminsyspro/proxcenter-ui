@@ -396,6 +396,27 @@ return true
               </Box>
             ) : filteredLogs.length > 0 ? (
               <Box sx={{ p: 1.5 }}>
+                {details?.totalLogLines > (details?.logs?.length || 0) && logFilter === 'all' && (
+                  <Box sx={{
+                    py: 0.75,
+                    px: 1.5,
+                    mb: 1,
+                    borderRadius: 0.5,
+                    bgcolor: 'rgba(88, 166, 255, 0.1)',
+                    border: '1px solid rgba(88, 166, 255, 0.2)',
+                    color: '#58a6ff',
+                    fontSize: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5
+                  }}>
+                    <i className="ri-information-line" />
+                    {t('tasks.detail.logsTruncated', {
+                      shown: details.logs.length.toLocaleString(),
+                      total: details.totalLogLines.toLocaleString()
+                    })}
+                  </Box>
+                )}
                 {filteredLogs.map((log, idx) => {
                   const logType = getLogType(log.t)
                   const logColor = getLogColor(logType)

@@ -25,6 +25,9 @@ const ALLOWED_QEMU_FIELDS = new Set([
   // Agent
   'agent',
 
+  // Hardware
+  'scsihw',
+
   // Options
   'ostype', 'tablet', 'localtime', 'freeze', 'kvm', 'acpi',
 
@@ -81,21 +84,24 @@ export async function GET(
     ])
 
     // Calculer les pending changes (différence entre effective et current)
+    // = changements qui nécessitent un reboot pour prendre effet
     const pending: Record<string, any> = {}
 
     if (configCurrent) {
-      const keysToCheck = ['sockets', 'cores', 'cpu', 'cpulimit', 'memory', 'balloon']
+      const skipKeys = new Set(['digest', 'pending'])
 
-      for (const key of keysToCheck) {
+      for (const key of Object.keys(configEffective)) {
+        if (skipKeys.has(key)) continue
         if (configEffective[key] !== configCurrent[key] && configEffective[key] !== undefined) {
           pending[key] = configEffective[key]
         }
       }
     }
 
-    // Retourner la config actuelle avec les pending
+    // Retourner la config effective (inclut les dernières modifications)
+    // avec les pending pour indiquer ce qui nécessite un reboot
     const result = {
-      ...configCurrent || configEffective,
+      ...configEffective,
       pending: Object.keys(pending).length > 0 ? pending : undefined
     }
 

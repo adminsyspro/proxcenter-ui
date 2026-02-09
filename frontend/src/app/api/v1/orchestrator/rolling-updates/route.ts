@@ -127,14 +127,6 @@ export async function POST(req: Request) {
       },
     }
 
-    console.log("[rolling-updates] Starting with SSH enabled:", {
-      connectionId,
-      sshUser: sshCredentials.sshUser,
-      sshPort: sshCredentials.sshPort,
-      sshAuthMethod: sshCredentials.sshAuthMethod,
-      hasKey: !!sshCredentials.sshKey,
-    })
-
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates`, {
       method: "POST",
       headers: {

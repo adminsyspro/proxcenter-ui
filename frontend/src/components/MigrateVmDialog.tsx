@@ -33,15 +33,7 @@ import {
 
 import { useLicense, Features } from '@/contexts/LicenseContext'
 
-// Fonction utilitaire pour formater la taille de stockage
-function formatStorageSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
-  return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`
-}
+import { formatBytes } from '@/utils/format'
 
 // Types
 type NodeInfo = {
@@ -1060,7 +1052,7 @@ export function MigrateVmDialog({
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Chip label={storage.type} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
                               <Typography variant="caption" color="text.secondary">
-                                {formatStorageSize(storage.avail)}
+                                {formatBytes(storage.avail)}
                               </Typography>
                             </Box>
                           </Box>

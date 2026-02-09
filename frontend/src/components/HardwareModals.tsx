@@ -30,16 +30,7 @@ import {
   Chip,
 } from '@mui/material'
 
-// Fonction utilitaire pour formater la taille de stockage
-function formatStorageSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
-  
-return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`
-}
+import { formatBytes } from '@/utils/format'
 
 // Types pour les storages
 type Storage = {
@@ -203,12 +194,12 @@ return
     }
   }
   
-  const formatBytes = (bytes?: number) => {
+  const formatDiskSize = (bytes?: number) => {
     if (!bytes) return '—'
     const gb = bytes / 1024 / 1024 / 1024
 
     if (gb >= 1024) return `${(gb / 1024).toFixed(2)} TB`
-    
+
 return `${gb.toFixed(2)} GB`
   }
   
@@ -1189,7 +1180,7 @@ return
                               <Chip label={s.type} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
                               {s.avail !== undefined && (
                                 <Typography variant="caption" color="text.secondary">
-                                  {formatStorageSize(s.avail)} free
+                                  {formatBytes(s.avail)} free
                                 </Typography>
                               )}
                             </Box>
@@ -2375,10 +2366,10 @@ return (
                               sx={{ height: 18, fontSize: '0.6rem' }}
                             />
                             <Typography variant="caption" color="text.secondary" sx={{ minWidth: 70, textAlign: 'right' }}>
-                              {formatStorageSize(storage.avail)}
+                              {formatBytes(storage.avail)}
                             </Typography>
                             <Typography variant="caption" sx={{ opacity: 0.5, minWidth: 70, textAlign: 'right' }}>
-                              {formatStorageSize(storage.total)}
+                              {formatBytes(storage.total)}
                             </Typography>
                           </Box>
                         </Box>
@@ -2791,7 +2782,7 @@ return
                             }} />
                           </Box>
                           <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.7, minWidth: 100, textAlign: 'right' }}>
-                            {formatStorageSize(s.avail)} / {formatStorageSize(s.total)}
+                            {formatBytes(s.avail)} / {formatBytes(s.total)}
                           </Typography>
                         </Box>
                       )}

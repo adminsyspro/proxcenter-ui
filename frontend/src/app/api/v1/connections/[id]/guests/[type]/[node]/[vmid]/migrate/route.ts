@@ -61,8 +61,6 @@ export async function POST(
       migrateParams['target-storage'] = targetstorage
     }
     
-    console.log(`[migrate] VM ${vmid} from ${node} to ${target}, params:`, migrateParams)
-    
     // Appeler l'API Proxmox pour la migration
     const result = await pveFetch<string>(
       conn,

@@ -171,7 +171,7 @@ export function getDb() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON favorites(user_id);`)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_favorites_vm_key ON favorites(vm_key);`)
   } catch (e) {
-    console.log('Migration favorites:', e)
+    // Migration error is non-critical, table may already exist
   }
 
   // ========================================

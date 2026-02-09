@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { Agent, request } from "undici"
+import { request } from "undici"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { getInsecureAgent } from "@/lib/proxmox/client"
 
 export const runtime = "nodejs"
 
@@ -75,7 +76,7 @@ export async function GET(
     const nodesUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/nodes`
 
     const dispatcher = conn.insecureDev
-      ? new Agent({ connect: { rejectUnauthorized: false } })
+      ? getInsecureAgent()
       : undefined
 
     const nodesRes = await request(nodesUrl, {

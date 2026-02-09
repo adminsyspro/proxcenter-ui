@@ -50,8 +50,6 @@ export async function POST(
       }
     }
 
-    console.log('Cloning VM with params:', Object.fromEntries(formData))
-
     // Appeler l'API Proxmox pour cloner la VM
     const result = await pveFetch<any>(conn, endpoint, {
       method: "POST",

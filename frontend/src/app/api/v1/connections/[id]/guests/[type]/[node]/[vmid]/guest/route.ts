@@ -115,15 +115,13 @@ export async function GET(_req: Request, ctx: RouteContext) {
               // Ne pas logger en erreur, c'est une configuration Proxmox
             } else if (msg.includes('500') && msg.includes('QEMU guest agent is not running')) {
               // Guest agent non démarré - normal
-            } else {
-              console.log("[guest] Guest agent network not available:", msg.slice(0, 150))
             }
           }
 
-          
+
 return undefined
         })(),
-        
+
         // OS Info
         (async (): Promise<OsInfo | undefined> => {
           try {
@@ -192,7 +190,7 @@ return undefined
           }
         }
       } catch (e) {
-        console.log("[guest] Error fetching LXC config:", e)
+        // LXC config fetch failed, non-critical
       }
     }
 

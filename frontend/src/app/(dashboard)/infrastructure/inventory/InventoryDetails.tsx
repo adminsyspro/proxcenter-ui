@@ -1,7 +1,10 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useTranslations } from 'next-intl'
+
+import { formatBytes } from '@/utils/format'
 
 import {
   Accordion,
@@ -60,28 +63,28 @@ import {
   useTheme,
 } from '@mui/material'
 import { lighten } from '@mui/material/styles'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import StopIcon from '@mui/icons-material/Stop'
-import PauseIcon from '@mui/icons-material/Pause'
-import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew'
-import MoveUpIcon from '@mui/icons-material/MoveUp'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
-import DescriptionIcon from '@mui/icons-material/Description'
-import AddIcon from '@mui/icons-material/Add'
-import CloseIcon from '@mui/icons-material/Close'
-import SaveIcon from '@mui/icons-material/Save'
+// RemixIcon replacements for @mui/icons-material
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const DescriptionIcon = (props: any) => <i className="ri-file-text-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const CloseIcon = (props: any) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
-import { 
-  AddDiskDialog, 
-  AddNetworkDialog, 
-  EditDiskDialog, 
-  EditNetworkDialog,
-  EditScsiControllerDialog,
-  CloneVmDialog
-} from '@/components/HardwareModals'
+// Dynamic imports for HardwareModals (code-split, loaded on demand)
+const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
+const AddNetworkDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddNetworkDialog })), { ssr: false })
+const EditDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditDiskDialog })), { ssr: false })
+const EditNetworkDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditNetworkDialog })), { ssr: false })
+const EditScsiControllerDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditScsiControllerDialog })), { ssr: false })
+const CloneVmDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.CloneVmDialog })), { ssr: false })
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import VmFirewallTab from '@/components/VmFirewallTab'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
@@ -759,21 +762,6 @@ function cpuPct(v: any) {
   if (!Number.isFinite(n)) return 0
   
 return Math.round(n * 100)
-}
-
-function formatBytes(bytes: number) {
-  if (!bytes || !Number.isFinite(bytes)) return '0 B'
-  const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  let i = 0
-  let v = bytes
-
-  while (v >= 1024 && i < u.length - 1) {
-    v /= 1024
-    i++
-  }
-
-  
-return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`
 }
 
 function formatBps(bps: number) {
@@ -14586,13 +14574,6 @@ return (
                                 const storagePercent = data.metrics?.storage?.pct || 0
                                 const usedStorage = data.metrics?.storage?.used || 0
                                 const totalStorage = data.metrics?.storage?.max || 0
-                                
-                                const formatBytes = (bytes: number) => {
-                                  if (bytes >= 1024 ** 4) return `${(bytes / 1024 ** 4).toFixed(2)} TiB`
-                                  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GiB`
-                                  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(2)} MiB`
-                                  return `${bytes} B`
-                                }
                                 
                                 // Compter les CPU totaux depuis nodesData
                                 const nodes = (data.nodesData as any[]) || []

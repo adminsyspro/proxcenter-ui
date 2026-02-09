@@ -5,15 +5,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, CircularProgress, LinearProgress, Typography } from '@mui/material'
 
-function formatBytes(bytes) {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  
-return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
+import { formatBytes } from '@/utils/format'
 
 export default function StoragePoolsWidget({ data, loading, config }) {
   const t = useTranslations()

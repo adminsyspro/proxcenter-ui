@@ -707,108 +707,103 @@ export async function GET() {
         try {
           const connData = await getConnectionById(conn.id)
           
-          // Récupérer nodes et VMs en parallèle
+          // Récupérer nodes et VMs en parallèle (avec timeout per-request)
+          const rTimeout = { signal: AbortSignal.timeout(15000) }
+
           const [nodesResult, vmsResult, storageResult] = await Promise.allSettled([
-            pveFetch<NodeData[]>(connData, '/nodes'),
-            pveFetch<VmData[]>(connData, '/cluster/resources?type=vm'),
-            pveFetch<any[]>(connData, '/cluster/resources?type=storage'),
+            pveFetch<NodeData[]>(connData, '/nodes', rTimeout),
+            pveFetch<VmData[]>(connData, '/cluster/resources?type=vm', rTimeout),
+            pveFetch<any[]>(connData, '/cluster/resources?type=storage', rTimeout),
           ])
           
           const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
           const vms = vmsResult.status === 'fulfilled' ? vmsResult.value || [] : []
           const storages = storageResult.status === 'fulfilled' ? storageResult.value || [] : []
           
-          // Agréger les nodes et récupérer RRD pour chaque node
-          for (const node of nodes) {
-            if (node.status !== 'online') continue
-            
+          // Agréger les nodes (données synchrones) et préparer les requêtes RRD
+          const onlineNodes = nodes.filter(node => node.status === 'online')
+
+          for (const node of onlineNodes) {
             const nodeMaxCpu = node.maxcpu || 0
             const nodeMaxMem = node.maxmem || 0
             const nodeKey = `${conn.id}:${node.node}`
-            
+
             totalCpuCapacity += nodeMaxCpu
             totalCpuUsed += (node.cpu || 0) * nodeMaxCpu
             totalRamCapacity += nodeMaxMem
             totalRamUsed += node.mem || 0
-            
+
             // Stocker la capacité du node
             nodeCapacities.set(nodeKey, { maxCpu: nodeMaxCpu, maxMem: nodeMaxMem })
-            
-            // Récupérer les données RRD du node
-            // On utilise timeframe=year pour avoir plus d'historique
-            // Les différences entre PVE 8 et PVE 9 sont gérées dans l'agrégation
-            try {
-              const rrdData = await pveFetch<RrdPoint[]>(
-                connData, 
-                `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=year&cf=AVERAGE`
-              )
-              
-              if (rrdData && rrdData.length > 0) {
-                const nodeRrdByDay = aggregateRrdByDayPerNode(rrdData, nodeKey, nodeMaxCpu, nodeMaxMem)
+          }
 
-                allNodesRrdData.set(nodeKey, nodeRrdByDay)
-                
-                // Collecter toutes les valeurs pour le calcul des tendances globales
-                for (const dayData of nodeRrdByDay.values()) {
-                  allCpuValues.push(...dayData.cpu)
-                  allRamValues.push(...dayData.ram)
-                }
+          // Récupérer les données RRD de tous les nodes en parallèle
+          const rrdTimeout = { signal: AbortSignal.timeout(10000) }
+
+          const nodeRrdResults = await Promise.allSettled(
+            onlineNodes.map(node =>
+              pveFetch<RrdPoint[]>(
+                connData,
+                `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=year&cf=AVERAGE`,
+                rrdTimeout
+              )
+            )
+          )
+
+          // Traiter les résultats RRD des nodes
+          for (let i = 0; i < onlineNodes.length; i++) {
+            const node = onlineNodes[i]
+            const nodeKey = `${conn.id}:${node.node}`
+            const nodeMaxCpu = node.maxcpu || 0
+            const nodeMaxMem = node.maxmem || 0
+            const result = nodeRrdResults[i]
+
+            if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
+              const nodeRrdByDay = aggregateRrdByDayPerNode(result.value, nodeKey, nodeMaxCpu, nodeMaxMem)
+
+              allNodesRrdData.set(nodeKey, nodeRrdByDay)
+
+              // Collecter toutes les valeurs pour le calcul des tendances globales
+              for (const dayData of nodeRrdByDay.values()) {
+                allCpuValues.push(...dayData.cpu)
+                allRamValues.push(...dayData.ram)
               }
-            } catch (rrdError) {
-              console.warn(`[resources] RRD error for node ${node.node}:`, rrdError)
+            } else if (result.status === 'rejected') {
+              console.warn(`[resources] RRD error for node ${node.node}:`, result.reason)
             }
           }
           
-          // Agréger le stockage et récupérer les données RRD
-          for (const storage of storages) {
-            if (storage.status !== 'available') continue
+          // Agréger le stockage (données synchrones) et préparer les requêtes RRD
+          const availableStorages = storages.filter(s => s.status === 'available')
+
+          for (const storage of availableStorages) {
             totalStorageCapacity += storage.maxdisk || 0
             totalStorageUsed += storage.disk || 0
-            
-            // Calculer le pourcentage pour les tendances
+          }
+
+          // Identifier les storages qui ont besoin de requêtes RRD
+          const storagesNeedingRrd = availableStorages.filter(
+            s => s.maxdisk > 0 && s.node && s.storage
+          )
+
+          // Récupérer les données RRD de tous les storages en parallèle
+          const storageRrdResults = await Promise.allSettled(
+            storagesNeedingRrd.map(storage =>
+              pveFetch<RrdPoint[]>(
+                connData,
+                `/nodes/${encodeURIComponent(storage.node)}/storage/${encodeURIComponent(storage.storage)}/rrddata?timeframe=year&cf=AVERAGE`,
+                rrdTimeout
+              )
+            )
+          )
+
+          // Traiter les résultats RRD des storages
+          for (const storage of availableStorages) {
             if (storage.maxdisk > 0) {
               const storagePct = (storage.disk / storage.maxdisk) * 100
 
               allStorageValues.push(storagePct)
-              
-              // Récupérer les données RRD du stockage pour l'historique
-              // Le stockage est accessible via /nodes/{node}/storage/{storage}/rrddata
-              if (storage.node && storage.storage) {
-                try {
-                  const storageRrd = await pveFetch<RrdPoint[]>(
-                    connData,
-                    `/nodes/${encodeURIComponent(storage.node)}/storage/${encodeURIComponent(storage.storage)}/rrddata?timeframe=year&cf=AVERAGE`
-                  )
-                  
-                  if (storageRrd && storageRrd.length > 0) {
-                    for (const point of storageRrd) {
-                      if (!point.time) continue
-                      
-                      const date = new Date(point.time * 1000)
-                      const dayKey = date.toISOString().split('T')[0]
-                      
-                      // Utiliser total et used du RRD si disponibles
-                      const used = Number(point.used ?? 0)
-                      const total = Number(point.total ?? storage.maxdisk ?? 0)
-                      
-                      if (used > 0 && total > 0) {
-                        const pct = (used / total) * 100
 
-                        if (pct >= 0 && pct <= 100) {
-                          if (!globalStorageByDay.has(dayKey)) {
-                            globalStorageByDay.set(dayKey, [])
-                          }
-
-                          globalStorageByDay.get(dayKey)!.push(pct)
-                        }
-                      }
-                    }
-                  }
-                } catch (storageRrdError) {
-                  // Silently ignore - storage RRD might not be available
-                }
-              }
-              
               // Fallback: ajouter la valeur actuelle pour aujourd'hui
               const today = new Date().toISOString().split('T')[0]
 
@@ -818,6 +813,38 @@ export async function GET() {
 
               globalStorageByDay.get(today)!.push(storagePct)
             }
+          }
+
+          // Traiter les résultats RRD des storages
+          for (let i = 0; i < storagesNeedingRrd.length; i++) {
+            const storage = storagesNeedingRrd[i]
+            const result = storageRrdResults[i]
+
+            if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
+              for (const point of result.value) {
+                if (!point.time) continue
+
+                const date = new Date(point.time * 1000)
+                const dayKey = date.toISOString().split('T')[0]
+
+                // Utiliser total et used du RRD si disponibles
+                const used = Number(point.used ?? 0)
+                const total = Number(point.total ?? storage.maxdisk ?? 0)
+
+                if (used > 0 && total > 0) {
+                  const pct = (used / total) * 100
+
+                  if (pct >= 0 && pct <= 100) {
+                    if (!globalStorageByDay.has(dayKey)) {
+                      globalStorageByDay.set(dayKey, [])
+                    }
+
+                    globalStorageByDay.get(dayKey)!.push(pct)
+                  }
+                }
+              }
+            }
+            // Silently ignore rejected - storage RRD might not be available
           }
           
           // Agréger les VMs

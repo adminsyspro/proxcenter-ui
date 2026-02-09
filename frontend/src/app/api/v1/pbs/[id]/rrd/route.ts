@@ -53,11 +53,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     }
 
     if (!rrdData || rrdData.length === 0) {
-      console.log(`[PBS RRD] No data found for PBS ${id}`)
       return NextResponse.json({ data: [] })
     }
-
-    console.log(`[PBS RRD] Got ${rrdData.length} points for PBS ${id}`)
 
     // Transformer les données pour le frontend
     const series = (rrdData || []).map((point: any) => ({

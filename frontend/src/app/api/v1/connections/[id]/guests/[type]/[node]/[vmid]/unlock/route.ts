@@ -93,7 +93,6 @@ async function getNodeIp(conn: any, nodeName: string): Promise<string> {
     const clusterNodes = await pveFetch<any[]>(conn, '/cluster/config/nodes')
     const clusterNode = clusterNodes?.find((n: any) => n.name === nodeName)
     if (clusterNode?.ip) {
-      console.log(`[getNodeIp] Found IP from cluster config: ${clusterNode.ip}`)
       return clusterNode.ip
     }
   } catch {
@@ -106,7 +105,6 @@ async function getNodeIp(conn: any, nodeName: string): Promise<string> {
     // Chercher une interface avec une adresse IP (vmbr0 ou eth0 typiquement)
     for (const iface of networks || []) {
       if (iface.address && iface.active && !iface.address.startsWith('127.')) {
-        console.log(`[getNodeIp] Found IP from network interface ${iface.iface}: ${iface.address}`)
         return iface.address
       }
     }
@@ -120,7 +118,6 @@ async function getNodeIp(conn: any, nodeName: string): Promise<string> {
     // Nettoyer l'URL si nécessaire
     const cleanHost = host.replace(/^https?:\/\//, '').replace(/:\d+$/, '').replace(/\/.*$/, '')
     if (cleanHost && !cleanHost.includes('/')) {
-      console.log(`[getNodeIp] Using connection host: ${cleanHost}`)
       return cleanHost
     }
   } catch {
@@ -128,7 +125,6 @@ async function getNodeIp(conn: any, nodeName: string): Promise<string> {
   }
 
   // 4. Dernier recours: le nom du nœud
-  console.log(`[getNodeIp] Fallback to node name: ${nodeName}`)
   return nodeName
 }
 
@@ -174,18 +170,15 @@ export async function POST(
     }
 
     const lockType = config.lock
-    console.log(`[unlock] VM ${vmid} is locked with type: ${lockType}`)
 
     // Récupérer l'IP du nœud
     const nodeIp = await getNodeIp(conn, node)
-    console.log(`[unlock] Node ${node} IP: ${nodeIp}`)
 
     // Exécuter unlock via SSH
     const unlockCmd = type === 'qemu' ? `qm unlock ${vmid}` : `pct unlock ${vmid}`
     const sshResult = await executeSSHCommand(id, nodeIp, unlockCmd)
 
     if (sshResult.success) {
-      console.log(`[unlock] VM ${vmid} unlocked successfully via SSH`)
       return NextResponse.json({
         data: { 
           unlocked: true, 
@@ -196,7 +189,6 @@ export async function POST(
         message: `VM ${vmid} unlocked successfully (was locked: ${lockType})`
       })
     } else {
-      console.log(`[unlock] SSH failed: ${sshResult.error}`)
       return NextResponse.json({
         error: sshResult.error,
         lockType,

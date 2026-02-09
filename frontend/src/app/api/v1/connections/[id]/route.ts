@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 
 export const runtime = "nodejs"
 
@@ -180,6 +181,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       },
     })
 
+    // Invalidate connection cache after update
+    invalidateConnectionCache(id)
+
     // Audit
     const { audit } = await import("@/lib/audit")
     const changes: Record<string, any> = { ...data }
@@ -248,6 +252,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await prisma.managedHost.deleteMany({ where: { connectionId: id } }).catch(() => {})
 
     await prisma.connection.delete({ where: { id } })
+
+    // Invalidate connection cache after deletion
+    invalidateConnectionCache(id)
 
     // Audit
     const { audit } = await import("@/lib/audit")

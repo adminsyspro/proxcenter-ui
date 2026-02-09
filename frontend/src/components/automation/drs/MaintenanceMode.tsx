@@ -28,13 +28,14 @@ import {
   useTheme,
   CircularProgress,
 } from '@mui/material'
-import BuildIcon from '@mui/icons-material/Build'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import DnsIcon from '@mui/icons-material/Dns'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import ErrorIcon from '@mui/icons-material/Error'
+// RemixIcon replacements for @mui/icons-material
+const BuildIcon = (props: any) => <i className="ri-hammer-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const DnsIcon = (props: any) => <i className="ri-server-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const WarningAmberIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const SwapHorizIcon = (props: any) => <i className="ri-arrow-left-right-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 // ============================================
 // Types

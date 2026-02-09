@@ -1,42 +1,16 @@
-import crypto from "crypto"
-
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db/prisma"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
+import { formatBytes } from "@/utils/format"
+import { generateFingerprint } from "@/lib/alerts/fingerprint"
 
 export const runtime = "nodejs"
 
 function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
-}
-
-function formatBytes(bytes: number) {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  
-return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-// Générer un fingerprint unique pour une alerte (sans le message qui contient des valeurs variables)
-function generateFingerprint(alert: {
-  source: string
-  severity: string
-  entityType?: string
-  entityId?: string
-  metric?: string
-}): string {
-  // On utilise uniquement les champs stables pour identifier l'alerte
-  // Le message contient des valeurs variables (%, etc.) donc on l'exclut
-  const data = `${alert.source}|${alert.severity}|${alert.entityType || ''}|${alert.entityId || ''}|${alert.metric || ''}`
-
-  
-return crypto.createHash('md5').update(data).digest('hex')
 }
 
 // Synchroniser les alertes en base de données
@@ -147,11 +121,13 @@ export async function GET() {
 
           if (!connData.baseUrl || !connData.apiToken) return null
 
+          const pveTimeout = { signal: AbortSignal.timeout(15000) }
+
           const [nodesResult, resourcesResult, statusResult, cephResult] = await Promise.allSettled([
-            pveFetch<any[]>(connData, "/nodes"),
-            pveFetch<any[]>(connData, "/cluster/resources"),
-            pveFetch<any[]>(connData, "/cluster/status"),
-            conn.hasCeph ? pveFetch<any>(connData, "/cluster/ceph/status") : Promise.resolve(null),
+            pveFetch<any[]>(connData, "/nodes", pveTimeout),
+            pveFetch<any[]>(connData, "/cluster/resources", pveTimeout),
+            pveFetch<any[]>(connData, "/cluster/status", pveTimeout),
+            conn.hasCeph ? pveFetch<any>(connData, "/cluster/ceph/status", pveTimeout) : Promise.resolve(null),
           ])
 
           const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
@@ -173,7 +149,7 @@ export async function GET() {
             }
 
             try {
-              const nodeStatus = await pveFetch<any>(connData, `/nodes/${encodeURIComponent(node.node)}/status`)
+              const nodeStatus = await pveFetch<any>(connData, `/nodes/${encodeURIComponent(node.node)}/status`, { signal: AbortSignal.timeout(10000) })
               const cpuCores = (Number(nodeStatus?.cpuinfo?.cores || 0) * Number(nodeStatus?.cpuinfo?.sockets || 1)) || 0
 
               
@@ -204,9 +180,11 @@ return null
         try {
           const connData = await getPbsConnectionById(conn.id)
           
+          const pbsTimeout = { signal: AbortSignal.timeout(15000) }
+
           const [datastores, tasks] = await Promise.allSettled([
-            pbsFetch<any[]>(connData, "/admin/datastore"),
-            pbsFetch<any[]>(connData, "/nodes/localhost/tasks?limit=50"),
+            pbsFetch<any[]>(connData, "/admin/datastore", pbsTimeout),
+            pbsFetch<any[]>(connData, "/nodes/localhost/tasks?limit=50", pbsTimeout),
           ])
 
           const datastoreList = datastores.status === 'fulfilled' ? datastores.value || [] : []
@@ -219,7 +197,7 @@ return null
             if (!storeName) return null
 
             try {
-              const dsStatus = await pbsFetch<any>(connData, `/admin/datastore/${encodeURIComponent(storeName)}/status`)
+              const dsStatus = await pbsFetch<any>(connData, `/admin/datastore/${encodeURIComponent(storeName)}/status`, { signal: AbortSignal.timeout(10000) })
 
               
 return {

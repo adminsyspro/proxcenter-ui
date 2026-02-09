@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 
 import { Box, Card, CardContent, CircularProgress, Divider, Stack, Typography, IconButton, Tooltip } from '@mui/material'
-import RefreshIcon from '@mui/icons-material/Refresh'
+// RemixIcon replacement for @mui/icons-material
+const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 import { useTranslations } from 'next-intl'
 

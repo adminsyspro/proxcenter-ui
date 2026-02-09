@@ -1,24 +1,9 @@
-import crypto from 'crypto'
-
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/db/prisma'
+import { generateFingerprint } from '@/lib/alerts/fingerprint'
 
 export const runtime = 'nodejs'
-
-// Générer un fingerprint unique pour une alerte
-function generateFingerprint(alert: {
-  source: string
-  entityType?: string
-  entityId?: string
-  metric?: string
-  message: string
-}): string {
-  const data = `${alert.source}|${alert.entityType || ''}|${alert.entityId || ''}|${alert.metric || ''}|${alert.message}`
-
-  
-return crypto.createHash('md5').update(data).digest('hex')
-}
 
 /**
  * POST /api/v1/alerts/sync

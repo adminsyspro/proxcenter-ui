@@ -1,6 +1,14 @@
 // src/lib/proxmox/client.ts
 import { Agent, request } from "undici"
 
+let insecureAgent: Agent | null = null
+export function getInsecureAgent(): Agent {
+  if (!insecureAgent) {
+    insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
+  }
+  return insecureAgent
+}
+
 export type ProxmoxClientOptions = {
   baseUrl: string
   apiToken: string
@@ -18,7 +26,7 @@ export async function pveFetch<T>(
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api2/json${path}`
 
   const dispatcher = opts.insecureDev
-    ? new Agent({ connect: { rejectUnauthorized: false } })
+    ? getInsecureAgent()
     : undefined
 
   const method = String(init.method || "GET").toUpperCase()
@@ -46,6 +54,7 @@ export async function pveFetch<T>(
     headers,
     body,
     dispatcher,
+    signal: init.signal ?? undefined,
   })
 
   const text = await res.body.text()

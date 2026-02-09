@@ -42,18 +42,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Récupérer tous les types de jobs en parallèle
     const [syncJobs, verifyJobs] = await Promise.all([
       // Sync Jobs
-      pbsFetch<any[]>(conn, "/admin/sync").catch((e) => {
-        console.log("[pbs-jobs] Sync jobs fetch error:", e?.message)
-        
-return []
-      }),
+      pbsFetch<any[]>(conn, "/admin/sync").catch(() => []),
 
       // Verify Jobs
-      pbsFetch<any[]>(conn, "/admin/verify").catch((e) => {
-        console.log("[pbs-jobs] Verify jobs fetch error:", e?.message)
-        
-return []
-      }),
+      pbsFetch<any[]>(conn, "/admin/verify").catch(() => []),
     ])
 
     // Tape Backup Jobs - essayer plusieurs endpoints selon la version PBS
@@ -69,16 +61,13 @@ return []
         const result = await pbsFetch<any[]>(conn, endpoint)
 
         if (result && Array.isArray(result)) {
-          console.log(`[pbs-jobs] Tape jobs via ${endpoint}:`, result.length)
           tapeJobs = result
           break
         }
-      } catch (e) {
-        console.log(`[pbs-jobs] Tape endpoint ${endpoint} failed:`, (e as Error)?.message?.substring(0, 80))
+      } catch {
+        // Tape endpoint not available, try next
       }
     }
-
-    console.log("[pbs-jobs] Fetched jobs - sync:", syncJobs?.length || 0, "verify:", verifyJobs?.length || 0, "tape:", tapeJobs?.length || 0)
 
     // Récupérer les prune jobs et GC config pour chaque datastore
     const pruneJobsPromises = datastoreNames.map(async (store) => {

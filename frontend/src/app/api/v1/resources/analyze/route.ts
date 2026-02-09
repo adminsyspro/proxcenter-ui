@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+import { formatBytes } from "@/utils/format"
+
 export const runtime = "nodejs"
 
 /**
@@ -46,8 +48,6 @@ async function callOllama(prompt: string): Promise<string> {
   const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
   const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1:8b'
   
-  console.log(`[resources/analyze] Calling Ollama at ${ollamaUrl} with model ${ollamaModel}`)
-  
   // Essayer d'abord /api/chat (format plus récent)
   try {
     const chatResponse = await fetch(`${ollamaUrl}/api/chat`, {
@@ -71,7 +71,7 @@ async function callOllama(prompt: string): Promise<string> {
 return data.message?.content || ''
     }
   } catch (e) {
-    console.log('[resources/analyze] /api/chat failed, trying /api/generate')
+    // /api/chat failed, trying /api/generate
   }
   
   // Fallback sur /api/generate (ancien format)
@@ -117,16 +117,6 @@ return response.ok
   } catch {
     return false
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  
-return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 function buildPrompt(kpis: KpiData, topCpuVms: TopVm[], topRamVms: TopVm[]): string {
@@ -201,7 +191,6 @@ export async function POST(req: Request) {
       try {
         responseText = await callOllama(prompt)
         provider = 'ollama'
-        console.log('[resources/analyze] Using Ollama')
       } catch (e) {
         console.error('[resources/analyze] Ollama error:', e)
       }

@@ -78,7 +78,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
               fingerprint = localConfigNode.pve_fp
             }
           } catch (e) {
-            console.log("[cluster-config] Failed to get nodes config:", e)
+            // Failed to get nodes config, non-critical
           }
         }
         
@@ -128,7 +128,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           raw: join
         }
       } catch (e) {
-        console.log("[cluster-config] Failed to get join info:", e)
+        // Failed to get join info, non-critical
       }
     }
 
@@ -151,7 +151,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           }))
       }
     } catch (e) {
-      console.log("[cluster-config] Failed to get network interfaces:", e)
+      // Failed to get network interfaces, non-critical
     }
 
     return NextResponse.json({

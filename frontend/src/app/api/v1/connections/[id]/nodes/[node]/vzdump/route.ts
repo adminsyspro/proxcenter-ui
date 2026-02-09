@@ -46,8 +46,6 @@ export async function POST(
       vzdumpParams.notes = notes
     }
     
-    console.log(`[vzdump] Starting backup of VM ${vmid} to ${storage}, mode: ${mode}`)
-    
     // Appeler l'API Proxmox vzdump
     const result = await pveFetch<string>(
       conn,

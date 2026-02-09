@@ -35,14 +35,15 @@ import {
   Autocomplete,
   CircularProgress,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
-import EditIcon from '@mui/icons-material/Edit'
-import DeleteIcon from '@mui/icons-material/Delete'
-import LocalOfferIcon from '@mui/icons-material/LocalOffer'
-import GroupWorkIcon from '@mui/icons-material/GroupWork'
-import CallSplitIcon from '@mui/icons-material/CallSplit'
-import PushPinIcon from '@mui/icons-material/PushPin'
-import InfoIcon from '@mui/icons-material/Info'
+// RemixIcon replacements for @mui/icons-material
+const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const EditIcon = (props: any) => <i className="ri-pencil-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const DeleteIcon = (props: any) => <i className="ri-delete-bin-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const LocalOfferIcon = (props: any) => <i className="ri-price-tag-3-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const GroupWorkIcon = (props: any) => <i className="ri-group-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const CallSplitIcon = (props: any) => <i className="ri-git-branch-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PushPinIcon = (props: any) => <i className="ri-pushpin-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 // ============================================
 // Types

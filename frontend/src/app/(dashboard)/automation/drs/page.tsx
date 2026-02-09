@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 
+import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
@@ -1308,34 +1309,28 @@ return () => setPageInfo('', '', '')
   const [migrationsProgress, setMigrationsProgress] = useState<Record<string, MigrationProgress>>({})
 
   // Data fetching (only when Enterprise mode is active)
-  const { data: status, mutate: mutateStatus, isLoading: statusLoading } =
-    useSWR<DRSStatus>(isEnterprise ? '/api/v1/orchestrator/drs/status' : null, fetcher, { refreshInterval: 10000 })
+  const { data: status, mutate: mutateStatus, isLoading: statusLoading } = useDRSStatus(isEnterprise)
 
-  const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } =
-    useSWR<DRSRecommendation[]>(isEnterprise ? '/api/v1/orchestrator/drs/recommendations' : null, fetcher, { refreshInterval: 15000 })
+  const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } = useDRSRecsHook(isEnterprise)
 
-  const recommendations = ensureArray(recommendationsRaw)
+  const recommendations: DRSRecommendation[] = ensureArray(recommendationsRaw as any)
 
-  const { data: migrationsRaw, mutate: mutateMigrations, isLoading: migrationsLoading } =
-    useSWR<DRSMigration[]>(isEnterprise ? '/api/v1/orchestrator/drs/migrations' : null, fetcher, { refreshInterval: 10000 })
+  const { data: migrationsRaw, mutate: mutateMigrations, isLoading: migrationsLoading } = useDRSMigrations(isEnterprise)
 
 
   // Garder toutes les migrations non-null (useMemo pour éviter les re-renders inutiles)
   const migrations = useMemo(() =>
-    ensureArray(migrationsRaw).filter(m => m != null),
+    ensureArray(migrationsRaw as any).filter((m: any) => m != null) as DRSMigration[],
     [migrationsRaw]
   )
 
-  const { data: metricsData, mutate: mutateMetrics } =
-    useSWR<Record<string, ClusterMetrics>>(isEnterprise ? '/api/v1/orchestrator/metrics' : null, fetcher, { refreshInterval: 30000 })
+  const { data: metricsData, mutate: mutateMetrics } = useDRSMetrics(isEnterprise)
 
-  const { data: drsSettings, mutate: mutateSettings } =
-    useSWR<DRSSettings>(isEnterprise ? '/api/v1/orchestrator/drs/settings' : null, fetcher)
+  const { data: drsSettings, mutate: mutateSettings } = useDRSSettings(isEnterprise)
 
-  const { data: affinityRulesRaw, mutate: mutateRules } =
-    useSWR<AffinityRule[]>(isEnterprise ? '/api/v1/orchestrator/drs/rules' : null, fetcher)
+  const { data: affinityRulesRaw, mutate: mutateRules } = useDRSRules(isEnterprise)
 
-  const affinityRules = ensureArray(affinityRulesRaw)
+  const affinityRules: any[] = ensureArray(affinityRulesRaw as any)
 
   // Récupérer les connexions PVE pour avoir les noms
   const { data: connectionsData } =
@@ -1380,11 +1375,11 @@ return allVMsData.data.vms.map(vm => ({
   const clusters = useMemo(() => {
     if (!metricsData) return []
     
-return Object.entries(metricsData)
+return Object.entries(metricsData as any)
 
       // Filtrer pour ne garder que les vrais clusters (plus d'un nœud)
-      .filter(([_, metrics]) => (metrics.nodes?.length || 0) > 1)
-      .map(([id, metrics]) => ({
+      .filter(([_, metrics]: [string, any]) => (metrics.nodes?.length || 0) > 1)
+      .map(([id, metrics]: [string, any]) => ({
         id,
         name: connectionNames[id] || metrics.connection_name || id.slice(0, 12),
         metrics,

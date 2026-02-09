@@ -17,6 +17,7 @@ import {
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { useReportsData } from '@/hooks/useReports'
 
 import ReportGenerator from './components/ReportGenerator'
 import ReportHistory from './components/ReportHistory'
@@ -74,17 +75,15 @@ export default function ReportsPage() {
   const { hasFeature, isLicensed, isEnterprise } = useLicense()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
 
   // Data
-  const [reportTypes, setReportTypes] = useState<ReportType[]>([])
-  const [reports, setReports] = useState<Report[]>([])
-  const [schedules, setSchedules] = useState<Schedule[]>([])
-  const [languages, setLanguages] = useState<Array<{ code: string; name: string }>>([
-    { code: 'en', name: 'English' },
-    { code: 'fr', name: 'Français' },
-  ])
+  const { data: reportsData, mutate: mutateReports, isLoading: loading } = useReportsData(isEnterprise, 30000)
+
+  const reportTypes = reportsData?.reportTypes || []
+  const reports = reportsData?.reports || []
+  const schedules = reportsData?.schedules || []
+  const languages = reportsData?.languages || [{ code: 'en', name: 'English' }, { code: 'fr', name: 'Français' }]
 
   useEffect(() => {
     setMounted(true)
@@ -95,64 +94,6 @@ export default function ReportsPage() {
 
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-
-      const [typesRes, reportsRes, schedulesRes, langsRes] = await Promise.all([
-        fetch('/api/v1/orchestrator/reports/types', { cache: 'no-store' }),
-        fetch('/api/v1/orchestrator/reports?limit=100', { cache: 'no-store' }),
-        fetch('/api/v1/orchestrator/reports/schedules', { cache: 'no-store' }),
-        fetch('/api/v1/orchestrator/reports/languages', { cache: 'no-store' }),
-      ])
-
-      if (typesRes.ok) {
-        const typesData = await typesRes.json()
-
-        setReportTypes(Array.isArray(typesData) ? typesData : [])
-      }
-
-      if (reportsRes.ok) {
-        const reportsData = await reportsRes.json()
-
-        setReports(reportsData.data || [])
-      }
-
-      if (schedulesRes.ok) {
-        const schedulesData = await schedulesRes.json()
-
-        setSchedules(Array.isArray(schedulesData) ? schedulesData : [])
-      }
-
-      if (langsRes.ok) {
-        const langsData = await langsRes.json()
-
-        if (Array.isArray(langsData) && langsData.length > 0) {
-          setLanguages(langsData)
-        }
-      }
-    } catch (e) {
-      console.error('Error loading reports data:', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // En mode Community, pas d'orchestrator
-    if (!isEnterprise) {
-      setLoading(false)
-      return
-    }
-
-    loadData()
-
-    // Refresh every 30 seconds
-    const interval = setInterval(loadData, 30000)
-
-    return () => clearInterval(interval)
-  }, [isEnterprise])
 
   const handleGenerateReport = async (request: any) => {
     if (!isEnterprise) return
@@ -166,7 +107,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         setSnackbar({ open: true, message: t('reports.reportStarted'), severity: 'success' })
-        loadData()
+        mutateReports()
         setTab(1) // Switch to history tab
       } else {
         const error = await res.json()
@@ -188,7 +129,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
-        loadData()
+        mutateReports()
       } else {
         setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
       }
@@ -209,7 +150,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         setSnackbar({ open: true, message: t('reports.scheduleCreated'), severity: 'success' })
-        loadData()
+        mutateReports()
       } else {
         const error = await res.json()
 
@@ -232,7 +173,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         setSnackbar({ open: true, message: t('reports.scheduleUpdated'), severity: 'success' })
-        loadData()
+        mutateReports()
       } else {
         const error = await res.json()
 
@@ -253,7 +194,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         setSnackbar({ open: true, message: t('reports.scheduleDeleted'), severity: 'success' })
-        loadData()
+        mutateReports()
       } else {
         setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
       }
@@ -272,7 +213,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         setSnackbar({ open: true, message: t('reports.scheduleRunStarted'), severity: 'success' })
-        loadData()
+        mutateReports()
         setTab(1) // Switch to history tab
       } else {
         const error = await res.json()
@@ -319,7 +260,7 @@ export default function ReportsPage() {
           <ReportHistory
             reports={reports}
             onDelete={handleDeleteReport}
-            onRefresh={loadData}
+            onRefresh={() => mutateReports()}
             loading={loading}
           />
         )}

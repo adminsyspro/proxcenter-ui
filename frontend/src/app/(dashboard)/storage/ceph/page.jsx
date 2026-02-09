@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 
@@ -47,6 +47,7 @@ import {
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
+import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
 
 /* -----------------------------
   Components
@@ -246,8 +247,6 @@ export default function CephPage() {
   // Historique IOPS et Throughput temps réel (30 derniers points)
   const [iopsHistory, setIopsHistory] = useState([])
   const [throughputHistory, setThroughputHistory] = useState([])
-  const iopsIntervalRef = useRef(null)
-  const rrdIntervalRef = useRef(null)
 
   // Charger les connexions et scanner celles avec Ceph
   useEffect(() => {
@@ -256,7 +255,7 @@ export default function CephPage() {
 
       try {
         // Récupérer uniquement les connexions PVE avec Ceph activé
-        const res = await fetch('/api/v1/connections?type=pve&hasCeph=true', { cache: 'no-store' })
+        const res = await fetch('/api/v1/connections?type=pve&hasCeph=true')
         const json = await res.json()
         const list = Array.isArray(json?.data) ? json.data : []
         
@@ -264,7 +263,7 @@ export default function CephPage() {
         const cephChecks = await Promise.all(
           list.map(async (conn) => {
             try {
-              const cephRes = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/ceph`, { cache: 'no-store' })
+              const cephRes = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/ceph`)
               const cephJson = await cephRes.json()
 
               
@@ -307,7 +306,7 @@ return {
     setError(null)
     
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph`)
       const json = await res.json()
       
       if (!res.ok) {
@@ -340,8 +339,7 @@ return
 
     try {
       const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/ceph/rrd?timeframe=${rrdTimeframe}`, 
-        { cache: 'no-store' }
+        `/api/v1/connections/${encodeURIComponent(connId)}/ceph/rrd?timeframe=${rrdTimeframe}`
       )
 
       const json = await res.json()
@@ -356,25 +354,6 @@ return
     }
   }
 
-  // Fonction légère pour rafraîchir uniquement les RRD (sans indicateur de chargement)
-  const refreshRrdOnly = async () => {
-    if (!connId) return
-
-    try {
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/ceph/rrd?timeframe=${rrdTimeframe}`, 
-        { cache: 'no-store' }
-      )
-
-      const json = await res.json()
-
-      if (res.ok && json?.data) {
-        setRrdData(json.data)
-      }
-    } catch (e) {
-      // Ignorer les erreurs de polling silencieusement
-    }
-  }
 
   useEffect(() => {
     if (!scanning && connId && cephData) {
@@ -421,54 +400,25 @@ return updated.slice(-30)
     }
   }, [cephData])
 
-  // Fonction légère pour rafraîchir uniquement les IOPS (pas tout le dashboard)
-  const refreshIopsOnly = async () => {
-    if (!connId) return
+  // SWR for live IOPS polling (5s in live mode)
+  const { data: liveIopsData } = useCephPerformance(cephData ? connId : null, liveMode)
 
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph`, { cache: 'no-store' })
-      const json = await res.json()
-
-      if (res.ok && json?.data?.performance) {
-        // Mettre à jour uniquement les données de performance
-        setCephData(prev => prev ? { ...prev, performance: json.data.performance } : prev)
-      }
-    } catch (e) {
-      // Ignorer les erreurs de polling silencieusement
-    }
-  }
-
-  // Polling pour rafraîchir les IOPS toutes les 5 secondes (seulement en mode live)
+  // Update cephData performance from live polling
   useEffect(() => {
-    if (liveMode && connId && cephData) {
-      iopsIntervalRef.current = setInterval(() => {
-        refreshIopsOnly()
-      }, 5000)
+    if (liveIopsData?.data?.performance && liveMode) {
+      setCephData(prev => prev ? { ...prev, performance: liveIopsData.data.performance } : prev)
     }
+  }, [liveIopsData, liveMode])
 
-    
-return () => {
-      if (iopsIntervalRef.current) {
-        clearInterval(iopsIntervalRef.current)
-      }
-    }
-  }, [liveMode, connId, !!cephData])
+  // SWR for live RRD polling (30s in live mode)
+  const { data: liveRrdData } = useCephRRD(cephData ? connId : null, rrdTimeframe, liveMode)
 
-  // Polling pour rafraîchir les RRD (Réseau) toutes les 30 secondes (seulement en mode live)
+  // Update rrdData from live polling (only in live mode, avoid clobbering initial load)
   useEffect(() => {
-    if (liveMode && connId && cephData && rrdData) {
-      rrdIntervalRef.current = setInterval(() => {
-        refreshRrdOnly()
-      }, 30000)
+    if (liveRrdData?.data && liveMode) {
+      setRrdData(liveRrdData.data)
     }
-
-    
-return () => {
-      if (rrdIntervalRef.current) {
-        clearInterval(rrdIntervalRef.current)
-      }
-    }
-  }, [liveMode, connId, !!cephData, !!rrdData])
+  }, [liveRrdData, liveMode])
 
   // Colonnes OSDs
   const osdColumns = useMemo(() => [

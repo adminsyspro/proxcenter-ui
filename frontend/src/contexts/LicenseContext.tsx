@@ -67,7 +67,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
   const loadLicenseStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/license/status', { cache: 'no-store' })
+      const res = await fetch('/api/v1/license/status')
       if (res.ok) {
         const data = await res.json()
         setStatus(data)
@@ -83,7 +83,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
   const loadFeatures = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/license/features', { cache: 'no-store' })
+      const res = await fetch('/api/v1/license/features')
       if (res.ok) {
         const data = await res.json()
         setFeatures(data.features || [])

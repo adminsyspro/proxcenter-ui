@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 
 import { useTranslations } from 'next-intl'
-
-import useSWR from 'swr'
 
 import {
   Box, Button, Card, CardContent, Chip, Grid, IconButton,
@@ -22,44 +20,20 @@ import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import * as firewallAPI from '@/lib/api/firewall'
 import MicrosegmentationTab from '@/components/MicrosegmentationTab'
+import { usePVEConnections } from '@/hooks/useConnections'
+import { useFirewallData, Connection } from '@/hooks/useFirewallData'
+import { useVMFirewallRules, VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
 ═══════════════════════════════════════════════════════════════════════════ */
-
-interface Connection {
-  id: string
-  name: string
-  type: 'pve' | 'pbs'
-  baseUrl: string
-}
 
 interface EditingRule {
   groupName: string
   rule: firewallAPI.FirewallRule
   index: number
 }
-
-interface VMFirewallInfo {
-  vmid: number
-  name: string
-  node: string
-  type: 'qemu' | 'lxc'
-  status: string
-  firewallEnabled: boolean
-  rules: firewallAPI.FirewallRule[]
-  options: firewallAPI.VMOptions | null
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   FETCHER
-═══════════════════════════════════════════════════════════════════════════ */
-
-const fetcher = (url: string) => fetch(url).then(res => {
-  if (!res.ok) throw new Error('Failed to fetch')
-  
-return res.json()
-})
 
 /* ═══════════════════════════════════════════════════════════════════════════
    COLORS
@@ -163,31 +137,28 @@ export default function NetworkAutomationPage() {
   // State
   const [activeTab, setActiveTab] = useState(0)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
-  
+
   // Connection selection
   const [selectedConnection, setSelectedConnection] = useState<string>('')
-  
-  // Firewall mode (cluster vs standalone)
-  const [firewallMode, setFirewallMode] = useState<firewallAPI.FirewallMode>('cluster')
-  const [connectionInfo, setConnectionInfo] = useState<firewallAPI.ConnectionFirewallInfo | null>(null)
-  
-  // Firewall data
-  const [aliases, setAliases] = useState<firewallAPI.Alias[]>([])
-  const [ipsets, setIPSets] = useState<firewallAPI.IPSet[]>([])
-  const [securityGroups, setSecurityGroups] = useState<firewallAPI.SecurityGroup[]>([])
-  const [clusterOptions, setClusterOptions] = useState<firewallAPI.ClusterOptions | null>(null)
-  const [clusterRules, setClusterRules] = useState<firewallAPI.FirewallRule[]>([])
-  const [nodeOptions, setNodeOptions] = useState<firewallAPI.NodeOptions | null>(null)
-  const [nodeRules, setNodeRules] = useState<firewallAPI.FirewallRule[]>([])
-  
-  // Host rules per node (for cluster mode)
-  const [nodesList, setNodesList] = useState<string[]>([])
-  const [hostRulesByNode, setHostRulesByNode] = useState<Record<string, firewallAPI.FirewallRule[]>>({})
-  const [loadingHostRules, setLoadingHostRules] = useState(false)
-  
-  // VM Firewall data
-  const [vmFirewallData, setVMFirewallData] = useState<VMFirewallInfo[]>([])
-  const [loadingVMRules, setLoadingVMRules] = useState(false)
+
+  // Load connections with SWR - filter PVE only (only in Enterprise mode)
+  const { data: connectionsData } = usePVEConnections()
+  const connections: Connection[] = isEnterprise ? (connectionsData?.data || []) : []
+
+  // Data hooks
+  const {
+    aliases, ipsets, securityGroups, clusterOptions, clusterRules,
+    nodeOptions, nodeRules, firewallMode, connectionInfo, nodesList,
+    loading, reload: loadFirewallData, setClusterRules, setClusterOptions,
+  } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
+
+  const {
+    vmFirewallData, loadingVMRules, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
+  } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
+
+  const {
+    hostRulesByNode, loadingHostRules, loadHostRules, reloadHostRulesForNode, setHostRulesByNode,
+  } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
   const [expandedVMs, setExpandedVMs] = useState<Set<number>>(new Set())
   const [selectedVMForRule, setSelectedVMForRule] = useState<VMFirewallInfo | null>(null)
   const [vmSearchQuery, setVmSearchQuery] = useState('')
@@ -275,160 +246,28 @@ export default function NetworkAutomationPage() {
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
   
-  // Load connections with SWR - filter PVE only (only in Enterprise mode)
-  const { data: connectionsData } = useSWR<{ data: Connection[] }>(isEnterprise ? '/api/v1/connections?type=pve' : null, fetcher)
-  const connections = connectionsData?.data || []
-  
   // Set first connection when loaded
   useEffect(() => {
     if (connections.length > 0 && !selectedConnection) {
       setSelectedConnection(connections[0].id)
     }
   }, [connections, selectedConnection])
-  
-  // Reset VM firewall data when connection changes
+
+  // Reset UI state when connection changes
   useEffect(() => {
     setVMFirewallData([])
     setExpandedVMs(new Set())
     setHostRulesByNode({})
-    setNodesList([])
     setExpandedHosts(new Set())
-    setFirewallMode('cluster') // Reset mode
   }, [selectedConnection])
-  
-  // Load firewall data when connection changes
-  const [loading, setLoading] = useState(false)
-  
-  const loadFirewallData = useCallback(async () => {
-    if (!selectedConnection) return
-    
-    setLoading(true)
 
-    // Clear previous data first
-    setNodesList([])
-    setHostRulesByNode({})
-    
-    try {
-      // First, try to get connection info to determine mode
-      // For now, we'll detect based on cluster options availability
-      // In a real implementation, this would be a dedicated API call
-      
-      const [aliasesData, ipsetsData, groupsData, clusterOpts, clusterRulesData] = await Promise.all([
-        firewallAPI.getAliases(selectedConnection).catch(() => []),
-        firewallAPI.getIPSets(selectedConnection).catch(() => []),
-        firewallAPI.getSecurityGroups(selectedConnection).catch(() => []),
-        firewallAPI.getClusterOptions(selectedConnection).catch(() => null),
-        firewallAPI.getClusterRules(selectedConnection).catch(() => []),
-      ])
-      
-      setAliases(Array.isArray(aliasesData) ? aliasesData : [])
-      setIPSets(Array.isArray(ipsetsData) ? ipsetsData : [])
-      setSecurityGroups(Array.isArray(groupsData) ? groupsData : [])
-      setClusterOptions(clusterOpts)
-      setClusterRules(Array.isArray(clusterRulesData) ? clusterRulesData : [])
-      
-      // Fetch nodes list from VMs API
-      let nodes: string[] = []
-
-      try {
-        const vmsResp = await fetch(`/api/v1/vms?connId=${selectedConnection}`)
-
-        if (vmsResp.ok) {
-          const vmsJson = await vmsResp.json()
-          const vms = vmsJson?.data?.vms || []
-
-
-          // Extract unique nodes
-          nodes = [...new Set(vms.map((vm: any) => vm.node).filter(Boolean))] as string[]
-          setNodesList(nodes)
-        }
-      } catch {
-        setNodesList([])
-      }
-      
-      // Detect mode: standalone if only 1 node, cluster if multiple nodes
-      // A single-node setup is considered standalone even if cluster API responds
-      const isStandalone = nodes.length <= 1
-      
-      if (!isStandalone) {
-        setFirewallMode('cluster')
-        setConnectionInfo({
-          mode: 'cluster',
-          node_count: nodes.length,
-          primary_node: '',
-          has_cluster_fw: true,
-          has_node_fw: true,
-        })
-      } else {
-        setFirewallMode('standalone')
-        const standaloneNode = nodes[0] || 'pve'
-
-        setConnectionInfo({
-          mode: 'standalone',
-          node_count: 1,
-          primary_node: standaloneNode,
-          has_cluster_fw: false,
-          has_node_fw: true,
-        })
-        
-        // If currently on Cluster Rules tab, switch to Host Rules
-        if (activeTab === 7) {
-          setActiveTab(6)
-        }
-        
-        // In standalone mode, load node-level firewall options
-        try {
-          const nodeOpts = await firewallAPI.getNodeOptions(selectedConnection, standaloneNode)
-
-          setNodeOptions(nodeOpts)
-          const nodeRulesData = await firewallAPI.getNodeRules(selectedConnection, standaloneNode)
-
-          setNodeRules(Array.isArray(nodeRulesData) ? nodeRulesData : [])
-        } catch {
-          // Node firewall might not be configured
-          setNodeOptions(null)
-          setNodeRules([])
-        }
-      }
-    } catch (err: any) {
-      console.error('Failed to load firewall data:', err)
-    } finally {
-      setLoading(false)
+  // If standalone mode detected, switch away from Cluster Rules tab
+  useEffect(() => {
+    if (firewallMode === 'standalone' && activeTab === 7) {
+      setActiveTab(6)
     }
-  }, [selectedConnection, activeTab])
-  
-  // Load host rules when switching to Host Rules tab
-  const loadHostRules = useCallback(async (connectionId?: string, nodes?: string[]) => {
-    const connId = connectionId || selectedConnection
-    const nodeList = nodes || nodesList
-    
-    if (!connId || nodeList.length === 0) return
-    
-    setLoadingHostRules(true)
+  }, [firewallMode, activeTab])
 
-    try {
-      const rulesMap: Record<string, firewallAPI.FirewallRule[]> = {}
-      
-      await Promise.all(
-        nodeList.map(async (node) => {
-          try {
-            const rules = await firewallAPI.getNodeRules(connId, node)
-
-            rulesMap[node] = Array.isArray(rules) ? rules : []
-          } catch {
-            rulesMap[node] = []
-          }
-        })
-      )
-      
-      setHostRulesByNode(rulesMap)
-    } catch (err) {
-      console.error('Failed to load host rules:', err)
-    } finally {
-      setLoadingHostRules(false)
-    }
-  }, [selectedConnection, nodesList])
-  
   // Load host rules when tab 6 is selected (Host Rules) - only if data not already loaded
   useEffect(() => {
     // Only load if on Host Rules tab and we have nodes but no rules loaded yet (Enterprise only)
@@ -437,94 +276,6 @@ return () => setPageInfo('', '', '')
     }
   }, [activeTab, selectedConnection, nodesList, loadHostRules, isEnterprise])
 
-  useEffect(() => {
-    if (isEnterprise && selectedConnection) {
-      loadFirewallData()
-    }
-  }, [selectedConnection, loadFirewallData, isEnterprise])
-  
-  // Helper: Check if firewall is enabled on any NIC from VM config
-  const checkNICFirewallEnabled = (config: Record<string, any>): boolean => {
-    // Check net0, net1, net2, etc. for firewall=1
-    for (let i = 0; i < 10; i++) {
-      const netConfig = config[`net${i}`]
-
-      if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
-        return true
-      }
-    }
-
-    
-return false
-  }
-  
-  // Load VM firewall rules when tab 4 (VM Rules) is selected
-  const loadVMFirewallData = useCallback(async () => {
-    if (!selectedConnection) return
-    
-    setLoadingVMRules(true)
-    
-    try {
-      // Get all VMs for this connection using the correct API
-      const vmsResp = await fetch(`/api/v1/vms?connId=${selectedConnection}`)
-      const vmsData = await vmsResp.json()
-      const guests = vmsData?.data?.vms || []
-      
-      // Load firewall rules for each VM (limit to avoid too many requests)
-      const vmData: VMFirewallInfo[] = []
-      
-      for (const guest of guests.slice(0, 50)) { // Limit to 50 VMs
-        try {
-          // Fetch rules, options, and VM config (for NIC firewall status)
-          const [rulesData, optionsData, configResp] = await Promise.all([
-            firewallAPI.getVMRules(selectedConnection, guest.node, guest.type, guest.vmid).catch(() => []),
-            firewallAPI.getVMOptions(selectedConnection, guest.node, guest.type, guest.vmid).catch(() => null),
-            fetch(`/api/v1/connections/${selectedConnection}/guests/${guest.type}/${guest.node}/${guest.vmid}/config`).then(r => r.json()).catch(() => null)
-          ])
-          
-          // Firewall is "active" if enabled on at least one NIC
-          const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
-          
-          vmData.push({
-            vmid: parseInt(guest.vmid, 10),
-            name: guest.name || `VM ${guest.vmid}`,
-            node: guest.node,
-            type: guest.type,
-            status: guest.status,
-            firewallEnabled: nicFirewallEnabled,
-            rules: Array.isArray(rulesData) ? rulesData : [],
-            options: optionsData
-          })
-        } catch {
-          vmData.push({
-            vmid: parseInt(guest.vmid, 10),
-            name: guest.name || `VM ${guest.vmid}`,
-            node: guest.node,
-            type: guest.type,
-            status: guest.status,
-            firewallEnabled: false,
-            rules: [],
-            options: null
-          })
-        }
-      }
-      
-      // Sort by firewall enabled first, then by rule count
-      vmData.sort((a, b) => {
-        if (a.firewallEnabled !== b.firewallEnabled) return b.firewallEnabled ? 1 : -1
-        
-return b.rules.length - a.rules.length
-      })
-      
-      setVMFirewallData(vmData)
-    } catch (err) {
-      console.error('Failed to load VM firewall data:', err)
-      setVMFirewallData([])
-    } finally {
-      setLoadingVMRules(false)
-    }
-  }, [selectedConnection])
-  
   // Load VM rules when on Overview (tab 0) or VM Rules tab (tab 5)
   // Also reload when connection changes (Enterprise only)
   useEffect(() => {
@@ -572,30 +323,6 @@ return next
     }
 
     setVmRuleDialogOpen(true)
-  }
-  
-  // Reload only one VM's firewall data
-  const reloadVMFirewallRules = async (vm: VMFirewallInfo) => {
-    try {
-      const [rulesData, optionsData, configResp] = await Promise.all([
-        firewallAPI.getVMRules(selectedConnection, vm.node, vm.type, vm.vmid).catch(() => []),
-        firewallAPI.getVMOptions(selectedConnection, vm.node, vm.type, vm.vmid).catch(() => null),
-        fetch(`/api/v1/connections/${selectedConnection}/guests/${vm.type}/${vm.node}/${vm.vmid}/config`).then(r => r.json()).catch(() => null)
-      ])
-      
-      const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
-      
-      setVMFirewallData(prev => prev.map(v => 
-        v.vmid === vm.vmid ? {
-          ...v,
-          firewallEnabled: nicFirewallEnabled,
-          rules: Array.isArray(rulesData) ? rulesData : [],
-          options: optionsData
-        } : v
-      ))
-    } catch (err) {
-      console.error('Failed to reload VM firewall rules:', err)
-    }
   }
   
   const handleSaveVMRule = async () => {
@@ -1084,19 +811,6 @@ return next
   // ══════════════════════════════════════════════════════════════════════════════
   // HOST RULES CRUD HANDLERS
   // ══════════════════════════════════════════════════════════════════════════════
-  
-  const reloadHostRulesForNode = async (node: string) => {
-    try {
-      const rules = await firewallAPI.getNodeRules(selectedConnection, node)
-
-      setHostRulesByNode(prev => ({
-        ...prev,
-        [node]: Array.isArray(rules) ? rules : []
-      }))
-    } catch (err) {
-      console.error(`Error reloading rules for node ${node}:`, err)
-    }
-  }
 
   const handleAddHostRule = async () => {
     if (!editingHostRule || !selectedConnection) return

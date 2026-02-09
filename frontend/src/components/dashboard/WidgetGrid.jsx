@@ -237,7 +237,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   useEffect(() => {
     const loadLayout = async () => {
       try {
-        const res = await fetch('/api/v1/dashboard/layout', { cache: 'no-store' })
+        const res = await fetch('/api/v1/dashboard/layout')
 
         if (res.ok) {
           const json = await res.json()

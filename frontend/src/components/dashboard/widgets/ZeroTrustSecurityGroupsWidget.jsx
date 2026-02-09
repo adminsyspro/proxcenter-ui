@@ -1,71 +1,16 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-
+import React from 'react'
 import { Box, Typography, Chip, CircularProgress, alpha, Stack } from '@mui/material'
+import { useClusterSecurityGroups } from '@/hooks/useZeroTrust'
 
 const GROUP_COLORS = [
-  '#22c55e', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', 
+  '#22c55e', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4',
   '#ec4899', '#10b981', '#6366f1', '#f97316'
 ]
 
 function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
-  const [clustersData, setClustersData] = useState([])
-  const [loadingData, setLoadingData] = useState(true)
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Get all PVE connections
-        const connRes = await fetch('/api/v1/connections')
-        const connJson = await connRes.json()
-        const pveConns = (connJson.data || []).filter(c => c.type === 'pve')
-        
-        if (pveConns.length === 0) {
-          setLoadingData(false)
-          
-return
-        }
-
-        // Fetch security groups for each cluster (1 call per cluster)
-        const data = await Promise.all(
-          pveConns.map(async (conn) => {
-            try {
-              const sgRes = await fetch(`/api/v1/firewall/groups/${conn.id}`)
-              let groups = []
-
-              if (sgRes?.ok) {
-                const sgJson = await sgRes.json()
-
-                groups = Array.isArray(sgJson) ? sgJson : []
-              }
-
-              
-return {
-                id: conn.id,
-                name: conn.name,
-                groups: groups.slice(0, 10) // Limit to 10 groups per cluster
-              }
-            } catch {
-              return { id: conn.id, name: conn.name, groups: [] }
-            }
-          })
-        )
-        
-        setClustersData(data)
-      } catch (err) {
-        console.error('ZeroTrustSecurityGroupsWidget error:', err)
-      } finally {
-        setLoadingData(false)
-      }
-    }
-
-    fetchData()
-    const interval = setInterval(fetchData, 60000)
-
-    
-return () => clearInterval(interval)
-  }, [])
+  const { data: clustersData = [], isLoading: loadingData } = useClusterSecurityGroups(60000)
 
   if (loadingData) {
     return (
@@ -83,10 +28,10 @@ return () => clearInterval(interval)
         <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Security Groups
         </Typography>
-        <Chip 
-          label={`${totalGroups} groupes`} 
-          size="small" 
-          sx={{ height: 18, fontSize: 9 }} 
+        <Chip
+          label={`${totalGroups} groupes`}
+          size="small"
+          sx={{ height: 18, fontSize: 9 }}
         />
       </Box>
 
@@ -104,14 +49,13 @@ return () => clearInterval(interval)
                       const color = GROUP_COLORS[index % GROUP_COLORS.length]
                       const isBase = sg.group?.startsWith('sg-base-')
 
-                      
-return (
+                      return (
                         <Chip
                           key={sg.group}
                           size="small"
                           icon={isBase ? <i className="ri-lock-line" style={{ fontSize: 9, marginLeft: 4 }} /> : undefined}
                           label={sg.group?.length > 12 ? sg.group.slice(0, 12) + '...' : sg.group}
-                          sx={{ 
+                          sx={{
                             height: 20,
                             fontSize: 9,
                             borderLeft: `2px solid ${color}`,

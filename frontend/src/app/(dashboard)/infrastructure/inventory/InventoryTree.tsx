@@ -512,8 +512,7 @@ return next
     try {
       // D'abord vérifier si la VM est verrouillée
       const checkRes = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`,
-        { cache: 'no-store' }
+        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`
       )
       
       if (checkRes.ok) {
@@ -699,7 +698,7 @@ return
   // Charger les favoris (mode local seulement)
   const loadFavorites = async () => {
     try {
-      const res = await fetch('/api/v1/favorites', { cache: 'no-store' })
+      const res = await fetch('/api/v1/favorites')
 
       if (res.ok) {
         const json = await res.json()
@@ -780,7 +779,7 @@ return next
 
       try {
         // Utiliser l'API agrégée pour charger tout l'arbre en une seule requête
-        const res = await fetch('/api/v1/inventory', { cache: 'no-store' })
+        const res = await fetch('/api/v1/inventory')
 
         if (!res.ok) throw new Error(`HTTP ${res.status} sur /inventory`)
         const json = await res.json()

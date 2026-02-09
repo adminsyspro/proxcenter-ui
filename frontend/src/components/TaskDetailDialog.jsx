@@ -21,22 +21,11 @@ import {
   Typography
 } from '@mui/material'
 
+import { useTaskDetail } from '@/hooks/useTaskDetail'
+
 /* --------------------------------
    Helpers
 -------------------------------- */
-
-async function fetchJson(url) {
-  const r = await fetch(url, { cache: 'no-store' })
-
-  if (!r.ok) {
-    const text = await r.text()
-
-    throw new Error(text || `HTTP ${r.status}`)
-  }
-
-  
-return r.json()
-}
 
 function formatTaskType(type, t) {
   // Use translation keys from tasks.types
@@ -50,7 +39,7 @@ function getStatusColor(status) {
   if (!status || status === 'running') return 'primary'
   if (status === 'OK') return 'success'
   if (status.includes && status.includes('WARNINGS')) return 'warning'
-  
+
 return 'error'
 }
 
@@ -67,7 +56,7 @@ function getLogType(text) {
   if (t.includes('error') || t.includes('failed')) return 'error'
   if (t.includes('warning')) return 'warning'
   if (t.includes('%') || t.includes('transferred')) return 'transfer'
-  
+
 return 'info'
 }
 
@@ -92,11 +81,43 @@ export default function TaskDetailDialog({ open, task, onClose }) {
   const [logFilter, setLogFilter] = useState('all')
   const [autoScroll, setAutoScroll] = useState(true)
   const [snackbar, setSnackbar] = useState({ open: false, message: '' })
-  
+
   const logsContainerRef = useRef(null)
   const logsEndRef = useRef(null)
-  const intervalRef = useRef(null)
   const prevLogsLengthRef = useRef(0)
+
+  // SWR hook for task details
+  const isRunningInput = task?.status === 'running' || !task?.status
+  const { data: fetchedDetails } = useTaskDetail(
+    open ? task?.connectionId : undefined,
+    open ? task?.node : undefined,
+    open ? task?.id : undefined,
+    isRunningInput
+  )
+
+  // Sync fetched details to local state
+  useEffect(() => {
+    if (fetchedDetails) {
+      setDetails(fetchedDetails)
+      setLoading(false)
+      setError(null)
+      if (fetchedDetails.logs?.length > prevLogsLengthRef.current) {
+        prevLogsLengthRef.current = fetchedDetails.logs.length
+        setTimeout(scrollToBottom, 100)
+      }
+    }
+  }, [fetchedDetails])
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open && task) {
+      setLoading(true)
+      setDetails(null)
+      setError(null)
+      setAutoScroll(true)
+      prevLogsLengthRef.current = 0
+    }
+  }, [open, task?.id])
 
   // Scroll to bottom
   const scrollToBottom = () => {
@@ -119,11 +140,11 @@ export default function TaskDetailDialog({ open, task, onClose }) {
   // Copy logs to clipboard
   const handleCopyLogs = async () => {
     if (!details?.logs) return
-    
+
     const logsText = details.logs
       .map(l => `${l.n.toString().padStart(4, ' ')} ${l.t}`)
       .join('\n')
-    
+
     try {
       await navigator.clipboard.writeText(logsText)
       setSnackbar({ open: true, message: t('common.copied') })
@@ -140,63 +161,9 @@ export default function TaskDetailDialog({ open, task, onClose }) {
     if (logFilter === 'errors') return type === 'error'
     if (logFilter === 'warnings') return type === 'warning' || type === 'error'
     if (logFilter === 'transfers') return type === 'transfer'
-    
+
 return true
   }) || []
-
-  // Fetch task details
-  const fetchDetails = async () => {
-    if (!task) return
-
-    try {
-      const upidEncoded = encodeURIComponent(task.id)
-      const url = `/api/v1/tasks/${task.connectionId}/${task.node}/${upidEncoded}`
-      const data = await fetchJson(url)
-
-      setDetails(data)
-      setError(null)
-
-      // Auto-scroll if new logs appeared and task is running
-      if (data.logs?.length > prevLogsLengthRef.current) {
-        prevLogsLengthRef.current = data.logs.length
-        setTimeout(scrollToBottom, 100)
-      }
-
-      // Stop polling if task is complete
-      if (data.status === 'stopped' && intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    } catch (e) {
-      setError(e?.message || t('errors.loadingError'))
-    }
-  }
-
-  // Start/stop polling based on dialog state
-  useEffect(() => {
-    if (open && task) {
-      setLoading(true)
-      setDetails(null)
-      setError(null)
-      setAutoScroll(true)
-      prevLogsLengthRef.current = 0
-
-      // Initial fetch
-      fetchDetails().finally(() => setLoading(false))
-
-      // Poll every 2s if task is running
-      if (task.status === 'running' || !task.status) {
-        intervalRef.current = setInterval(fetchDetails, 2000)
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
-  }, [open, task?.id])
 
   // Scroll when filter changes
   useEffect(() => {
@@ -221,21 +188,21 @@ return true
 
   return (
     <>
-      <Dialog 
-        open={open} 
-        onClose={onClose} 
-        maxWidth="md" 
+      <Dialog
+        open={open}
+        onClose={onClose}
+        maxWidth="md"
         fullWidth
         PaperProps={{
-          sx: { 
+          sx: {
             bgcolor: 'background.paper',
             backgroundImage: 'none'
           }
         }}
       >
-        <DialogTitle sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <DialogTitle sx={{
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '1px solid',
           borderColor: 'divider',
@@ -253,13 +220,13 @@ return true
                 justifyContent: 'center'
               }}
             >
-              <i 
-                className={isRunning ? 'ri-loader-4-line' : statusColor === 'success' ? 'ri-check-line' : 'ri-close-line'} 
-                style={{ 
-                  fontSize: 20, 
+              <i
+                className={isRunning ? 'ri-loader-4-line' : statusColor === 'success' ? 'ri-check-line' : 'ri-close-line'}
+                style={{
+                  fontSize: 20,
                   color: '#fff',
                   animation: isRunning ? 'spin 1s linear infinite' : 'none'
-                }} 
+                }}
               />
             </Box>
             <Box>
@@ -336,11 +303,11 @@ return true
                   </Typography>
                 </Box>
               </Box>
-              <LinearProgress 
+              <LinearProgress
                 variant={isRunning && progress === 0 ? 'indeterminate' : 'determinate'}
                 value={progress}
-                sx={{ 
-                  height: 8, 
+                sx={{
+                  height: 8,
                   borderRadius: 1,
                   bgcolor: 'action.hover',
                   '& .MuiLinearProgress-bar': {
@@ -359,12 +326,12 @@ return true
           )}
 
           {/* Logs toolbar */}
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 1, 
-            px: 2, 
-            py: 1, 
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 2,
+            py: 1,
             borderBottom: '1px solid',
             borderColor: 'divider',
             bgcolor: '#161b22'
@@ -388,13 +355,13 @@ return true
             <Box sx={{ flex: 1 }} />
 
             <Tooltip title={autoScroll ? t('tasks.detail.autoScrollEnabled') : t('tasks.detail.autoScrollDisabled')}>
-              <IconButton 
-                size="small" 
+              <IconButton
+                size="small"
                 onClick={() => {
                   setAutoScroll(true)
                   scrollToBottom()
                 }}
-                sx={{ 
+                sx={{
                   opacity: autoScroll ? 1 : 0.5,
                   color: autoScroll ? 'primary.main' : 'inherit'
                 }}
@@ -411,10 +378,10 @@ return true
           </Box>
 
           {/* Logs */}
-          <Box 
+          <Box
             ref={logsContainerRef}
             onScroll={handleScroll}
-            sx={{ 
+            sx={{
               height: 320,
               overflow: 'auto',
               bgcolor: '#0d1117',
@@ -432,21 +399,21 @@ return true
                 {filteredLogs.map((log, idx) => {
                   const logType = getLogType(log.t)
                   const logColor = getLogColor(logType)
-                  
+
                   return (
-                    <Box 
-                      key={`${log.n}-${idx}`} 
-                      sx={{ 
+                    <Box
+                      key={`${log.n}-${idx}`}
+                      sx={{
                         display: 'flex',
                         py: 0.25,
                         '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' }
                       }}
                     >
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          color: 'grey.600', 
-                          minWidth: 40, 
+                      <Typography
+                        component="span"
+                        sx={{
+                          color: 'grey.600',
+                          minWidth: 40,
                           textAlign: 'right',
                           pr: 1.5,
                           userSelect: 'none',
@@ -456,9 +423,9 @@ return true
                       >
                         {log.n}
                       </Typography>
-                      <Typography 
-                        component="span" 
-                        sx={{ 
+                      <Typography
+                        component="span"
+                        sx={{
                           color: logColor,
                           fontFamily: 'inherit',
                           fontSize: 'inherit',

@@ -53,7 +53,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
   const fetchVersionInfo = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/version/check', { cache: 'no-store' })
+      const res = await fetch('/api/v1/version/check')
       const data = await res.json()
       setVersionInfo(data)
     } catch (e) {

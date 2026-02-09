@@ -104,7 +104,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     setError(null)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs`)
       const json = await res.json()
 
       if (json.error) {
@@ -153,7 +153,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     if (!connectionId) return
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/resources?type=vm`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/resources?type=vm`)
       const json = await res.json()
 
       if (!json.error) {

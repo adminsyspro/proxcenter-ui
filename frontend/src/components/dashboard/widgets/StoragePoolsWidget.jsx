@@ -16,7 +16,7 @@ function StoragePoolsWidget({ data, loading, config }) {
     const fetchStorages = async () => {
       try {
         // Récupérer les storages de toutes les connexions
-        const connRes = await fetch('/api/v1/connections?type=pve', { cache: 'no-store' })
+        const connRes = await fetch('/api/v1/connections?type=pve')
 
         if (!connRes.ok) return
         const connJson = await connRes.json()
@@ -26,7 +26,7 @@ function StoragePoolsWidget({ data, loading, config }) {
         
         await Promise.all(connections.map(async (conn) => {
           try {
-            const res = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/storage`, { cache: 'no-store' })
+            const res = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/storage`)
 
             if (res.ok) {
               const json = await res.json()

@@ -28,7 +28,7 @@ function UsageBar({
     const free = Math.max(0, 100 - u)
 
     return (
-      <Box sx={{ mb: 1.5 }}>
+      <Box sx={{ mb: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <i className={iconClass} style={{ fontSize: 14, color: themeColor }} />
@@ -78,7 +78,7 @@ function UsageBar({
   const pctVal = cap > 0 ? Math.round((u / cap) * 100) : 0
 
   return (
-    <Box sx={{ mb: 1.5 }}>
+    <Box sx={{ mb: 2.5 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <i className={iconClass} style={{ fontSize: 14, color: themeColor }} />

@@ -2784,6 +2784,60 @@ return () => {
     }
   }, [selection?.type, selection?.id])
 
+  // Polling des métriques CPU/RAM/Storage toutes les 2s pour les VMs et nodes
+  useEffect(() => {
+    if (!selection || !data) return
+    const isVm = selection.type === 'vm'
+    const isNode = selection.type === 'node'
+    if (!isVm && !isNode) return
+
+    // Seulement pour les VMs running ou les nodes online
+    if (isVm && data.vmRealStatus !== 'running') return
+    if (isNode && data.status !== 'ok') return
+
+    let alive = true
+
+    const poll = async () => {
+      try {
+        if (isVm) {
+          const { connId, node, type, vmid } = parseVmId(selection.id)
+          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
+          const resources = asArray<any>(safeJson(await res.json()))
+          const g = resources.find((x: any) => String(x.node) === String(node) && String(x.type) === String(type) && String(x.vmid) === String(vmid))
+          if (!g || !alive) return
+          setData(prev => prev ? {
+            ...prev,
+            metrics: {
+              cpu: { label: 'CPU', pct: cpuPct(g.cpu) },
+              ram: { label: 'RAM', pct: pct(Number(g.mem ?? 0), Number(g.maxmem ?? 0)), used: Number(g.mem ?? 0), max: Number(g.maxmem ?? 0) },
+              storage: { label: 'Storage', pct: pct(Number(g.disk ?? 0), Number(g.maxdisk ?? 0)), used: Number(g.disk ?? 0), max: Number(g.maxdisk ?? 0) },
+            },
+          } : prev)
+        } else {
+          const { connId, node } = parseNodeId(selection.id)
+          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
+          const resources = asArray<any>(safeJson(await res.json()))
+          const n = resources.find((x: any) => x.type === 'node' && String(x.node) === String(node))
+          if (!n || !alive) return
+          setData(prev => prev ? {
+            ...prev,
+            metrics: {
+              ...prev.metrics,
+              cpu: { label: 'CPU', pct: cpuPct(n.cpu), used: cpuPct(n.cpu), max: 100 },
+              ram: { label: 'RAM', pct: pct(Number(n.mem ?? 0), Number(n.maxmem ?? 0)), used: Number(n.mem ?? 0), max: Number(n.maxmem ?? 0) },
+              storage: { label: 'Storage', pct: pct(Number(n.disk ?? 0), Number(n.maxdisk ?? 0)), used: Number(n.disk ?? 0), max: Number(n.maxdisk ?? 0) },
+            },
+          } : prev)
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }
+
+    const id = setInterval(poll, 2000)
+    return () => { alive = false; clearInterval(id) }
+  }, [selection?.type, selection?.id, data?.vmRealStatus, data?.status])
+
   // Recharger les données RRD PBS/Datastore quand le timeframe change
   useEffect(() => {
     let alive = true

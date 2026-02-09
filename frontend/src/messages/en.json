@@ -2619,7 +2619,8 @@
       "fixed": "Fixed in",
       "severity": "Severity",
       "node": "Node",
-      "published": "Published"
+      "published": "Published",
+      "description": "Description"
     },
     "lastScan": "Last scan: {date}",
     "filterBySeverity": "Filter by severity"

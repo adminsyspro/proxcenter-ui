@@ -251,13 +251,13 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
               <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('columns.fixed')}</TableCell>
               <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('columns.severity')}</TableCell>
               {!node && <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('columns.node')}</TableCell>}
-              <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('columns.published')}</TableCell>
+              <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('columns.description')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredCves.map(cve => (
               <TableRow
-                key={cve.cveId}
+                key={`${cve.cveId}-${cve.package}-${cve.node}`}
                 sx={{
                   '&:hover': { bgcolor: 'action.hover' },
                   '&:last-child td': { borderBottom: 'none' },
@@ -314,9 +314,9 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
                     <Typography variant="body2" sx={{ fontSize: 12 }}>{cve.node}</Typography>
                   </TableCell>
                 )}
-                <TableCell>
-                  <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>
-                    {new Date(cve.publishedAt).toLocaleDateString()}
+                <TableCell sx={{ maxWidth: 360 }}>
+                  <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cve.description || '—'}
                   </Typography>
                 </TableCell>
               </TableRow>

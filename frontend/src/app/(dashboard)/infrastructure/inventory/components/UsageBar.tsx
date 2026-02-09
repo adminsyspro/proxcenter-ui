@@ -45,7 +45,7 @@ function UsageBar({
           sx={{
             height: 6,
             borderRadius: 999,
-            bgcolor: 'rgba(255,255,255,0.12)',
+            bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
             overflow: 'hidden',
           }}
         >

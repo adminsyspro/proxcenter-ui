@@ -44,6 +44,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'rec
 import { formatBytes } from '@/utils/format'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
+import CveTab from '@/components/CveTab'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
 import { formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
@@ -57,6 +58,7 @@ export default function NodeTabs(props: any) {
     clusterConfigLoaded,
     canShowRrd,
     clusterConfigLoading,
+    cveAvailable,
     data,
     deleteReplicationDialogOpen,
     deletingReplicationJob,
@@ -291,6 +293,31 @@ export default function NodeTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-refresh-line" style={{ fontSize: 16 }} />
                       Replication
+                    </Box>
+                  }
+                />
+                {/* Onglet CVE Scanner */}
+                <Tab
+                  disabled={!cveAvailable}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: cveAvailable ? 1 : 0.4 }}>
+                      <i className="ri-shield-cross-line" style={{ fontSize: 16 }} />
+                      CVE
+                      {!cveAvailable && (
+                        <Chip
+                          size="small"
+                          label="Enterprise"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                            ml: 0.5,
+                            '& .MuiChip-label': { px: 0.75 }
+                          }}
+                        />
+                      )}
                     </Box>
                   }
                 />
@@ -2723,8 +2750,15 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Subscription - Index 8 pour cluster, Index 9 pour standalone */}
+                {/* Onglet CVE - Index 8 pour cluster, Index 9 pour standalone */}
                 {((nodeTab === 8 && data.clusterName) || (nodeTab === 9 && !data.clusterName)) && (
+                  <Box sx={{ p: 2, overflow: 'auto' }}>
+                    <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
+                  </Box>
+                )}
+
+                {/* Onglet Subscription - Index 9 pour cluster, Index 10 pour standalone */}
+                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

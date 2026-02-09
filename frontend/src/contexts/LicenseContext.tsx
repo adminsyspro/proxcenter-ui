@@ -20,6 +20,7 @@ export const Features = {
   JOBS: 'jobs',
   NOTIFICATIONS: 'notifications',
   TOPOLOGY: 'topology',
+  CVE_SCANNER: 'cve_scanner',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]

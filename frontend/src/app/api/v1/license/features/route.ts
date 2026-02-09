@@ -26,6 +26,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
     { id: 'rbac', name: 'RBAC', enabled: false },
     { id: 'jobs', name: 'Jobs', enabled: false },
     { id: 'notifications', name: 'Notifications', enabled: false },
+    { id: 'cve_scanner', name: 'CVE Scanner', enabled: false },
   ]
 }
 

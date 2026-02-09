@@ -4,7 +4,7 @@
   "license": "Commercial",
   "private": true,
   "scripts": {
-    "predev": "DATABASE_URL=file:./data/proxcenter.db prisma db push --accept-data-loss",
+    "predev": "DATABASE_URL=file:./data/proxcenter.db prisma db push",
     "dev": "concurrently \"next dev --turbopack\" \"node ws-proxy.js\"",
     "build": "next build",
     "start": "concurrently \"next start\" \"node ws-proxy.js\"",

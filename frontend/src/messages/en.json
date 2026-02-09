@@ -164,8 +164,7 @@
     "billing": "Billing",
     "about": "About",
     "templates": "Templates",
-    "reports": "Reports",
-    "topology": "Topology"
+    "reports": "Reports"
   },
   "navbar": {
     "language": "Language",
@@ -2624,19 +2623,5 @@
     },
     "lastScan": "Last scan: {date}",
     "filterBySeverity": "Filter by severity"
-  },
-  "topology": {
-    "title": "Topology",
-    "subtitle": "Proxmox cluster network map",
-    "clusters": "Clusters",
-    "nodes": "Nodes",
-    "vms": "VMs",
-    "cpu": "CPU",
-    "memory": "MEM",
-    "online": "Online",
-    "warning": "Warning",
-    "offline": "Offline",
-    "noData": "No topology data available. Make sure your Proxmox connections are configured.",
-    "loading": "Loading topology..."
   }
 }

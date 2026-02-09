@@ -31,10 +31,10 @@ export async function POST(req: Request) {
     for (const alert of alerts) {
       const fingerprint = generateFingerprint({
         source: alert.source,
+        severity: alert.severity,
         entityType: alert.entityType,
         entityId: alert.entityId,
         metric: alert.metric,
-        message: alert.message
       })
 
       currentFingerprints.push(fingerprint)

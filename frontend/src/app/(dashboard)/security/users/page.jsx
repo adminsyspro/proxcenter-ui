@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useSession } from 'next-auth/react'
 
@@ -38,6 +38,7 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import { useUsers, useRbacRoles, useRbacAssignments } from '@/hooks/useUsers'
 
 /* --------------------------------
    Helpers
@@ -52,7 +53,7 @@ function timeAgo(date, t) {
   if (diff < 60) return t ? t('time.secondsAgo') : 'il y a quelques secondes'
   if (diff < 3600) return t ? t('time.minutesAgo', { count: Math.floor(diff / 60) }) : `il y a ${Math.floor(diff / 60)} min`
   if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `il y a ${Math.floor(diff / 3600)} h`
-  
+
 return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `il y a ${Math.floor(diff / 86400)} j`
 }
 
@@ -64,15 +65,15 @@ function RoleChips({ roles, t }) {
   if (!roles || roles.length === 0) {
     return <Chip size='small' label={t ? t('common.none') : 'Aucun rôle'} variant='outlined' sx={{ opacity: 0.5 }} />
   }
-  
+
   return (
     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
       {roles.slice(0, 2).map((role, idx) => (
-        <Chip 
+        <Chip
           key={idx}
-          size='small' 
+          size='small'
           label={role.name}
-          sx={{ 
+          sx={{
             bgcolor: role.color ? `${role.color}20` : undefined,
             color: role.color || undefined,
             borderColor: role.color || undefined,
@@ -92,7 +93,7 @@ function AuthProviderChip({ provider }) {
     return <Chip size='small' label='LDAP' variant='outlined' icon={<i className='ri-server-line' style={{ fontSize: 14 }} />} />
   }
 
-  
+
 return <Chip size='small' label='Local' variant='outlined' icon={<i className='ri-user-line' style={{ fontSize: 14 }} />} />
 }
 
@@ -132,22 +133,22 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
 
   const handleSave = async () => {
     setError('')
-    
+
     if (!isEdit && !email) {
       setError(t ? t('common.error') : 'Email requis')
-      
+
 return
     }
 
     if (!isEdit && !password) {
       setError(t ? t('common.error') : 'Mot de passe requis')
-      
+
 return
     }
 
     if (password && password.length < 8) {
       setError(t ? t('usersPage.passwordMinLength') : 'Password must be at least 8 characters')
-      
+
 return
     }
 
@@ -169,7 +170,7 @@ return
 
       if (!res.ok) {
         setError(data.error || (t ? t('common.error') : 'Erreur'))
-        
+
 return
       }
 
@@ -215,7 +216,7 @@ return
       <DialogTitle>{isEdit ? (t ? t('common.edit') : 'Modifier l\'utilisateur') : (t ? t('common.add') : 'Nouvel utilisateur')}</DialogTitle>
       <DialogContent>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
-        
+
         <TextField
           fullWidth
           label={t ? t('common.name') : 'Nom'}
@@ -361,7 +362,7 @@ function DeleteDialog({ open, onClose, user, onConfirm, currentUserId, t }) {
 
       if (!res.ok) {
         setError(data.error || (t ? t('common.error') : 'Erreur'))
-        
+
 return
       }
 
@@ -423,94 +424,58 @@ export default function UsersPage() {
   const t = useTranslations()
   const { hasFeature } = useLicense()
   const showRbac = hasFeature(Features.RBAC)
-  const [users, setUsers] = useState([])
-  const [rbacRoles, setRbacRoles] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState(0)
 
   const { setPageInfo } = usePageTitle()
 
   useEffect(() => {
     setPageInfo(t('navigation.users'), t('security.users'), 'ri-user-line')
-    
+
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
+
+  // SWR data fetching
+  const { data: usersData, error: usersError, isLoading: usersLoading, mutate: mutateUsers } = useUsers()
+  const { data: assignmentsData, mutate: mutateAssignments } = useRbacAssignments()
+  const { data: rolesData } = useRbacRoles(showRbac)
+
+  // Combine users with their RBAC role assignments
+  const users = useMemo(() => {
+    const rawUsers = usersData?.data || []
+    const assignments = assignmentsData?.data || []
+
+    return rawUsers.map(user => {
+      const userAssignments = assignments.filter(a => a.user_id === user.id)
+
+      return {
+        ...user,
+        roles: userAssignments.map(a => ({
+          id: a.role_id,
+          name: a.role_name,
+          color: a.role_color,
+          assignment_id: a.id,
+          scope_type: a.scope_type,
+          scope_target: a.scope_target
+        }))
+      }
+    })
+  }, [usersData, assignmentsData])
+
+  const rbacRoles = rolesData?.data || []
+  const loading = usersLoading
+  const error = usersError ? (usersError.message || t('errors.loadingError')) : ''
+
+  // Revalidate all data after mutations (create/edit/delete)
+  const revalidateAll = useCallback(() => {
+    mutateUsers()
+    mutateAssignments()
+  }, [mutateUsers, mutateAssignments])
 
   // Dialogs
   const [userDialogOpen, setUserDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState(null)
-
-  // Charger les utilisateurs avec leurs rôles RBAC
-  const loadUsers = async () => {
-    try {
-      setLoading(true)
-      
-      // Charger les utilisateurs
-      const usersRes = await fetch('/api/v1/users')
-      const usersData = await usersRes.json()
-
-      if (!usersRes.ok) {
-        setError(usersData.error || t('common.error'))
-        
-return
-      }
-      
-      // Charger les assignations RBAC
-      const assignmentsRes = await fetch('/api/v1/rbac/assignments')
-      const assignmentsData = await assignmentsRes.json()
-      
-      // Combiner les données
-      const usersWithRoles = (usersData.data || []).map(user => {
-        const userAssignments = (assignmentsData.data || []).filter(a => a.user_id === user.id)
-
-        
-return {
-          ...user,
-          roles: userAssignments.map(a => ({
-            id: a.role_id,
-            name: a.role_name,
-            color: a.role_color,
-            assignment_id: a.id,
-            scope_type: a.scope_type,
-            scope_target: a.scope_target
-          }))
-        }
-      })
-      
-      setUsers(usersWithRoles)
-    } catch (e) {
-      setError(t('errors.loadingError'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Charger les rôles RBAC disponibles (seulement si la feature est activée)
-  const loadRoles = async () => {
-    if (!showRbac) {
-      setRbacRoles([])
-      return
-    }
-
-    try {
-      const res = await fetch('/api/v1/rbac/roles')
-      const data = await res.json()
-
-      if (res.ok) {
-        setRbacRoles(data.data || [])
-      }
-    } catch (e) {
-      console.error('Error loading RBAC roles:', e)
-    }
-  }
-
-  useEffect(() => {
-    loadUsers()
-    loadRoles()
-  }, [showRbac])
 
   const handleEdit = (user) => {
     setSelectedUser(user)
@@ -670,7 +635,7 @@ return {
         open={userDialogOpen}
         onClose={() => setUserDialogOpen(false)}
         user={selectedUser}
-        onSave={loadUsers}
+        onSave={revalidateAll}
         rbacRoles={rbacRoles}
         t={t}
         showRbac={showRbac}
@@ -680,7 +645,7 @@ return {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         user={userToDelete}
-        onConfirm={loadUsers}
+        onConfirm={revalidateAll}
         currentUserId={session?.user?.id}
         t={t}
       />

@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, CircularProgress, LinearProgress, Typography } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
 
-export default function StoragePoolsWidget({ data, loading, config }) {
+function StoragePoolsWidget({ data, loading, config }) {
   const t = useTranslations()
   const [storages, setStorages] = useState([])
   const [loadingStorages, setLoadingStorages] = useState(true)
@@ -136,3 +136,5 @@ return bUsage - aUsage
     </Box>
   )
 }
+
+export default React.memo(StoragePoolsWidget)

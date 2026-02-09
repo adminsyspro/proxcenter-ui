@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 
 import { useSession } from 'next-auth/react'
 
@@ -39,6 +39,7 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
+import { useOrchestratorAlerts, useAlertsSummary, useAlertRules, useAlertThresholds } from '@/hooks/useAlerts'
 
 /* --------------------------------
    Types
@@ -178,12 +179,6 @@ export default function AlertsPage() {
   const { isEnterprise } = useLicense()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
-  const [alerts, setAlerts] = useState<AlertData[]>([])
-  const [rules, setRules] = useState<EventRule[]>([])
-
-  const [summary, setSummary] = useState<AlertSummary>({
-    total_active: 0, critical: 0, warning: 0, info: 0, acknowledged: 0, resolved_today: 0
-  })
 
   const [thresholds, setThresholds] = useState<AlertThresholds>({
     cpu_warning: 80, cpu_critical: 95,
@@ -191,10 +186,8 @@ export default function AlertsPage() {
     storage_warning: 80, storage_critical: 90
   })
 
-  const [loading, setLoading] = useState(false)
   const [savingThresholds, setSavingThresholds] = useState(false)
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
-  const [orchestratorAvailable, setOrchestratorAvailable] = useState(true)
 
   // Dialog pour créer/éditer une règle
   const [ruleDialog, setRuleDialog] = useState(false)
@@ -229,73 +222,59 @@ export default function AlertsPage() {
 
   useEffect(() => {
     setPageInfo(t('alerts.title'), t('alerts.title'), 'ri-notification-3-line')
-    
+
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
-  const loadData = async () => {
-    // En mode Community, pas d'orchestrator
-    if (!isEnterprise) {
-      setAlerts([])
-      setSummary({ total_active: 0, critical: 0, warning: 0, info: 0, acknowledged: 0, resolved_today: 0 })
-      setRules([])
-      setLoading(false)
-      return
-    }
+  // SWR data fetching - only fetch when Enterprise mode is active
+  const {
+    data: alertsData,
+    error: alertsError,
+    isLoading: alertsLoading,
+    mutate: mutateAlerts
+  } = useOrchestratorAlerts(isEnterprise, 30000)
 
-    try {
-      setLoading(true)
+  const {
+    data: summaryData,
+    mutate: mutateSummary
+  } = useAlertsSummary(isEnterprise, 30000)
 
-      const [alertsRes, summaryRes, rulesRes] = await Promise.all([
-        fetch('/api/v1/orchestrator/alerts?limit=200', { cache: 'no-store' }),
-        fetch('/api/v1/orchestrator/alerts/summary', { cache: 'no-store' }),
-        fetch('/api/v1/orchestrator/alerts/rules', { cache: 'no-store' })
-      ])
+  const {
+    data: rulesData,
+    mutate: mutateRules
+  } = useAlertRules(isEnterprise, 30000)
 
-      if (alertsRes.ok) {
-        const json = await alertsRes.json()
+  const {
+    data: thresholdsData
+  } = useAlertThresholds(isEnterprise)
 
-        setOrchestratorAvailable(true)
-        setAlerts(json.data || [])
-      } else {
-        setOrchestratorAvailable(false)
-      }
+  // Derive state from SWR data
+  const alerts: AlertData[] = alertsData?.data || []
+  const orchestratorAvailable = !alertsError
+  const loading = alertsLoading
 
-      if (summaryRes.ok) setSummary(await summaryRes.json())
-
-      if (rulesRes.ok) {
-        const rulesData = await rulesRes.json()
-
-        setRules(Array.isArray(rulesData) ? rulesData : [])
-      }
-    } catch (e) {
-      console.error('Erreur chargement:', e)
-      setOrchestratorAvailable(false)
-    } finally {
-      setLoading(false)
-    }
+  const summary: AlertSummary = summaryData || {
+    total_active: 0, critical: 0, warning: 0, info: 0, acknowledged: 0, resolved_today: 0
   }
 
-  const loadThresholds = async () => {
-    if (!isEnterprise) return
+  const rules: EventRule[] = useMemo(() => {
+    if (!rulesData) return []
+    return Array.isArray(rulesData) ? rulesData : []
+  }, [rulesData])
 
-    try {
-      const res = await fetch('/api/v1/orchestrator/alerts/thresholds', { cache: 'no-store' })
-
-      if (res.ok) setThresholds(await res.json())
-    } catch (e) { console.error('Erreur seuils:', e) }
-  }
-
+  // Sync thresholds from SWR into local state (for editing)
   useEffect(() => {
-    loadData()
-    loadThresholds()
+    if (thresholdsData) {
+      setThresholds(thresholdsData)
+    }
+  }, [thresholdsData])
 
-    if (!isEnterprise) return
-
-    const interval = setInterval(loadData, 30000)
-
-    return () => clearInterval(interval)
-  }, [isEnterprise])
+  // Revalidate all SWR caches after mutations
+  const revalidateAll = useCallback(() => {
+    mutateAlerts()
+    mutateSummary()
+    mutateRules()
+  }, [mutateAlerts, mutateSummary, mutateRules])
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(alert => {
@@ -307,7 +286,7 @@ return () => setPageInfo('', '', '')
 
       if (severityFilter !== 'all' && alert.severity !== severityFilter) return false
       if (statusFilter !== 'all' && alert.status !== statusFilter) return false
-      
+
 return true
     })
   }, [alerts, search, severityFilter, statusFilter])
@@ -326,7 +305,7 @@ return true
           // DELETE /api/v1/orchestrator/alerts résout toutes les alertes
           await fetch('/api/v1/orchestrator/alerts', { method: 'DELETE' })
           setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
-          loadData()
+          revalidateAll()
         } catch (e) {
           setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
         }
@@ -388,7 +367,7 @@ return true
       })
       setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
       setRuleDialog(false)
-      loadData()
+      revalidateAll()
     } catch (e) {
       setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
     } finally {
@@ -407,7 +386,7 @@ return true
         try {
           await fetch(`/api/v1/orchestrator/alerts/rules/${id}`, { method: 'DELETE' })
           setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
-          loadData()
+          revalidateAll()
         } catch (e) {
           setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
         }
@@ -422,7 +401,7 @@ return true
 
     try {
       await fetch(`/api/v1/orchestrator/alerts/rules/${id}/toggle`, { method: 'POST' })
-      loadData()
+      revalidateAll()
     } catch (e) {
       setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
     }
@@ -440,7 +419,7 @@ return true
         body: JSON.stringify({ acknowledged_by: userId })
       })
       setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
-      loadData()
+      revalidateAll()
     } catch (e) {
       setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
     }
@@ -452,7 +431,7 @@ return true
     try {
       await fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' })
       setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
-      loadData()
+      revalidateAll()
     } catch (e) {
       setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
     }
@@ -587,14 +566,14 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               </Button>
             </Stack>
             <Box sx={{ flex: 1, minHeight: 0 }}>
-              <DataGrid 
-                rows={filteredAlerts} 
-                columns={alertColumns} 
-                loading={loading} 
-                density="compact" 
-                pageSizeOptions={[25, 50, 100]} 
-                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }} 
-                sx={{ 
+              <DataGrid
+                rows={filteredAlerts}
+                columns={alertColumns}
+                loading={loading}
+                density="compact"
+                pageSizeOptions={[25, 50, 100]}
+                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                sx={{
                   border: 'none',
                   '& .MuiDataGrid-cell': {
                     display: 'flex',
@@ -603,7 +582,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   '& .MuiDataGrid-row': {
                     minHeight: '52px !important',
                   }
-                }} 
+                }}
               />
             </Box>
           </Box>
@@ -650,14 +629,14 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               <Button variant="contained" size="small" onClick={openNewRuleDialog} startIcon={<i className="ri-add-line" />}>{t('common.add')}</Button>
             </Box>
             <Box sx={{ flex: 1, minHeight: 0 }}>
-              <DataGrid 
-                rows={rules} 
-                columns={ruleColumns} 
-                loading={loading} 
-                density="compact" 
+              <DataGrid
+                rows={rules}
+                columns={ruleColumns}
+                loading={loading}
+                density="compact"
                 pageSizeOptions={[10, 25, 50]}
-                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }} 
-                sx={{ 
+                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                sx={{
                   border: 'none',
                   '& .MuiDataGrid-cell': {
                     display: 'flex',
@@ -666,7 +645,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   '& .MuiDataGrid-row': {
                     minHeight: '52px !important',
                   }
-                }} 
+                }}
               />
             </Box>
           </Box>
@@ -721,8 +700,8 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
       </Dialog>
 
       {/* Dialog de confirmation */}
-      <Dialog 
-        open={confirmDialog.open} 
+      <Dialog
+        open={confirmDialog.open}
         onClose={() => setConfirmDialog(d => ({ ...d, open: false }))}
         maxWidth="xs"
         fullWidth

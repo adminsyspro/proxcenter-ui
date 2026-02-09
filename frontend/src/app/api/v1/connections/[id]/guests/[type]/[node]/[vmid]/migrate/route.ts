@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { migrateVmSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
 
@@ -21,12 +22,17 @@ export async function POST(
 
     if (denied) return denied
 
-    const body = await req.json()
-    const { target, online = true, targetstorage, withLocalDisks } = body
+    const rawBody = await req.json()
+    const parseResult = migrateVmSchema.safeParse(rawBody)
 
-    if (!target) {
-      return NextResponse.json({ error: "Target node is required" }, { status: 400 })
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid input", details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
+
+    const { target, online, targetstorage, withLocalDisks } = parseResult.data
 
     const conn = await getConnectionById(id)
     

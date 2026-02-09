@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { moveDiskSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
 
@@ -21,16 +22,17 @@ export async function POST(
 
     if (denied) return denied
 
-    const body = await req.json()
-    const { disk, storage, deleteSource = true, format } = body
+    const rawBody = await req.json()
+    const parseResult = moveDiskSchema.safeParse(rawBody)
 
-    if (!disk) {
-      return NextResponse.json({ error: "Disk name is required (e.g., scsi0)" }, { status: 400 })
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid input", details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    if (!storage) {
-      return NextResponse.json({ error: "Target storage is required" }, { status: 400 })
-    }
+    const { disk, storage, deleteSource, format } = parseResult.data
 
     const conn = await getConnectionById(id)
     

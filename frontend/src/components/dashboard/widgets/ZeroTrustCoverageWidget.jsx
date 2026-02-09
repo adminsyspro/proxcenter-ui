@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Box, Typography, LinearProgress, CircularProgress, alpha, Stack } from '@mui/material'
 import { useLicense } from '@/contexts/LicenseContext'
 
-export default function ZeroTrustCoverageWidget({ data, loading, config }) {
+function ZeroTrustCoverageWidget({ data, loading, config }) {
   const t = useTranslations('firewall')
   const { isEnterprise } = useLicense()
   const [vmData, setVmData] = useState([])
@@ -183,10 +183,12 @@ export default function ZeroTrustCoverageWidget({ data, loading, config }) {
               borderRadius: 3,
               bgcolor: alpha('#888', 0.15),
               '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 3 }
-            }} 
+            }}
           />
         </Box>
       </Box>
     </Box>
   )
 }
+
+export default React.memo(ZeroTrustCoverageWidget)

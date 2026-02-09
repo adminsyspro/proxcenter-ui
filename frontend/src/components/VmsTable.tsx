@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useEffect, useState, useCallback } from 'react'
+import React, { useMemo, useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { createPortal } from 'react-dom'
@@ -349,7 +349,7 @@ type VmsTableProps = {
   Component
 ------------------------------ */
 
-export default function VmsTable({
+function VmsTable({
   vms,
   loading = false,
   onVmClick,
@@ -1859,3 +1859,5 @@ return [
     </Box>
   )
 }
+
+export default React.memo(VmsTable)

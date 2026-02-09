@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import React, { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box, Typography } from '@mui/material'
 import VmWaffleChart from '@/components/VmWaffleChart'
 
-export default function VmStatusWaffleWidget({ data, loading }) {
+function VmStatusWaffleWidget({ data, loading }) {
   const router = useRouter()
 
   // Combine VMs and LXCs for the waffle chart
@@ -49,3 +49,5 @@ export default function VmStatusWaffleWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(VmStatusWaffleWidget)

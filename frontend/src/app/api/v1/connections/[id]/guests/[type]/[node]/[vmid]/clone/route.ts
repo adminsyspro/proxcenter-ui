@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { cloneVmSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
 
@@ -31,12 +32,18 @@ export async function POST(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    const body = await req.json()
+    const rawBody = await req.json()
 
-    // Valider les champs requis
-    if (!body.newid) {
-      return NextResponse.json({ error: "newid is required" }, { status: 400 })
+    const parseResult = cloneVmSchema.safeParse(rawBody)
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid input", details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
+
+    const body = parseResult.data
 
     // Construire l'URL Proxmox pour le clone
     const endpoint = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/clone`

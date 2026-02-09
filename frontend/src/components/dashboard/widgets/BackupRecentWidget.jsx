@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Chip, Typography } from '@mui/material'
 
-export default function BackupRecentWidget({ data, loading }) {
+function BackupRecentWidget({ data, loading }) {
   const t = useTranslations()
   const pbs = data?.pbs || {}
 
@@ -108,3 +109,5 @@ export default function BackupRecentWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(BackupRecentWidget)

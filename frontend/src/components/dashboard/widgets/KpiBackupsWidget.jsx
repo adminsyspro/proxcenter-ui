@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography } from '@mui/material'
 
-export default function KpiBackupsWidget({ data, loading }) {
+function KpiBackupsWidget({ data, loading }) {
   const t = useTranslations()
   const pbs = data?.pbs || {}
   const hasError = pbs.backups24h?.error > 0
@@ -35,3 +36,5 @@ export default function KpiBackupsWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(KpiBackupsWidget)

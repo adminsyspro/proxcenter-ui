@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography } from '@mui/material'
 
-export default function GuestsSummaryWidget({ data, loading }) {
+function GuestsSummaryWidget({ data, loading }) {
   const t = useTranslations()
   const guests = data?.guests || {}
 
@@ -42,3 +43,5 @@ export default function GuestsSummaryWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(GuestsSummaryWidget)

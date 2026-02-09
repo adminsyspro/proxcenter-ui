@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography } from '@mui/material'
 
@@ -26,7 +27,7 @@ function getUptimeColor(seconds) {
 return '#f44336'                  // Moins de 1 jour (récemment redémarré)
 }
 
-export default function UptimeNodesWidget({ data, loading }) {
+function UptimeNodesWidget({ data, loading }) {
   const t = useTranslations()
   const nodes = data?.nodes || []
 
@@ -82,3 +83,5 @@ export default function UptimeNodesWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(UptimeNodesWidget)

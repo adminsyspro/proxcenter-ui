@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, LinearProgress, Typography } from '@mui/material'
 
-export default function CephStatusWidget({ data, loading }) {
+function CephStatusWidget({ data, loading }) {
   const t = useTranslations()
   const ceph = data?.ceph
 
@@ -98,3 +99,5 @@ function formatBps(bps) {
   
 return parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
+
+export default React.memo(CephStatusWidget)

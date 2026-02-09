@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { resizeDiskSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
 
@@ -21,16 +22,17 @@ export async function POST(
 
     if (denied) return denied
 
-    const body = await req.json()
-    const { disk, size } = body
+    const rawBody = await req.json()
+    const parseResult = resizeDiskSchema.safeParse(rawBody)
 
-    if (!disk) {
-      return NextResponse.json({ error: "Disk name is required (e.g., scsi0)" }, { status: 400 })
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid input", details: parseResult.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    if (!size) {
-      return NextResponse.json({ error: "Size is required (e.g., +10G)" }, { status: 400 })
-    }
+    const { disk, size } = parseResult.data
 
     const conn = await getConnectionById(id)
     

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
+import { updateConnectionSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
 
@@ -75,38 +76,38 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     if (denied) return denied
 
-    const body = await req.json().catch(() => null)
+    const rawBody = await req.json().catch(() => null)
 
-    if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
+    const parseResult = updateConnectionSchema.safeParse(rawBody)
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        { error: "Invalid input", details: parseResult.error.flatten() },
+        { status: 400 }
+      )
+    }
+
+    const body = parseResult.data
     const data: any = {}
 
     // Champs de base
-    if (body.name !== undefined) data.name = String(body.name).trim()
+    if (body.name !== undefined) data.name = body.name
+    if (body.type !== undefined) data.type = body.type
+    if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl
+    if (body.uiUrl !== undefined) data.uiUrl = body.uiUrl || null
+    if (body.insecureTLS !== undefined) data.insecureTLS = body.insecureTLS
+    if (body.hasCeph !== undefined) data.hasCeph = body.hasCeph
 
-    if (body.type !== undefined) {
-      const type = String(body.type).trim()
-
-      if (!['pve', 'pbs'].includes(type)) {
-        return NextResponse.json({ error: "type must be 'pve' or 'pbs'" }, { status: 400 })
-      }
-
-      data.type = type
-    }
-
-    if (body.baseUrl !== undefined) data.baseUrl = String(body.baseUrl).trim()
-    if (body.uiUrl !== undefined) data.uiUrl = body.uiUrl ? String(body.uiUrl).trim() : null
-    if (body.insecureTLS !== undefined) data.insecureTLS = !!body.insecureTLS
-    if (body.hasCeph !== undefined) data.hasCeph = !!body.hasCeph
-
-    if (body.apiToken !== undefined && String(body.apiToken).trim()) {
-      data.apiTokenEnc = encryptSecret(String(body.apiToken).trim())
+    if (body.apiToken !== undefined && body.apiToken) {
+      data.apiTokenEnc = encryptSecret(body.apiToken)
     }
 
     // Champs SSH
     if (body.sshEnabled !== undefined) {
-      data.sshEnabled = !!body.sshEnabled
-      
+      data.sshEnabled = body.sshEnabled
+
       // Si on désactive SSH, nettoyer les credentials
       if (!body.sshEnabled) {
         data.sshAuthMethod = null
@@ -115,34 +116,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
 
-    if (body.sshPort !== undefined) {
-      const port = parseInt(String(body.sshPort), 10)
-
-      if (port < 1 || port > 65535) {
-        return NextResponse.json({ error: "sshPort must be between 1 and 65535" }, { status: 400 })
-      }
-
-      data.sshPort = port
-    }
-
-    if (body.sshUser !== undefined) {
-      data.sshUser = String(body.sshUser).trim() || 'root'
-    }
-
-    if (body.sshAuthMethod !== undefined) {
-      const method = body.sshAuthMethod ? String(body.sshAuthMethod).trim() : null
-
-      if (method && !['key', 'password'].includes(method)) {
-        return NextResponse.json({ error: "sshAuthMethod must be 'key' or 'password'" }, { status: 400 })
-      }
-
-      data.sshAuthMethod = method
-    }
+    if (body.sshPort !== undefined) data.sshPort = body.sshPort
+    if (body.sshUser !== undefined) data.sshUser = body.sshUser || 'root'
+    if (body.sshAuthMethod !== undefined) data.sshAuthMethod = body.sshAuthMethod || null
 
     // Mise à jour de la clé SSH
     if (body.sshKey !== undefined) {
       if (body.sshKey) {
-        data.sshKeyEnc = encryptSecret(String(body.sshKey).trim())
+        data.sshKeyEnc = encryptSecret(body.sshKey)
       } else {
         data.sshKeyEnc = null
       }
@@ -153,7 +134,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       const secret = body.sshPassphrase || body.sshPassword
 
       if (secret) {
-        data.sshPassEnc = encryptSecret(String(secret).trim())
+        data.sshPassEnc = encryptSecret(secret)
       } else {
         data.sshPassEnc = null
       }

@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, LinearProgress, Typography } from '@mui/material'
 
-export default function PbsOverviewWidget({ data, loading }) {
+function PbsOverviewWidget({ data, loading }) {
   const t = useTranslations()
   const pbs = data?.pbs || {}
 
@@ -103,3 +104,5 @@ export default function PbsOverviewWidget({ data, loading }) {
     </Box>
   )
 }
+
+export default React.memo(PbsOverviewWidget)

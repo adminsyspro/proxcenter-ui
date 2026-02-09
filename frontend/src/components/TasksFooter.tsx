@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -17,6 +17,7 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
+import { useTaskEvents } from '@/hooks/useTaskEvents'
 import TaskDetailDialog from './TaskDetailDialog'
 
 // ============================================
@@ -92,7 +93,7 @@ function formatTime(dateStr: string | null): string {
   try {
     const date = new Date(dateStr)
 
-    
+
 return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
     return dateStr
@@ -106,13 +107,13 @@ function formatDate(dateStr: string | null): string {
     const date = new Date(dateStr)
     const today = new Date()
     const isToday = date.toDateString() === today.toDateString()
-    
+
     if (isToday) {
       return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     }
 
-    
-return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + 
+
+return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' +
            date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   } catch {
     return dateStr
@@ -148,12 +149,29 @@ export default function TasksFooter({
     return status
   }
 
+  // SWR hook for task events
+  const { data: tasksRaw, mutate: mutateTasks, isLoading: loading } = useTaskEvents(50, 10000)
+
+  // Derive tasks from SWR data
+  const tasks: TaskEvent[] = (tasksRaw?.data || []).map((e: any) => ({
+    id: e.id,
+    upid: e.id,
+    type: e.type,
+    status: e.status,
+    startTime: e.ts,
+    endTime: e.endTs,
+    duration: e.duration,
+    node: e.node,
+    user: e.user,
+    description: e.typeLabel || e.message,
+    connectionId: e.connectionId,
+    connectionName: e.connectionName
+  }))
+
   // State - initialize with defaults, then hydrate from localStorage
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [hidden, setHidden] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
-  const [tasks, setTasks] = useState<TaskEvent[]>([])
-  const [loading, setLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState<TaskEvent | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -161,7 +179,7 @@ export default function TasksFooter({
   useEffect(() => {
     const savedExpanded = localStorage.getItem('tasksFooterExpanded')
     const savedHidden = localStorage.getItem('tasksFooterHidden')
-    
+
     if (savedExpanded !== null) {
       setExpanded(savedExpanded === 'true')
     }
@@ -169,7 +187,7 @@ export default function TasksFooter({
     if (savedHidden !== null) {
       setHidden(savedHidden === 'true')
     }
-    
+
     setIsHydrated(true)
   }, [])
 
@@ -185,50 +203,6 @@ export default function TasksFooter({
       localStorage.setItem('tasksFooterHidden', String(hidden))
     }
   }, [hidden, isHydrated])
-
-  // Fetch tasks
-  const fetchTasks = useCallback(async () => {
-    try {
-      const res = await fetch('/api/v1/events?limit=50&source=tasks')
-
-      if (res.ok) {
-        const data = await res.json()
-
-        // API returns { data: [...], meta: {...} }
-        // e.id contains the UPID from Proxmox
-        const taskEvents = (data.data || [])
-
-        setTasks(taskEvents.map((e: any) => ({
-          id: e.id,           // UPID is used as unique id
-          upid: e.id,         // UPID for API calls
-          type: e.type,
-          status: e.status,
-          startTime: e.ts,
-          endTime: e.endTs,
-          duration: e.duration,
-          node: e.node,
-          user: e.user,
-          description: e.typeLabel || e.message,
-          connectionId: e.connectionId,
-          connectionName: e.connectionName
-        })))
-      }
-    } catch (err) {
-      console.error('Failed to fetch tasks:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchTasks()
-
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchTasks, 10000)
-
-    
-return () => clearInterval(interval)
-  }, [fetchTasks])
 
   // Handlers
   const handleToggleExpand = () => {
@@ -426,7 +400,7 @@ return () => clearInterval(interval)
             px: 2,
             py: 0.75,
             cursor: 'pointer',
-            bgcolor: theme.palette.mode === 'dark' 
+            bgcolor: theme.palette.mode === 'dark'
               ? alpha(theme.palette.primary.main, 0.08)
               : alpha(theme.palette.primary.main, 0.04),
             borderBottom: expanded ? '1px solid' : 'none',
@@ -482,12 +456,12 @@ return () => clearInterval(interval)
               />
             )}
           </Box>
-          
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Tooltip title={t('tasks.refresh')}>
               <IconButton
                 size="small"
-                onClick={(e) => { e.stopPropagation(); fetchTasks(); }}
+                onClick={(e) => { e.stopPropagation(); mutateTasks(); }}
               >
                 <i className="ri-refresh-line" style={{ fontSize: 16 }} />
               </IconButton>
@@ -526,7 +500,7 @@ return () => clearInterval(interval)
                 getRowClassName={(params) => {
                   if (params.row.status === 'running') return 'row-running'
                   if (params.row.status && params.row.status !== 'OK' && !params.row.status.includes('WARNINGS')) return 'row-error'
-                  
+
 return ''
                 }}
                 sx={{
@@ -554,8 +528,8 @@ return ''
                   '& .MuiDataGrid-cell': {
                     py: 0.5,
                     borderBottom: '1px solid',
-                    borderColor: theme.palette.mode === 'dark' 
-                      ? 'rgba(255,255,255,0.05)' 
+                    borderColor: theme.palette.mode === 'dark'
+                      ? 'rgba(255,255,255,0.05)'
                       : 'rgba(0,0,0,0.05)'
                   },
                   '& .row-running': {

@@ -40,6 +40,11 @@ import { DataGrid } from '@mui/x-data-grid'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 
+import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
+import { useLicenseManagement } from '@/hooks/useLicenseManagement'
+import { useAISettings } from '@/hooks/useAISettings'
+import { useGreenSettings } from '@/hooks/useGreenSettings'
+
 // Import dynamique pour éviter les erreurs SSR
 const NotificationsTab = dynamic(() => import('@/components/settings/NotificationsTab'), {
   ssr: false,
@@ -81,7 +86,7 @@ async function fetchJson(url, init) {
   } catch {}
 
   if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
-  
+
 return json
 }
 
@@ -101,7 +106,7 @@ function ConnectionStatus({ connection, autoTest = false }) {
         ? `/api/v1/pbs/${connection.id}/status`
         : `/api/v1/connections/${connection.id}/nodes`
 
-      const res = await fetch(endpoint, { cache: 'no-store' })
+      const res = await fetch(endpoint)
 
       if (res.ok) {
         setStatus('ok')
@@ -157,52 +162,22 @@ function ConnectionsTab() {
   const isOnboarding = searchParams.get('onboarding') === 'true'
   const [connTab, setConnTab] = useState(0)
 
-  // PVE Connections
-  const [pveConnections, setPveConnections] = useState([])
-  const [pveLoading, setPveLoading] = useState(true)
-  const [pveError, setPveError] = useState(null)
-
-  // PBS Connections
-  const [pbsConnections, setPbsConnections] = useState([])
-  const [pbsLoading, setPbsLoading] = useState(true)
-  const [pbsError, setPbsError] = useState(null)
+  // Hook for data fetching
+  const {
+    pveConnections,
+    pbsConnections,
+    pveLoading,
+    pbsLoading,
+    pveError,
+    pbsError,
+    loadPveConnections,
+    loadPbsConnections,
+  } = useConnectionsManagement()
 
   // Dialog
   const [addConnOpen, setAddConnOpen] = useState(false)
   const [addConnType, setAddConnType] = useState('pve')
   const [editingConn, setEditingConn] = useState(null)
-
-  const loadPveConnections = async () => {
-    setPveLoading(true)
-    setPveError(null)
-
-    try {
-      const json = await fetchJson('/api/v1/connections?type=pve', { cache: 'no-store' })
-
-      setPveConnections(Array.isArray(json?.data) ? json.data : [])
-    } catch (e) {
-      setPveError(e?.message || String(e))
-      setPveConnections([])
-    } finally {
-      setPveLoading(false)
-    }
-  }
-
-  const loadPbsConnections = async () => {
-    setPbsLoading(true)
-    setPbsError(null)
-
-    try {
-      const json = await fetchJson('/api/v1/connections?type=pbs', { cache: 'no-store' })
-
-      setPbsConnections(Array.isArray(json?.data) ? json.data : [])
-    } catch (e) {
-      setPbsError(e?.message || String(e))
-      setPbsConnections([])
-    } finally {
-      setPbsLoading(false)
-    }
-  }
 
   const openAddDialog = (type) => {
     setAddConnType(type)
@@ -289,7 +264,7 @@ function ConnectionsTab() {
 
     setAddConnOpen(false)
     setAddConn({ name: '', baseUrl: '', uiUrl: '', insecureTLS: true, hasCeph: false, apiToken: '' })
-    
+
     if (addConnType === 'pve') {
       await loadPveConnections()
     } else {
@@ -303,18 +278,13 @@ function ConnectionsTab() {
 
     if (!ok) return
     await fetchJson(`/api/v1/connections/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    
+
     if (type === 'pve') {
       await loadPveConnections()
     } else {
       await loadPbsConnections()
     }
   }
-
-  useEffect(() => {
-    loadPveConnections()
-    loadPbsConnections()
-  }, [])
 
   // PVE Columns
   const pveColumns = useMemo(
@@ -454,28 +424,28 @@ function ConnectionsTab() {
     <>
       {/* Sub-tabs PVE / PBS */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs 
-          value={connTab} 
+        <Tabs
+          value={connTab}
           onChange={(_, v) => setConnTab(v)}
           sx={{ '& .MuiTab-root': { minHeight: 48 } }}
         >
-          <Tab 
+          <Tab
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-server-line' style={{ fontSize: 18 }} />
                 <span>Proxmox VE</span>
                 <Chip size='small' label={pveConnections.length} color='primary' sx={{ height: 18, fontSize: 10, ml: 0.5 }} />
               </Box>
-            } 
+            }
           />
-          <Tab 
+          <Tab
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-hard-drive-2-line' style={{ fontSize: 18 }} />
                 <span>Proxmox Backup Server</span>
                 <Chip size='small' label={pbsConnections.length} color='secondary' sx={{ height: 18, fontSize: 10, ml: 0.5 }} />
               </Box>
-            } 
+            }
           />
         </Tabs>
       </Box>
@@ -571,88 +541,40 @@ function ConnectionsTab() {
 function LicenseTab() {
   const t = useTranslations()
   const [licenseKey, setLicenseKey] = useState('')
-  const [activating, setActivating] = useState(false)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(null)
-  const [licenseStatus, setLicenseStatus] = useState(null)
-  const [features, setFeatures] = useState([])
-  const [loading, setLoading] = useState(true)
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false)
 
-  const loadLicenseStatus = async () => {
-    try {
-      setLoading(true)
-      const res = await fetch('/api/v1/license/status')
-      if (res.ok) {
-        const data = await res.json()
-        setLicenseStatus(data)
-      }
-    } catch (e) {
-      console.error('Failed to load license status', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadFeatures = async () => {
-    try {
-      const res = await fetch('/api/v1/license/features')
-      if (res.ok) {
-        const data = await res.json()
-        setFeatures(data.features || [])
-      }
-    } catch (e) {
-      console.error('Failed to load features', e)
-    }
-  }
-
-  useEffect(() => {
-    loadLicenseStatus()
-    loadFeatures()
-  }, [])
+  const {
+    licenseStatus,
+    features,
+    loading,
+    error,
+    success,
+    activating,
+    setError,
+    setSuccess,
+    handleActivate: hookActivate,
+    handleDeactivate: hookDeactivate,
+  } = useLicenseManagement()
 
   const handleActivate = async () => {
-    setActivating(true)
-    setError(null)
-    setSuccess(null)
-    try {
-      const res = await fetch('/api/v1/license/activate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ license: licenseKey })
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Activation failed')
-      }
+    const result = await hookActivate(licenseKey)
+
+    if (result.success) {
       setSuccess(t('settings.licenseActivated'))
       setLicenseKey('')
-      await loadLicenseStatus()
-      await loadFeatures()
-    } catch (e) {
-      setError(e?.message || 'Activation failed')
-    } finally {
-      setActivating(false)
+    } else {
+      setError(result.error || 'Activation failed')
     }
   }
 
   const handleDeactivate = async () => {
     setDeactivateDialogOpen(false)
-    setActivating(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/v1/license/deactivate', { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Deactivation failed')
-      }
+    const result = await hookDeactivate()
+
+    if (result.success) {
       setSuccess(t('settings.licenseDeactivated'))
-      await loadLicenseStatus()
-      await loadFeatures()
-    } catch (e) {
-      setError(e?.message || 'Deactivation failed')
-    } finally {
-      setActivating(false)
+    } else {
+      setError(result.error || 'Deactivation failed')
     }
   }
 
@@ -890,108 +812,39 @@ function LicenseTab() {
 function AITab() {
   const t = useTranslations()
 
-  const [settings, setSettings] = useState({
-    enabled: false,
-    provider: 'ollama',
-    ollamaUrl: 'http://localhost:11434',
-    ollamaModel: 'mistral:7b',
-    openaiKey: '',
-    openaiModel: 'gpt-4o-mini'
-  })
-
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [availableModels, setAvailableModels] = useState([])
-  const [loadingModels, setLoadingModels] = useState(false)
-
-  // Charger les paramètres au montage
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
-    try {
-      const res = await fetch('/api/v1/settings/ai')
-
-      if (res.ok) {
-        const json = await res.json()
-
-        if (json?.data) {
-          setSettings(s => ({ ...s, ...json.data }))
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load AI settings', e)
-    }
-  }
+  const {
+    settings,
+    setSettings,
+    testing,
+    testResult,
+    setTestResult,
+    saving,
+    availableModels,
+    loadingModels,
+    saveSettings: hookSaveSettings,
+    testConnection: hookTestConnection,
+    loadOllamaModels,
+  } = useAISettings()
 
   const saveSettings = async () => {
-    setSaving(true)
+    const result = await hookSaveSettings()
 
-    try {
-      await fetchJson('/api/v1/settings/ai', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      })
+    if (result.success) {
       setTestResult({ type: 'success', message: t('settings.saved') })
-    } catch (e) {
-      setTestResult({ type: 'error', message: e?.message || t('common.error') })
-    } finally {
-      setSaving(false)
+    } else {
+      setTestResult({ type: 'error', message: result.error || t('common.error') })
     }
   }
 
   const testConnection = async () => {
-    setTesting(true)
-    setTestResult(null)
+    const result = await hookTestConnection()
 
-    try {
-      const res = await fetch('/api/v1/ai/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      })
-
-      const json = await res.json()
-
-      if (res.ok) {
-        setTestResult({ type: 'success', message: `${t('settings.connectionOk')} "${json.response?.substring(0, 100)}..."` })
-      } else {
-        setTestResult({ type: 'error', message: json?.error || t('settings.connectionError') })
-      }
-    } catch (e) {
-      setTestResult({ type: 'error', message: e?.message || t('settings.connectionError') })
-    } finally {
-      setTesting(false)
+    if (result.success) {
+      setTestResult({ type: 'success', message: `${t('settings.connectionOk')} "${result.response?.substring(0, 100)}..."` })
+    } else {
+      setTestResult({ type: 'error', message: result.error || t('settings.connectionError') })
     }
   }
-
-  const loadOllamaModels = async () => {
-    setLoadingModels(true)
-
-    try {
-      const res = await fetch(`${settings.ollamaUrl}/api/tags`)
-
-      if (res.ok) {
-        const json = await res.json()
-        const models = json?.models?.map(m => m.name) || []
-
-        setAvailableModels(models)
-      }
-    } catch (e) {
-      console.error('Failed to load Ollama models', e)
-    } finally {
-      setLoadingModels(false)
-    }
-  }
-
-  useEffect(() => {
-    if (settings.provider === 'ollama' && settings.ollamaUrl) {
-      loadOllamaModels()
-    }
-  }, [settings.provider, settings.ollamaUrl])
 
   return (
     <Box>
@@ -1228,33 +1081,16 @@ function AITab() {
 function GreenTab() {
   const t = useTranslations()
 
-  const [settings, setSettings] = useState({
-    pue: 1.4,
-    electricityPrice: 0.18,
-    currency: 'EUR',
-    co2Country: 'france',
-    co2Factor: 0.052,
-    serverSpecs: {
-      mode: 'auto',
-      avgCoresPerServer: 64,
-      avgRamPerServer: 256,
-      tdpPerCore: 10,
-      wattsPerGbRam: 0.375,
-      wattsPerTbStorage: 6,
-      storageType: 'mixed',
-      overheadPerServer: 50,
-    },
-    display: {
-      showCost: true,
-      showCo2: true,
-      showEquivalences: true,
-      showScore: true,
-    }
-  })
-
-  const [saving, setSaving] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState(null)
+  const {
+    settings,
+    setSettings,
+    saving,
+    loading,
+    message,
+    setMessage,
+    loadSettings,
+    saveSettings: hookSaveSettings,
+  } = useGreenSettings()
 
   const co2FactorsByCountry = {
     france: { label: t('settings.co2Countries.france'), value: 0.052 },
@@ -1271,60 +1107,24 @@ function GreenTab() {
     custom: { label: t('settings.co2Countries.custom'), value: settings.co2Factor },
   }
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
-    try {
-      setLoading(true)
-      const res = await fetch('/api/v1/settings/green')
-
-      if (res.ok) {
-        const json = await res.json()
-
-        if (json?.data) {
-          setSettings(s => ({ ...s, ...json.data }))
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load green settings', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const saveSettings = async () => {
-    setSaving(true)
-    setMessage(null)
-
-    try {
-      const res = await fetch('/api/v1/settings/green', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      })
-
-      if (res.ok) {
-        setMessage({ type: 'success', text: t('settings.savedSuccess') })
-      } else {
-        throw new Error(t('settings.saveError'))
-      }
-    } catch (e) {
-      setMessage({ type: 'error', text: e?.message || t('common.error') })
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handleCountryChange = (country) => {
     const factor = co2FactorsByCountry[country]?.value || 0.052
 
-    setSettings(s => ({ 
-      ...s, 
+    setSettings(s => ({
+      ...s,
       co2Country: country,
       co2Factor: country === 'custom' ? s.co2Factor : factor
     }))
+  }
+
+  const saveSettings = async () => {
+    const result = await hookSaveSettings()
+
+    if (result.success) {
+      setMessage({ type: 'success', text: t('settings.savedSuccess') })
+    } else {
+      setMessage({ type: 'error', text: result.error || t('settings.saveError') })
+    }
   }
 
   if (loading) {
@@ -1692,11 +1492,11 @@ export default function SettingsPage() {
         <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 0 }}>
           {/* Main Tabs */}
           <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 2 }}>
-            <Tabs 
-              value={mainTab} 
+            <Tabs
+              value={mainTab}
               onChange={(_, v) => setMainTab(v)}
               sx={{
-                '& .MuiTab-root': { 
+                '& .MuiTab-root': {
                   minHeight: 56,
                   textTransform: 'none',
                   fontSize: '0.95rem'

@@ -598,7 +598,7 @@ return () => setPageInfo('', '', '')
     setError(null)
     
     try {
-      const res = await fetch('/api/v1/resources/overview', { cache: 'no-store' })
+      const res = await fetch('/api/v1/resources/overview')
 
       if (!res.ok) throw new Error('Erreur lors du chargement')
       

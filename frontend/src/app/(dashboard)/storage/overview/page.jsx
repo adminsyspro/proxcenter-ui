@@ -247,7 +247,7 @@ return () => setPageInfo('', '', '')
     setError(null)
 
     try {
-      const res = await fetch('/api/v1/storage', { cache: 'no-store' })
+      const res = await fetch('/api/v1/storage')
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()

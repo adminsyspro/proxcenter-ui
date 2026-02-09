@@ -75,7 +75,7 @@ export default function InventoryPage() {
   useEffect(() => {
     const fetchRunningTasks = async () => {
       try {
-        const res = await fetch('/api/v1/tasks/running', { cache: 'no-store' })
+        const res = await fetch('/api/v1/tasks/running')
 
         if (!res.ok) return
         const json = await res.json()
@@ -173,7 +173,7 @@ return () => setPageInfo('', '', '')
   // Charger les favoris
   const loadFavorites = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/favorites', { cache: 'no-store' })
+      const res = await fetch('/api/v1/favorites')
 
       if (res.ok) {
         const json = await res.json()
@@ -241,7 +241,7 @@ return () => setPageInfo('', '', '')
 
     try {
       // Charger uniquement les connexions PVE (pas PBS)
-      const res = await fetch('/api/v1/connections?type=pve', { cache: 'no-store' })
+      const res = await fetch('/api/v1/connections?type=pve')
       const json = await res.json()
       const list = Array.isArray(json?.data) ? json.data : []
 

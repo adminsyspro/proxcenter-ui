@@ -276,7 +276,7 @@ return () => setPageInfo('', '', '')
       setPbsLoading(true)
 
       try {
-        const res = await fetch('/api/v1/connections?type=pbs', { cache: 'no-store' })
+        const res = await fetch('/api/v1/connections?type=pbs')
         const json = await res.json()
         const list = Array.isArray(json?.data) ? json.data : []
 
@@ -301,7 +301,7 @@ return () => setPageInfo('', '', '')
   useEffect(() => {
     const loadPveConnections = async () => {
       try {
-        const res = await fetch('/api/v1/connections?type=pve', { cache: 'no-store' })
+        const res = await fetch('/api/v1/connections?type=pve')
         const json = await res.json()
         const list = Array.isArray(json?.data) ? json.data : []
 
@@ -325,8 +325,8 @@ return () => setPageInfo('', '', '')
     const loadPbsMetadata = async () => {
       try {
         const [statusRes, datastoresRes] = await Promise.all([
-          fetch(`/api/v1/pbs/${encodeURIComponent(selectedPbs)}/status`, { cache: 'no-store' }),
-          fetch(`/api/v1/pbs/${encodeURIComponent(selectedPbs)}/datastores`, { cache: 'no-store' }),
+          fetch(`/api/v1/pbs/${encodeURIComponent(selectedPbs)}/status`),
+          fetch(`/api/v1/pbs/${encodeURIComponent(selectedPbs)}/datastores`),
         ])
 
         if (statusRes.ok) {
@@ -367,8 +367,7 @@ return () => setPageInfo('', '', '')
         if (search.trim()) params.set('search', search.trim())
 
         const res = await fetch(
-          `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups?${params}`,
-          { cache: 'no-store' }
+          `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups?${params}`
         )
 
         if (res.ok) {

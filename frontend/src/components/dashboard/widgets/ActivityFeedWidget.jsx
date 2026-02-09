@@ -1,14 +1,15 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, CircularProgress, List, ListItem, ListItemText, Typography } from '@mui/material'
+import { useTaskEvents } from '@/hooks/useTaskEvents'
 
 function ActivityFeedWidget({ data, loading, config }) {
   const t = useTranslations()
-  const [events, setEvents] = useState([])
-  const [loadingEvents, setLoadingEvents] = useState(true)
+  const { data: eventsData, isLoading: loadingEvents } = useTaskEvents(20, 30000)
+  const events = Array.isArray(eventsData?.data) ? eventsData.data : []
 
   function timeAgo(ts) {
     if (!ts) return ''
@@ -37,30 +38,6 @@ function ActivityFeedWidget({ data, loading, config }) {
     'verify': t('backups.verified'),
     'garbage_collection': 'GC PBS',
   }
-
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const res = await fetch('/api/v1/events?limit=20&source=tasks', { cache: 'no-store' })
-
-        if (res.ok) {
-          const json = await res.json()
-
-          setEvents(Array.isArray(json?.data) ? json.data : [])
-        }
-      } catch (e) {
-        console.error('Failed to fetch events:', e)
-      } finally {
-        setLoadingEvents(false)
-      }
-    }
-
-    fetchEvents()
-    const interval = setInterval(fetchEvents, 30000)
-
-    
-return () => clearInterval(interval)
-  }, [])
 
   if (loadingEvents) {
     return (

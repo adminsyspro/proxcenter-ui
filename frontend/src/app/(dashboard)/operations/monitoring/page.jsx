@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import { useTranslations } from 'next-intl'
 
@@ -26,7 +26,7 @@ import {
   CartesianGrid
 } from 'recharts'
 
-import { monitoringApi } from '@/lib/api/monitoring'
+import { useMonitoringSummary } from '@/hooks/useMonitoring'
 
 // Recharts (déjà dans tes deps)
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -93,9 +93,8 @@ return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 export default function Page() {
   const t = useTranslations()
-  const [loading, setLoading] = useState(true)
-  const [payload, setPayload] = useState(null)
-  const [error, setError] = useState('')
+  const { data: payload, error: fetchError, isLoading: loading, mutate } = useMonitoringSummary(10000)
+  const error = fetchError?.message || ''
 
   const { setPageInfo } = usePageTitle()
 
@@ -104,35 +103,6 @@ export default function Page() {
 
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
-
-  const refreshMs = 10_000
-
-  async function load() {
-    try {
-      setError('')
-      const res = await monitoringApi.summary()
-
-      // Normalisation (suivant ton wrapper api.get())
-      // - parfois res.data = { data: ... }
-      // - parfois res.data.data = ...
-      const p = res?.data?.data ?? res?.data ?? null
-
-      setPayload(p)
-    } catch (e) {
-      setError(e?.message || t('monitoringPage.unknownError'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-    const intervalId = setInterval(load, refreshMs)
-
-
-return () => clearInterval(intervalId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Compat schéma : overview OU kpis
   const overview = payload?.overview ?? payload?.kpis ?? payload?.data?.overview ?? payload?.data?.kpis ?? {}
@@ -202,7 +172,7 @@ return <Chip size="small" variant="outlined" label={label} />
           <MiniStat title={t('monitoringPage.latency')} value={overview.latencyMs ?? 0} unit="ms" subtitle={t('monitoringPage.clusterAverage')} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <MiniStat title={t('monitoringPage.refresh')} value={Math.round(refreshMs / 1000)} unit="s" subtitle={loading ? t('common.loading') : t('monitoringPage.auto')} />
+          <MiniStat title={t('monitoringPage.refresh')} value={10} unit="s" subtitle={loading ? t('common.loading') : t('monitoringPage.auto')} />
         </Grid>
       </Grid>
 

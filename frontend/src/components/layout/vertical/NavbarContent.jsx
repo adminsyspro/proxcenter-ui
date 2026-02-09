@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -48,6 +48,8 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 
 // License Context
 import { useLicense, Features } from '@/contexts/LicenseContext'
+
+import { useActiveAlerts, useDRSRecommendations, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
 
 // Version config
 import { VERSION } from '@/config/version'
@@ -146,22 +148,46 @@ const NavbarContent = () => {
   // About Dialog
   const [aboutOpen, setAboutOpen] = useState(false)
 
-  // Version update check
-  const [updateInfo, setUpdateInfo] = useState(null)
-
   // Menus anchors
   const [langAnchor, setLangAnchor] = useState(null)
   const [notifAnchor, setNotifAnchor] = useState(null)
   const [userAnchor, setUserAnchor] = useState(null)
 
-  // Notifications state
-  const [notifications, setNotifications] = useState([])
-  const [notifLoading, setNotifLoading] = useState(false)
-  const [notifCount, setNotifCount] = useState(0)
-  const [notifStats, setNotifStats] = useState({ crit: 0, warn: 0 })
+  // SWR hooks for notifications
+  const { data: alertsResponse, mutate: mutateAlerts } = useActiveAlerts(isEnterprise, 30000)
+  const { data: drsRecsResponse, mutate: mutateDrsRecs } = useDRSRecommendations(isEnterprise, hasFeature(Features.DRS), 30000)
+  const { data: updateInfoData } = useVersionCheck(3600000)
+  const { data: healthData } = useOrchestratorHealth(isEnterprise, 30000)
 
-  // DRS recommendations state
-  const [drsRecommendations, setDrsRecommendations] = useState([])
+  // Derive notifications from SWR data
+  const notifications = useMemo(() => {
+    if (!alertsResponse?.data) return []
+    const alerts = alertsResponse.data || []
+    return alerts.map(a => ({
+      id: a.id,
+      message: a.message,
+      severity: a.severity === 'critical' ? 'crit' : a.severity === 'warning' ? 'warn' : 'info',
+      source: a.resource || a.connection_id,
+      lastSeenAt: a.last_seen_at,
+      firstSeenAt: a.first_seen_at,
+      occurrences: a.occurrences || 1
+    }))
+  }, [alertsResponse])
+
+  const notifCount = notifications.length
+  const notifStats = useMemo(() => {
+    const alerts = alertsResponse?.data || []
+    return {
+      crit: alerts.filter(a => a.severity === 'critical').length,
+      warn: alerts.filter(a => a.severity === 'warning').length
+    }
+  }, [alertsResponse])
+
+  const drsRecommendations = useMemo(() => {
+    return Array.isArray(drsRecsResponse) ? drsRecsResponse : []
+  }, [drsRecsResponse])
+
+  const updateInfo = updateInfoData || null
 
   // License expiration notification
   const licenseExpirationNotif = licenseStatus?.licensed &&
@@ -238,62 +264,6 @@ const NavbarContent = () => {
   const openNotif = Boolean(notifAnchor)
   const openUser = Boolean(userAnchor)
 
-  // Charger les notifications depuis l'orchestrator (Enterprise seulement)
-  const fetchNotifications = useCallback(async () => {
-    // En mode Community, pas d'orchestrator donc pas de notifications
-    if (!isEnterprise) {
-      setNotifications([])
-      setNotifStats({ crit: 0, warn: 0 })
-      setNotifCount(0)
-      setDrsRecommendations([])
-      return
-    }
-
-    try {
-      // Récupérer les alertes actives depuis l'orchestrator
-      const res = await fetch('/api/v1/orchestrator/alerts?status=active&limit=10', { cache: 'no-store' })
-
-      if (res.ok) {
-        const json = await res.json()
-        const alerts = json.data || []
-
-        // Mapper les champs de l'orchestrator vers le format attendu par l'UI
-        const mappedAlerts = alerts.map(a => ({
-          id: a.id,
-          message: a.message,
-          severity: a.severity === 'critical' ? 'crit' : a.severity === 'warning' ? 'warn' : 'info',
-          source: a.resource || a.connection_id,
-          lastSeenAt: a.last_seen_at,
-          firstSeenAt: a.first_seen_at,
-          occurrences: a.occurrences || 1
-        }))
-
-        setNotifications(mappedAlerts)
-
-        // Compter les critiques et warnings
-        const critCount = alerts.filter(a => a.severity === 'critical').length
-        const warnCount = alerts.filter(a => a.severity === 'warning').length
-
-        setNotifStats({
-          crit: critCount,
-          warn: warnCount
-        })
-        setNotifCount(alerts.length)
-      }
-
-      // Récupérer les recommandations DRS si la feature est disponible
-      if (hasFeature(Features.DRS)) {
-        const drsRes = await fetch('/api/v1/orchestrator/drs/recommendations', { cache: 'no-store' })
-        if (drsRes.ok) {
-          const drsData = await drsRes.json()
-          setDrsRecommendations(Array.isArray(drsData) ? drsData : [])
-        }
-      }
-    } catch (e) {
-      console.error('Failed to fetch notifications:', e)
-    }
-  }, [hasFeature, isEnterprise])
-
   // Acquitter une alerte depuis la cloche (via orchestrator)
   const handleAcknowledge = async (e, alertId) => {
     e.stopPropagation()
@@ -308,7 +278,7 @@ const NavbarContent = () => {
       })
 
       if (res.ok) {
-        fetchNotifications()
+        mutateAlerts()
       }
     } catch (e) {
       console.error('Failed to acknowledge:', e)
@@ -325,7 +295,7 @@ const NavbarContent = () => {
       })
 
       if (res.ok) {
-        fetchNotifications()
+        mutateAlerts()
       }
     } catch (e) {
       console.error('Failed to resolve:', e)
@@ -343,7 +313,7 @@ const NavbarContent = () => {
       })
 
       if (res.ok) {
-        fetchNotifications()
+        mutateAlerts()
       }
     } catch (e) {
       console.error('Failed to clear all:', e)
@@ -365,47 +335,16 @@ const NavbarContent = () => {
         })
       }
 
-      fetchNotifications()
+      mutateAlerts()
     } catch (e) {
       console.error('Failed to acknowledge all:', e)
     }
   }
 
-  // Charger les notifications au mount et toutes les 30 secondes
-  useEffect(() => {
-    fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30000)
-
-
-return () => clearInterval(interval)
-  }, [fetchNotifications])
-
-  // Check for version updates on mount and every hour
-  useEffect(() => {
-    const checkForUpdates = async () => {
-      try {
-        const res = await fetch('/api/v1/version/check', { cache: 'no-store' })
-        if (res.ok) {
-          const data = await res.json()
-          setUpdateInfo(data)
-        }
-      } catch (e) {
-        console.error('Failed to check for updates:', e)
-      }
-    }
-
-    checkForUpdates()
-    const interval = setInterval(checkForUpdates, 3600000) // Check every hour
-
-    return () => clearInterval(interval)
-  }, [])
-
   // Charger les notifications quand on ouvre le menu
-  const handleOpenNotif = async (e) => {
+  const handleOpenNotif = (e) => {
     setNotifAnchor(e.currentTarget)
-    setNotifLoading(true)
-    await fetchNotifications()
-    setNotifLoading(false)
+    mutateAlerts()
   }
 
   // Ctrl/Cmd + K => open search; ESC => close
@@ -436,43 +375,11 @@ return () => window.removeEventListener('keydown', onKeyDown)
     await signOut({ callbackUrl: '/login' })
   }
 
-  // PXCore (orchestrator) status
-  const [pxcoreStatus, setPXCoreStatus] = useState({ 
-    status: 'unknown', 
-    syncing: false,
-    components: null 
-  })
-  
-  const fetchPXCoreStatus = useCallback(async () => {
-    try {
-      setPXCoreStatus(prev => ({ ...prev, syncing: true }))
-      const res = await fetch('/api/v1/orchestrator/health', { cache: 'no-store' })
-
-      if (res.ok) {
-        const json = await res.json()
-
-        setPXCoreStatus({ 
-          status: json.status || 'healthy',
-          syncing: false,
-          components: json.components || null
-        })
-      } else {
-        setPXCoreStatus({ status: 'error', syncing: false, components: null })
-      }
-    } catch {
-      setPXCoreStatus({ status: 'offline', syncing: false, components: null })
-    }
-  }, [])
-
-  // Fetch PXCore status periodically (only for Enterprise)
-  useEffect(() => {
-    if (!isEnterprise) return
-
-    fetchPXCoreStatus()
-    const interval = setInterval(fetchPXCoreStatus, 30000)
-
-    return () => clearInterval(interval)
-  }, [fetchPXCoreStatus, isEnterprise])
+  // PXCore (orchestrator) status - derived from SWR
+  const pxcoreStatus = useMemo(() => {
+    if (!healthData) return { status: 'unknown', syncing: false, components: null }
+    return { status: healthData.status, syncing: false, components: healthData.components }
+  }, [healthData])
 
   // PXCore status colors and labels
   const getPXCoreInfo = (status, components) => {
@@ -821,11 +728,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
         </Box>
         <Divider />
 
-        {notifLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : allNotifications.length === 0 ? (
+        {allNotifications.length === 0 ? (
           <Box sx={{ py: 3, textAlign: 'center' }}>
             <i className='ri-checkbox-circle-line' style={{ fontSize: 32, color: 'var(--mui-palette-success-main)', opacity: 0.7 }} />
             <Typography variant='body2' sx={{ mt: 1, opacity: 0.7 }}>

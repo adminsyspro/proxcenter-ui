@@ -1,106 +1,15 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { useTranslations } from 'next-intl'
-
 import { Box, Typography, LinearProgress, CircularProgress, alpha, Stack } from '@mui/material'
 import { useLicense } from '@/contexts/LicenseContext'
+import { useVMFirewallCoverage } from '@/hooks/useZeroTrust'
 
 function ZeroTrustCoverageWidget({ data, loading, config }) {
   const t = useTranslations('firewall')
   const { isEnterprise } = useLicense()
-  const [vmData, setVmData] = useState([])
-  const [loadingData, setLoadingData] = useState(true)
-
-  useEffect(() => {
-    // En mode Community, pas d'orchestrator pour le firewall
-    if (!isEnterprise) {
-      setLoadingData(false)
-      return
-    }
-
-    const fetchData = async () => {
-      try {
-        // Get first PVE connection
-        const connRes = await fetch('/api/v1/connections')
-        const connJson = await connRes.json()
-        const pveConn = connJson.data?.find(c => c.type === 'pve')
-
-        if (!pveConn) {
-          setLoadingData(false)
-
-          return
-        }
-
-        // Fetch VMs
-        const vmsRes = await fetch(`/api/v1/vms?connId=${pveConn.id}`)
-
-        if (vmsRes?.ok) {
-          const vmsJson = await vmsRes.json()
-          const guests = vmsJson?.data?.vms || []
-
-          // Check firewall and rules for each VM (simplified - first 30)
-          const vmChecks = await Promise.all(
-            guests.slice(0, 30).map(async (vm) => {
-              try {
-                const [configRes, rulesRes] = await Promise.all([
-                  fetch(`/api/v1/connections/${pveConn.id}/guests/${vm.type}/${vm.node}/${vm.vmid}/config`),
-                  fetch(`/api/v1/firewall/vms/${pveConn.id}/${vm.node}/${vm.type}/${vm.vmid}?type=rules`).catch(() => null)
-                ])
-                
-                let firewallEnabled = false
-
-                if (configRes.ok) {
-                  const configJson = await configRes.json()
-                  const config = configJson?.data || {}
-
-                  for (let i = 0; i < 10; i++) {
-                    const netConfig = config[`net${i}`]
-
-                    if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
-                      firewallEnabled = true
-                      break
-                    }
-                  }
-                }
-
-                let rules = []
-                let hasSG = false
-
-                if (rulesRes?.ok) {
-                  rules = await rulesRes.json()
-
-                  if (Array.isArray(rules)) {
-                    hasSG = rules.some(r => r.type === 'group')
-                  }
-                }
-
-                return { 
-                  ...vm, 
-                  firewallEnabled, 
-                  hasRules: Array.isArray(rules) && rules.length > 0,
-                  hasSG 
-                }
-              } catch {
-                return { ...vm, firewallEnabled: false, hasRules: false, hasSG: false }
-              }
-            })
-          )
-
-          setVmData(vmChecks)
-        }
-      } catch (err) {
-        console.error('ZeroTrustCoverageWidget error:', err)
-      } finally {
-        setLoadingData(false)
-      }
-    }
-
-    fetchData()
-    const interval = setInterval(fetchData, 60000)
-
-    return () => clearInterval(interval)
-  }, [isEnterprise])
+  const { data: vmData = [], isLoading: loadingData } = useVMFirewallCoverage(isEnterprise, 60000)
 
   if (loadingData) {
     return (
@@ -159,15 +68,15 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
             <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10 }}>Protection</Typography>
             <Typography variant="caption" sx={{ fontWeight: 700, fontSize: 10 }}>{Math.round(protectionRate)}%</Typography>
           </Box>
-          <LinearProgress 
-            variant="determinate" 
-            value={protectionRate} 
-            sx={{ 
-              height: 6, 
+          <LinearProgress
+            variant="determinate"
+            value={protectionRate}
+            sx={{
+              height: 6,
               borderRadius: 3,
               bgcolor: alpha('#ef4444', 0.15),
               '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 3 }
-            }} 
+            }}
           />
         </Box>
         <Box>
@@ -175,11 +84,11 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
             <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10 }}>Micro-segmentation</Typography>
             <Typography variant="caption" sx={{ fontWeight: 700, fontSize: 10 }}>{Math.round(sgRate)}%</Typography>
           </Box>
-          <LinearProgress 
-            variant="determinate" 
-            value={sgRate} 
-            sx={{ 
-              height: 6, 
+          <LinearProgress
+            variant="determinate"
+            value={sgRate}
+            sx={{
+              height: 6,
               borderRadius: 3,
               bgcolor: alpha('#888', 0.15),
               '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 3 }

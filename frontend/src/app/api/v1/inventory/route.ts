@@ -5,6 +5,7 @@ import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getCo
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS } from "@/lib/rbac"
+import { formatBytes } from "@/utils/format"
 
 export const runtime = "nodejs"
 
@@ -130,14 +131,6 @@ type PbsServerData = {
     datastoreCount: number
     backupCount: number
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 export async function GET() {

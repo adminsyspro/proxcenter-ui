@@ -117,7 +117,6 @@ export async function POST(
         })
       })
       
-      console.log('[remote-migrate] Got TLS fingerprint:', targetFingerprint)
     } catch (tlsError) {
       console.warn('[remote-migrate] Failed to get TLS fingerprint:', tlsError)
       
@@ -193,12 +192,6 @@ export async function POST(
     if (bwlimit !== undefined && bwlimit !== null && bwlimit !== '') {
       migrateParams['bwlimit'] = String(bwlimit)
     }
-
-    console.log(`[remote-migrate] VM ${vmid} from ${node} to ${targetNode}@${targetHost}`)
-    console.log(`[remote-migrate] Params (sanitized):`, {
-      ...migrateParams,
-      'target-endpoint': `apitoken=***,host=${targetHost},port=${targetPort}${targetFingerprint ? ',fingerprint=***' : ''}`
-    })
 
     // Appeler l'API Proxmox pour la migration cross-cluster
     const result = await pveFetch<string>(

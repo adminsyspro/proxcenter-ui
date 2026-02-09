@@ -27,32 +27,33 @@ import {
   useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import RefreshIcon from '@mui/icons-material/Refresh'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
-import TrendingFlatIcon from '@mui/icons-material/TrendingFlat'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import ErrorIcon from '@mui/icons-material/Error'
-import StorageIcon from '@mui/icons-material/Storage'
-import MemoryIcon from '@mui/icons-material/Memory'
-import SpeedIcon from '@mui/icons-material/Speed'
-import CloudIcon from '@mui/icons-material/Cloud'
-import AccessTimeIcon from '@mui/icons-material/AccessTime'
-import InsightsIcon from '@mui/icons-material/Insights'
-import PsychologyIcon from '@mui/icons-material/Psychology'
-import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
-import ShieldIcon from '@mui/icons-material/Shield'
-import BoltIcon from '@mui/icons-material/Bolt'
-import EnergySavingsLeafIcon from '@mui/icons-material/EnergySavingsLeaf'
-import Co2Icon from '@mui/icons-material/Co2'
-import ElectricBoltIcon from '@mui/icons-material/ElectricBolt'
-import ParkIcon from '@mui/icons-material/Park'
-import DirectionsCarIcon from '@mui/icons-material/DirectionsCar'
-import EuroIcon from '@mui/icons-material/Euro'
-import LayersIcon from '@mui/icons-material/Layers'
-import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates'
-import SavingsIcon from '@mui/icons-material/Savings'
+// RemixIcon replacements for @mui/icons-material
+const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const TrendingUpIcon = (props: any) => <i className="ri-arrow-up-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const TrendingDownIcon = (props: any) => <i className="ri-arrow-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const TrendingFlatIcon = (props: any) => <i className="ri-subtract-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const WarningAmberIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const StorageIcon = (props: any) => <i className="ri-hard-drive-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const MemoryIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const SpeedIcon = (props: any) => <i className="ri-speed-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const CloudIcon = (props: any) => <i className="ri-cloud-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const AccessTimeIcon = (props: any) => <i className="ri-time-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const InsightsIcon = (props: any) => <i className="ri-line-chart-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PsychologyIcon = (props: any) => <i className="ri-brain-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const RocketLaunchIcon = (props: any) => <i className="ri-rocket-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ShieldIcon = (props: any) => <i className="ri-shield-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const BoltIcon = (props: any) => <i className="ri-flashlight-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const EnergySavingsLeafIcon = (props: any) => <i className="ri-leaf-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const Co2Icon = (props: any) => <i className="ri-cloud-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ElectricBoltIcon = (props: any) => <i className="ri-flashlight-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ParkIcon = (props: any) => <i className="ri-plant-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const DirectionsCarIcon = (props: any) => <i className="ri-car-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const EuroIcon = (props: any) => <i className="ri-money-euro-circle-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const LayersIcon = (props: any) => <i className="ri-stack-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const TipsAndUpdatesIcon = (props: any) => <i className="ri-lightbulb-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const SavingsIcon = (props: any) => <i className="ri-funds-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 import {
   ResponsiveContainer,
   XAxis,

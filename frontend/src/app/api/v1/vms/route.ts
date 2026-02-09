@@ -4,12 +4,13 @@ import { prisma } from "@/lib/db/prisma"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS } from "@/lib/rbac"
+import { formatBytes, formatUptime } from "@/utils/format"
 
 export const runtime = "nodejs"
 
 /**
  * GET /api/v1/vms
- * 
+ *
  * API agrégée qui retourne toutes les VMs et LXCs de toutes les connexions PVE.
  * Optimisé pour charger toutes les données en parallèle.
  * Les IPs sont chargées séparément via /api/v1/vms/ips pour ne pas ralentir.
@@ -17,28 +18,6 @@ export const runtime = "nodejs"
 
 function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
-}
-
-function formatBytes(bytes: number) {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  
-return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-function secondsToUptime(seconds: number) {
-  if (!seconds || seconds < 0) return '-'
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-
-  if (d > 0) return `${d}j ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  
-return `${m}m`
 }
 
 export async function GET(req: Request) {
@@ -110,7 +89,7 @@ export async function GET(req: Request) {
             ramUsedFormatted: formatBytes(Number(r.mem || 0)),
             ramMaxFormatted: formatBytes(Number(r.maxmem || 0)),
             diskGb: round1(Number(r.maxdisk || 0) / 1073741824),
-            uptime: secondsToUptime(r.uptime),
+            uptime: formatUptime(r.uptime),
             uptimeSeconds: Number(r.uptime || 0),
             template: r.template === 1,
             tags: r.tags ? String(r.tags).split(';').filter(Boolean) : [],

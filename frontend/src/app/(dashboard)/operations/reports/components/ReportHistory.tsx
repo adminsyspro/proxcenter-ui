@@ -12,6 +12,8 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
+import { formatBytes } from '@/utils/format'
+
 interface Report {
   id: string
   type: string
@@ -35,15 +37,6 @@ interface ReportHistoryProps {
   onDelete: (id: string) => Promise<void>
   onRefresh: () => void
   loading: boolean
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
 function formatDate(dateStr: string): string {

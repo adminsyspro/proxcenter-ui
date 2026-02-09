@@ -42,26 +42,23 @@ export async function GET(req: Request) {
         sshPort: true,
         sshUser: true,
         sshAuthMethod: true,
+        // Inclure les champs chiffrés pour vérifier si configuré (ne pas renvoyer au client)
+        sshKeyEnc: true,
+        sshPassEnc: true,
         createdAt: true,
         updatedAt: true,
       },
     })
 
-    // Ajouter un indicateur si SSH est configuré (clé ou mot de passe présent)
-    const connectionsWithSSHStatus = await Promise.all(
-      connections.map(async (conn) => {
-        // Vérifier si des credentials SSH sont configurés
-        const fullConn = await prisma.connection.findUnique({
-          where: { id: conn.id },
-          select: { sshKeyEnc: true, sshPassEnc: true }
-        })
-        
-        return {
-          ...conn,
-          sshConfigured: !!(fullConn?.sshKeyEnc || fullConn?.sshPassEnc)
-        }
-      })
-    )
+    // Calculer sshConfigured en mémoire sans N+1 queries
+    const connectionsWithSSHStatus = connections.map((conn) => {
+      const { sshKeyEnc, sshPassEnc, ...rest } = conn
+
+      return {
+        ...rest,
+        sshConfigured: !!(sshKeyEnc || sshPassEnc)
+      }
+    })
 
     return NextResponse.json({ data: connectionsWithSSHStatus })
   } catch (e: any) {

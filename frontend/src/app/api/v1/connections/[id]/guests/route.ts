@@ -114,8 +114,6 @@ export async function GET(_req: Request, ctx: RouteContext) {
               // Permission manquante sur Proxmox (VM.Monitor requis) - silencieux
             } else if (msg.includes('500') && msg.includes('QEMU guest agent is not running')) {
               // Guest agent non démarré - normal
-            } else {
-              console.log("[guest] Guest agent network not available:", msg.slice(0, 150))
             }
           }
 
@@ -145,9 +143,7 @@ return undefined
             // Silencieux pour les erreurs de permission
             const msg = e?.message || ''
 
-            if (!msg.includes('403') && !msg.includes('Permission')) {
-              console.log("[guest] Guest agent osinfo not available:", msg.slice(0, 100))
-            }
+            // Silencieux pour les erreurs non-permission
           }
 
           
@@ -196,7 +192,7 @@ return undefined
           }
         }
       } catch (e) {
-        console.log("[guest] Error fetching LXC config:", e)
+        // LXC config fetch failed, non-critical
       }
     }
 

@@ -72,20 +72,9 @@ export async function POST(
       sshAuthMethod: connection.sshAuthMethod,
     }
 
-    console.log('[test-ssh] Connection SSH config:', {
-      sshEnabled: connection.sshEnabled,
-      sshPort: connection.sshPort,
-      sshUser: connection.sshUser,
-      sshAuthMethod: connection.sshAuthMethod,
-      hasSshKeyEnc: !!connection.sshKeyEnc,
-      hasSshPassEnc: !!connection.sshPassEnc,
-    })
-
     if (connection.sshKeyEnc) {
       try {
         const decryptedKey = decryptSecret(connection.sshKeyEnc)
-        console.log('[test-ssh] Decrypted key length:', decryptedKey?.length)
-        console.log('[test-ssh] Key starts with:', decryptedKey?.substring(0, 50))
         sshCredentials.sshKey = decryptedKey
       } catch (e: any) {
         console.error('[test-ssh] Failed to decrypt SSH key:', e)
@@ -109,14 +98,6 @@ export async function POST(
       }
     }
 
-    console.log('[test-ssh] Sending to orchestrator:', {
-      sshEnabled: sshCredentials.sshEnabled,
-      sshPort: sshCredentials.sshPort,
-      sshUser: sshCredentials.sshUser,
-      sshAuthMethod: sshCredentials.sshAuthMethod,
-      hasKey: !!sshCredentials.sshKey,
-      keyLength: sshCredentials.sshKey?.length,
-    })
 
     // Call orchestrator to test SSH on all nodes
     const { getOrchestratorClient } = await import("@/lib/orchestrator")

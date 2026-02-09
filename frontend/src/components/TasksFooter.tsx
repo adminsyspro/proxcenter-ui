@@ -170,9 +170,6 @@ export default function TasksFooter({
       setHidden(savedHidden === 'true')
     }
     
-    // Debug
-    console.log('[TasksFooter] Hydrated:', { savedExpanded, savedHidden })
-    
     setIsHydrated(true)
   }, [])
 
@@ -247,7 +244,6 @@ return () => clearInterval(interval)
   }
 
   const handleRowDoubleClick = (params: any) => {
-    console.log('[TasksFooter] Row double-clicked:', params.row)
     setSelectedTask(params.row)
     setDialogOpen(true)
   }

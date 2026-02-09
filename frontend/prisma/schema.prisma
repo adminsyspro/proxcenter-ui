@@ -100,5 +100,6 @@ model Alert {
   @@index([severity])
   @@index([source])
   @@index([lastSeenAt])
+  @@index([status, severity, lastSeenAt])
   @@map("alerts")
 }

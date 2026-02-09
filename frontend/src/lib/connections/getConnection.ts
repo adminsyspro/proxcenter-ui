@@ -17,6 +17,15 @@ export type PbsConn = {
   insecureDev: boolean
 }
 
+// In-memory cache for connections
+const connectionCache = new Map<string, { data: PveConn | PbsConn; expiry: number }>()
+const CACHE_TTL = 60_000 // 60 seconds
+
+export function invalidateConnectionCache(id?: string) {
+  if (id) connectionCache.delete(id)
+  else connectionCache.clear()
+}
+
 export async function getConnectionById(id: string): Promise<PveConn> {
   if (!id) throw new Error("Missing connection id")
 
@@ -25,10 +34,15 @@ export async function getConnectionById(id: string): Promise<PveConn> {
     throw new Error('Default connection is not configured. Create a connection in SQLite (POST /api/v1/connections).')
   }
 
+  const cached = connectionCache.get(id)
+  if (cached && cached.expiry > Date.now()) {
+    return cached.data as PveConn
+  }
+
   const c = await prisma.connection.findUnique({
     where: { id },
 
-    // ✅ on SELECT uniquement ce qu'il faut, mais on inclut bien baseUrl
+    // on SELECT uniquement ce qu'il faut, mais on inclut bien baseUrl
     select: {
       id: true,
       name: true,
@@ -42,17 +56,27 @@ export async function getConnectionById(id: string): Promise<PveConn> {
   if (!c.baseUrl) throw new Error(`Connection ${id} has no baseUrl`)
   if (!c.apiTokenEnc) throw new Error(`Connection ${id} has no apiTokenEnc`)
 
-  return {
+  const result: PveConn = {
     id: c.id,
     name: c.name,
     baseUrl: c.baseUrl,
     apiToken: decryptSecret(c.apiTokenEnc),
     insecureDev: !!c.insecureTLS,
   }
+
+  connectionCache.set(id, { data: result, expiry: Date.now() + CACHE_TTL })
+
+  return result
 }
 
 export async function getPbsConnectionById(id: string): Promise<PbsConn> {
   if (!id) throw new Error("Missing PBS connection id")
+
+  const cacheKey = `pbs:${id}`
+  const cached = connectionCache.get(cacheKey)
+  if (cached && cached.expiry > Date.now()) {
+    return cached.data as PbsConn
+  }
 
   const c = await prisma.connection.findUnique({
     where: { id },
@@ -71,11 +95,15 @@ export async function getPbsConnectionById(id: string): Promise<PbsConn> {
   if (!c.baseUrl) throw new Error(`PBS Connection ${id} has no baseUrl`)
   if (!c.apiTokenEnc) throw new Error(`PBS Connection ${id} has no apiTokenEnc`)
 
-  return {
+  const result: PbsConn = {
     id: c.id,
     name: c.name,
     baseUrl: c.baseUrl,
     apiToken: decryptSecret(c.apiTokenEnc),
     insecureDev: !!c.insecureTLS,
   }
+
+  connectionCache.set(cacheKey, { data: result, expiry: Date.now() + CACHE_TTL })
+
+  return result
 }

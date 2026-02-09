@@ -80,8 +80,6 @@ export async function DELETE(
     const queryString = params.toString()
     const url = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}${queryString ? '?' + queryString : ''}`
     
-    console.log(`[DELETE VM] Deleting ${type}/${vmid} on ${node}, URL: ${url}`)
-
     // Appeler l'API Proxmox pour supprimer la VM
     const result = await pveFetch<string>(
       conn,

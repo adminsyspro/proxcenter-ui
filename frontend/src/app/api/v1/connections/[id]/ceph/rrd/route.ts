@@ -43,7 +43,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       )
     } catch (e) {
       // Fallback: pas de données RRD
-      console.log('RRD data not available:', e)
+      // RRD data not available
     }
 
     // Parser et formater les données pour les graphiques
@@ -171,7 +171,7 @@ return result
         }))
         .sort((a, b) => a.id - b.id)
     } catch (e) {
-      console.log('Failed to fetch OSD metrics:', e)
+      // Failed to fetch OSD metrics
     }
 
     // Calculer les moyennes de latence

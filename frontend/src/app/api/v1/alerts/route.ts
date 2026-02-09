@@ -1,24 +1,9 @@
-import crypto from 'crypto'
-
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/db/prisma'
+import { generateFingerprint } from '@/lib/alerts/fingerprint'
 
 export const runtime = 'nodejs'
-
-function generateFingerprint(alert: {
-  severity: string
-  message: string  // Ajouter cette ligne
-  source: string
-  entityType?: string
-  entityId?: string
-  metric?: string
-}): string {
-  const data = `${alert.source}|${alert.severity}|${alert.message}|${alert.entityType || ''}|${alert.entityId || ''}|${alert.metric || ''}`
-
-  
-return crypto.createHash('md5').update(data).digest('hex')
-}
 
 /**
  * GET /api/v1/alerts

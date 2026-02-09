@@ -43,8 +43,6 @@ export async function POST(
       size,
     }
     
-    console.log(`[resize_disk] VM ${vmid} disk ${disk} size ${size}`)
-    
     // Appeler l'API Proxmox
     const endpoint = resourceType === 'qemu' 
       ? `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/resize`

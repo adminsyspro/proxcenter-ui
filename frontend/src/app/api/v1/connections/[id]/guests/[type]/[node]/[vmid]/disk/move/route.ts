@@ -51,8 +51,6 @@ export async function POST(
       moveParams.format = format
     }
     
-    console.log(`[move_disk] VM ${vmid} disk ${disk} to ${storage}, params:`, moveParams)
-    
     // Appeler l'API Proxmox
     const endpoint = resourceType === 'qemu' 
       ? `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/move_disk`

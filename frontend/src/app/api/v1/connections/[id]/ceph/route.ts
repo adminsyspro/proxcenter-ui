@@ -2,26 +2,17 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { formatBytes } from "@/utils/format"
 
 export const runtime = "nodejs"
-
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  
-return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
 
 function formatBytesPerSec(bytes: number): string {
   if (!bytes || bytes === 0) return '0 B/s'
   const k = 1024
-  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s']
+  const sizes = ['B/s', 'KiB/s', 'MiB/s', 'GiB/s', 'TiB/s']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
 
-  
+
 return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 

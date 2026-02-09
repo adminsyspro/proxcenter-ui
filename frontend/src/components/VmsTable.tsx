@@ -28,17 +28,17 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
-import * as XLSX from 'xlsx'
+// XLSX is dynamically imported in handleExportExcel to reduce bundle size
 
-// Icons pour le menu contextuel
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import StopIcon from '@mui/icons-material/Stop'
-import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew'
-import PauseIcon from '@mui/icons-material/Pause'
-import RestartAltIcon from '@mui/icons-material/RestartAlt'
-import TerminalIcon from '@mui/icons-material/Terminal'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
-import MoveUpIcon from '@mui/icons-material/MoveUp'
+// RemixIcon replacements for @mui/icons-material
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const RestartAltIcon = (props: any) => <i className="ri-restart-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const TerminalIcon = (props: any) => <i className="ri-terminal-box-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 /* -----------------------------
   Types
@@ -548,7 +548,8 @@ return { id: vm.id, data }
   }, [showTrends, visibleVms, onLoadTrends, onLoadTrendsBatch]) // Ne dépend que des VMs visibles
 
   // Fonction d'export Excel
-  const handleExportExcel = useCallback(() => {
+  const handleExportExcel = useCallback(async () => {
+    const XLSX = await import('xlsx')
     const exportData = vms.map(vm => ({
       'ID': vm.vmid,
       'Nom': vm.name,

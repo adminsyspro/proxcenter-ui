@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { formatBytes } from '@/utils/format'
 import {
   Box,
   Card,
@@ -85,13 +86,6 @@ const getStatusLabel = (status: string, template: boolean | undefined): string =
     case 'stopped': return 'Stopped'
     default: return status
   }
-}
-
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
 /* -----------------------------

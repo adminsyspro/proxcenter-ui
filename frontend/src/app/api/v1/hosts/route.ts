@@ -3,33 +3,12 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { formatBytes, formatUptime } from "@/utils/format"
 
 export const runtime = "nodejs"
 
 function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
-}
-
-function formatBytes(bytes: number) {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  
-return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-function secondsToUptime(seconds: number) {
-  if (!seconds || seconds < 0) return '-'
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-
-  if (d > 0) return `${d}j ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  
-return `${m}m`
 }
 
 export async function GET(req: Request) {
@@ -94,7 +73,7 @@ export async function GET(req: Request) {
             diskUsedFormatted: formatBytes(diskUsed),
             diskMaxFormatted: formatBytes(diskMax),
             uptime,
-            uptimeFormatted: secondsToUptime(uptime),
+            uptimeFormatted: formatUptime(uptime),
           }
         })
 

@@ -1,6 +1,14 @@
 // src/lib/proxmox/pbs-client.ts
 import { Agent, request } from "undici"
 
+let insecureAgent: Agent | null = null
+function getInsecureAgent(): Agent {
+  if (!insecureAgent) {
+    insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
+  }
+  return insecureAgent
+}
+
 export type PbsClientOptions = {
   baseUrl: string
   apiToken: string  // Format attendu: user@realm!tokenid:secret (avec :)
@@ -23,7 +31,7 @@ export async function pbsFetch<T>(
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api2/json${path}`
 
   const dispatcher = opts.insecureDev
-    ? new Agent({ connect: { rejectUnauthorized: false } })
+    ? getInsecureAgent()
     : undefined
 
   const method = String(init.method || "GET").toUpperCase()
@@ -52,6 +60,7 @@ export async function pbsFetch<T>(
     headers,
     body,
     dispatcher,
+    signal: init.signal ?? undefined,
   })
 
   const text = await res.body.text()

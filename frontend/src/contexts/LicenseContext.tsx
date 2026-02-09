@@ -19,7 +19,6 @@ export const Features = {
   RBAC: 'rbac',
   JOBS: 'jobs',
   NOTIFICATIONS: 'notifications',
-  TOPOLOGY: 'topology',
   CVE_SCANNER: 'cve_scanner',
 } as const
 

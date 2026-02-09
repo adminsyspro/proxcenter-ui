@@ -164,8 +164,7 @@
     "billing": "Facturation",
     "about": "À propos",
     "templates": "Templates",
-    "reports": "Rapports",
-    "topology": "Topologie"
+    "reports": "Rapports"
   },
   "navbar": {
     "language": "Langue",
@@ -2596,19 +2595,5 @@
     },
     "lastScan": "Dernier scan : {date}",
     "filterBySeverity": "Filtrer par sévérité"
-  },
-  "topology": {
-    "title": "Topologie",
-    "subtitle": "Carte réseau des clusters Proxmox",
-    "clusters": "Clusters",
-    "nodes": "Nœuds",
-    "vms": "VMs",
-    "cpu": "CPU",
-    "memory": "MEM",
-    "online": "En ligne",
-    "warning": "Avertissement",
-    "offline": "Hors ligne",
-    "noData": "Aucune donnée de topologie disponible. Vérifiez que vos connexions Proxmox sont configurées.",
-    "loading": "Chargement de la topologie..."
   }
 }

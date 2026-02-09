@@ -250,6 +250,7 @@ return `${mins}m`
                 borderRadius: 2,
                 p: 1.25,
                 pb: 1,
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
               <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
@@ -322,6 +323,7 @@ return `${mins}m`
                 borderColor: 'divider',
                 borderRadius: 2,
                 p: 1.25,
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
               <UsageBar themeColor={primaryColor} label="CPU usage" used={cpuNowPct} capacity={100} mode="pct" />
@@ -348,6 +350,7 @@ return `${mins}m`
                 borderColor: 'divider',
                 borderRadius: 2,
                 p: 1.25,
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
               {hostInfo.ioDelay != null ? (
@@ -385,6 +388,7 @@ return `${mins}m`
                 borderColor: 'divider',
                 borderRadius: 2,
                 p: 1.25,
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
               <Stack spacing={1.25}>
@@ -712,6 +716,7 @@ return `${mins}m`
                 borderColor: 'divider',
                 borderRadius: 2,
                 p: 1.25,
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
               {/* Pour PBS et Datastore, n'afficher que Storage */}

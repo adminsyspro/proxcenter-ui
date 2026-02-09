@@ -111,7 +111,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'severity, message, source are required' }, { status: 400 })
     }
 
-    const fingerprint = generateFingerprint({ severity, message, source, entityType, entityId, metric })
+    const fingerprint = generateFingerprint({ severity, source, entityType, entityId, metric })
 
     // Upsert: créer ou mettre à jour si existe déjà
     const alert = await prisma.alert.upsert({

@@ -127,10 +127,10 @@ return () => setPageInfo('', '', '')
 
   useEffect(() => {
     load()
-    const t = setInterval(load, refreshMs)
+    const intervalId = setInterval(load, refreshMs)
 
-    
-return () => clearInterval(t)
+
+return () => clearInterval(intervalId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

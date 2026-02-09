@@ -547,6 +547,8 @@ export function MigrateVmDialog({
     const loadRemoteResources = async () => {
       setRemoteStoragesLoading(true)
       setRemoteBridgesLoading(true)
+      setSelectedRemoteStorage('')
+      setSelectedRemoteBridge('')
       
       try {
         // Load storages
@@ -572,7 +574,7 @@ export function MigrateVmDialog({
         
         if (networkJson.data && Array.isArray(networkJson.data)) {
           const bridges = networkJson.data
-            .filter((n: any) => n.type === 'bridge')
+            .filter((n: any) => n.type === 'bridge' || n.type === 'OVSBridge')
             .map((n: any) => n.iface)
           setRemoteBridges(bridges)
           
@@ -1260,7 +1262,11 @@ export function MigrateVmDialog({
                     <InputLabel>{t('hardware.crossCluster.selectTargetNode')}</InputLabel>
                     <Select
                       value={selectedRemoteNode}
-                      onChange={(e) => setSelectedRemoteNode(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedRemoteNode(e.target.value)
+                        setSelectedRemoteStorage('')
+                        setSelectedRemoteBridge('')
+                      }}
                       label={t('hardware.crossCluster.selectTargetNode')}
                     >
                       {remoteNodes.map((node) => (

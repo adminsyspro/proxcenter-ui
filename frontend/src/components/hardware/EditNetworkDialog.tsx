@@ -78,7 +78,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
 
         if (json.data && Array.isArray(json.data)) {
           const bridgeList = json.data
-            .filter((n: any) => n.type === 'bridge')
+            .filter((n: any) => n.type === 'bridge' || n.type === 'OVSBridge')
             .map((n: any) => n.iface)
 
           setBridges(bridgeList.length > 0 ? bridgeList : ['vmbr0', 'vmbr1'])

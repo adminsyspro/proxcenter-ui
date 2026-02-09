@@ -71,7 +71,7 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, ex
 
         if (json.data && Array.isArray(json.data)) {
           const bridgeList = json.data
-            .filter((n: any) => n.type === 'bridge')
+            .filter((n: any) => n.type === 'bridge' || n.type === 'OVSBridge')
             .map((n: any) => n.iface)
 
           console.log('[AddNetworkDialog] Bridges found:', bridgeList)

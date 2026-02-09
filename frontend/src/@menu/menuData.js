@@ -75,6 +75,13 @@ export const menuData = (t = (key) => key) => [
         permissions: ['admin.settings'],
         requiredFeature: 'microsegmentation'
       },
+      {
+        label: t('navigation.topology'),
+        icon: 'ri-mind-map',
+        href: '/automation/topology',
+        permissions: ['node.view'],
+        requiredFeature: 'topology'
+      },
     ]
   },
 

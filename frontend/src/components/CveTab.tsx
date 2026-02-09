@@ -82,10 +82,21 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
 
   const handleScan = async () => {
     setScanning(true)
-    // Simulate scan delay
-    await new Promise(r => setTimeout(r, 2000))
-    await fetchCves()
-    setScanning(false)
+    try {
+      const url = node
+        ? `/api/v1/cve/${connectionId}?node=${encodeURIComponent(node)}`
+        : `/api/v1/cve/${connectionId}`
+      const res = await fetch(url, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setCves(data.vulnerabilities || [])
+        setLastScan(data.lastScan || null)
+      }
+    } catch (e) {
+      console.error('Failed to scan CVEs:', e)
+    } finally {
+      setScanning(false)
+    }
   }
 
   const toggleFilter = (severity: string) => {

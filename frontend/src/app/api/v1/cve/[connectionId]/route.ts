@@ -3,121 +3,81 @@ import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-interface CveEntry {
-  cveId: string
-  package: string
-  installedVersion: string
-  fixedVersion: string
-  severity: 'critical' | 'high' | 'medium' | 'low'
-  description: string
-  node: string
-  publishedAt: string
-}
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
 
-const MOCK_CVES: CveEntry[] = [
-  {
-    cveId: 'CVE-2025-32820',
-    package: 'pve-manager',
-    installedVersion: '8.1.4',
-    fixedVersion: '8.1.5',
-    severity: 'critical',
-    description: 'Remote code execution in pve-manager API endpoint allows authenticated users to execute arbitrary commands.',
-    node: 'pve-node-01',
-    publishedAt: '2025-11-15',
-  },
-  {
-    cveId: 'CVE-2025-31105',
-    package: 'qemu-server',
-    installedVersion: '8.0.10',
-    fixedVersion: '8.0.11',
-    severity: 'high',
-    description: 'VM escape vulnerability in QEMU virtio-net device emulation.',
-    node: 'pve-node-01',
-    publishedAt: '2025-10-22',
-  },
-  {
-    cveId: 'CVE-2025-28974',
-    package: 'openssl',
-    installedVersion: '3.0.13',
-    fixedVersion: '3.0.14',
-    severity: 'high',
-    description: 'Buffer overflow in X.509 certificate verification could lead to denial of service.',
-    node: 'pve-node-02',
-    publishedAt: '2025-09-18',
-  },
-  {
-    cveId: 'CVE-2025-27631',
-    package: 'libproxmox-rs',
-    installedVersion: '0.3.1',
-    fixedVersion: '0.3.2',
-    severity: 'high',
-    description: 'Improper input validation in REST API parser allows privilege escalation.',
-    node: 'pve-node-03',
-    publishedAt: '2025-08-30',
-  },
-  {
-    cveId: 'CVE-2025-26448',
-    package: 'pve-kernel-6.8',
-    installedVersion: '6.8.12-1',
-    fixedVersion: '6.8.12-2',
-    severity: 'medium',
-    description: 'Local privilege escalation via eBPF verifier bypass in kernel.',
-    node: 'pve-node-01',
-    publishedAt: '2025-08-12',
-  },
-  {
-    cveId: 'CVE-2025-25190',
-    package: 'pve-firewall',
-    installedVersion: '5.0.5',
-    fixedVersion: '5.0.6',
-    severity: 'medium',
-    description: 'Firewall rules bypass when using IPv6 mapped addresses.',
-    node: 'pve-node-02',
-    publishedAt: '2025-07-25',
-  },
-  {
-    cveId: 'CVE-2025-24012',
-    package: 'corosync',
-    installedVersion: '3.1.8',
-    fixedVersion: '3.1.9',
-    severity: 'medium',
-    description: 'Cluster communication can be disrupted via malformed totem messages.',
-    node: 'pve-node-03',
-    publishedAt: '2025-07-03',
-  },
-  {
-    cveId: 'CVE-2025-22876',
-    package: 'libgnutls30',
-    installedVersion: '3.8.4',
-    fixedVersion: '3.8.5',
-    severity: 'low',
-    description: 'Timing side-channel in RSA-PKCS#1 v1.5 signature verification.',
-    node: 'pve-node-02',
-    publishedAt: '2025-06-14',
-  },
-]
-
+// GET /api/v1/cve/{connectionId}?node=xxx — proxy to orchestrator
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
-  const { connectionId } = await params
-  const { searchParams } = new URL(request.url)
-  const node = searchParams.get('node')
+  try {
+    const { connectionId } = await params
+    const { searchParams } = new URL(request.url)
+    const node = searchParams.get('node')
 
-  // Simulate a small delay
-  await new Promise(resolve => setTimeout(resolve, 300))
+    let url = `${ORCHESTRATOR_URL}/api/v1/cve/${encodeURIComponent(connectionId)}`
+    if (node) {
+      url += `?node=${encodeURIComponent(node)}`
+    }
 
-  let results = MOCK_CVES
-  if (node) {
-    // Map real node name to mock nodes for demo purposes
-    // In production, the backend would filter by actual node
-    results = MOCK_CVES.filter(cve => cve.node === node || node.includes('node'))
+    const response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: data.error || 'Failed to get CVE scan results' },
+        { status: response.status }
+      )
+    }
+
+    return NextResponse.json(data)
+  } catch (error: any) {
+    console.error('Error fetching CVEs:', error)
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    )
   }
+}
 
-  return NextResponse.json({
-    connectionId,
-    lastScan: new Date(Date.now() - 3600000).toISOString(),
-    vulnerabilities: results,
-  })
+// POST /api/v1/cve/{connectionId} — force scan (proxy to orchestrator /scan)
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ connectionId: string }> }
+) {
+  try {
+    const { connectionId } = await params
+    const { searchParams } = new URL(request.url)
+    const node = searchParams.get('node')
+
+    let url = `${ORCHESTRATOR_URL}/api/v1/cve/${encodeURIComponent(connectionId)}/scan`
+    if (node) {
+      url += `?node=${encodeURIComponent(node)}`
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: data.error || 'Failed to scan for CVEs' },
+        { status: response.status }
+      )
+    }
+
+    return NextResponse.json(data)
+  } catch (error: any) {
+    console.error('Error scanning CVEs:', error)
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }

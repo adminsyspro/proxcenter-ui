@@ -33,6 +33,7 @@ import { formatUptime } from '../helpers'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
 import StatusChip from './StatusChip'
+import NodeHeatmap from './NodeHeatmap'
 
 function VCenterSummary({
   kindLabel,
@@ -315,7 +316,7 @@ return `${mins}m`
 
           /* Affichage détaillé pour les Hosts - 3 colonnes */
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', xl: 'row' } }}>
-            {/* Colonne 1 - CPU, Load, RAM, HD */}
+            {/* Colonne 1 - CPU, Load, RAM, SWAP, IO delay, KSM */}
             <Box
               sx={{
                 flex: 1,
@@ -342,9 +343,36 @@ return `${mins}m`
               {swapCap > 0 ? (
                 <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
               ) : null}
+
+              {/* IO delay + KSM */}
+              {(hostInfo.ioDelay != null || hostInfo.ksmSharing != null) && (
+                <>
+                  <Divider sx={{ my: 1.25 }} />
+                  <Stack spacing={1}>
+                    {hostInfo.ioDelay != null && (
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>IO delay</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    {hostInfo.ksmSharing != null && (
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>KSM sharing</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
+                        </Box>
+                      </Box>
+                    )}
+                  </Stack>
+                </>
+              )}
             </Box>
 
-            {/* Colonne 2 - IO delay, KSM */}
+            {/* Colonne 2 - Heatmap CPU/RAM */}
             <Box
               sx={{
                 flex: 1,
@@ -355,26 +383,9 @@ return `${mins}m`
                 bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
-              <Stack spacing={1.25}>
-                {hostInfo.ioDelay != null ? (
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                    <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>IO delay</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
-                    </Box>
-                  </Box>
-                ) : null}
-                {hostInfo.ksmSharing != null ? (
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                    <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>KSM sharing</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
-                    </Box>
-                  </Box>
-                ) : null}
-              </Stack>
+              {connId && nodeName ? (
+                <NodeHeatmap connId={connId} nodeName={nodeName} primaryColor={primaryColor} />
+              ) : null}
             </Box>
 
             {/* Colonne 3 - Informations système */}

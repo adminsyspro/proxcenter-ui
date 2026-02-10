@@ -311,7 +311,7 @@ export default function ProtectionTab({
                           display: 'block', fontFamily: 'monospace', fontSize: '0.65rem', lineHeight: 1.6,
                           color: log.level === 'error' ? 'error.main' : log.level === 'warning' ? 'warning.main' : 'text.secondary'
                         }}>
-                          [{new Date(log.timestamp).toLocaleTimeString()}] {log.message}
+                          [{new Date(log.created_at).toLocaleTimeString()}] {log.message}
                         </Typography>
                       ))}
                     </Box>

@@ -50,10 +50,10 @@ export interface UpdateReplicationJobRequest {
 }
 
 export interface ReplicationJobLog {
-  timestamp: string
+  created_at: string
   level: 'info' | 'warning' | 'error'
   message: string
-  bytes_transferred: number
+  bytes_sent: number
   duration_ms: number
 }
 

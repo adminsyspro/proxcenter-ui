@@ -245,7 +245,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             <Box>
               <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createJob.selectVMs')}</Typography>
 
-              {/* Tag filter chips */}
+              {/* Tag filter chips — clicking a tag filters AND selects matching VMs */}
               {allTags.length > 0 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
                   {allTags.map(tag => (
@@ -253,7 +253,17 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                       key={tag}
                       label={tag}
                       size='small'
-                      onClick={() => setTagFilter(prev => prev === tag ? null : tag)}
+                      onClick={() => {
+                        if (tagFilter === tag) {
+                          // Deactivate filter
+                          setTagFilter(null)
+                        } else {
+                          // Activate filter and select all VMs with this tag
+                          setTagFilter(tag)
+                          const tagVMIds = sourceVMs.filter(v => v.tags?.includes(tag)).map(v => v.vmid)
+                          setSelectedVMs(prev => [...new Set([...prev, ...tagVMIds])])
+                        }
+                      }}
                       variant={tagFilter === tag ? 'filled' : 'outlined'}
                       sx={{
                         bgcolor: tagFilter === tag ? tagColor(tag) : 'transparent',
@@ -278,30 +288,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 sx={{ mb: 1 }}
                 InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-search-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
               />
-
-              {/* Select all filtered VMs shortcut */}
-              {filteredVMs.length > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
-                  <Button
-                    size='small'
-                    sx={{ fontSize: '0.7rem', textTransform: 'none', minWidth: 0, px: 1 }}
-                    onClick={() => {
-                      const allIds = filteredVMs.map(v => v.vmid)
-                      const allSelected = allIds.every(id => selectedVMs.includes(id))
-                      if (allSelected) {
-                        setSelectedVMs(prev => prev.filter(id => !allIds.includes(id)))
-                      } else {
-                        setSelectedVMs(prev => [...new Set([...prev, ...allIds])])
-                      }
-                    }}
-                  >
-                    {filteredVMs.every(v => selectedVMs.includes(v.vmid))
-                      ? t('common.none')
-                      : t('common.all')
-                    } ({filteredVMs.length})
-                  </Button>
-                </Box>
-              )}
 
               <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.5 }}>
                 {filteredVMs.length === 0 ? (

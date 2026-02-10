@@ -4507,6 +4507,18 @@ return vm?.isCluster ?? false
             </Box>
           )}
 
+          {selection?.type === 'node' && data.hostInfo?.maintenance && (
+            <Alert
+              severity="warning"
+              icon={<i className="ri-tools-fill" style={{ fontSize: 20 }} />}
+              sx={{ borderRadius: 2 }}
+            >
+              <Typography variant="body2" fontWeight={600}>
+                {t('inventory.maintenanceModeActive')}
+              </Typography>
+            </Alert>
+          )}
+
           <Divider />
 
           <VCenterSummary

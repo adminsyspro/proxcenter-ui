@@ -121,6 +121,7 @@ export type DetailsPayload = {
     ioDelay?: number
     ksmSharing?: number
     updates?: Array<{ package?: string; version?: string }>
+    maintenance?: string
     subscription?: {
       status?: string
       nextDueDate?: string

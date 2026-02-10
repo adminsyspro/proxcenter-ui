@@ -6,6 +6,35 @@ import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 export const runtime = "nodejs"
 
 /**
+ * GET /api/v1/connections/[id]/nodes/[node]/maintenance
+ *
+ * Returns current maintenance status from node config
+ */
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ id: string; node: string }> }
+) {
+  try {
+    const { id, node } = await ctx.params
+
+    const resourceId = buildNodeResourceId(id, node)
+    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", resourceId)
+    if (denied) return denied
+
+    const conn = await getConnectionById(id)
+    if (!conn) {
+      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    }
+
+    const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' })
+    return NextResponse.json({ data: { maintenance: config?.maintenance || null } })
+  } catch (e: any) {
+    console.error("[maintenance] GET Error:", e?.message)
+    return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })
+  }
+}
+
+/**
  * POST /api/v1/connections/[id]/nodes/[node]/maintenance
  *
  * Entre en mode maintenance (PUT /nodes/{node}/config avec maintenance=upgrade)

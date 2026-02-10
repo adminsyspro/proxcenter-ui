@@ -8,21 +8,18 @@ export type ReplicationJobStatus = 'synced' | 'syncing' | 'error' | 'paused' | '
 
 export interface ReplicationJob {
   id: string
-  vm_id: number
-  vm_name: string
+  vm_ids: number[]
+  vm_names: string[]
   source_cluster: string
-  source_pool: string
   target_cluster: string
   target_pool: string
+  vmid_prefix: number
   status: ReplicationJobStatus
   schedule: string
   rpo_target: number      // seconds
-  rpo_actual: number      // seconds
-  last_sync: string
-  next_sync: string
-  volume_bytes: number
+  last_sync?: string | null
+  next_sync?: string | null
   throughput_bps: number
-  online_mode: boolean
   rate_limit_mbps: number
   network_mapping: Record<string, string>  // source bridge → target bridge
   progress_percent: number

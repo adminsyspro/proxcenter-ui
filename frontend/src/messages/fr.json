@@ -1713,9 +1713,9 @@
     "cpuIncompatible": "CPU incompatible",
     "cpuIncompatibleBlocked": "Migration bloquée: le CPU de la VM n'est pas compatible avec ce node",
     "crossCluster": {
-      "tabLabel": "Cross-Cluster",
+      "tabLabel": "Cross-Migration",
       "beta": "Bêta",
-      "title": "Migration Cross-Cluster (API Proxmox remote_migrate)",
+      "title": "Cross-Migration (API Proxmox remote_migrate)",
       "description": "Migrer cette VM vers un autre cluster Proxmox ou un nœud standalone. Nécessite une authentification par token API sur la cible.",
       "source": "SOURCE",
       "lxcNotSupported": "Les conteneurs LXC ne sont pas supportés",

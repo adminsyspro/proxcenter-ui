@@ -1368,8 +1368,11 @@ return allVMsData.data.vms.map(vm => ({
 
   // Computed
   // Set of node names currently in maintenance — used to filter out bad targets
+  // Combines: orchestrator metrics (in_maintenance) + DRS settings (maintenance_nodes)
   const maintenanceNodeNames = useMemo(() => {
     const set = new Set<string>()
+
+    // Source 1: orchestrator metrics
     if (metricsData) {
       for (const [, metrics] of Object.entries(metricsData as Record<string, any>)) {
         for (const n of (metrics?.nodes || [])) {
@@ -1377,8 +1380,16 @@ return allVMsData.data.vms.map(vm => ({
         }
       }
     }
+
+    // Source 2: DRS settings maintenance_nodes list
+    if (drsSettings?.maintenance_nodes) {
+      for (const name of drsSettings.maintenance_nodes) {
+        set.add(name)
+      }
+    }
+
     return set
-  }, [metricsData])
+  }, [metricsData, drsSettings])
 
   const pendingRecs = useMemo(() =>
     recommendations.filter(r =>

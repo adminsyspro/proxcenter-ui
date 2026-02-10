@@ -24,7 +24,9 @@ function AreaPctChart({
 }) {
   const theme = useTheme()
   const chartColor = color || theme.palette.primary.main
-  const tooltipStyle = { backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }
+  const isDark = theme.palette.mode === 'dark'
+  const tooltipStyle = { backgroundColor: isDark ? '#1e1e2d' : '#fff', border: `1px solid ${isDark ? '#444' : '#ccc'}`, color: isDark ? '#e7e3fc' : '#333', borderRadius: 8 }
+  const tooltipLabelStyle = { color: isDark ? '#e7e3fc' : '#333' }
 
   return (
     <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
@@ -40,6 +42,8 @@ function AreaPctChart({
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
               <Tooltip
                 contentStyle={tooltipStyle}
+                labelStyle={tooltipLabelStyle}
+                itemStyle={tooltipLabelStyle}
                 labelFormatter={v => new Date(Number(v)).toLocaleString()}
                 formatter={(v: any) => {
                   const n = Number(v)
@@ -90,7 +94,9 @@ function AreaBpsChart2({
   const theme = useTheme()
   const chartColorA = colorA || theme.palette.primary.main
   const chartColorB = colorB || lighten(theme.palette.primary.main, 0.3)
-  const tooltipStyle = { backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }
+  const isDark = theme.palette.mode === 'dark'
+  const tooltipStyle = { backgroundColor: isDark ? '#1e1e2d' : '#fff', border: `1px solid ${isDark ? '#444' : '#ccc'}`, color: isDark ? '#e7e3fc' : '#333', borderRadius: 8 }
+  const tooltipLabelStyle = { color: isDark ? '#e7e3fc' : '#333' }
 
   return (
     <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
@@ -106,6 +112,8 @@ function AreaBpsChart2({
               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 10 }} width={50} />
               <Tooltip
                 contentStyle={tooltipStyle}
+                labelStyle={tooltipLabelStyle}
+                itemStyle={tooltipLabelStyle}
                 labelFormatter={v => new Date(Number(v)).toLocaleString()}
                 formatter={(v: any, name: any) => {
                   const n = Number(v)

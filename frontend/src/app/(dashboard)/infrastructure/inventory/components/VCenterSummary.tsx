@@ -33,6 +33,7 @@ import { formatUptime } from '../helpers'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
 import StatusChip from './StatusChip'
+import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 
 function VCenterSummary({
   kindLabel,
@@ -53,6 +54,7 @@ function VCenterSummary({
   cephHealth,
   nodesOnline,
   nodesTotal,
+  vmCount,
 }: {
   kindLabel: string
   status: Status
@@ -72,6 +74,7 @@ function VCenterSummary({
   cephHealth?: string
   nodesOnline?: number
   nodesTotal?: number
+  vmCount?: number
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -103,41 +106,9 @@ function VCenterSummary({
   })
 
   // États pour les modales
-  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false)
+  const [nodeUpdateDialogOpen, setNodeUpdateDialogOpen] = useState(false)
   const [changelogDialogOpen, setChangelogDialogOpen] = useState(false)
-  const [upgradeConsoleOpen, setUpgradeConsoleOpen] = useState(false)
-  const [upgradeTaskId, setUpgradeTaskId] = useState<string | null>(null)
   const [checkingSubscription, setCheckingSubscription] = useState(false)
-
-  // Vérifier si un reboot est nécessaire (présence de kernel dans les updates)
-  const hasKernelUpdate = hostInfo?.updates?.some((u: any) => 
-    u.package?.toLowerCase().includes('kernel') || 
-    u.package?.toLowerCase().includes('linux-image') ||
-    u.package?.toLowerCase().includes('proxmox-kernel')
-  ) || false
-
-  // Handler pour lancer la mise à jour
-  const handleStartUpgrade = async (consoleType: 'novnc' | 'xterm') => {
-    if (!connId || !nodeName) return
-    
-    try {
-      // Appel API pour lancer apt upgrade
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/apt/upgrade`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: consoleType })
-      })
-      
-      if (res.ok) {
-        const data = await res.json()
-        setUpgradeTaskId(data.data || data.upid)
-        setUpgradeDialogOpen(false)
-        setUpgradeConsoleOpen(true)
-      }
-    } catch (err) {
-      console.error('Failed to start upgrade:', err)
-    }
-  }
 
   // Handler pour vérifier la subscription
   const handleCheckSubscription = async () => {
@@ -523,13 +494,13 @@ return `${mins}m`
                       </Box>
                       
                       <Stack direction="row" spacing={1}>
-                        <Button 
-                          size="small" 
-                          variant="contained" 
+                        <Button
+                          size="small"
+                          variant="contained"
                           color="warning"
                           startIcon={<i className="ri-download-line" />}
                           sx={{ flex: 1, fontSize: '0.7rem' }}
-                          onClick={() => setUpgradeDialogOpen(true)}
+                          onClick={() => setNodeUpdateDialogOpen(true)}
                         >
                           {t('updates.upgrade')}
                         </Button>
@@ -727,132 +698,27 @@ return `${mins}m`
         )}
       </CardContent>
 
-      {/* Modal de mise à jour */}
-      <Dialog 
-        open={upgradeDialogOpen} 
-        onClose={() => setUpgradeDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-download-cloud-line" style={{ fontSize: 24, color: '#ff9800' }} />
-          {t('updates.upgradeTitle')}
-        </DialogTitle>
-        <DialogContent>
-          {/* Résumé des mises à jour */}
-          <Alert 
-            severity={hasKernelUpdate ? 'warning' : 'info'} 
-            sx={{ mb: 2 }}
-            icon={hasKernelUpdate ? <i className="ri-restart-line" style={{ fontSize: 20 }} /> : <i className="ri-information-line" style={{ fontSize: 20 }} />}
-          >
-            <Box>
-              <Typography variant="body2" fontWeight={600}>
-                {hostInfo?.updates?.length || 0} {t('updates.packagesToUpdate')}
-              </Typography>
-              {hasKernelUpdate && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                  <i className="ri-error-warning-line" style={{ fontSize: 14 }} />
-                  <Typography variant="caption">
-                    {t('updates.rebootRequiredKernel')}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Alert>
-
-          {/* Liste des paquets */}
-          <Box sx={{ 
-            maxHeight: 300, 
-            overflow: 'auto', 
-            border: '1px solid', 
-            borderColor: 'divider', 
-            borderRadius: 1,
-            mb: 2
-          }}>
-            {/* Header */}
-            <Box sx={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 120px 120px',
-              gap: 1,
-              px: 1.5,
-              py: 1,
-              bgcolor: 'action.hover',
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              position: 'sticky',
-              top: 0,
-              zIndex: 1
-            }}>
-              <Typography variant="caption" fontWeight={600}>{t('updates.package')}</Typography>
-              <Typography variant="caption" fontWeight={600}>{t('updates.currentVersion')}</Typography>
-              <Typography variant="caption" fontWeight={600}>{t('updates.newVersion')}</Typography>
-            </Box>
-            {/* Rows */}
-            {hostInfo?.updates?.map((update: any, idx: number) => (
-              <Box 
-                key={idx}
-                sx={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: '1fr 120px 120px',
-                  gap: 1,
-                  px: 1.5,
-                  py: 0.75,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  '&:last-child': { borderBottom: 'none' },
-                  '&:hover': { bgcolor: 'action.hover' },
-                  bgcolor: update.package?.toLowerCase().includes('kernel') ? 'rgba(255, 152, 0, 0.1)' : 'transparent'
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {update.package?.toLowerCase().includes('kernel') && (
-                    <i className="ri-restart-line" style={{ fontSize: 12, color: '#ff9800' }} />
-                  )}
-                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {update.package}
-                  </Typography>
-                </Box>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 11, opacity: 0.6 }}>
-                  {update.currentVersion}
-                </Typography>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'success.main', fontWeight: 600 }}>
-                  {update.newVersion}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-
-          {/* Sélection du type de console */}
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            {t('updates.selectConsole')}
-          </Typography>
-          <Stack direction="row" spacing={2}>
-            <Button
-              variant="contained"
-              color="warning"
-              startIcon={<i className="ri-terminal-box-line" />}
-              onClick={() => handleStartUpgrade('xterm')}
-              sx={{ flex: 1 }}
-            >
-              xterm.js
-            </Button>
-            <Button
-              variant="outlined"
-              color="warning"
-              startIcon={<i className="ri-computer-line" />}
-              onClick={() => handleStartUpgrade('novnc')}
-              sx={{ flex: 1 }}
-            >
-              noVNC
-            </Button>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setUpgradeDialogOpen(false)}>
-            {t('common.cancel')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Node Update Dialog */}
+      {connId && nodeName && (
+        <NodeUpdateDialog
+          open={nodeUpdateDialogOpen}
+          onClose={() => setNodeUpdateDialogOpen(false)}
+          connectionId={connId}
+          nodeName={nodeName}
+          vmCount={vmCount || 0}
+          nodeUpdates={nodeName ? {
+            [nodeName]: {
+              count: hostInfo?.updates?.length || 0,
+              updates: (hostInfo?.updates || []).map((u: any) => ({
+                Package: u.package,
+                OldVersion: u.currentVersion,
+                Version: u.newVersion,
+              })),
+              version: hostInfo?.pveVersion || null,
+            }
+          } : {}}
+        />
+      )}
 
       {/* Modal Changelog */}
       <Dialog 
@@ -912,45 +778,6 @@ return `${mins}m`
         </DialogActions>
       </Dialog>
 
-      {/* Console de mise à jour (xterm/VNC) */}
-      <Dialog 
-        open={upgradeConsoleOpen} 
-        onClose={() => setUpgradeConsoleOpen(false)}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{ sx: { height: '80vh' } }}
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className="ri-terminal-box-line" style={{ fontSize: 24 }} />
-            {t('updates.upgradeInProgress')}
-          </Box>
-          <IconButton onClick={() => setUpgradeConsoleOpen(false)} size="small">
-            <i className="ri-close-line" />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
-          {connId && nodeName && upgradeTaskId && (
-            <Box sx={{ flex: 1, bgcolor: '#000', p: 1 }}>
-              <iframe
-                src={`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/console?type=xterm`}
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  border: 'none',
-                  backgroundColor: '#000'
-                }}
-                title="Upgrade Console"
-              />
-            </Box>
-          )}
-          {!upgradeTaskId && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <CircularProgress />
-            </Box>
-          )}
-        </DialogContent>
-      </Dialog>
     </Card>
   )
 }

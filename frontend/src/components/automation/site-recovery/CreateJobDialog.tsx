@@ -6,7 +6,7 @@ import useSWR from 'swr'
 
 import {
   Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, InputAdornment, MenuItem, Select, Stack, Switch,
+  FormControlLabel, InputAdornment, MenuItem, Select, Stack,
   TextField, Typography
 } from '@mui/material'
 
@@ -56,7 +56,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [schedule, setSchedule] = useState('*/15 * * * *')
   const [rpoTarget, setRpoTarget] = useState(900)
   const [rateLimit, setRateLimit] = useState(0)
-  const [onlineMode, setOnlineMode] = useState(true)
   const [vmSearch, setVmSearch] = useState('')
 
   // Only Ceph-enabled connections can be source/target
@@ -144,7 +143,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       schedule,
       rpo_target: rpoTarget,
       rate_limit_mbps: rateLimit,
-      online_mode: onlineMode,
       network_mapping: {}
     })
     handleClose()
@@ -158,7 +156,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSchedule('*/15 * * * *')
     setRpoTarget(900)
     setRateLimit(0)
-    setOnlineMode(true)
     setVmSearch('')
     onClose()
   }
@@ -287,17 +284,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             fullWidth
             helperText={t('siteRecovery.createJob.rateLimitHelp')}
             InputProps={{ endAdornment: <InputAdornment position='end'>MB/s</InputAdornment> }}
-          />
-
-          {/* Online Mode */}
-          <FormControlLabel
-            control={<Switch checked={onlineMode} onChange={e => setOnlineMode(e.target.checked)} />}
-            label={
-              <Box>
-                <Typography variant='body2'>{t('siteRecovery.createJob.onlineMode')}</Typography>
-                <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.createJob.onlineModeDesc')}</Typography>
-              </Box>
-            }
           />
         </Stack>
       </DialogContent>

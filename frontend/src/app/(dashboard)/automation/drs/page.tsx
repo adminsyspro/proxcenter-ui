@@ -71,10 +71,7 @@ import DRSSettingsPanel, {
   type DRSSettings, 
   type ClusterVersionInfo 
 } from '@/components/automation/drs/DRSSettingsPanel'
-import MaintenanceMode, { 
-  type NodeMaintenanceInfo 
-} from '@/components/automation/drs/MaintenanceMode'
-import AffinityRulesManager, { 
+import AffinityRulesManager, {
   type AffinityRule, 
   type VMInfo as AffinityVMInfo 
 } from '@/components/automation/drs/AffinityRulesManager'
@@ -1428,20 +1425,6 @@ return Object.entries(metricsData as any)
     return clusters.flatMap(c => c.metrics.nodes?.map(n => n.node) || [])
   }, [clusters])
 
-  // Nodes for maintenance panel
-  const maintenanceNodes: NodeMaintenanceInfo[] = useMemo(() => {
-    return clusters.flatMap(c => 
-      (c.metrics.nodes || []).map(n => ({
-        name: n.node,
-        connectionId: c.id,
-        status: n.status === 'online' ? 'online' as const : 'offline' as const,
-        inMaintenance: n.in_maintenance || false,
-        vmCount: n.vm_count || 0,
-        ctCount: n.ct_count || 0,
-      }))
-    )
-  }, [clusters])
-
   // Set default selected cluster
   useEffect(() => {
     if (clusters.length > 0 && !selectedCluster) {
@@ -1670,22 +1653,6 @@ return next
     setSelectedRec(null)
   }, [])
 
-  // Maintenance handlers
-  const handleEnterMaintenance = useCallback(async (nodeName: string, connectionId: string) => {
-    await apiAction(`/api/v1/orchestrator/drs/maintenance/${nodeName}`, 'POST', { connection_id: connectionId })
-    await mutateMetrics()
-  }, [mutateMetrics])
-
-  const handleExitMaintenance = useCallback(async (nodeName: string, connectionId: string) => {
-    await apiAction(`/api/v1/orchestrator/drs/maintenance/${nodeName}`, 'DELETE', { connection_id: connectionId })
-    await mutateMetrics()
-  }, [mutateMetrics])
-
-  const handleEvacuate = useCallback(async (nodeName: string, connectionId: string) => {
-    await apiAction(`/api/v1/orchestrator/drs/maintenance/${nodeName}/evacuate`, 'POST', { connection_id: connectionId })
-    await mutateRecs()
-  }, [mutateRecs])
-
   // Settings handlers
   const handleSaveSettings = useCallback(async (settings: DRSSettings) => {
     await apiAction('/api/v1/orchestrator/drs/settings', 'PUT', settings)
@@ -1712,15 +1679,13 @@ return next
   const globalStats = useMemo(() => {
     const allNodesArr = clusters.flatMap(c => c.metrics.nodes || [])
     const totalVMs = clusters.reduce((acc, c) => acc + (c.metrics.summary?.running_vms || 0), 0)
-    const maintenanceCount = allNodesArr.filter(n => n.in_maintenance).length
-    
+
     return {
       clusters: clusters.length,
       nodes: allNodesArr.length,
       vms: totalVMs,
       recommendations: pendingRecs.length,
       migrations: migrations.filter(m => m.status === 'running').length,
-      maintenance: maintenanceCount
     }
   }, [clusters, pendingRecs, migrations])
 
@@ -1775,15 +1740,6 @@ return next
           color={globalStats.migrations > 0 ? 'info' : 'primary'}
           subtitle={t('drsPage.inProgress')}
         />
-        {globalStats.maintenance > 0 && (
-          <StatCard
-            icon={<BuildIcon />}
-            label={t('drsPage.maintenance')}
-            value={globalStats.maintenance}
-            color="warning"
-            subtitle={t('drsPage.nodesLabel')}
-          />
-        )}
       </Box>
 
       {/* Tabs */}
@@ -1811,18 +1767,6 @@ return next
           }
         />
         <Tab icon={<HistoryIcon />} iconPosition="start" label={t('drsPage.history')} />
-        <Tab
-          icon={<BuildIcon />}
-          iconPosition="start"
-          label={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {t('drsPage.maintenance')}
-              {globalStats.maintenance > 0 && (
-                <Chip size="small" label={globalStats.maintenance} color="warning" />
-              )}
-            </Box>
-          }
-        />
         <Tab icon={<LocalOfferIcon />} iconPosition="start" label={t('drsPage.affinity')} />
         <Tab icon={<SettingsIcon />} iconPosition="start" label={t('drsPage.configuration')} />
       </Tabs>
@@ -1975,19 +1919,8 @@ return next
         </Card>
       )}
 
-      {/* Tab: Maintenance */}
-      {tab === 3 && (
-        <MaintenanceMode
-          nodes={maintenanceNodes}
-          onEnterMaintenance={handleEnterMaintenance}
-          onExitMaintenance={handleExitMaintenance}
-          onEvacuate={handleEvacuate}
-          loading={!metricsData}
-        />
-      )}
-
       {/* Tab: Affinity Rules */}
-      {tab === 4 && (
+      {tab === 3 && (
         <Box>
           {/* Cluster selector */}
           {clusters.length > 1 && (
@@ -2021,7 +1954,7 @@ return next
       )}
 
       {/* Tab: Configuration */}
-      {tab === 5 && (
+      {tab === 4 && (
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent>
             <DRSSettingsPanel

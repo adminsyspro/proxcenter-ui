@@ -395,13 +395,14 @@ return {
   if (sel.type === 'node') {
     const { connId, node } = parseNodeId(sel.id)
 
-    const [nodesR, statusR, resourcesR, versionR, subscriptionR, updatesR] = await Promise.all([
+    const [nodesR, statusR, resourcesR, versionR, subscriptionR, updatesR, maintenanceR] = await Promise.all([
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store' }),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/version`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { cache: 'no-store' }).catch(() => null),
     ])
 
     const nodes = asArray<any>(safeJson(await nodesR.json()))
@@ -469,6 +470,15 @@ return {
       try {
         const updResponse = await updatesR.json()
         updatesData = updResponse?.data || []
+      } catch {}
+    }
+
+    let maintenanceValue: string | undefined
+
+    if (maintenanceR && maintenanceR.ok) {
+      try {
+        const maintData = await maintenanceR.json()
+        maintenanceValue = maintData?.data?.maintenance || undefined
       } catch {}
     }
 
@@ -567,6 +577,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         ksmSharing,
         updates: updatesData || [],
         subscription: subscriptionData,
+        maintenance: maintenanceValue,
       },
       vmsData,
       clusterName,

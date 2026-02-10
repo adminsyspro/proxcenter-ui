@@ -1968,7 +1968,7 @@ return (
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <StatusIcon status={n.status} type="node" maintenance={n.maintenance} />
-                    <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14 }} />
+                    <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: n.maintenance ? '#ff9800' : undefined }} />
                     <span style={{ fontSize: 14 }}>{clu.name}</span>
                     <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
                     {n.maintenance && (
@@ -2095,7 +2095,7 @@ return (
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <StatusIcon status={n.status} type="node" maintenance={n.maintenance} />
-                      <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14 }} />
+                      <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: n.maintenance ? '#ff9800' : undefined }} />
                       <span style={{ fontSize: 14 }}>{n.node}</span>
                       <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
                       {n.maintenance && (

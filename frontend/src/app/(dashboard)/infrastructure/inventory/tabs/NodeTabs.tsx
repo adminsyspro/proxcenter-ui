@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -201,6 +201,30 @@ export default function NodeTabs(props: any) {
     updatesDialogNode,
     setUpdatesDialogNode,
   } = props
+
+  // Standalone upgrade state
+  const [standaloneUpgradeOpen, setStandaloneUpgradeOpen] = useState(false)
+  const [standaloneConsoleOpen, setStandaloneConsoleOpen] = useState(false)
+  const [standaloneConsoleUrl, setStandaloneConsoleUrl] = useState<string | null>(null)
+
+  const handleStandaloneUpgrade = async () => {
+    const { connId, node } = parseNodeId(selection?.id || '')
+    if (!connId || !node) return
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt/upgrade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'xterm' })
+      })
+      if (res.ok) {
+        setStandaloneConsoleUrl(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/console?type=xterm`)
+        setStandaloneUpgradeOpen(false)
+        setStandaloneConsoleOpen(true)
+      }
+    } catch (err) {
+      console.error('Failed to start upgrade:', err)
+    }
+  }
 
   return (
     <>
@@ -2891,12 +2915,12 @@ export default function NodeTabs(props: any) {
                                       gap: 1,
                                       px: 1.5,
                                       py: 0.75,
-                                      bgcolor: 'action.hover',
+                                      bgcolor: 'background.paper',
                                       borderBottom: '1px solid',
                                       borderColor: 'divider',
                                       position: 'sticky',
                                       top: 0,
-                                      zIndex: 1
+                                      zIndex: 2
                                     }}>
                                       <Typography variant="caption" fontWeight={600}>{t('updates.package')}</Typography>
                                       <Typography variant="caption" fontWeight={600}>{t('updates.currentVersion')}</Typography>
@@ -3086,11 +3110,16 @@ export default function NodeTabs(props: any) {
                                 {t('updates.update')}
                               </Button>
                             ) : pkgCount > 0 ? (
-                              <Alert severity="info" icon={<i className="ri-terminal-box-line" />}>
-                                <Typography variant="body2">
-                                  Use the Shell tab to run <code style={{ fontFamily: 'monospace', fontSize: 12, background: 'rgba(0,0,0,0.1)', padding: '1px 4px', borderRadius: 2 }}>apt update && apt dist-upgrade -y</code> to apply updates.
-                                </Typography>
-                              </Alert>
+                              <Button
+                                variant="contained"
+                                color="warning"
+                                size="large"
+                                startIcon={<i className="ri-play-circle-line" style={{ fontSize: 20 }} />}
+                                onClick={() => setStandaloneUpgradeOpen(true)}
+                                sx={{ alignSelf: 'flex-start' }}
+                              >
+                                {t('updates.update')}
+                              </Button>
                             ) : null}
                           </>
                         )}
@@ -3111,6 +3140,66 @@ export default function NodeTabs(props: any) {
                           nodeUpdates={nodeUpdates}
                         />
                       )}
+
+                      {/* Standalone upgrade confirmation dialog */}
+                      <Dialog open={standaloneUpgradeOpen} onClose={() => setStandaloneUpgradeOpen(false)} maxWidth="sm" fullWidth>
+                        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-download-cloud-line" style={{ fontSize: 24, color: '#ff9800' }} />
+                          {t('updates.upgradeTitle')}
+                        </DialogTitle>
+                        <DialogContent>
+                          <Alert severity={hasKernel ? 'warning' : 'info'} sx={{ mb: 2 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {pkgCount} {t('updates.packagesToUpdate')}
+                            </Typography>
+                            {hasKernel && (
+                              <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                                <i className="ri-error-warning-line" style={{ fontSize: 14 }} />
+                                {t('updates.rebootRequiredKernel')}
+                              </Typography>
+                            )}
+                          </Alert>
+                          <Typography variant="body2" sx={{ mb: 2 }}>
+                            {t('updates.selectConsole')}
+                          </Typography>
+                          <Stack direction="row" spacing={2}>
+                            <Button variant="contained" color="warning" startIcon={<i className="ri-terminal-box-line" />} onClick={handleStandaloneUpgrade} sx={{ flex: 1 }}>
+                              xterm.js
+                            </Button>
+                          </Stack>
+                        </DialogContent>
+                        <DialogActions>
+                          <Button onClick={() => setStandaloneUpgradeOpen(false)}>{t('common.cancel')}</Button>
+                        </DialogActions>
+                      </Dialog>
+
+                      {/* Standalone upgrade console */}
+                      <Dialog open={standaloneConsoleOpen} onClose={() => setStandaloneConsoleOpen(false)} maxWidth="lg" fullWidth PaperProps={{ sx: { height: '80vh' } }}>
+                        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <i className="ri-terminal-box-line" style={{ fontSize: 24 }} />
+                            {t('updates.upgradeInProgress')}
+                          </Box>
+                          <IconButton onClick={() => setStandaloneConsoleOpen(false)} size="small">
+                            <i className="ri-close-line" />
+                          </IconButton>
+                        </DialogTitle>
+                        <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
+                          {standaloneConsoleUrl ? (
+                            <Box sx={{ flex: 1, bgcolor: '#000', p: 1 }}>
+                              <iframe
+                                src={standaloneConsoleUrl}
+                                style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }}
+                                title="Upgrade Console"
+                              />
+                            </Box>
+                          ) : (
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                              <CircularProgress />
+                            </Box>
+                          )}
+                        </DialogContent>
+                      </Dialog>
                     </Box>
                   )
                 })()}

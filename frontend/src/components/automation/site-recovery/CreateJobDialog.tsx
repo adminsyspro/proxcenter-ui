@@ -55,11 +55,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
   const [targetCluster, setTargetCluster] = useState('')
   const [targetPool, setTargetPool] = useState('')
-  const [schedule, setSchedule] = useState('*/15 * * * *')
   const [rpoTarget, setRpoTarget] = useState(900)
   const [vmSearch, setVmSearch] = useState('')
   const [selectionMode, setSelectionMode] = useState<'vms' | 'tags'>('vms')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [vmidPrefix, setVmidPrefix] = useState<number>(0)
 
   // SSH connectivity check state
   const [sshCheck, setSshCheck] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle')
@@ -172,16 +172,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   // ── Presets ───────────────────────────────────────────────────────────
 
-  const schedulePresets = [
-    { value: '* * * * *', label: t('siteRecovery.createJob.continuous') },
-    { value: '*/5 * * * *', label: t('siteRecovery.createJob.every5min') },
-    { value: '*/15 * * * *', label: t('siteRecovery.createJob.every15min') },
-    { value: '*/30 * * * *', label: t('siteRecovery.createJob.every30min') },
-    { value: '0 * * * *', label: t('siteRecovery.createJob.everyHour') },
-    { value: '0 */6 * * *', label: t('siteRecovery.createJob.every6hours') },
-    { value: '0 0 * * *', label: t('siteRecovery.createJob.daily') },
-  ]
-
   const rpoPresets = [
     { value: 30, label: '30s' },
     { value: 60, label: '1m' },
@@ -216,6 +206,16 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectedVMs(prev => prev.includes(vmid) ? prev.filter(id => id !== vmid) : [...prev, vmid])
   }
 
+  // Derive cron schedule from RPO target (run at ~RPO/3 for safety margin)
+  const scheduleFromRPO = (rpo: number): string => {
+    const interval = Math.max(1, Math.floor(rpo / 180)) // RPO/3 in minutes, min 1
+    if (interval <= 1) return '* * * * *'
+    if (interval < 60) return `*/${interval} * * * *`
+    const hours = Math.floor(interval / 60)
+    if (hours < 24) return `0 */${hours} * * *`
+    return '0 0 * * *'
+  }
+
   const handleSubmit = () => {
     onSubmit({
       vm_ids: selectionMode === 'vms' ? selectedVMs : [],
@@ -223,9 +223,10 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       source_cluster: sourceCluster,
       target_cluster: targetCluster,
       target_pool: targetPool,
-      schedule,
+      schedule: scheduleFromRPO(rpoTarget),
       rpo_target: rpoTarget,
       rate_limit_mbps: 0,
+      vmid_prefix: vmidPrefix || undefined,
       network_mapping: {}
     })
     handleClose()
@@ -238,8 +239,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectionMode('vms')
     setTargetCluster('')
     setTargetPool('')
-    setSchedule('*/15 * * * *')
     setRpoTarget(900)
+    setVmidPrefix(0)
     setVmSearch('')
     setSshCheck('idle')
     setSshError('')
@@ -465,19 +466,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             </Select>
           </Box>
 
-          {/* Schedule */}
-          <Box>
-            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.schedule')}</Typography>
-            <Select value={schedule} onChange={e => setSchedule(e.target.value)} size='small' fullWidth>
-              {schedulePresets.map(p => (
-                <MenuItem key={p.value} value={p.value}>
-                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-time-line' /></ListItemIcon>
-                  {p.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
-
           {/* RPO Target */}
           <Box>
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.rpoTarget')}</Typography>
@@ -489,6 +477,23 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 </MenuItem>
               ))}
             </Select>
+          </Box>
+
+          {/* VMID Prefix */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.vmidPrefix')}</Typography>
+            <TextField
+              type='number'
+              value={vmidPrefix || ''}
+              onChange={e => setVmidPrefix(Number(e.target.value) || 0)}
+              size='small'
+              fullWidth
+              placeholder='0'
+              helperText={t('siteRecovery.createJob.vmidPrefixHelp')}
+              InputProps={{
+                startAdornment: <InputAdornment position='start'><i className='ri-hashtag' style={{ opacity: 0.5 }} /></InputAdornment>
+              }}
+            />
           </Box>
 
         </Stack>

@@ -1493,7 +1493,9 @@
       "sshSuccess": "Connexion SSH directe vérifiée entre {source} et {target}",
       "sshFailed": "Échec de la connexion SSH directe",
       "sshRequirement": "Le SSH sans mot de passe doit être configuré entre les clusters source et cible. Assurez-vous que root peut se connecter en SSH de la source vers la cible sans invite de mot de passe.",
-      "sshRetry": "Réessayer"
+      "sshRetry": "Réessayer",
+      "vmidPrefix": "Préfixe VMID",
+      "vmidPrefixHelp": "Préfixe ajouté aux IDs de VM sur le cluster cible (ex : préfixe 9 + VM 100 = 9100). Laisser vide ou 0 pour garder le même VMID."
     },
     "createPlan": {
       "title": "Créer un plan de reprise",

@@ -2381,7 +2381,15 @@
     "noLocalVms": "Aucune VM avec stockage local",
     "running": "En cours",
     "stopped": "Arrêtée",
-    "replicationOk": "Réplication OK"
+    "replicationOk": "Réplication OK",
+    "update": "Mettre à jour",
+    "preflightChecks": "Vérifications pré-vol",
+    "cephHealth": "Santé Ceph",
+    "cephMustBeHealthy": "Ceph doit être HEALTH_OK avant la mise à jour",
+    "vmMigration": "Migration des VMs",
+    "allOnSharedStorage": "Toutes les VMs sur stockage partagé",
+    "maintenanceNotice": "Mode Maintenance",
+    "willBeActivated": "Sera activé pendant la mise à jour"
   },
   "replication": {
     "title": "Réplication",

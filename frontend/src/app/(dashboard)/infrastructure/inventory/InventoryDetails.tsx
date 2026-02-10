@@ -3354,6 +3354,42 @@ return
     }
   }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeUpdates])
 
+  // Load local-vms when node "Updates" tab is selected (cluster nodes only)
+  useEffect(() => {
+    const updatesTabIndex = data?.clusterName ? 8 : 9
+    if (selection?.type === 'node' && nodeTab === updatesTabIndex && data?.clusterName) {
+      const { connId, node } = parseNodeId(selection.id)
+      if (!nodeLocalVms[node]?.loading && nodeLocalVms[node] === undefined) {
+        setNodeLocalVms(prev => ({
+          ...prev,
+          [node]: { total: 0, running: 0, blockingMigration: 0, withReplication: 0, canMigrate: true, vms: [], loading: true }
+        }))
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/local-vms`)
+          .then(res => res.json())
+          .then(json => {
+            setNodeLocalVms(prev => ({
+              ...prev,
+              [node]: {
+                total: json.data?.summary?.total || 0,
+                running: json.data?.summary?.running || 0,
+                blockingMigration: json.data?.summary?.blockingMigration || 0,
+                withReplication: json.data?.summary?.withReplication || 0,
+                canMigrate: json.data?.summary?.canMigrate ?? true,
+                vms: json.data?.localVms || [],
+                loading: false
+              }
+            }))
+          })
+          .catch(() => {
+            setNodeLocalVms(prev => ({
+              ...prev,
+              [node]: { total: 0, running: 0, blockingMigration: 0, withReplication: 0, canMigrate: true, vms: [], loading: false }
+            }))
+          })
+      }
+    }
+  }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeLocalVms])
+
   // Reset clusterTab et clusterHaLoaded quand la sélection change
   useEffect(() => {
     setClusterTab(0)
@@ -4575,7 +4611,7 @@ return vm?.isCluster ?? false
                 nodeNotesLoading, nodeNotesSaving, nodeReplicationData, nodeReplicationLoading, nodeShellData,
                 nodeShellLoading, nodeSubscriptionData, nodeSubscriptionLoading, nodeSyslogData, nodeSyslogLive,
                 nodeSyslogLoading, nodeSystemData, nodeSystemLoading, nodeSystemSubTab, nodeTab,
-                nodeUpdates, setNodeUpdates, rollingUpdateAvailable, rollingUpdateWizardOpen, setRollingUpdateWizardOpen,
+                nodeUpdates, setNodeUpdates, nodeLocalVms, setNodeLocalVms, rollingUpdateAvailable, rollingUpdateWizardOpen, setRollingUpdateWizardOpen,
                 updatesDialogOpen, setUpdatesDialogOpen, updatesDialogNode, setUpdatesDialogNode,
                 onSelect, pools, primaryColor, primaryColorLight, removeSubscriptionDialogOpen,
                 removeSubscriptionLoading, replicationDeleting, replicationDialogMode, replicationDialogOpen, replicationFormData,

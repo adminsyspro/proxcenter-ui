@@ -2,9 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 
-import { Box, Card, CardContent, CircularProgress, Divider, Stack, Typography, IconButton, Tooltip } from '@mui/material'
-// RemixIcon replacement for @mui/icons-material
-const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+import { Box, Card, CardContent, CircularProgress, Typography, IconButton, Tooltip } from '@mui/material'
 
 import { useTranslations } from 'next-intl'
 
@@ -391,37 +389,23 @@ return () => setPageInfo('', '', '')
           overflow: 'hidden',
         }}
       >
-        {/* Header fixe */}
-        <CardContent sx={{ pt: 1.5, pb: 1, px: isTreeCollapsed ? 1 : 2 }}>
-          <Stack direction='row' alignItems='center' justifyContent={isTreeCollapsed ? 'center' : 'flex-end'}>
-            <Stack direction="row" spacing={0.5}>
-              {!isTreeCollapsed && (
-                <Tooltip title={t('common.refresh')}>
-                  <IconButton size='small' onClick={() => refreshTree?.()} disabled={loading}>
-                    <RefreshIcon fontSize='small' />
-                  </IconButton>
-                </Tooltip>
-              )}
-              <Tooltip title={isTreeCollapsed ? t('common.showMore') : t('common.showLess')}>
-                <IconButton 
-                  size='small' 
-                  onClick={() => setIsTreeCollapsed(!isTreeCollapsed)}
-                  sx={{ 
-                    bgcolor: 'action.hover',
-                    '&:hover': { bgcolor: 'action.selected' }
-                  }}
-                >
-                  <i 
-                    className={isTreeCollapsed ? 'ri-side-bar-fill' : 'ri-side-bar-line'} 
-                    style={{ fontSize: 16 }} 
-                  />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-          </Stack>
-
-          {!isTreeCollapsed && <Divider sx={{ mt: 1 }} />}
-        </CardContent>
+        {/* Header fixe (collapsed: juste le bouton expand) */}
+        {isTreeCollapsed && (
+          <CardContent sx={{ pt: 1.5, pb: 1, px: 1, display: 'flex', justifyContent: 'center' }}>
+            <Tooltip title={t('common.showMore')}>
+              <IconButton
+                size='small'
+                onClick={() => setIsTreeCollapsed(false)}
+                sx={{
+                  bgcolor: 'action.hover',
+                  '&:hover': { bgcolor: 'action.selected' }
+                }}
+              >
+                <i className='ri-side-bar-fill' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </CardContent>
+        )}
 
         {/* Contenu scrollable - masqué quand collapsed */}
         {!isTreeCollapsed && (
@@ -433,9 +417,9 @@ return () => setPageInfo('', '', '')
           ) : err ? (
             <Typography color='error'>{err}</Typography>
           ) : (
-            <InventoryTree 
-              selected={selection} 
-              onSelect={setSelection} 
+            <InventoryTree
+              selected={selection}
+              onSelect={setSelection}
               onRefreshRef={handleRefreshRef}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
@@ -447,6 +431,10 @@ return () => setPageInfo('', '', '')
               favorites={favorites}
               onToggleFavorite={toggleFavorite}
               migratingVmIds={migratingVmIds}
+              onRefresh={() => refreshTree?.()}
+              refreshLoading={loading}
+              onCollapse={() => setIsTreeCollapsed(!isTreeCollapsed)}
+              isCollapsed={isTreeCollapsed}
             />
           )}
         </Box>

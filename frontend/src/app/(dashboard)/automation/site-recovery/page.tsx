@@ -263,6 +263,7 @@ export default function SiteRecoveryPage() {
             loading={jobsLoading}
             logs={jobLogs || []}
             logsLoading={logsLoading}
+            connections={connections}
             onSyncJob={handleSyncJob}
             onPauseJob={handlePauseJob}
             onResumeJob={handleResumeJob}

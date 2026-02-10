@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -35,17 +35,30 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
   const [targetCluster, setTargetCluster] = useState('')
   const [vmAssignments, setVmAssignments] = useState<VMAssignment[]>([])
 
-  // Filter jobs matching selected source cluster
-  const availableJobs = (jobs || []).filter(j =>
-    (!sourceCluster || j.source_cluster === sourceCluster) &&
-    (!targetCluster || j.target_cluster === targetCluster)
-  )
+  // Flatten VMs from matching replication jobs
+  const availableVMs = useMemo(() => {
+    const matchingJobs = (jobs || []).filter(j =>
+      (!sourceCluster || j.source_cluster === sourceCluster) &&
+      (!targetCluster || j.target_cluster === targetCluster)
+    )
+    const vms: { vm_id: number; vm_name: string; job_id: string }[] = []
+    for (const j of matchingJobs) {
+      const ids = j.vm_ids || []
+      const names = j.vm_names || []
+      for (let k = 0; k < ids.length; k++) {
+        if (!vms.find(v => v.vm_id === ids[k])) {
+          vms.push({ vm_id: ids[k], vm_name: names[k] || `VM ${ids[k]}`, job_id: j.id })
+        }
+      }
+    }
+    return vms
+  }, [jobs, sourceCluster, targetCluster])
 
-  const addVM = (job: ReplicationJob) => {
-    if (vmAssignments.find(v => v.vm_id === job.vm_id)) return
+  const addVM = (vm: { vm_id: number; vm_name: string }) => {
+    if (vmAssignments.find(v => v.vm_id === vm.vm_id)) return
     setVmAssignments(prev => [...prev, {
-      vm_id: job.vm_id,
-      vm_name: job.vm_name,
+      vm_id: vm.vm_id,
+      vm_name: vm.vm_name,
       tier: 3,
       boot_order: prev.length + 1
     }])
@@ -130,20 +143,20 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
             <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createPlan.assignVMs')}</Typography>
 
             {/* Available VMs from replication jobs */}
-            {availableJobs.length > 0 && (
+            {availableVMs.length > 0 && (
               <Box sx={{ mb: 1.5 }}>
                 <Typography variant='caption' sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>
                   {t('siteRecovery.createPlan.availableVMs')}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                  {availableJobs
-                    .filter(j => !vmAssignments.find(v => v.vm_id === j.vm_id))
-                    .map(j => (
+                  {availableVMs
+                    .filter(vm => !vmAssignments.find(v => v.vm_id === vm.vm_id))
+                    .map(vm => (
                       <Chip
-                        key={j.id}
-                        label={j.vm_name}
+                        key={vm.vm_id}
+                        label={vm.vm_name}
                         size='small'
-                        onClick={() => addVM(j)}
+                        onClick={() => addVM(vm)}
                         icon={<i className='ri-add-line' style={{ fontSize: 14 }} />}
                         sx={{ cursor: 'pointer' }}
                       />

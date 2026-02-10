@@ -12,19 +12,35 @@ import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
+function formatBytes(bytes: number | undefined | null): string {
+  if (!bytes || bytes <= 0) return '—'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
 
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
-function formatDuration(seconds: number): string {
+function formatDuration(seconds: number | undefined | null): string {
+  if (seconds == null || isNaN(seconds)) return '—'
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`
 
   return `${(seconds / 3600).toFixed(1)}h`
+}
+
+function computeRpoActual(lastSync: string | null | undefined): number | null {
+  if (!lastSync) return null
+  const diff = Math.floor((Date.now() - new Date(lastSync).getTime()) / 1000)
+  return diff > 0 ? diff : null
+}
+
+function jobLabel(job: ReplicationJob): string {
+  const names = (job.vm_names || []).filter(Boolean)
+  if (names.length > 0) return names.join(', ')
+  const ids = job.vm_ids || []
+  if (ids.length === 0) return 'Replication Job'
+  if (ids.length <= 3) return ids.map(id => `VM ${id}`).join(', ')
+  return `${ids.length} VMs (${ids.slice(0, 2).join(', ')}…)`
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────
@@ -55,10 +71,11 @@ const DetailRow = ({ icon, label, value, mono }: { icon: string; label: string; 
   </Box>
 )
 
-const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void; t: any }) => {
+const JobCard = ({ job, onClick, t, connName }: { job: ReplicationJob; onClick: () => void; t: any; connName: (id: string) => string }) => {
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
   const isSyncing = job.status === 'syncing'
+  const rpoActual = computeRpoActual(job.last_sync)
 
   return (
     <Card
@@ -76,9 +93,9 @@ const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
           <Box>
-            <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.25 }}>{job.vm_name}</Typography>
+            <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.25 }}>{jobLabel(job)}</Typography>
             <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-              {job.source_cluster} → {job.target_cluster}
+              {connName(job.source_cluster)} → {connName(job.target_cluster)}
             </Typography>
           </Box>
           <StatusChip status={job.status} t={t} />
@@ -90,14 +107,10 @@ const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void
             <Typography variant='caption' sx={{ color: 'text.secondary' }}>RPO</Typography>
             <Typography variant='body2' sx={{
               fontWeight: 600,
-              color: job.rpo_actual <= job.rpo_target ? 'success.main' : 'warning.main'
+              color: rpoActual != null && rpoActual <= job.rpo_target ? 'success.main' : 'text.secondary'
             }}>
-              {formatDuration(job.rpo_actual)}
+              {formatDuration(rpoActual)}
             </Typography>
-          </Box>
-          <Box>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.volume')}</Typography>
-            <Typography variant='body2' sx={{ fontWeight: 600 }}>{formatBytes(job.volume_bytes)}</Typography>
           </Box>
           <Box sx={{ ml: 'auto', textAlign: 'right' }}>
             <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.lastSync')}</Typography>
@@ -125,11 +138,17 @@ const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void
 
 // ── Main Component ─────────────────────────────────────────────────────
 
+interface Connection {
+  id: string
+  name: string
+}
+
 interface ProtectionTabProps {
   jobs: ReplicationJob[]
   loading: boolean
   logs: ReplicationJobLog[]
   logsLoading: boolean
+  connections: Connection[]
   onSyncJob: (id: string) => void
   onPauseJob: (id: string) => void
   onResumeJob: (id: string) => void
@@ -139,7 +158,7 @@ interface ProtectionTabProps {
 }
 
 export default function ProtectionTab({
-  jobs, loading, logs, logsLoading,
+  jobs, loading, logs, logsLoading, connections,
   onSyncJob, onPauseJob, onResumeJob, onDeleteJob,
   selectedJobId, onSelectJob
 }: ProtectionTabProps) {
@@ -148,16 +167,25 @@ export default function ProtectionTab({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  const connMap = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const c of connections || []) m[c.id] = c.name
+    return m
+  }, [connections])
+
+  const connName = (id: string) => connMap[id] || id
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()
 
     return (jobs || []).filter(j => {
-      const matchQ = !qq || j.vm_name.toLowerCase().includes(qq) ||
-        j.source_cluster.toLowerCase().includes(qq) || j.target_cluster.toLowerCase().includes(qq)
+      const label = jobLabel(j)
+      const matchQ = !qq || label.toLowerCase().includes(qq) ||
+        connName(j.source_cluster).toLowerCase().includes(qq) || connName(j.target_cluster).toLowerCase().includes(qq)
 
       return matchQ && (statusFilter === 'all' || j.status === statusFilter)
     })
-  }, [jobs, q, statusFilter])
+  }, [jobs, q, statusFilter, connName])
 
   const selected = useMemo(() => (jobs || []).find(j => j.id === selectedJobId), [jobs, selectedJobId])
 
@@ -228,7 +256,7 @@ export default function ProtectionTab({
         </Box>
       ) : (
         <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, 1fr)' } }}>
-          {filtered.map(j => <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} t={t} />)}
+          {filtered.map(j => <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} t={t} connName={connName} />)}
         </Box>
       )}
 
@@ -241,8 +269,10 @@ export default function ProtectionTab({
             <>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                 <Box>
-                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>{selected.vm_name}</Typography>
-                  <Typography variant='caption' sx={{ color: 'text.secondary' }}>VM {selected.vm_id}</Typography>
+                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>{jobLabel(selected)}</Typography>
+                  <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                    {(selected.vm_ids || []).length} VM(s) — IDs: {(selected.vm_ids || []).join(', ')}
+                  </Typography>
                 </Box>
                 <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
               </Box>
@@ -255,17 +285,16 @@ export default function ProtectionTab({
 
               <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', my: 2, textAlign: 'center' }}>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.source')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>{selected.source_cluster} / {selected.source_pool}</Typography>
+                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>{connName(selected.source_cluster)}</Typography>
                 <Box sx={{ color: 'text.disabled', my: 0.5 }}><i className='ri-arrow-down-line' /></Box>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.target')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{selected.target_cluster} / {selected.target_pool}</Typography>
+                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{connName(selected.target_cluster)} / {selected.target_pool}</Typography>
               </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto' }}>
                 <DetailRow icon='ri-time-line' label={t('siteRecovery.protection.schedule')} value={selected.schedule} />
                 <DetailRow icon='ri-timer-line' label={t('siteRecovery.protection.rpoTarget')} value={formatDuration(selected.rpo_target)} />
-                <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(selected.rpo_actual)} />
-                <DetailRow icon='ri-database-2-line' label={t('siteRecovery.protection.volume')} value={formatBytes(selected.volume_bytes)} />
+                <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(computeRpoActual(selected.last_sync))} />
                 <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
                 <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
 

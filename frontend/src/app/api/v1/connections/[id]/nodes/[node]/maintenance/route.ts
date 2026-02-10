@@ -8,7 +8,8 @@ export const runtime = "nodejs"
 /**
  * GET /api/v1/connections/[id]/nodes/[node]/maintenance
  *
- * Returns current maintenance status from node config
+ * Returns current maintenance status by checking both node config
+ * and cluster resources hastate (HA maintenance)
  */
 export async function GET(
   _req: Request,
@@ -26,8 +27,19 @@ export async function GET(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' })
-    return NextResponse.json({ data: { maintenance: config?.maintenance || null } })
+    const [config, nodeResources] = await Promise.all([
+      pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null),
+      pveFetch<any[]>(conn, '/cluster/resources?type=node').catch(() => []),
+    ])
+
+    // Check hastate from cluster resources (most reliable for HA maintenance)
+    const nodeResource = (nodeResources || []).find((nr: any) => nr?.node === node)
+    const hastateMaintenance = nodeResource?.hastate === 'maintenance' ? 'maintenance' : null
+
+    // Config-based maintenance (set via node config)
+    const configMaintenance = config?.maintenance || null
+
+    return NextResponse.json({ data: { maintenance: hastateMaintenance || configMaintenance } })
   } catch (e: any) {
     console.error("[maintenance] GET Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })

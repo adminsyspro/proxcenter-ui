@@ -5,11 +5,12 @@ import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import {
-  Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControlLabel, InputAdornment, MenuItem, Select, Stack,
   TextField, Typography
 } from '@mui/material'
 
+import { tagColor } from '@/app/(dashboard)/infrastructure/inventory/helpers'
 import type { CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ interface VM {
   connId: string
   type: string
   status: string
+  tags: string[]
 }
 
 interface CreateJobDialogProps {
@@ -55,8 +57,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [targetPool, setTargetPool] = useState('')
   const [schedule, setSchedule] = useState('*/15 * * * *')
   const [rpoTarget, setRpoTarget] = useState(900)
-  const [rateLimit, setRateLimit] = useState(0)
   const [vmSearch, setVmSearch] = useState('')
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
 
   // SSH connectivity check state
   const [sshCheck, setSshCheck] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle')
@@ -120,13 +122,21 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     )
   , [allVMs, sourceCluster])
 
-  // Search filter on source VMs
+  // Collect all unique tags from source VMs
+  const allTags = useMemo(() => {
+    const tags = new Set<string>()
+    sourceVMs.forEach(vm => vm.tags?.forEach(t => tags.add(t)))
+    return Array.from(tags).sort()
+  }, [sourceVMs])
+
+  // Search + tag filter on source VMs
   const filteredVMs = useMemo(() =>
-    sourceVMs.filter(v =>
-      !vmSearch || v.name.toLowerCase().includes(vmSearch.toLowerCase()) ||
-      String(v.vmid).includes(vmSearch)
-    )
-  , [sourceVMs, vmSearch])
+    sourceVMs.filter(v => {
+      if (tagFilter && (!v.tags || !v.tags.includes(tagFilter))) return false
+      if (!vmSearch) return true
+      return v.name.toLowerCase().includes(vmSearch.toLowerCase()) || String(v.vmid).includes(vmSearch)
+    })
+  , [sourceVMs, vmSearch, tagFilter])
 
   // Fetch Ceph pools for the selected target cluster
   const { data: cephData, isLoading: cephLoading } = useSWR(
@@ -134,8 +144,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     fetcher
   )
 
+  // Filter out internal Ceph pools (.mgr, .rgw.root, device_health_metrics, etc.)
   const cephPools = useMemo(() =>
-    cephData?.data?.pools?.list || []
+    (cephData?.data?.pools?.list || []).filter((p: any) =>
+      !p.name.startsWith('.') && p.name !== 'device_health_metrics'
+    )
   , [cephData])
 
   // ── Presets ───────────────────────────────────────────────────────────
@@ -168,6 +181,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setTargetPool('')
     setSshCheck('idle')
     setSshError('')
+    setTagFilter(null)
+    setVmSearch('')
   }
 
   const handleTargetClusterChange = (value: string) => {
@@ -189,7 +204,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       target_pool: targetPool,
       schedule,
       rpo_target: rpoTarget,
-      rate_limit_mbps: rateLimit,
+      rate_limit_mbps: 0,
       network_mapping: {}
     })
     handleClose()
@@ -202,8 +217,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setTargetPool('')
     setSchedule('*/15 * * * *')
     setRpoTarget(900)
-    setRateLimit(0)
     setVmSearch('')
+    setTagFilter(null)
     setSshCheck('idle')
     setSshError('')
     onClose()
@@ -229,6 +244,31 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           {sourceCluster && (
             <Box>
               <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createJob.selectVMs')}</Typography>
+
+              {/* Tag filter chips */}
+              {allTags.length > 0 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                  {allTags.map(tag => (
+                    <Chip
+                      key={tag}
+                      label={tag}
+                      size='small'
+                      onClick={() => setTagFilter(prev => prev === tag ? null : tag)}
+                      variant={tagFilter === tag ? 'filled' : 'outlined'}
+                      sx={{
+                        bgcolor: tagFilter === tag ? tagColor(tag) : 'transparent',
+                        color: tagFilter === tag ? '#fff' : tagColor(tag),
+                        borderColor: tagColor(tag),
+                        fontWeight: 500,
+                        fontSize: '0.7rem',
+                        height: 24,
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </Box>
+              )}
+
               <TextField
                 value={vmSearch}
                 onChange={e => setVmSearch(e.target.value)}
@@ -238,6 +278,31 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 sx={{ mb: 1 }}
                 InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-search-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
               />
+
+              {/* Select all filtered VMs shortcut */}
+              {filteredVMs.length > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+                  <Button
+                    size='small'
+                    sx={{ fontSize: '0.7rem', textTransform: 'none', minWidth: 0, px: 1 }}
+                    onClick={() => {
+                      const allIds = filteredVMs.map(v => v.vmid)
+                      const allSelected = allIds.every(id => selectedVMs.includes(id))
+                      if (allSelected) {
+                        setSelectedVMs(prev => prev.filter(id => !allIds.includes(id)))
+                      } else {
+                        setSelectedVMs(prev => [...new Set([...prev, ...allIds])])
+                      }
+                    }}
+                  >
+                    {filteredVMs.every(v => selectedVMs.includes(v.vmid))
+                      ? t('common.none')
+                      : t('common.all')
+                    } ({filteredVMs.length})
+                  </Button>
+                </Box>
+              )}
+
               <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.5 }}>
                 {filteredVMs.length === 0 ? (
                   <Typography variant='caption' sx={{ p: 1, color: 'text.secondary' }}>{t('siteRecovery.createJob.noVMs')}</Typography>
@@ -247,9 +312,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                       key={vm.vmid}
                       control={<Checkbox size='small' checked={selectedVMs.includes(vm.vmid)} onChange={() => toggleVM(vm.vmid)} />}
                       label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
                           <Typography variant='body2'>{vm.name}</Typography>
                           <Typography variant='caption' sx={{ color: 'text.secondary' }}>({vm.vmid})</Typography>
+                          {vm.tags?.map(tag => (
+                            <Chip key={tag} label={tag} size='small' sx={{ height: 18, fontSize: '0.6rem', bgcolor: tagColor(tag), color: '#fff' }} />
+                          ))}
                         </Box>
                       }
                       sx={{ display: 'flex', m: 0, py: 0.25, px: 0.5, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
@@ -330,9 +398,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 <MenuItem key={p.name} value={p.name}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                     <span>{p.name}</span>
-                    <Typography variant='caption' sx={{ color: 'text.secondary', ml: 2 }}>
-                      {p.bytesUsedFormatted} / {p.maxAvailFormatted}
-                    </Typography>
+                    {p.maxAvail > 0 && (
+                      <Typography variant='caption' sx={{ color: 'text.secondary', ml: 2 }}>
+                        {p.bytesUsedFormatted} used &middot; {p.maxAvailFormatted} avail
+                      </Typography>
+                    )}
                   </Box>
                 </MenuItem>
               ))}
@@ -355,17 +425,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             </Select>
           </Box>
 
-          {/* Rate Limit */}
-          <TextField
-            label={t('siteRecovery.createJob.rateLimit')}
-            type='number'
-            value={rateLimit}
-            onChange={e => setRateLimit(Number(e.target.value))}
-            size='small'
-            fullWidth
-            helperText={t('siteRecovery.createJob.rateLimitHelp')}
-            InputProps={{ endAdornment: <InputAdornment position='end'>MB/s</InputAdornment> }}
-          />
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

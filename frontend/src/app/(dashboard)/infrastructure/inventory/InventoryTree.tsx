@@ -1525,8 +1525,15 @@ return (
 return (
               <Box key={host.key}>
                 {/* Header hôte */}
-                <Box 
-                  onClick={() => toggleSection(`host:${host.key}`)}
+                <Box
+                  onClick={() => {
+                    const willCollapse = !isCollapsed
+                    toggleSection(`host:${host.key}`)
+                    if (willCollapse && selected?.type === 'vm') {
+                      const isInHost = host.vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
+                      if (isInHost) onSelect(null)
+                    }
+                  }}
                   sx={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -1633,8 +1640,15 @@ return (
 return (
               <Box key={pool}>
                 {/* Header pool */}
-                <Box 
-                  onClick={() => toggleSection(`pool:${pool}`)}
+                <Box
+                  onClick={() => {
+                    const willCollapse = !isCollapsed
+                    toggleSection(`pool:${pool}`)
+                    if (willCollapse && selected?.type === 'vm') {
+                      const isInPool = vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
+                      if (isInPool) onSelect(null)
+                    }
+                  }}
                   sx={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -1736,12 +1750,20 @@ return (
             tagsList.map(({ tag, vms }) => {
               const isCollapsed = collapsedSections.has(`tag:${tag}`)
 
-              
+
 return (
               <Box key={tag}>
                 {/* Header tag */}
-                <Box 
-                  onClick={() => toggleSection(`tag:${tag}`)}
+                <Box
+                  onClick={() => {
+                    const willCollapse = !isCollapsed
+                    toggleSection(`tag:${tag}`)
+                    // Deselect VM if it belongs to this tag and we're collapsing
+                    if (willCollapse && selected?.type === 'vm') {
+                      const isInTag = vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
+                      if (isInTag) onSelect(null)
+                    }
+                  }}
                   sx={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -1903,7 +1925,7 @@ return (
 
       /* Mode Arbre : vue hiérarchique */
       <SimpleTreeView
-          selectedItems={selectedItemId ? [selectedItemId] : ['root:root']}
+          selectedItems={selectedItemId || 'root:root'}
           defaultExpandedItems={['root:root']}
           expandedItems={search.trim() ? ['root:root', ...expandedItems] : undefined}
           onSelectedItemsChange={(_event, ids) => {

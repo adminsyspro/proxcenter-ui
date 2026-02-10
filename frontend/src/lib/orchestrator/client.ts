@@ -355,6 +355,90 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
       error?: string
     }>(`/connections/${connectionId}/test-ssh`)
   }
+
+  // ============================================
+  // Site Recovery - Replication Jobs
+  // ============================================
+
+  getReplicationHealth() {
+    return this.get<any>('/replication/status')
+  }
+
+  getReplicationJobs() {
+    return this.get<any[]>('/replication/jobs')
+  }
+
+  getReplicationJob(id: string) {
+    return this.get<any>(`/replication/jobs/${id}`)
+  }
+
+  createReplicationJob(body: any) {
+    return this.post<any>('/replication/jobs', body)
+  }
+
+  updateReplicationJob(id: string, body: any) {
+    return this.put<any>(`/replication/jobs/${id}`, body)
+  }
+
+  deleteReplicationJob(id: string) {
+    return this.delete<{ status: string }>(`/replication/jobs/${id}`)
+  }
+
+  syncReplicationJob(id: string) {
+    return this.post<{ status: string }>(`/replication/jobs/${id}/sync`)
+  }
+
+  pauseReplicationJob(id: string) {
+    return this.post<{ status: string }>(`/replication/jobs/${id}/pause`)
+  }
+
+  resumeReplicationJob(id: string) {
+    return this.post<{ status: string }>(`/replication/jobs/${id}/resume`)
+  }
+
+  getReplicationJobLogs(id: string) {
+    return this.get<any[]>(`/replication/jobs/${id}/logs`)
+  }
+
+  // ============================================
+  // Site Recovery - Recovery Plans
+  // ============================================
+
+  getRecoveryPlans() {
+    return this.get<any[]>('/replication/plans')
+  }
+
+  getRecoveryPlan(id: string) {
+    return this.get<any>(`/replication/plans/${id}`)
+  }
+
+  createRecoveryPlan(body: any) {
+    return this.post<any>('/replication/plans', body)
+  }
+
+  updateRecoveryPlan(id: string, body: any) {
+    return this.put<any>(`/replication/plans/${id}`, body)
+  }
+
+  deleteRecoveryPlan(id: string) {
+    return this.delete<{ status: string }>(`/replication/plans/${id}`)
+  }
+
+  testFailover(planId: string) {
+    return this.post<any>(`/replication/plans/${planId}/test-failover`)
+  }
+
+  executeFailover(planId: string) {
+    return this.post<any>(`/replication/plans/${planId}/failover`)
+  }
+
+  executeFailback(planId: string) {
+    return this.post<any>(`/replication/plans/${planId}/failback`)
+  }
+
+  getRecoveryHistory(planId: string) {
+    return this.get<any[]>(`/replication/plans/${planId}/history`)
+  }
 }
 
 // ============================================

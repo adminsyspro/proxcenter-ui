@@ -47,6 +47,7 @@ import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
+import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
 import { formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
@@ -201,6 +202,8 @@ export default function NodeTabs(props: any) {
     updatesDialogNode,
     setUpdatesDialogNode,
   } = props
+
+  const [nodeUpdateDialogOpen, setNodeUpdateDialogOpen] = React.useState(false)
 
   return (
     <>
@@ -3076,10 +3079,10 @@ export default function NodeTabs(props: any) {
                                 color="warning"
                                 size="large"
                                 startIcon={<i className="ri-play-circle-line" style={{ fontSize: 20 }} />}
-                                onClick={() => setRollingUpdateWizardOpen(true)}
+                                onClick={() => data.clusterName ? setRollingUpdateWizardOpen(true) : setNodeUpdateDialogOpen(true)}
                                 sx={{ alignSelf: 'flex-start' }}
                                 disabled={
-                                  !!(nodeCephData && nodeCephData.hasCeph !== false &&
+                                  !!(data.clusterName && nodeCephData && nodeCephData.hasCeph !== false &&
                                   (nodeCephData?.health?.status || nodeCephData?.health?.overall_status) !== 'HEALTH_OK')
                                 }
                               >
@@ -3090,19 +3093,33 @@ export default function NodeTabs(props: any) {
                         )}
                       </Stack>
 
-                      {/* Rolling Update Wizard */}
-                      <RollingUpdateWizard
-                        open={rollingUpdateWizardOpen}
-                        onClose={() => setRollingUpdateWizardOpen(false)}
-                        connectionId={selection?.id?.split(':')[0] || ''}
-                        nodes={[{
-                          node: nodeName,
-                          version: nodeUpdate?.version || '',
-                          vms: data.vmsData?.length || 0,
-                          status: 'online',
-                        }]}
-                        nodeUpdates={nodeUpdates}
-                      />
+                      {/* Rolling Update Wizard (cluster nodes) */}
+                      {data.clusterName && (
+                        <RollingUpdateWizard
+                          open={rollingUpdateWizardOpen}
+                          onClose={() => setRollingUpdateWizardOpen(false)}
+                          connectionId={selection?.id?.split(':')[0] || ''}
+                          nodes={[{
+                            node: nodeName,
+                            version: nodeUpdate?.version || '',
+                            vms: data.vmsData?.length || 0,
+                            status: 'online',
+                          }]}
+                          nodeUpdates={nodeUpdates}
+                        />
+                      )}
+
+                      {/* Node Update Dialog (standalone nodes) */}
+                      {!data.clusterName && (
+                        <NodeUpdateDialog
+                          open={nodeUpdateDialogOpen}
+                          onClose={() => setNodeUpdateDialogOpen(false)}
+                          connectionId={selection?.id?.split(':')[0] || ''}
+                          nodeName={nodeName}
+                          vmCount={data.vmsData?.filter((vm: any) => vm.status === 'running').length || 0}
+                          nodeUpdates={nodeUpdates}
+                        />
+                      )}
                     </Box>
                   )
                 })()}

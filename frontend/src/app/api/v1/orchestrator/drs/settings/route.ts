@@ -20,6 +20,8 @@ const defaultSettings = {
   memory_low_threshold: 25,
   storage_high_threshold: 90,
   imbalance_threshold: 5,
+  homogenization_enabled: true,
+  max_load_spread: 10,
   cpu_weight: 1.0,
   memory_weight: 1.0,
   storage_weight: 0.5,

@@ -54,6 +54,8 @@ export interface DRSSettings {
   memory_low_threshold: number
   storage_high_threshold: number
   imbalance_threshold: number
+  homogenization_enabled: boolean
+  max_load_spread: number
   cpu_weight: number
   memory_weight: number
   storage_weight: number
@@ -97,6 +99,8 @@ export const defaultDRSSettings: DRSSettings = {
   memory_low_threshold: 25,
   storage_high_threshold: 90,
   imbalance_threshold: 5,
+  homogenization_enabled: true,
+  max_load_spread: 10,
   cpu_weight: 1.0,
   memory_weight: 1.0,
   storage_weight: 0.5,
@@ -405,6 +409,47 @@ export default function DRSSettingsPanel({
               />
               <Typography variant="caption" color="text.secondary">
                 {t('drsPage.imbalanceThresholdDesc')}
+              </Typography>
+            </Grid>
+
+            <Grid size={{ xs: 12 }}>
+              <Divider sx={{ my: 1 }} />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.homogenization_enabled}
+                    onChange={(e) => handleChange('homogenization_enabled', e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.homogenizationEnabled')}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {t('drsPage.homogenizationEnabledDesc')}
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                {t('drsPage.maxLoadSpread', { value: settings.max_load_spread })}
+              </Typography>
+              <Slider
+                value={settings.max_load_spread}
+                onChange={(_, v) => handleChange('max_load_spread', v as number)}
+                min={1}
+                max={20}
+                step={0.5}
+                valueLabelDisplay="auto"
+                disabled={!settings.homogenization_enabled}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {t('drsPage.maxLoadSpreadDesc')}
               </Typography>
             </Grid>
           </Grid>

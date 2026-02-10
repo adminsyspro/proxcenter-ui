@@ -339,10 +339,12 @@ return `${mins}m`
                 </Box>
               ) : null}
               <UsageBar themeColor={primaryColor} label="RAM usage" used={memUsed} capacity={memCap} mode="bytes" />
-              <UsageBar themeColor={primaryColor} label="HD space" used={diskUsed} capacity={diskCap} mode="bytes" />
+              {swapCap > 0 ? (
+                <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
+              ) : null}
             </Box>
 
-            {/* Colonne 2 - IO delay, KSM, SWAP */}
+            {/* Colonne 2 - IO delay, KSM */}
             <Box
               sx={{
                 flex: 1,
@@ -353,31 +355,26 @@ return `${mins}m`
                 bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
-              {hostInfo.ioDelay != null ? (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor }} />
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                      IO delay
-                    </Typography>
+              <Stack spacing={1.25}>
+                {hostInfo.ioDelay != null ? (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>IO delay</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
+                    </Box>
                   </Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
-                </Box>
-              ) : null}
-              {hostInfo.ksmSharing != null ? (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor }} />
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                      KSM sharing
-                    </Typography>
+                ) : null}
+                {hostInfo.ksmSharing != null ? (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>KSM sharing</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
+                    </Box>
                   </Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
-                </Box>
-              ) : null}
-              {swapCap > 0 ? (
-                <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
-              ) : null}
+                ) : null}
+              </Stack>
             </Box>
 
             {/* Colonne 3 - Informations système */}

@@ -1971,9 +1971,6 @@ return (
                     <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: n.maintenance ? '#ff9800' : undefined }} />
                     <span style={{ fontSize: 14 }}>{clu.name}</span>
                     <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
-                    {n.maintenance && (
-                      <Chip label="MAINT" size="small" sx={{ height: 16, fontSize: 10, bgcolor: '#ff9800', color: '#fff', fontWeight: 700 }} />
-                    )}
                     {/* Warning Ceph */}
                     {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
                       <Tooltip title={`Ceph: ${clu.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
@@ -2098,9 +2095,6 @@ return (
                       <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: n.maintenance ? '#ff9800' : undefined }} />
                       <span style={{ fontSize: 14 }}>{n.node}</span>
                       <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
-                      {n.maintenance && (
-                        <Chip label="MAINT" size="small" sx={{ height: 16, fontSize: 10, bgcolor: '#ff9800', color: '#fff', fontWeight: 700 }} />
-                      )}
                     </Box>
                   }
                 >

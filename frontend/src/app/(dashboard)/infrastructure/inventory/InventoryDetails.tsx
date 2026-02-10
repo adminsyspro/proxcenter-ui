@@ -4512,6 +4512,27 @@ return vm?.isCluster ?? false
               severity="warning"
               icon={<i className="ri-tools-fill" style={{ fontSize: 20 }} />}
               sx={{ borderRadius: 2 }}
+              action={
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  startIcon={<i className="ri-play-circle-line" />}
+                  sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                  onClick={async () => {
+                    if (!confirm(t('inventory.confirmExitMaintenance'))) return
+                    const { connId, node } = parseNodeId(selection.id)
+                    try {
+                      await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { method: 'DELETE' })
+                      if (onRefresh) await onRefresh()
+                    } catch (e: any) {
+                      console.error('[maintenance] Exit error:', e?.message)
+                    }
+                  }}
+                >
+                  {t('inventory.exitMaintenance')}
+                </Button>
+              }
             >
               <Typography variant="body2" fontWeight={600}>
                 {t('inventory.maintenanceModeActive')}

@@ -1338,8 +1338,11 @@ return favorites.has(vmKey)
   )
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      {header}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minHeight: 0 }}>
+      <Box sx={{ flexShrink: 0 }}>
+        {header}
+      </Box>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
 
       {error ? <Alert severity='error'>{error}</Alert> : null}
 
@@ -2278,6 +2281,7 @@ return (
       </SimpleTreeView>
       )}
 
+      </Box>
       {/* Menu contextuel VM */}
       <Menu
         open={contextMenu !== null}

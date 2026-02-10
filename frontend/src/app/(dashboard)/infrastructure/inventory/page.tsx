@@ -409,7 +409,7 @@ return () => setPageInfo('', '', '')
 
         {/* Contenu scrollable - masqué quand collapsed */}
         {!isTreeCollapsed && (
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 2, pb: 2 }}>
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', px: 2, pb: 2 }}>
           {loading ? (
             <Box sx={{ p: 1 }}>
               <CircularProgress size={22} />

@@ -1211,72 +1211,7 @@ return favorites.has(vmKey)
 
   const header = useMemo(
     () => (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 1, py: 0.5 }}>
-        {/* Sélecteur de vue avec icônes */}
-        <ToggleButtonGroup
-          value={viewMode}
-          exclusive
-          onChange={(_, v) => {
-            if (v) {
-              setViewMode(v)
-
-              // Quand on passe en mode tree, sélectionner la racine
-              if (v === 'tree') {
-                onSelect({ type: 'root', id: 'root' })
-              } else {
-                // Désélectionner quand on passe en mode liste (vms, hosts, pools, tags)
-                onSelect(null)
-              }
-            }
-          }}
-          size="small"
-          fullWidth
-          sx={{ 
-            '& .MuiToggleButton-root': { 
-              py: 0.5,
-              px: 1,
-              minWidth: 0,
-              flex: 1
-            }
-          }}
-        >
-          <ToggleButton value="tree">
-            <Tooltip title={t('navigation.inventory')}>
-              <i className="ri-node-tree" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="vms">
-            <Tooltip title={`${t('inventory.vms')} (${allVms.length})`}>
-              <i className="ri-computer-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="hosts">
-            <Tooltip title={`${t('inventory.nodes')} (${hostsList.length})`}>
-              <i className="ri-server-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="pools">
-            <Tooltip title={`${t('storage.pools')} (${poolsList.length})`}>
-              <i className="ri-folder-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="tags">
-            <Tooltip title={`Tags (${tagsList.length})`}>
-              <i className="ri-price-tag-3-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="favorites">
-            <Tooltip title={`(${favoritesList.length})`}>
-              <i className={favoritesList.length > 0 ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 16, color: favoritesList.length > 0 ? '#ffc107' : undefined }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="templates">
-            <Tooltip title={`${t('navigation.templates')} (${templatesCount})`}>
-              <i className="ri-file-copy-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
-
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 1, pt: 1.5, pb: 0.5 }}>
         {/* Recherche + actions */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <TextField
@@ -1334,6 +1269,69 @@ return favorites.has(vmKey)
             </Tooltip>
           )}
         </Box>
+
+        {/* Sélecteur de vue avec icônes */}
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_, v) => {
+            if (v) {
+              setViewMode(v)
+
+              if (v === 'tree') {
+                onSelect({ type: 'root', id: 'root' })
+              } else {
+                onSelect(null)
+              }
+            }
+          }}
+          size="small"
+          fullWidth
+          sx={{
+            '& .MuiToggleButton-root': {
+              py: 0.5,
+              px: 1,
+              minWidth: 0,
+              flex: 1
+            }
+          }}
+        >
+          <ToggleButton value="tree">
+            <Tooltip title={t('navigation.inventory')}>
+              <i className="ri-node-tree" style={{ fontSize: 16 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="vms">
+            <Tooltip title={`${t('inventory.vms')} (${allVms.length})`}>
+              <i className="ri-computer-line" style={{ fontSize: 16 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="hosts">
+            <Tooltip title={`${t('inventory.nodes')} (${hostsList.length})`}>
+              <i className="ri-server-line" style={{ fontSize: 16 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="pools">
+            <Tooltip title={`${t('storage.pools')} (${poolsList.length})`}>
+              <i className="ri-folder-line" style={{ fontSize: 16 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="tags">
+            <Tooltip title={`Tags (${tagsList.length})`}>
+              <i className="ri-price-tag-3-line" style={{ fontSize: 16 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="favorites">
+            <Tooltip title={`(${favoritesList.length})`}>
+              <i className={favoritesList.length > 0 ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 16, color: favoritesList.length > 0 ? '#ffc107' : undefined }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="templates">
+            <Tooltip title={`${t('navigation.templates')} (${templatesCount})`}>
+              <i className="ri-file-copy-line" style={{ fontSize: 16 }} />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Box>
     ),
     [loading, search, viewMode, allVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed]

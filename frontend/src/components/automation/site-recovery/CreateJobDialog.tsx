@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import {
-  Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControlLabel, InputAdornment, MenuItem, Select, Stack,
   TextField, Typography
 } from '@mui/material'
@@ -57,6 +57,49 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [rpoTarget, setRpoTarget] = useState(900)
   const [rateLimit, setRateLimit] = useState(0)
   const [vmSearch, setVmSearch] = useState('')
+
+  // SSH connectivity check state
+  const [sshCheck, setSshCheck] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle')
+  const [sshError, setSshError] = useState('')
+  const [sshSourceNode, setSshSourceNode] = useState('')
+  const [sshTargetIP, setSshTargetIP] = useState('')
+
+  // Auto-trigger SSH check when both clusters are selected
+  const runSSHCheck = useCallback(async (src: string, tgt: string) => {
+    if (!src || !tgt) {
+      setSshCheck('idle')
+      setSshError('')
+      return
+    }
+
+    setSshCheck('checking')
+    setSshError('')
+
+    try {
+      const res = await fetch('/api/v1/orchestrator/replication/check-ssh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_cluster: src, target_cluster: tgt })
+      })
+      const data = await res.json()
+
+      if (data.connected) {
+        setSshCheck('success')
+        setSshSourceNode(data.source_node || '')
+        setSshTargetIP(data.target_ip || '')
+      } else {
+        setSshCheck('failed')
+        setSshError(data.error || 'Unknown error')
+      }
+    } catch {
+      setSshCheck('failed')
+      setSshError('Failed to reach orchestrator')
+    }
+  }, [])
+
+  useEffect(() => {
+    runSSHCheck(sourceCluster, targetCluster)
+  }, [sourceCluster, targetCluster, runSSHCheck])
 
   // Only Ceph-enabled connections can be source/target
   const cephConnections = useMemo(() =>
@@ -123,11 +166,15 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectedVMs([])
     setTargetCluster('')
     setTargetPool('')
+    setSshCheck('idle')
+    setSshError('')
   }
 
   const handleTargetClusterChange = (value: string) => {
     setTargetCluster(value)
     setTargetPool('')
+    setSshCheck('idle')
+    setSshError('')
   }
 
   const toggleVM = (vmid: number) => {
@@ -157,10 +204,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setRpoTarget(900)
     setRateLimit(0)
     setVmSearch('')
+    setSshCheck('idle')
+    setSshError('')
     onClose()
   }
 
-  const canSubmit = sourceCluster && selectedVMs.length > 0 && targetCluster && targetPool
+  const canSubmit = sourceCluster && selectedVMs.length > 0 && targetCluster && targetPool && sshCheck === 'success'
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
@@ -231,6 +280,38 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               {targetConnections.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
             </Select>
           </Box>
+
+          {/* SSH Connectivity Check */}
+          {sourceCluster && targetCluster && sshCheck !== 'idle' && (
+            <Box>
+              {sshCheck === 'checking' && (
+                <Alert severity='info' icon={<CircularProgress size={18} />}>
+                  {t('siteRecovery.createJob.sshChecking')}
+                </Alert>
+              )}
+              {sshCheck === 'success' && (
+                <Alert severity='success'>
+                  {t('siteRecovery.createJob.sshSuccess', { source: sshSourceNode, target: sshTargetIP })}
+                </Alert>
+              )}
+              {sshCheck === 'failed' && (
+                <Alert
+                  severity='error'
+                  action={
+                    <Button color='inherit' size='small' onClick={() => runSSHCheck(sourceCluster, targetCluster)}>
+                      {t('siteRecovery.createJob.sshRetry')}
+                    </Button>
+                  }
+                >
+                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{t('siteRecovery.createJob.sshFailed')}</Typography>
+                  <Typography variant='caption' sx={{ display: 'block', mt: 0.5 }}>{sshError}</Typography>
+                  <Typography variant='caption' sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
+                    {t('siteRecovery.createJob.sshRequirement')}
+                  </Typography>
+                </Alert>
+              )}
+            </Box>
+          )}
 
           {/* Target Pool (dynamic from Ceph API) */}
           <Box>

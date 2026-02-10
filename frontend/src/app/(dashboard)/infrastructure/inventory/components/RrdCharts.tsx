@@ -24,7 +24,8 @@ function AreaPctChart({
 }) {
   const theme = useTheme()
   const chartColor = color || theme.palette.primary.main
-  
+  const tooltipStyle = { backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }
+
   return (
     <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -38,11 +39,12 @@ function AreaPctChart({
               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
               <Tooltip
+                contentStyle={tooltipStyle}
                 labelFormatter={v => new Date(Number(v)).toLocaleString()}
                 formatter={(v: any) => {
                   const n = Number(v)
 
-                  
+
 return [Number.isFinite(n) ? `${n}%` : '—', '']
                 }}
               />
@@ -88,7 +90,8 @@ function AreaBpsChart2({
   const theme = useTheme()
   const chartColorA = colorA || theme.palette.primary.main
   const chartColorB = colorB || lighten(theme.palette.primary.main, 0.3)
-  
+  const tooltipStyle = { backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }
+
   return (
     <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -102,11 +105,12 @@ function AreaBpsChart2({
               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 10 }} width={50} />
               <Tooltip
+                contentStyle={tooltipStyle}
                 labelFormatter={v => new Date(Number(v)).toLocaleString()}
                 formatter={(v: any, name: any) => {
                   const n = Number(v)
 
-                  
+
 return [Number.isFinite(n) ? formatBps(n) : '—', name]
                 }}
               />

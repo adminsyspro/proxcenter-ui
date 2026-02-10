@@ -18,9 +18,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (denied) return denied
 
   const conn = await getConnectionById(id)
-  const nodes = await pveFetch<any[]>(conn, `/nodes`, { method: "GET" })
 
-  // Enrichir chaque node avec son IP
+  // Fetch nodes and cluster resources in parallel (for maintenance hastate)
+  const [nodes, clusterResources] = await Promise.all([
+    pveFetch<any[]>(conn, `/nodes`, { method: "GET" }),
+    pveFetch<any[]>(conn, `/cluster/resources?type=node`).catch(() => [] as any[]),
+  ])
+
+  // Build a map of node hastate from cluster resources
+  const hastateMap: Record<string, string> = {}
+  for (const res of (clusterResources || [])) {
+    if (res?.node && res?.hastate) {
+      hastateMap[res.node] = res.hastate
+    }
+  }
+
+  // Enrichir chaque node avec son IP et hastate
   const enrichedNodes = await Promise.all(
     (nodes || []).map(async (node: any) => {
       const nodeName = node.node || node.name
@@ -68,7 +81,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
       return {
         ...node,
-        ip
+        ip,
+        hastate: hastateMap[nodeName] || null,
       }
     })
   )

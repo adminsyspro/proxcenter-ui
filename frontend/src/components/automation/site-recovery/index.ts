@@ -1,0 +1,6 @@
+export { default as DashboardTab } from './DashboardTab'
+export { default as ProtectionTab } from './ProtectionTab'
+export { default as RecoveryPlansTab } from './RecoveryPlansTab'
+export { default as CreateJobDialog } from './CreateJobDialog'
+export { default as CreatePlanDialog } from './CreatePlanDialog'
+export { default as FailoverDialog } from './FailoverDialog'

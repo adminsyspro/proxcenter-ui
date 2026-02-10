@@ -62,9 +62,9 @@ export const menuData = (t = (key) => key) => [
         requiredFeature: 'drs'
       },
       {
-        label: t('navigation.replication'),
-        icon: 'ri-arrow-right-double-fill',
-        href: '/automation/replication',
+        label: t('navigation.siteRecovery'),
+        icon: 'ri-shield-star-line',
+        href: '/automation/site-recovery',
         permissions: ['vm.config'],
         requiredFeature: 'ceph_replication'
       },

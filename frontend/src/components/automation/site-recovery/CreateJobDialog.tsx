@@ -126,7 +126,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   // Collect all unique tags from source VMs
   const allTags = useMemo(() => {
     const tags = new Set<string>()
-    sourceVMs.forEach(vm => vm.tags?.forEach(t => { if (t) tags.add(t) }))
+    sourceVMs.forEach(vm => vm.tags?.forEach(t => { if (t.trim()) tags.add(t.trim()) }))
     return Array.from(tags).sort()
   }, [sourceVMs])
 

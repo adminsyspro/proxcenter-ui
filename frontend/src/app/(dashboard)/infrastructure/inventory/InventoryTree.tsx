@@ -225,6 +225,10 @@ type Props = {
   favorites?: Set<string>  // favoris partagés depuis le parent
   onToggleFavorite?: (vm: { connId: string; node: string; type: string; vmid: string | number; name?: string }) => void
   migratingVmIds?: Set<string>  // Set de vmIds en cours de migration (format: "connId:vmid")
+  onRefresh?: () => void  // callback pour refresh l'arbre
+  refreshLoading?: boolean  // loading pendant le refresh
+  onCollapse?: () => void  // callback pour collapse/expand le panneau
+  isCollapsed?: boolean  // état collapsed du panneau
 }
 
 type Connection = {
@@ -419,7 +423,7 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds }: Props) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed }: Props) {
   const t = useTranslations()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1273,40 +1277,66 @@ return favorites.has(vmKey)
           </ToggleButton>
         </ToggleButtonGroup>
 
-        {/* Recherche */}
-        <TextField
-          size='small'
-          placeholder={t('common.search')}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          fullWidth
-          sx={{ 
-            '& .MuiOutlinedInput-root': {
-              height: 32,
-              fontSize: 13,
-            },
-            '& .MuiOutlinedInput-input': {
-              py: 0.5,
-            }
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position='start'>
-                <SearchIcon sx={{ fontSize: 18, opacity: 0.6 }} />
-              </InputAdornment>
-            ),
-            endAdornment: search ? (
-              <InputAdornment position='end'>
-                <IconButton size='small' onClick={() => setSearch('')} sx={{ p: 0.25 }}>
-                  <ClearIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              </InputAdornment>
-            ) : null
-          }}
-        />
+        {/* Recherche + actions */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <TextField
+            size='small'
+            placeholder={t('common.search')}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            sx={{
+              flex: 1,
+              '& .MuiOutlinedInput-root': {
+                height: 32,
+                fontSize: 13,
+              },
+              '& .MuiOutlinedInput-input': {
+                py: 0.5,
+              }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position='start'>
+                  <SearchIcon sx={{ fontSize: 18, opacity: 0.6 }} />
+                </InputAdornment>
+              ),
+              endAdornment: search ? (
+                <InputAdornment position='end'>
+                  <IconButton size='small' onClick={() => setSearch('')} sx={{ p: 0.25 }}>
+                    <ClearIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null
+            }}
+          />
+          {onRefresh && (
+            <Tooltip title={t('common.refresh')}>
+              <IconButton size='small' onClick={onRefresh} disabled={refreshLoading}>
+                <RefreshIcon fontSize='small' />
+              </IconButton>
+            </Tooltip>
+          )}
+          {onCollapse && (
+            <Tooltip title={isCollapsed ? t('common.showMore') : t('common.showLess')}>
+              <IconButton
+                size='small'
+                onClick={onCollapse}
+                sx={{
+                  bgcolor: 'action.hover',
+                  '&:hover': { bgcolor: 'action.selected' }
+                }}
+              >
+                <i
+                  className={isCollapsed ? 'ri-side-bar-fill' : 'ri-side-bar-line'}
+                  style={{ fontSize: 16 }}
+                />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </Box>
     ),
-    [loading, search, viewMode, allVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length]
+    [loading, search, viewMode, allVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed]
   )
 
   return (

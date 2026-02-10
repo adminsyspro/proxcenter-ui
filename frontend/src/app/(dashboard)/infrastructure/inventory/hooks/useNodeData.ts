@@ -214,7 +214,8 @@ export function useNodeData(
     const isInCluster = !!clusterName
     if (!isInCluster) return
     const cephTabIndex = 6
-    if (nodeTab !== cephTabIndex) return
+    const updatesTabIndex = 8
+    if (nodeTab !== cephTabIndex && nodeTab !== updatesTabIndex) return
 
     setNodeCephLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')

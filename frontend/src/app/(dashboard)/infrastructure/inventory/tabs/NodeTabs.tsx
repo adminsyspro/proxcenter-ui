@@ -191,6 +191,8 @@ export default function NodeTabs(props: any) {
     toggleFavorite,
     nodeUpdates,
     setNodeUpdates,
+    nodeLocalVms,
+    setNodeLocalVms,
     rollingUpdateAvailable,
     rollingUpdateWizardOpen,
     setRollingUpdateWizardOpen,
@@ -2978,6 +2980,95 @@ export default function NodeTabs(props: any) {
                               </Alert>
                             )}
 
+                            {/* Pre-flight checks (cluster nodes with updates) */}
+                            {pkgCount > 0 && data.clusterName && (() => {
+                              const cephHealth = nodeCephData?.health?.status || nodeCephData?.health?.overall_status
+                              const hasCeph = nodeCephData && nodeCephData.hasCeph !== false
+                              const localVmData = nodeLocalVms?.[nodeName]
+                              const cephHealthy = !hasCeph || cephHealth === 'HEALTH_OK'
+
+                              return (
+                                <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                    <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <i className="ri-shield-check-line" style={{ fontSize: 18 }} />
+                                      {t('updates.preflightChecks')}
+                                    </Typography>
+                                    <Stack spacing={1.5}>
+                                      {/* Ceph Health */}
+                                      {hasCeph && (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                          <Chip
+                                            size="small"
+                                            label={cephHealth || 'LOADING'}
+                                            color={cephHealth === 'HEALTH_OK' ? 'success' : cephHealth === 'HEALTH_WARN' ? 'warning' : 'error'}
+                                            icon={<i className={cephHealth === 'HEALTH_OK' ? 'ri-checkbox-circle-line' : 'ri-alert-line'} style={{ fontSize: 14 }} />}
+                                            sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                          />
+                                          <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                                            {t('updates.cephHealth')}
+                                          </Typography>
+                                          {!cephHealthy && (
+                                            <Typography variant="caption" color="error">
+                                              {t('updates.cephMustBeHealthy')}
+                                            </Typography>
+                                          )}
+                                        </Box>
+                                      )}
+
+                                      {/* VM Migration Readiness */}
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        {localVmData?.loading ? (
+                                          <CircularProgress size={16} />
+                                        ) : localVmData && localVmData.total > 0 ? (
+                                          <Chip
+                                            size="small"
+                                            label={`${localVmData.total} VM${localVmData.total > 1 ? 's' : ''}`}
+                                            color={localVmData.blockingMigration > 0 ? 'error' : 'warning'}
+                                            icon={<i className={localVmData.blockingMigration > 0 ? 'ri-error-warning-line' : 'ri-information-line'} style={{ fontSize: 14 }} />}
+                                            sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                          />
+                                        ) : (
+                                          <Chip
+                                            size="small"
+                                            label="OK"
+                                            color="success"
+                                            icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 14 }} />}
+                                            sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                          />
+                                        )}
+                                        <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                                          {t('updates.vmMigration')}
+                                          {localVmData && !localVmData.loading && localVmData.total === 0 && (
+                                            <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.6 }}>
+                                              — {t('updates.allOnSharedStorage')}
+                                            </Typography>
+                                          )}
+                                        </Typography>
+                                      </Box>
+
+                                      {/* Maintenance Mode Notice */}
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        <Chip
+                                          size="small"
+                                          label="Auto"
+                                          color="info"
+                                          icon={<i className="ri-tools-line" style={{ fontSize: 14 }} />}
+                                          sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                        />
+                                        <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                                          {t('updates.maintenanceNotice')}
+                                          <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.6 }}>
+                                            — {t('updates.willBeActivated')}
+                                          </Typography>
+                                        </Typography>
+                                      </Box>
+                                    </Stack>
+                                  </CardContent>
+                                </Card>
+                              )
+                            })()}
+
                             {/* Action buttons */}
                             {pkgCount > 0 && data.clusterName ? (
                               <Button
@@ -2987,8 +3078,12 @@ export default function NodeTabs(props: any) {
                                 startIcon={<i className="ri-play-circle-line" style={{ fontSize: 20 }} />}
                                 onClick={() => setRollingUpdateWizardOpen(true)}
                                 sx={{ alignSelf: 'flex-start' }}
+                                disabled={
+                                  !!(nodeCephData && nodeCephData.hasCeph !== false &&
+                                  (nodeCephData?.health?.status || nodeCephData?.health?.overall_status) !== 'HEALTH_OK')
+                                }
                               >
-                                {t('updates.startRollingUpdate')}
+                                {t('updates.update')}
                               </Button>
                             ) : pkgCount > 0 ? (
                               <Alert severity="info" icon={<i className="ri-terminal-box-line" />}>

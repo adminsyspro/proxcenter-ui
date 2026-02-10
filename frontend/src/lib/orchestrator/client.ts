@@ -400,6 +400,16 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any[]>(`/replication/jobs/${id}/logs`)
   }
 
+  checkSSHConnectivity(sourceCluster: string, targetCluster: string) {
+    return this.post<{
+      connected: boolean
+      source_node: string
+      target_node: string
+      target_ip: string
+      error: string
+    }>('/replication/check-ssh', { source_cluster: sourceCluster, target_cluster: targetCluster })
+  }
+
   // ============================================
   // Site Recovery - Recovery Plans
   // ============================================

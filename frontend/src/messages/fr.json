@@ -1486,7 +1486,13 @@
       "rateLimitHelp": "0 = illimité",
       "onlineMode": "Mode en ligne",
       "onlineModeDesc": "Réplique pendant que la VM est en cours d'exécution (peut impacter les performances)",
-      "create": "Créer le job"
+      "create": "Créer le job",
+      "sshCheckTitle": "Connectivité SSH",
+      "sshChecking": "Vérification de la connectivité SSH directe entre les clusters...",
+      "sshSuccess": "Connexion SSH directe vérifiée entre {source} et {target}",
+      "sshFailed": "Échec de la connexion SSH directe",
+      "sshRequirement": "Le SSH sans mot de passe doit être configuré entre les clusters source et cible. Assurez-vous que root peut se connecter en SSH de la source vers la cible sans invite de mot de passe.",
+      "sshRetry": "Réessayer"
     },
     "createPlan": {
       "title": "Créer un plan de reprise",

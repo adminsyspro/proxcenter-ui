@@ -1492,7 +1492,9 @@
       "sshSuccess": "Direct SSH connection verified between {source} and {target}",
       "sshFailed": "Direct SSH connection failed",
       "sshRequirement": "Passwordless SSH must be configured between source and target clusters. Ensure root can SSH from source to target without a password prompt.",
-      "sshRetry": "Retry"
+      "sshRetry": "Retry",
+      "vmidPrefix": "VMID Prefix",
+      "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID."
     },
     "createPlan": {
       "title": "Create Recovery Plan",

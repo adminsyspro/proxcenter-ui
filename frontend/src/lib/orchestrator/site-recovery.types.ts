@@ -40,6 +40,7 @@ export interface CreateReplicationJobRequest {
   schedule: string
   rpo_target: number
   rate_limit_mbps: number
+  vmid_prefix?: number
   network_mapping: Record<string, string>
 }
 

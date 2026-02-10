@@ -3320,6 +3320,40 @@ return
     }
   }, [selection?.type, selection?.id, clusterTab, data?.nodesData, nodeUpdates, nodeLocalVms])
 
+  // Load updates when node "Updates" tab is selected
+  useEffect(() => {
+    // Updates tab index: 8 for cluster node, 9 for standalone
+    const updatesTabIndex = data?.clusterName ? 8 : 9
+    if (selection?.type === 'node' && nodeTab === updatesTabIndex) {
+      const { connId, node } = parseNodeId(selection.id)
+      if (!nodeUpdates[node]?.loading && nodeUpdates[node] === undefined) {
+        setNodeUpdates((prev: any) => ({
+          ...prev,
+          [node]: { count: 0, updates: [], version: null, loading: true }
+        }))
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/updates`)
+          .then(res => res.json())
+          .then(json => {
+            setNodeUpdates((prev: any) => ({
+              ...prev,
+              [node]: {
+                count: json.data?.count || 0,
+                updates: json.data?.updates || [],
+                version: json.data?.version || null,
+                loading: false
+              }
+            }))
+          })
+          .catch(() => {
+            setNodeUpdates((prev: any) => ({
+              ...prev,
+              [node]: { count: 0, updates: [], version: null, loading: false }
+            }))
+          })
+      }
+    }
+  }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeUpdates])
+
   // Reset clusterTab et clusterHaLoaded quand la sélection change
   useEffect(() => {
     setClusterTab(0)
@@ -4541,6 +4575,8 @@ return vm?.isCluster ?? false
                 nodeNotesLoading, nodeNotesSaving, nodeReplicationData, nodeReplicationLoading, nodeShellData,
                 nodeShellLoading, nodeSubscriptionData, nodeSubscriptionLoading, nodeSyslogData, nodeSyslogLive,
                 nodeSyslogLoading, nodeSystemData, nodeSystemLoading, nodeSystemSubTab, nodeTab,
+                nodeUpdates, setNodeUpdates, rollingUpdateAvailable, rollingUpdateWizardOpen, setRollingUpdateWizardOpen,
+                updatesDialogOpen, setUpdatesDialogOpen, updatesDialogNode, setUpdatesDialogNode,
                 onSelect, pools, primaryColor, primaryColorLight, removeSubscriptionDialogOpen,
                 removeSubscriptionLoading, replicationDeleting, replicationDialogMode, replicationDialogOpen, replicationFormData,
                 replicationLogData, replicationLogDialogOpen, replicationLogJob, replicationLogLoading, replicationSaving,

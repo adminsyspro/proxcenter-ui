@@ -36,6 +36,7 @@ import {
   TableRow,
   Tabs,
   TextField,
+  Tooltip as MuiTooltip,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -45,6 +46,7 @@ import { formatBytes } from '@/utils/format'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
+import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
 import { formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
@@ -187,6 +189,15 @@ export default function NodeTabs(props: any) {
     timeFormData,
     timezonesList,
     toggleFavorite,
+    nodeUpdates,
+    setNodeUpdates,
+    rollingUpdateAvailable,
+    rollingUpdateWizardOpen,
+    setRollingUpdateWizardOpen,
+    updatesDialogOpen,
+    setUpdatesDialogOpen,
+    updatesDialogNode,
+    setUpdatesDialogNode,
   } = props
 
   return (
@@ -293,6 +304,31 @@ export default function NodeTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-refresh-line" style={{ fontSize: 16 }} />
                       Replication
+                    </Box>
+                  }
+                />
+                {/* Onglet Updates */}
+                <Tab
+                  disabled={!rollingUpdateAvailable}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: rollingUpdateAvailable ? 1 : 0.4 }}>
+                      <i className="ri-download-cloud-line" style={{ fontSize: 16 }} />
+                      Updates
+                      {!rollingUpdateAvailable && (
+                        <Chip
+                          size="small"
+                          label="Enterprise"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                            ml: 0.5,
+                            '& .MuiChip-label': { px: 0.75 }
+                          }}
+                        />
+                      )}
                     </Box>
                   }
                 />
@@ -2750,15 +2786,249 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet CVE - Index 8 pour cluster, Index 9 pour standalone */}
-                {((nodeTab === 8 && data.clusterName) || (nodeTab === 9 && !data.clusterName)) && (
+                {/* Onglet Updates - Index 8 pour cluster, Index 9 pour standalone */}
+                {((nodeTab === 8 && data.clusterName) || (nodeTab === 9 && !data.clusterName)) && (() => {
+                  const nodeName = data.nodeName || selection?.id?.split(':').pop() || ''
+                  const nodeUpdate = nodeUpdates?.[nodeName]
+                  const pkgCount = nodeUpdate?.count || 0
+                  const hasKernel = nodeUpdate?.updates?.some((u: any) =>
+                    (u.Package || u.package || '').toLowerCase().includes('kernel') ||
+                    (u.Package || u.package || '').toLowerCase().includes('linux-image') ||
+                    (u.Package || u.package || '').toLowerCase().includes('pve-kernel')
+                  )
+                  // Estimation: download 2min + install 5min + 3s/pkg + reboot 5min if kernel + buffer 2min
+                  const estimatedMinutes = pkgCount > 0
+                    ? Math.ceil(2 + 5 + Math.ceil(pkgCount * 3 / 60) + (hasKernel ? 5 : 0) + 2)
+                    : 0
+
+                  return (
+                    <Box sx={{ p: 2 }}>
+                      <Stack spacing={3}>
+                        {/* Header */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <i className="ri-download-cloud-line" style={{ fontSize: 20 }} />
+                            {t('updates.availableUpdates')}
+                          </Typography>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<i className="ri-refresh-line" />}
+                            onClick={() => {
+                              setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
+                            }}
+                          >
+                            {t('updates.refresh')}
+                          </Button>
+                        </Box>
+
+                        {/* Loading state */}
+                        {nodeUpdate?.loading ? (
+                          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                            <CircularProgress size={32} />
+                          </Box>
+                        ) : !nodeUpdate ? (
+                          <Alert severity="info" icon={<i className="ri-information-line" />}>
+                            <Typography variant="body2">
+                              {t('updates.checkUpdates')}
+                            </Typography>
+                          </Alert>
+                        ) : (
+                          <>
+                            {/* Version card */}
+                            <Card variant="outlined">
+                              <CardContent>
+                                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <i className="ri-server-line" style={{ fontSize: 18 }} />
+                                  {nodeName}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                  {nodeUpdate?.version && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('updates.version')}:</Typography>
+                                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>{nodeUpdate.version}</Typography>
+                                    </Box>
+                                  )}
+                                  <Chip
+                                    size="small"
+                                    label={`${pkgCount} ${t('updates.packages').toLowerCase()}`}
+                                    color={pkgCount > 0 ? 'warning' : 'success'}
+                                    icon={pkgCount > 0 ? <i className="ri-arrow-up-circle-fill" style={{ fontSize: 14 }} /> : <i className="ri-checkbox-circle-fill" style={{ fontSize: 14 }} />}
+                                    sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                  />
+                                  {pkgCount > 0 && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <i className="ri-time-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                                      <Typography variant="caption">~{estimatedMinutes} min</Typography>
+                                    </Box>
+                                  )}
+                                  {hasKernel && (
+                                    <MuiTooltip title={t('updates.rebootRequired')}>
+                                      <Chip
+                                        size="small"
+                                        label={t('updates.rebootRequired')}
+                                        color="warning"
+                                        icon={<i className="ri-restart-line" style={{ fontSize: 14 }} />}
+                                        sx={{ height: 24, fontSize: 11 }}
+                                      />
+                                    </MuiTooltip>
+                                  )}
+                                </Box>
+                              </CardContent>
+                            </Card>
+
+                            {/* Package list table */}
+                            {pkgCount > 0 && (
+                              <Card variant="outlined">
+                                <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                                  <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                                    {/* Header */}
+                                    <Box sx={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr 160px 160px',
+                                      gap: 1,
+                                      px: 1.5,
+                                      py: 0.75,
+                                      bgcolor: 'action.hover',
+                                      borderBottom: '1px solid',
+                                      borderColor: 'divider',
+                                      position: 'sticky',
+                                      top: 0,
+                                      zIndex: 1
+                                    }}>
+                                      <Typography variant="caption" fontWeight={600}>{t('updates.package')}</Typography>
+                                      <Typography variant="caption" fontWeight={600}>{t('updates.currentVersion')}</Typography>
+                                      <Typography variant="caption" fontWeight={600}>{t('updates.newVersion')}</Typography>
+                                    </Box>
+                                    {/* Rows */}
+                                    {nodeUpdate.updates.map((upd: any, idx: number) => {
+                                      const pkgName = upd.Package || upd.package || ''
+                                      const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
+                                      return (
+                                        <Box
+                                          key={idx}
+                                          sx={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 160px 160px',
+                                            gap: 1,
+                                            px: 1.5,
+                                            py: 0.5,
+                                            borderBottom: '1px solid',
+                                            borderColor: 'divider',
+                                            '&:last-child': { borderBottom: 'none' },
+                                            '&:hover': { bgcolor: 'action.hover' },
+                                            bgcolor: isKernel ? 'rgba(255, 152, 0, 0.1)' : 'transparent'
+                                          }}
+                                        >
+                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                                            {isKernel && (
+                                              <i className="ri-restart-line" style={{ fontSize: 12, color: '#ff9800', flexShrink: 0 }} />
+                                            )}
+                                            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
+                                              {pkgName}
+                                            </Typography>
+                                          </Box>
+                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.OldVersion || upd.old_version || '—'}
+                                          </Typography>
+                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.Version || upd.version || upd.new_version || '—'}
+                                          </Typography>
+                                        </Box>
+                                      )
+                                    })}
+                                  </Box>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* Summary alert */}
+                            {pkgCount === 0 ? (
+                              <Alert severity="success" icon={<i className="ri-checkbox-circle-line" />}>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {t('updates.upToDate')}
+                                </Typography>
+                              </Alert>
+                            ) : (
+                              <Alert
+                                severity="warning"
+                                icon={<i className="ri-error-warning-line" />}
+                              >
+                                <Box>
+                                  <Typography variant="body2" fontWeight={600}>
+                                    {t('updates.summaryUpdates', { count: pkgCount, nodes: 1 })}
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5, flexWrap: 'wrap' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <i className="ri-time-line" style={{ fontSize: 14 }} />
+                                      <Typography variant="caption">
+                                        {t('updates.totalEstimatedTime')}: ~{estimatedMinutes} min
+                                      </Typography>
+                                    </Box>
+                                    {hasKernel && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                        <i className="ri-restart-line" style={{ fontSize: 14, color: '#ff9800' }} />
+                                        <Typography variant="caption">
+                                          {t('updates.rebootsRequired', { count: 1 })}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </Box>
+                              </Alert>
+                            )}
+
+                            {/* Action buttons */}
+                            {pkgCount > 0 && data.clusterName ? (
+                              <Button
+                                variant="contained"
+                                color="warning"
+                                size="large"
+                                startIcon={<i className="ri-play-circle-line" style={{ fontSize: 20 }} />}
+                                onClick={() => setRollingUpdateWizardOpen(true)}
+                                sx={{ alignSelf: 'flex-start' }}
+                              >
+                                {t('updates.startRollingUpdate')}
+                              </Button>
+                            ) : pkgCount > 0 ? (
+                              <Alert severity="info" icon={<i className="ri-terminal-box-line" />}>
+                                <Typography variant="body2">
+                                  Use the Shell tab to run <code style={{ fontFamily: 'monospace', fontSize: 12, background: 'rgba(0,0,0,0.1)', padding: '1px 4px', borderRadius: 2 }}>apt update && apt dist-upgrade -y</code> to apply updates.
+                                </Typography>
+                              </Alert>
+                            ) : null}
+                          </>
+                        )}
+                      </Stack>
+
+                      {/* Rolling Update Wizard (cluster nodes only) */}
+                      {data.clusterName && (
+                        <RollingUpdateWizard
+                          open={rollingUpdateWizardOpen}
+                          onClose={() => setRollingUpdateWizardOpen(false)}
+                          connectionId={selection?.id?.split(':')[0] || ''}
+                          nodes={[{
+                            node: nodeName,
+                            version: nodeUpdate?.version || '',
+                            vms: data.vmsData?.length || 0,
+                            status: 'online',
+                          }]}
+                          nodeUpdates={nodeUpdates}
+                        />
+                      )}
+                    </Box>
+                  )
+                })()}
+
+                {/* Onglet CVE - Index 9 pour cluster, Index 10 pour standalone */}
+                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Subscription - Index 9 pour cluster, Index 10 pour standalone */}
-                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (
+                {/* Onglet Subscription - Index 10 pour cluster, Index 11 pour standalone */}
+                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

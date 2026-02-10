@@ -1463,6 +1463,7 @@
     },
     "createJob": {
       "title": "Create Replication Job",
+      "sourceCluster": "Source Cluster",
       "selectVMs": "Select VMs",
       "searchVMs": "Search VMs...",
       "noVMs": "No VMs available",
@@ -1470,6 +1471,7 @@
       "targetCluster": "Target Cluster",
       "targetPool": "Target Pool",
       "selectCluster": "Select a cluster",
+      "selectPool": "Select a pool",
       "schedule": "Schedule",
       "continuous": "Continuous",
       "every5min": "Every 5 minutes",

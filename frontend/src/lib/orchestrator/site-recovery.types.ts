@@ -33,6 +33,7 @@ export interface ReplicationJob {
 
 export interface CreateReplicationJobRequest {
   vm_ids: number[]
+  source_cluster: string
   target_cluster: string
   target_pool: string
   schedule: string

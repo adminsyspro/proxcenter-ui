@@ -1467,6 +1467,7 @@
       "selectVMs": "Select VMs",
       "searchVMs": "Search VMs...",
       "noVMs": "No VMs available",
+      "noTags": "No tags found on source VMs",
       "selectedCount": "{count} VM(s) selected",
       "targetCluster": "Target Cluster",
       "targetPool": "Target Pool",

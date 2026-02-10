@@ -6,8 +6,8 @@ import useSWR from 'swr'
 
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, InputAdornment, MenuItem, Select, Stack,
-  TextField, Typography
+  FormControlLabel, InputAdornment, ListItemIcon, MenuItem, Select, Stack,
+  TextField, ToggleButton, ToggleButtonGroup, Typography
 } from '@mui/material'
 
 import { tagColor } from '@/app/(dashboard)/infrastructure/inventory/helpers'
@@ -58,7 +58,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [schedule, setSchedule] = useState('*/15 * * * *')
   const [rpoTarget, setRpoTarget] = useState(900)
   const [vmSearch, setVmSearch] = useState('')
-  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  const [selectionMode, setSelectionMode] = useState<'vms' | 'tags'>('vms')
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
 
   // SSH connectivity check state
   const [sshCheck, setSshCheck] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle')
@@ -129,14 +130,32 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     return Array.from(tags).sort()
   }, [sourceVMs])
 
-  // Search + tag filter on source VMs
+  // Count VMs per tag
+  const tagVMCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    allTags.forEach(tag => {
+      counts[tag] = sourceVMs.filter(v => v.tags?.includes(tag)).length
+    })
+    return counts
+  }, [allTags, sourceVMs])
+
+  // Total unique VMs matching selected tags
+  const matchingTagVMCount = useMemo(() => {
+    if (selectedTags.length === 0) return 0
+    const ids = new Set<number>()
+    sourceVMs.forEach(vm => {
+      if (vm.tags?.some(t => selectedTags.includes(t))) ids.add(vm.vmid)
+    })
+    return ids.size
+  }, [selectedTags, sourceVMs])
+
+  // Search filter on source VMs (for VM mode only)
   const filteredVMs = useMemo(() =>
     sourceVMs.filter(v => {
-      if (tagFilter && (!v.tags || !v.tags.includes(tagFilter))) return false
       if (!vmSearch) return true
       return v.name.toLowerCase().includes(vmSearch.toLowerCase()) || String(v.vmid).includes(vmSearch)
     })
-  , [sourceVMs, vmSearch, tagFilter])
+  , [sourceVMs, vmSearch])
 
   // Fetch Ceph pools for the selected target cluster
   const { data: cephData, isLoading: cephLoading } = useSWR(
@@ -177,11 +196,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const handleSourceClusterChange = (value: string) => {
     setSourceCluster(value)
     setSelectedVMs([])
+    setSelectedTags([])
     setTargetCluster('')
     setTargetPool('')
     setSshCheck('idle')
     setSshError('')
-    setTagFilter(null)
+    setSelectionMode('vms')
     setVmSearch('')
   }
 
@@ -198,7 +218,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   const handleSubmit = () => {
     onSubmit({
-      vm_ids: selectedVMs,
+      vm_ids: selectionMode === 'vms' ? selectedVMs : [],
+      tags: selectionMode === 'tags' ? selectedTags : [],
       source_cluster: sourceCluster,
       target_cluster: targetCluster,
       target_pool: targetPool,
@@ -213,18 +234,20 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const handleClose = () => {
     setSourceCluster('')
     setSelectedVMs([])
+    setSelectedTags([])
+    setSelectionMode('vms')
     setTargetCluster('')
     setTargetPool('')
     setSchedule('*/15 * * * *')
     setRpoTarget(900)
     setVmSearch('')
-    setTagFilter(null)
     setSshCheck('idle')
     setSshError('')
     onClose()
   }
 
-  const canSubmit = sourceCluster && selectedVMs.length > 0 && targetCluster && targetPool && sshCheck === 'success'
+  const hasSelection = selectionMode === 'vms' ? selectedVMs.length > 0 : selectedTags.length > 0
+  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success'
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
@@ -236,85 +259,126 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.sourceCluster')}</Typography>
             <Select value={sourceCluster} onChange={e => handleSourceClusterChange(e.target.value)} size='small' fullWidth displayEmpty>
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectCluster')}</MenuItem>
-              {cephConnections.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              {cephConnections.map(c => (
+                <MenuItem key={c.id} value={c.id}>
+                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-server-line' /></ListItemIcon>
+                  {c.name}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
 
-          {/* VM Selection (only shown after source cluster is selected) */}
+          {/* VM / Tag Selection (only shown after source cluster is selected) */}
           {sourceCluster && (
             <Box>
-              <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createJob.selectVMs')}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant='subtitle2'>{t('siteRecovery.createJob.selectVMs')}</Typography>
+                <ToggleButtonGroup
+                  value={selectionMode}
+                  exclusive
+                  onChange={(_, v) => {
+                    if (v) {
+                      setSelectionMode(v)
+                      if (v === 'tags') { setSelectedVMs([]); setVmSearch('') }
+                      if (v === 'vms') setSelectedTags([])
+                    }
+                  }}
+                  size='small'
+                >
+                  <ToggleButton value='vms' sx={{ px: 1.5, py: 0.25, textTransform: 'none', gap: 0.5 }}>
+                    <i className='ri-computer-line' style={{ fontSize: 16 }} /> VMs
+                  </ToggleButton>
+                  <ToggleButton value='tags' sx={{ px: 1.5, py: 0.25, textTransform: 'none', gap: 0.5 }}>
+                    <i className='ri-price-tag-3-line' style={{ fontSize: 16 }} /> Tags
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
 
-              {/* Tag filter chips — clicking a tag filters AND selects matching VMs */}
-              {allTags.length > 0 && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-                  {allTags.map(tag => (
-                    <Chip
-                      key={tag}
-                      label={tag}
-                      size='small'
-                      onClick={() => {
-                        if (tagFilter === tag) {
-                          // Deactivate filter
-                          setTagFilter(null)
-                        } else {
-                          // Activate filter and select all VMs with this tag
-                          setTagFilter(tag)
-                          const tagVMIds = sourceVMs.filter(v => v.tags?.includes(tag)).map(v => v.vmid)
-                          setSelectedVMs(prev => [...new Set([...prev, ...tagVMIds])])
-                        }
-                      }}
-                      variant={tagFilter === tag ? 'filled' : 'outlined'}
-                      sx={{
-                        bgcolor: tagFilter === tag ? tagColor(tag) : 'transparent',
-                        color: tagFilter === tag ? '#fff' : tagColor(tag),
-                        borderColor: tagColor(tag),
-                        fontWeight: 500,
-                        fontSize: '0.7rem',
-                        height: 24,
-                        cursor: 'pointer',
-                      }}
-                    />
-                  ))}
-                </Box>
+              {/* ── VM selection mode ── */}
+              {selectionMode === 'vms' && (
+                <>
+                  <TextField
+                    value={vmSearch}
+                    onChange={e => setVmSearch(e.target.value)}
+                    placeholder={t('siteRecovery.createJob.searchVMs')}
+                    size='small'
+                    fullWidth
+                    sx={{ mb: 1 }}
+                    InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-search-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
+                  />
+
+                  <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.5 }}>
+                    {filteredVMs.length === 0 ? (
+                      <Typography variant='caption' sx={{ p: 1, color: 'text.secondary' }}>{t('siteRecovery.createJob.noVMs')}</Typography>
+                    ) : (
+                      filteredVMs.map(vm => (
+                        <FormControlLabel
+                          key={vm.vmid}
+                          control={<Checkbox size='small' checked={selectedVMs.includes(vm.vmid)} onChange={() => toggleVM(vm.vmid)} />}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                              <Typography variant='body2'>{vm.name}</Typography>
+                              <Typography variant='caption' sx={{ color: 'text.secondary' }}>({vm.vmid})</Typography>
+                              {vm.tags?.map(tag => (
+                                <Chip key={tag} label={tag} size='small' sx={{ height: 18, fontSize: '0.6rem', bgcolor: tagColor(tag), color: '#fff' }} />
+                              ))}
+                            </Box>
+                          }
+                          sx={{ display: 'flex', m: 0, py: 0.25, px: 0.5, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
+                        />
+                      ))
+                    )}
+                  </Box>
+                  {selectedVMs.length > 0 && (
+                    <Typography variant='caption' sx={{ color: 'primary.main', mt: 0.5 }}>
+                      {t('siteRecovery.createJob.selectedCount', { count: selectedVMs.length })}
+                    </Typography>
+                  )}
+                </>
               )}
 
-              <TextField
-                value={vmSearch}
-                onChange={e => setVmSearch(e.target.value)}
-                placeholder={t('siteRecovery.createJob.searchVMs')}
-                size='small'
-                fullWidth
-                sx={{ mb: 1 }}
-                InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-search-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
-              />
-
-              <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.5 }}>
-                {filteredVMs.length === 0 ? (
-                  <Typography variant='caption' sx={{ p: 1, color: 'text.secondary' }}>{t('siteRecovery.createJob.noVMs')}</Typography>
-                ) : (
-                  filteredVMs.map(vm => (
-                    <FormControlLabel
-                      key={vm.vmid}
-                      control={<Checkbox size='small' checked={selectedVMs.includes(vm.vmid)} onChange={() => toggleVM(vm.vmid)} />}
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                          <Typography variant='body2'>{vm.name}</Typography>
-                          <Typography variant='caption' sx={{ color: 'text.secondary' }}>({vm.vmid})</Typography>
-                          {vm.tags?.map(tag => (
-                            <Chip key={tag} label={tag} size='small' sx={{ height: 18, fontSize: '0.6rem', bgcolor: tagColor(tag), color: '#fff' }} />
-                          ))}
-                        </Box>
-                      }
-                      sx={{ display: 'flex', m: 0, py: 0.25, px: 0.5, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
-                    />
-                  ))
-                )}
-              </Box>
-              {selectedVMs.length > 0 && (
-                <Typography variant='caption' sx={{ color: 'primary.main', mt: 0.5 }}>
-                  {t('siteRecovery.createJob.selectedCount', { count: selectedVMs.length })}
-                </Typography>
+              {/* ── Tag selection mode ── */}
+              {selectionMode === 'tags' && (
+                <>
+                  <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.5 }}>
+                    {allTags.length === 0 ? (
+                      <Typography variant='caption' sx={{ p: 1, color: 'text.secondary' }}>{t('siteRecovery.createJob.noTags')}</Typography>
+                    ) : (
+                      allTags.map(tag => (
+                        <FormControlLabel
+                          key={tag}
+                          control={
+                            <Checkbox
+                              size='small'
+                              checked={selectedTags.includes(tag)}
+                              onChange={() => setSelectedTags(prev =>
+                                prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                              )}
+                            />
+                          }
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Chip
+                                label={tag}
+                                size='small'
+                                sx={{ bgcolor: tagColor(tag), color: '#fff', fontWeight: 500, fontSize: '0.7rem', height: 22 }}
+                              />
+                              <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                                ({tagVMCounts[tag]} VMs)
+                              </Typography>
+                            </Box>
+                          }
+                          sx={{ display: 'flex', m: 0, py: 0.25, px: 0.5, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
+                        />
+                      ))
+                    )}
+                  </Box>
+                  {selectedTags.length > 0 && (
+                    <Typography variant='caption' sx={{ color: 'primary.main', mt: 0.5 }}>
+                      {selectedTags.length} {selectedTags.length === 1 ? 'tag' : 'tags'} selected — {matchingTagVMCount} VMs currently matching
+                    </Typography>
+                  )}
+                </>
               )}
             </Box>
           )}
@@ -331,7 +395,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               disabled={!sourceCluster}
             >
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectCluster')}</MenuItem>
-              {targetConnections.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              {targetConnections.map(c => (
+                <MenuItem key={c.id} value={c.id}>
+                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-server-line' /></ListItemIcon>
+                  {c.name}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
 
@@ -382,6 +451,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectPool')}</MenuItem>
               {cephPools.map((p: any) => (
                 <MenuItem key={p.name} value={p.name}>
+                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-database-2-line' /></ListItemIcon>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                     <span>{p.name}</span>
                     {p.maxAvail > 0 && (
@@ -399,7 +469,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           <Box>
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.schedule')}</Typography>
             <Select value={schedule} onChange={e => setSchedule(e.target.value)} size='small' fullWidth>
-              {schedulePresets.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+              {schedulePresets.map(p => (
+                <MenuItem key={p.value} value={p.value}>
+                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-time-line' /></ListItemIcon>
+                  {p.label}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
 
@@ -407,7 +482,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           <Box>
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.rpoTarget')}</Typography>
             <Select value={rpoTarget} onChange={e => setRpoTarget(Number(e.target.value))} size='small' fullWidth>
-              {rpoPresets.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+              {rpoPresets.map(p => (
+                <MenuItem key={p.value} value={p.value}>
+                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-timer-line' /></ListItemIcon>
+                  {p.label}
+                </MenuItem>
+              ))}
             </Select>
           </Box>
 

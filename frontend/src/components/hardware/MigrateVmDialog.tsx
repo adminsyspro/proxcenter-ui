@@ -133,7 +133,7 @@ return names.sort()
 
         if (json.data && Array.isArray(json.data)) {
           const availableNodes = json.data
-            .filter((n: NodeInfo) => n.node !== currentNode && n.status === 'online')
+            .filter((n: any) => n.node !== currentNode && n.status === 'online' && n.hastate !== 'maintenance')
             .map((n: NodeInfo) => ({
               node: n.node,
               status: n.status,

@@ -33,7 +33,6 @@ import { formatUptime } from '../helpers'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
 import StatusChip from './StatusChip'
-import NodeHeatmap from './NodeHeatmap'
 
 function VCenterSummary({
   kindLabel,
@@ -372,7 +371,7 @@ return `${mins}m`
               )}
             </Box>
 
-            {/* Colonne 2 - Heatmap CPU/RAM */}
+            {/* Colonne 2 - Informations système */}
             <Box
               sx={{
                 flex: 1,
@@ -383,23 +382,7 @@ return `${mins}m`
                 bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
               }}
             >
-              {connId && nodeName ? (
-                <NodeHeatmap connId={connId} nodeName={nodeName} primaryColor={primaryColor} />
-              ) : null}
-            </Box>
-
-            {/* Colonne 3 - Informations système */}
-            <Box
-              sx={{
-                flex: 1,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
-                p: 1.25,
-                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
-              }}
-            >
-              <Stack spacing={1.25}>
+              <Stack spacing={2.5}>
                 {hostInfo.cpuModel ? (
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     <i className="ri-cpu-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />

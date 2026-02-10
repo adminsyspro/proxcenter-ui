@@ -274,7 +274,7 @@ export function MigrateVmDialog({
         
         if (json.data && Array.isArray(json.data)) {
           const availableNodes = json.data
-            .filter((n: NodeInfo) => n.node !== currentNode && n.status === 'online')
+            .filter((n: any) => n.node !== currentNode && n.status === 'online' && n.hastate !== 'maintenance')
             .map((n: NodeInfo) => ({
               node: n.node,
               status: n.status,
@@ -283,9 +283,9 @@ export function MigrateVmDialog({
               mem: n.mem,
               maxmem: n.maxmem
             }))
-          
+
           setNodes(availableNodes)
-          
+
           if (availableNodes.length > 0) {
             const recommended = getRecommendedNode(availableNodes)
             setSelectedNode(recommended.node)
@@ -298,7 +298,7 @@ export function MigrateVmDialog({
         setNodesLoading(false)
       }
     }
-    
+
     loadNodes()
   }, [open, connId, currentNode, activeTab])
   
@@ -509,7 +509,7 @@ export function MigrateVmDialog({
         
         if (json.data && Array.isArray(json.data)) {
           const availableNodes = json.data
-            .filter((n: NodeInfo) => n.status === 'online')
+            .filter((n: any) => n.status === 'online' && n.hastate !== 'maintenance')
             .map((n: NodeInfo) => ({
               node: n.node,
               status: n.status,
@@ -518,9 +518,9 @@ export function MigrateVmDialog({
               mem: n.mem,
               maxmem: n.maxmem
             }))
-          
+
           setRemoteNodes(availableNodes)
-          
+
           if (availableNodes.length > 0) {
             setSelectedRemoteNode(availableNodes[0].node)
           }

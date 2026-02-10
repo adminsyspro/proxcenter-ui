@@ -1367,9 +1367,25 @@ return allVMsData.data.vms.map(vm => ({
   }, [allVMsData])
 
   // Computed
+  // Set of node names currently in maintenance — used to filter out bad targets
+  const maintenanceNodeNames = useMemo(() => {
+    const set = new Set<string>()
+    if (metricsData) {
+      for (const [, metrics] of Object.entries(metricsData as Record<string, any>)) {
+        for (const n of (metrics?.nodes || [])) {
+          if (n.in_maintenance) set.add(n.node)
+        }
+      }
+    }
+    return set
+  }, [metricsData])
+
   const pendingRecs = useMemo(() =>
-    recommendations.filter(r => r.status === 'pending' || r.status === 'approved'),
-    [recommendations]
+    recommendations.filter(r =>
+      (r.status === 'pending' || r.status === 'approved') &&
+      !maintenanceNodeNames.has(r.target_node)
+    ),
+    [recommendations, maintenanceNodeNames]
   )
 
   const clusters = useMemo(() => {

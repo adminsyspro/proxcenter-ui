@@ -466,23 +466,27 @@ return
                     </MenuItem>
                   ),
                   // Nodes du groupe
-                  ...group.nodes.map(n => (
+                  ...group.nodes.map(n => {
+                    const isMaintenance = n.hastate === 'maintenance'
+                    const isDisabled = n.status !== 'online' || isMaintenance
+
+                    return (
                     <MenuItem
                       key={`${n.connId}-${n.node}`}
                       value={n.node}
-                      disabled={n.status !== 'online'}
+                      disabled={isDisabled}
                       sx={{ pl: group.isCluster ? 4 : 2 }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
                         <i
-                          className="ri-server-line"
+                          className={isMaintenance ? 'ri-tools-line' : 'ri-server-line'}
                           style={{
                             fontSize: 14,
-                            color: n.status === 'online' ? theme.palette.success.main : theme.palette.text.disabled
+                            color: isMaintenance ? theme.palette.warning.main : n.status === 'online' ? theme.palette.success.main : theme.palette.text.disabled
                           }}
                         />
                         <Box sx={{ flex: 1 }}>
-                          <Typography variant="body2" sx={{ opacity: n.status === 'online' ? 1 : 0.5 }}>
+                          <Typography variant="body2" sx={{ opacity: isDisabled ? 0.5 : 1 }}>
                             {n.node}
                             {!group.isCluster && (
                               <Typography component="span" sx={{ ml: 1, opacity: 0.6, fontSize: '0.8em' }}>
@@ -491,7 +495,7 @@ return
                             )}
                           </Typography>
                         </Box>
-                        {n.status === 'online' && (
+                        {n.status === 'online' && !isMaintenance && (
                           <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
                               <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
@@ -509,12 +513,16 @@ return
                             </Box>
                           </Stack>
                         )}
-                        {n.status !== 'online' && (
+                        {isMaintenance && (
+                          <Chip label="maintenance" size="small" color="warning" sx={{ height: 18, fontSize: 10 }} />
+                        )}
+                        {n.status !== 'online' && !isMaintenance && (
                           <Chip label="offline" size="small" sx={{ height: 18, fontSize: 10 }} />
                         )}
                       </Box>
                     </MenuItem>
-                  ))
+                    )
+                  })
                 ]).flat().filter(Boolean)}
               </Select>
             </FormControl>

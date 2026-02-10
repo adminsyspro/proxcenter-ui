@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import useSWR from 'swr'
 
 import {
   Box, Button, Chip, Tab, Tabs
@@ -29,6 +30,11 @@ import {
 } from '@/components/automation/site-recovery'
 
 import type { RecoveryPlan, RecoveryExecution } from '@/lib/orchestrator/site-recovery.types'
+
+const fetcher = (url: string) => fetch(url).then(res => {
+  if (!res.ok) throw new Error('Failed to fetch')
+  return res.json()
+})
 
 export default function SiteRecoveryPage() {
   const t = useTranslations()
@@ -61,6 +67,10 @@ export default function SiteRecoveryPage() {
   const { data: jobLogs, isLoading: logsLoading } = useReplicationJobLogs(selectedJobId, !!selectedJobId)
   const { data: planHistory, isLoading: historyLoading } = useRecoveryHistory(selectedPlanId)
 
+  // Real data: PVE connections and all VMs
+  const { data: connectionsData } = useSWR<{ data: any[] }>('/api/v1/connections?type=pve', fetcher)
+  const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
+
   // Page title
   useEffect(() => {
     setPageInfo(t('siteRecovery.title'), t('siteRecovery.subtitle'), 'ri-shield-star-line')
@@ -73,15 +83,22 @@ export default function SiteRecoveryPage() {
     (jobs || []).filter((j: any) => j.status === 'error').length
   , [jobs])
 
-  // Clusters for dialogs (extracted from health data)
-  const clusters = useMemo(() =>
-    (health?.sites || []).map((s: any) => ({ id: s.cluster_id, name: s.name || s.cluster_id }))
-  , [health])
+  // PVE connections for dialogs
+  const connections = useMemo(() =>
+    (connectionsData?.data || []).map((c: any) => ({ id: c.id, name: c.name, hasCeph: c.hasCeph }))
+  , [connectionsData])
 
-  // VMs from jobs (for create dialog)
-  const availableVMs = useMemo(() =>
-    (jobs || []).map((j: any) => ({ vmid: j.vm_id, name: j.vm_name, node: '' }))
-  , [jobs])
+  // All VMs for create job dialog
+  const allVMs = useMemo(() =>
+    (allVMsData?.data?.vms || []).map((vm: any) => ({
+      vmid: parseInt(vm.vmid, 10) || 0,
+      name: vm.name,
+      node: vm.node || vm.host,
+      connId: vm.connId,
+      type: vm.type,
+      status: vm.status
+    }))
+  , [allVMsData])
 
   // Selected plan for failover dialog
   const failoverPlan = useMemo(() =>
@@ -274,15 +291,15 @@ export default function SiteRecoveryPage() {
           open={createJobOpen}
           onClose={() => setCreateJobOpen(false)}
           onSubmit={handleCreateJob}
-          clusters={clusters}
-          vms={availableVMs}
+          connections={connections}
+          allVMs={allVMs}
         />
 
         <CreatePlanDialog
           open={createPlanOpen}
           onClose={() => setCreatePlanOpen(false)}
           onSubmit={handleCreatePlan}
-          clusters={clusters}
+          connections={connections}
           jobs={jobs || []}
         />
 

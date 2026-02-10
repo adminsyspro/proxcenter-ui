@@ -16,7 +16,7 @@ interface CreatePlanDialogProps {
   open: boolean
   onClose: () => void
   onSubmit: (data: CreateRecoveryPlanRequest) => void
-  clusters: Array<{ id: string; name: string }>
+  connections: Array<{ id: string; name: string; hasCeph: boolean }>
   jobs: ReplicationJob[]
 }
 
@@ -27,7 +27,7 @@ interface VMAssignment {
   boot_order: number
 }
 
-export default function CreatePlanDialog({ open, onClose, onSubmit, clusters, jobs }: CreatePlanDialogProps) {
+export default function CreatePlanDialog({ open, onClose, onSubmit, connections, jobs }: CreatePlanDialogProps) {
   const t = useTranslations()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -112,7 +112,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, clusters, jo
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createPlan.sourceCluster')}</Typography>
             <Select value={sourceCluster} onChange={e => setSourceCluster(e.target.value)} size='small' fullWidth displayEmpty>
               <MenuItem value='' disabled>{t('siteRecovery.createPlan.selectCluster')}</MenuItem>
-              {clusters.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              {connections.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
             </Select>
           </Box>
 
@@ -121,7 +121,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, clusters, jo
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createPlan.targetCluster')}</Typography>
             <Select value={targetCluster} onChange={e => setTargetCluster(e.target.value)} size='small' fullWidth displayEmpty>
               <MenuItem value='' disabled>{t('siteRecovery.createPlan.selectCluster')}</MenuItem>
-              {clusters.filter(c => c.id !== sourceCluster).map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              {connections.filter(c => c.id !== sourceCluster).map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
             </Select>
           </Box>
 

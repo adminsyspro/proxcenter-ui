@@ -31,6 +31,7 @@ const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: 
 const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
@@ -348,10 +349,10 @@ function RootInventoryView({
         gap: 2,
         mb: 2
       }}>
-        {/* Card 1: Resource Usage */}
+        {/* Card 1: Resource Usage - Donut gauges */}
         <Card variant="outlined" sx={{ p: 0 }}>
           <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: 1.5,
                 bgcolor: alpha(theme.palette.info.main, 0.12),
@@ -361,49 +362,67 @@ function RootInventoryView({
               </Box>
               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.resourceUsage')}</Typography>
             </Stack>
-            {/* CPU bar */}
-            <Box sx={{ mb: 1.5 }}>
-              <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                <Typography variant="caption" sx={{ opacity: 0.7 }}>CPU</Typography>
-                <Typography variant="caption" fontWeight={700} sx={{
-                  color: globalStats.avgCpu > 90 ? 'error.main' : globalStats.avgCpu > 70 ? 'warning.main' : 'info.main'
-                }}>
-                  {globalStats.avgCpu.toFixed(1)}%
-                </Typography>
-              </Stack>
-              <Box sx={{ width: '100%', height: 8, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1, overflow: 'hidden' }}>
-                <Box sx={{
-                  width: `${Math.min(100, globalStats.avgCpu)}%`, height: '100%', borderRadius: 1,
-                  bgcolor: globalStats.avgCpu > 90 ? 'error.main' : globalStats.avgCpu > 70 ? 'warning.main' : 'info.main',
-                  transition: 'width 0.3s ease'
-                }} />
-              </Box>
-            </Box>
-            {/* RAM bar */}
-            <Box>
-              <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                <Typography variant="caption" sx={{ opacity: 0.7 }}>RAM</Typography>
-                <Typography variant="caption" fontWeight={700} sx={{
-                  color: globalStats.avgRam > 90 ? 'error.main' : globalStats.avgRam > 70 ? 'warning.main' : 'secondary.main'
-                }}>
-                  {globalStats.avgRam.toFixed(1)}%
-                </Typography>
-              </Stack>
-              <Box sx={{ width: '100%', height: 8, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 1, overflow: 'hidden' }}>
-                <Box sx={{
-                  width: `${Math.min(100, globalStats.avgRam)}%`, height: '100%', borderRadius: 1,
-                  bgcolor: globalStats.avgRam > 90 ? 'error.main' : globalStats.avgRam > 70 ? 'warning.main' : 'secondary.main',
-                  transition: 'width 0.3s ease'
-                }} />
-              </Box>
-            </Box>
+            <Stack direction="row" justifyContent="space-around" alignItems="center">
+              {/* CPU gauge */}
+              {(() => {
+                const cpuColor = globalStats.avgCpu > 90 ? theme.palette.error.main : globalStats.avgCpu > 70 ? theme.palette.warning.main : theme.palette.info.main
+                const cpuData = [
+                  { value: globalStats.avgCpu },
+                  { value: Math.max(0, 100 - globalStats.avgCpu) },
+                ]
+                return (
+                  <Box sx={{ position: 'relative', width: 80, height: 80 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={cpuData} cx="50%" cy="50%" innerRadius={26} outerRadius={36} startAngle={90} endAngle={-270} dataKey="value" stroke="none">
+                          <Cell fill={cpuColor} />
+                          <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                      <Typography variant="caption" fontWeight={800} sx={{ fontSize: 13, color: cpuColor, lineHeight: 1 }}>
+                        {globalStats.avgCpu.toFixed(0)}%
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: -0.5, opacity: 0.7, fontSize: 11 }}>CPU</Typography>
+                  </Box>
+                )
+              })()}
+              {/* RAM gauge */}
+              {(() => {
+                const ramColor = globalStats.avgRam > 90 ? theme.palette.error.main : globalStats.avgRam > 70 ? theme.palette.warning.main : theme.palette.secondary.main
+                const ramData = [
+                  { value: globalStats.avgRam },
+                  { value: Math.max(0, 100 - globalStats.avgRam) },
+                ]
+                return (
+                  <Box sx={{ position: 'relative', width: 80, height: 80 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={ramData} cx="50%" cy="50%" innerRadius={26} outerRadius={36} startAngle={90} endAngle={-270} dataKey="value" stroke="none">
+                          <Cell fill={ramColor} />
+                          <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                      <Typography variant="caption" fontWeight={800} sx={{ fontSize: 13, color: ramColor, lineHeight: 1 }}>
+                        {globalStats.avgRam.toFixed(0)}%
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: -0.5, opacity: 0.7, fontSize: 11 }}>RAM</Typography>
+                  </Box>
+                )
+              })()}
+            </Stack>
           </CardContent>
         </Card>
 
-        {/* Card 2: VM Distribution */}
+        {/* Card 2: VM Distribution - Donut chart */}
         <Card variant="outlined" sx={{ p: 0 }}>
           <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: 1.5,
                 bgcolor: alpha(theme.palette.success.main, 0.12),
@@ -413,55 +432,58 @@ function RootInventoryView({
               </Box>
               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmDistribution')}</Typography>
             </Stack>
-            {/* Stacked bar */}
-            <Box sx={{ width: '100%', height: 12, borderRadius: 1.5, overflow: 'hidden', display: 'flex', mb: 1.5 }}>
-              {vmStats.total > 0 && (
-                <>
-                  <Box sx={{
-                    width: `${(vmStats.running / vmStats.total) * 100}%`, height: '100%',
-                    bgcolor: 'success.main', transition: 'width 0.3s ease'
-                  }} />
-                  <Box sx={{
-                    width: `${(vmStats.stopped / vmStats.total) * 100}%`, height: '100%',
-                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
-                    transition: 'width 0.3s ease'
-                  }} />
-                  {vmStats.other > 0 && (
-                    <Box sx={{
-                      width: `${(vmStats.other / vmStats.total) * 100}%`, height: '100%',
-                      bgcolor: 'warning.main', transition: 'width 0.3s ease'
-                    }} />
-                  )}
-                </>
-              )}
-            </Box>
-            {/* Legend */}
-            <Stack direction="row" spacing={2} flexWrap="wrap">
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.running')}</Typography>
-                <Typography variant="caption" fontWeight={700}>{vmStats.running}</Typography>
-              </Stack>
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' }} />
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.stopped')}</Typography>
-                <Typography variant="caption" fontWeight={700}>{vmStats.stopped}</Typography>
-              </Stack>
-              {vmStats.other > 0 && (
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        ...(vmStats.running > 0 ? [{ name: t('inventory.health.running'), value: vmStats.running }] : []),
+                        ...(vmStats.stopped > 0 ? [{ name: t('inventory.health.stopped'), value: vmStats.stopped }] : []),
+                        ...(vmStats.other > 0 ? [{ name: t('inventory.health.other'), value: vmStats.other }] : []),
+                        ...(vmStats.total === 0 ? [{ name: 'empty', value: 1 }] : []),
+                      ]}
+                      cx="50%" cy="50%" innerRadius={28} outerRadius={40}
+                      dataKey="value" stroke="none" paddingAngle={vmStats.total > 0 ? 3 : 0}
+                    >
+                      {vmStats.running > 0 && <Cell fill={theme.palette.success.main} />}
+                      {vmStats.stopped > 0 && <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)'} />}
+                      {vmStats.other > 0 && <Cell fill={theme.palette.warning.main} />}
+                      {vmStats.total === 0 && <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                  <Typography variant="caption" fontWeight={800} sx={{ fontSize: 15, lineHeight: 1 }}>{vmStats.total}</Typography>
+                </Box>
+              </Box>
+              <Stack spacing={0.5}>
                 <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
-                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.other')}</Typography>
-                  <Typography variant="caption" fontWeight={700}>{vmStats.other}</Typography>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.running')}</Typography>
+                  <Typography variant="caption" fontWeight={700}>{vmStats.running}</Typography>
                 </Stack>
-              )}
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)' }} />
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.stopped')}</Typography>
+                  <Typography variant="caption" fontWeight={700}>{vmStats.stopped}</Typography>
+                </Stack>
+                {vmStats.other > 0 && (
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                    <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.other')}</Typography>
+                    <Typography variant="caption" fontWeight={700}>{vmStats.other}</Typography>
+                  </Stack>
+                )}
+              </Stack>
             </Stack>
           </CardContent>
         </Card>
 
-        {/* Card 3: VM Type Split */}
+        {/* Card 3: VM Type Split - Donut chart */}
         <Card variant="outlined" sx={{ p: 0 }}>
           <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: 1.5,
                 bgcolor: alpha(theme.palette.info.main, 0.12),
@@ -471,29 +493,40 @@ function RootInventoryView({
               </Box>
               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmTypeSplit')}</Typography>
             </Stack>
-            {/* Stacked bar */}
-            <Box sx={{ width: '100%', height: 12, borderRadius: 1.5, overflow: 'hidden', display: 'flex', mb: 1.5 }}>
-              {vmTypeSplit.total > 0 && (
-                <>
-                  <MuiTooltip title={`QEMU: ${vmTypeSplit.qemu}`}>
-                    <Box sx={{ width: `${(vmTypeSplit.qemu / vmTypeSplit.total) * 100}%`, height: '100%', bgcolor: 'info.main', transition: 'width 0.3s ease' }} />
-                  </MuiTooltip>
-                  <MuiTooltip title={`LXC: ${vmTypeSplit.lxc}`}>
-                    <Box sx={{ width: `${(vmTypeSplit.lxc / vmTypeSplit.total) * 100}%`, height: '100%', bgcolor: '#a855f7', transition: 'width 0.3s ease' }} />
-                  </MuiTooltip>
-                </>
-              )}
-            </Box>
-            <Stack direction="row" spacing={2}>
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>QEMU</Typography>
-                <Typography variant="caption" fontWeight={700}>{vmTypeSplit.qemu}</Typography>
-              </Stack>
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#a855f7' }} />
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>LXC</Typography>
-                <Typography variant="caption" fontWeight={700}>{vmTypeSplit.lxc}</Typography>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        ...(vmTypeSplit.qemu > 0 ? [{ name: 'QEMU', value: vmTypeSplit.qemu }] : []),
+                        ...(vmTypeSplit.lxc > 0 ? [{ name: 'LXC', value: vmTypeSplit.lxc }] : []),
+                        ...(vmTypeSplit.total === 0 ? [{ name: 'empty', value: 1 }] : []),
+                      ]}
+                      cx="50%" cy="50%" innerRadius={28} outerRadius={40}
+                      dataKey="value" stroke="none" paddingAngle={vmTypeSplit.total > 0 ? 3 : 0}
+                    >
+                      {vmTypeSplit.qemu > 0 && <Cell fill={theme.palette.info.main} />}
+                      {vmTypeSplit.lxc > 0 && <Cell fill="#a855f7" />}
+                      {vmTypeSplit.total === 0 && <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                  <Typography variant="caption" fontWeight={800} sx={{ fontSize: 15, lineHeight: 1 }}>{vmTypeSplit.total}</Typography>
+                </Box>
+              </Box>
+              <Stack spacing={0.5}>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>QEMU</Typography>
+                  <Typography variant="caption" fontWeight={700}>{vmTypeSplit.qemu}</Typography>
+                </Stack>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#a855f7' }} />
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>LXC</Typography>
+                  <Typography variant="caption" fontWeight={700}>{vmTypeSplit.lxc}</Typography>
+                </Stack>
               </Stack>
             </Stack>
           </CardContent>

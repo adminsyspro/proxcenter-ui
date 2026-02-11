@@ -175,24 +175,16 @@ export async function GET() {
         const connConfig = await getConnectionById(conn.id)
         
         // Charger nodes, guests, HA et Ceph en parallèle pour cette connexion
-        const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
+        const [nodesResult, guestsResult, haResult, cephResult] = await Promise.allSettled([
           pveFetch<NodeData[]>(connConfig, '/nodes'),
           pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
           pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
           pveFetch<any>(connConfig, '/cluster/ceph/status'),
-          pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
         ])
 
         const nodes: NodeData[] = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
         const guests: GuestData[] = guestsResult.status === 'fulfilled' ? guestsResult.value || [] : []
         const haResources: HaResource[] = haResult.status === 'fulfilled' ? haResult.value || [] : []
-        const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []
-
-        // Build a map of node hastate from cluster resources (most reliable source for HA maintenance)
-        const nodeHastateMap = new Map<string, string>()
-        for (const nr of nodeResources) {
-          if (nr?.node && nr?.hastate) nodeHastateMap.set(nr.node, nr.hastate)
-        }
         
         // Extraire le statut Ceph (HEALTH_OK, HEALTH_WARN, HEALTH_ERR)
         let cephHealth: string | undefined
@@ -277,10 +269,9 @@ export async function GET() {
         for (const n of nodes) {
           if (!n?.node) continue
           const extra = nodeIpMap.get(n.node)
-          const hastate = nodeHastateMap.get(n.node)
-          // Use hastate from /cluster/resources as primary indicator (works for HA maintenance),
-          // fall back to config-based maintenance field
-          const maintenance = hastate === 'maintenance' ? 'maintenance' : extra?.maintenance
+          // Config is the authoritative source for maintenance mode.
+          // hastate from CRM may lag behind by up to ~120s after config is cleared.
+          const maintenance = extra?.maintenance || undefined
           nodeMap.set(n.node, {
             ...n,
             ip: extra?.ip,

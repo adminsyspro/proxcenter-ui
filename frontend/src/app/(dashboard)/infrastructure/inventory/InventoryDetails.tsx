@@ -23,6 +23,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Divider,
   FormControl,
@@ -189,7 +190,9 @@ export default function InventoryDetails({
   const [savingCpu, setSavingCpu] = useState(false)
   const [savingMemory, setSavingMemory] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
-  
+  const [exitMaintenanceDialogOpen, setExitMaintenanceDialogOpen] = useState(false)
+  const [exitMaintenanceBusy, setExitMaintenanceBusy] = useState(false)
+
   // État pour le lock de la VM
   const [vmLock, setVmLock] = useState<{ locked: boolean; lockType?: string }>({ locked: false })
   const [unlocking, setUnlocking] = useState(false)
@@ -4508,36 +4511,80 @@ return vm?.isCluster ?? false
           )}
 
           {selection?.type === 'node' && data.hostInfo?.maintenance && (
-            <Alert
-              severity="warning"
-              icon={<i className="ri-tools-fill" style={{ fontSize: 20 }} />}
-              sx={{ borderRadius: 2 }}
-              action={
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="warning"
-                  startIcon={<i className="ri-play-circle-line" />}
-                  sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
-                  onClick={async () => {
-                    if (!confirm(t('inventory.confirmExitMaintenance'))) return
-                    const { connId, node } = parseNodeId(selection.id)
-                    try {
-                      await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { method: 'DELETE' })
-                      if (onRefresh) await onRefresh()
-                    } catch (e: any) {
-                      console.error('[maintenance] Exit error:', e?.message)
-                    }
-                  }}
-                >
+            <>
+              <Alert
+                severity="warning"
+                icon={<i className="ri-tools-fill" style={{ fontSize: 20 }} />}
+                sx={{ borderRadius: 2 }}
+                action={
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    startIcon={<i className="ri-play-circle-line" />}
+                    sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                    onClick={() => setExitMaintenanceDialogOpen(true)}
+                  >
+                    {t('inventory.exitMaintenance')}
+                  </Button>
+                }
+              >
+                <Typography variant="body2" fontWeight={600}>
+                  {t('inventory.maintenanceModeActive')}
+                </Typography>
+              </Alert>
+              <Dialog
+                open={exitMaintenanceDialogOpen}
+                onClose={() => setExitMaintenanceDialogOpen(false)}
+                maxWidth="xs"
+                fullWidth
+              >
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{
+                    width: 40, height: 40, borderRadius: 2,
+                    bgcolor: 'rgba(76,175,80,0.12)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <i className="ri-play-circle-line" style={{ fontSize: 22, color: '#4caf50' }} />
+                  </Box>
                   {t('inventory.exitMaintenance')}
-                </Button>
-              }
-            >
-              <Typography variant="body2" fontWeight={600}>
-                {t('inventory.maintenanceModeActive')}
-              </Typography>
-            </Alert>
+                </DialogTitle>
+                <DialogContent>
+                  <DialogContentText>
+                    {t('inventory.confirmExitMaintenance')}
+                  </DialogContentText>
+                  <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
+                    {t('inventory.node')}: {selection?.id ? parseNodeId(selection.id).node : ''}
+                  </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                  <Button onClick={() => setExitMaintenanceDialogOpen(false)} color="inherit">
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    disabled={exitMaintenanceBusy}
+                    startIcon={exitMaintenanceBusy ? <CircularProgress size={16} /> : undefined}
+                    onClick={async () => {
+                      const { connId, node } = parseNodeId(selection!.id)
+                      setExitMaintenanceBusy(true)
+                      try {
+                        await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { method: 'DELETE' })
+                        setExitMaintenanceDialogOpen(false)
+                        if (onRefresh) await onRefresh()
+                      } catch (e: any) {
+                        console.error('[maintenance] Exit error:', e?.message)
+                      } finally {
+                        setExitMaintenanceBusy(false)
+                      }
+                    }}
+                  >
+                    {t('common.confirm')}
+                  </Button>
+                </DialogActions>
+              </Dialog>
+            </>
           )}
 
           <Divider />

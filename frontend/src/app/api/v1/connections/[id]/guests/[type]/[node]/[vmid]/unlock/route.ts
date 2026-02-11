@@ -85,46 +85,47 @@ async function executeSSHCommand(
 }
 
 /**
- * Récupère l'IP d'un nœud Proxmox
+ * Get the management IP of a Proxmox node.
+ * Priority: node network interfaces (vmbr0 preferred) > DNS resolution > cluster config > connection host
  */
 async function getNodeIp(conn: any, nodeName: string): Promise<string> {
-  // 1. Essayer /cluster/config/nodes pour les clusters
+  // 1. Try node network interfaces — most reliable for management IP
+  try {
+    const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`)
+    const ifaces = (networks || []).filter(
+      (iface: any) => iface.address && iface.active && !iface.address.startsWith('127.')
+    )
+    // Prefer vmbr0 (standard Proxmox management bridge)
+    const vmbr0 = ifaces.find((i: any) => i.iface === 'vmbr0')
+    if (vmbr0?.address) return vmbr0.address
+    // Fallback to any bridge interface
+    const bridge = ifaces.find((i: any) => i.iface?.startsWith('vmbr'))
+    if (bridge?.address) return bridge.address
+    // Fallback to first active interface
+    if (ifaces.length > 0) return ifaces[0].address
+  } catch {}
+
+  // 2. Try DNS resolution of the node name
+  try {
+    const dns = await import('dns')
+    const resolved = await dns.promises.resolve4(nodeName)
+    if (resolved?.[0]) return resolved[0]
+  } catch {}
+
+  // 3. Try cluster config (may return corosync IP — less reliable)
   try {
     const clusterNodes = await pveFetch<any[]>(conn, '/cluster/config/nodes')
     const clusterNode = clusterNodes?.find((n: any) => n.name === nodeName)
-    if (clusterNode?.ip) {
-      return clusterNode.ip
-    }
-  } catch {
-    // Pas un cluster ou erreur
-  }
+    if (clusterNode?.ip) return clusterNode.ip
+  } catch {}
 
-  // 2. Essayer /nodes/{node}/network pour récupérer l'IP depuis les interfaces
-  try {
-    const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`)
-    // Chercher une interface avec une adresse IP (vmbr0 ou eth0 typiquement)
-    for (const iface of networks || []) {
-      if (iface.address && iface.active && !iface.address.startsWith('127.')) {
-        return iface.address
-      }
-    }
-  } catch {
-    // Erreur réseau
-  }
-
-  // 3. Utiliser le hostname de la connexion (c'est souvent l'IP du nœud principal)
+  // 4. Fallback to connection host
   try {
     const host = conn.host || ''
-    // Nettoyer l'URL si nécessaire
     const cleanHost = host.replace(/^https?:\/\//, '').replace(/:\d+$/, '').replace(/\/.*$/, '')
-    if (cleanHost && !cleanHost.includes('/')) {
-      return cleanHost
-    }
-  } catch {
-    // Erreur parsing
-  }
+    if (cleanHost && !cleanHost.includes('/')) return cleanHost
+  } catch {}
 
-  // 4. Dernier recours: le nom du nœud
   return nodeName
 }
 

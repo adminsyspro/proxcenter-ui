@@ -188,8 +188,16 @@ export default function SiteRecoveryPage() {
     if (!failoverDialog.planId) return
     const endpoint = failoverDialog.type === 'test' ? 'test-failover' : failoverDialog.type
 
+    const body = failoverDialog.type === 'test'
+      ? JSON.stringify({ network_isolated: true })
+      : undefined
+
     try {
-      const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/${endpoint}`, { method: 'POST' })
+      const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/${endpoint}`, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body
+      })
       const data = await res.json()
 
       setActiveExecution(data)
@@ -198,6 +206,25 @@ export default function SiteRecoveryPage() {
       console.error('Failed to execute:', e)
     }
   }, [failoverDialog, mutatePlans])
+
+  // Poll execution status every 3s while running
+  useEffect(() => {
+    if (!activeExecution || activeExecution.status !== 'running') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/v1/orchestrator/replication/executions/${activeExecution.id}`)
+        const data = await res.json()
+        setActiveExecution(data)
+        if (data.status !== 'running') {
+          clearInterval(interval)
+          mutatePlans()
+        }
+      } catch (e) {
+        console.error('Failed to poll execution:', e)
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [activeExecution?.id, activeExecution?.status, mutatePlans])
 
   return (
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
@@ -312,6 +339,7 @@ export default function SiteRecoveryPage() {
           type={failoverDialog.type}
           onConfirm={handleFailoverConfirm}
           execution={activeExecution}
+          targetConnId={failoverPlan?.target_cluster}
         />
       </Box>
     </EnterpriseGuard>

@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  LinearProgress, Stack, TextField, Typography
+  IconButton, LinearProgress, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
 
 import type { RecoveryPlan, RecoveryExecution, RecoveryVMResult } from '@/lib/orchestrator/site-recovery.types'
@@ -19,9 +19,10 @@ interface FailoverDialogProps {
   type: 'test' | 'failover' | 'failback'
   onConfirm: () => void
   execution: RecoveryExecution | null
+  targetConnId?: string
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, execution }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, execution, targetConnId }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const isDestructive = type === 'failover' || type === 'failback'
@@ -72,6 +73,17 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, e
       <DialogContent>
         <Stack spacing={2}>
           <Alert severity={config.severity}>{config.description}</Alert>
+
+          {type === 'test' && (
+            <Chip
+              size='small'
+              icon={<i className='ri-wifi-off-line' />}
+              label={t('siteRecovery.failover.networkIsolated')}
+              color='info'
+              variant='outlined'
+              sx={{ mt: -0.5 }}
+            />
+          )}
 
           {/* Plan Summary */}
           <Box sx={{ p: 2, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
@@ -144,6 +156,25 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, e
                         <Typography variant='caption' sx={{ color: 'error.main', fontSize: '0.65rem' }}>{vm.error}</Typography>
                       )}
                     </Box>
+                    {type === 'test' && targetConnId && vm.target_node && vm.target_vmid &&
+                     (vm.status === 'running' || vm.status === 'completed') && (
+                      <Tooltip title={t('siteRecovery.failover.openConsole')}>
+                        <IconButton
+                          size='small'
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            window.open(
+                              `/novnc/console.html?connId=${encodeURIComponent(targetConnId)}&type=qemu&node=${encodeURIComponent(vm.target_node!)}&vmid=${vm.target_vmid}`,
+                              `console-dr-${vm.target_vmid}`,
+                              'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
+                            )
+                          }}
+                          sx={{ color: 'primary.main' }}
+                        >
+                          <i className='ri-terminal-box-line' />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </Box>
                 ))}
               </Stack>
@@ -166,7 +197,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, e
             </Button>
           </>
         )}
-        {isExecuting && execution?.status !== 'running' && (
+        {execution && execution.status !== 'running' && (
           <Button onClick={onClose}>{t('common.close')}</Button>
         )}
       </DialogActions>

@@ -112,6 +112,8 @@ export interface RecoveryVMResult {
   status: 'pending' | 'running' | 'completed' | 'failed'
   progress_percent: number
   error?: string
+  target_node?: string
+  target_vmid?: number
 }
 
 export interface RecoveryExecution {
@@ -119,6 +121,7 @@ export interface RecoveryExecution {
   plan_id: string
   type: RecoveryExecutionType
   status: RecoveryExecutionStatus
+  network_isolated?: boolean
   started_at: string
   completed_at?: string
   vm_results: RecoveryVMResult[]

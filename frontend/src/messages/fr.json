@@ -2638,14 +2638,18 @@
       "alerts": "Alertes",
       "utilization": "Utilisation",
       "inventory": "Inventaire",
-      "capacity": "Capacité"
+      "capacity": "Capacité",
+      "security": "Sécurité",
+      "site_recovery": "Reprise d'activité"
     },
     "typeDescriptions": {
       "infrastructure": "Vue d'ensemble des clusters, nœuds, VMs et stockage",
       "alerts": "Historique, statistiques et tendances des alertes",
       "utilization": "Métriques et tendances d'utilisation des ressources",
       "inventory": "Inventaire complet des VMs, containers et templates",
-      "capacity": "Planification de capacité avec prédictions et recommandations"
+      "capacity": "Planification de capacité avec prédictions et recommandations",
+      "security": "Analyse des vulnérabilités CVE sur tous les nœuds",
+      "site_recovery": "Préparation DR avec conformité RPO et état de la réplication"
     },
     "sectionNames": {
       "summary": "Résumé exécutif",
@@ -2665,7 +2669,13 @@
       "specs": "Spécifications",
       "current": "Capacité actuelle",
       "predictions": "Prédictions",
-      "recommendations": "Recommandations"
+      "recommendations": "Recommandations",
+      "critical_high": "Critiques & Hautes",
+      "all_vulnerabilities": "Toutes les vulnérabilités",
+      "per_node": "Par nœud",
+      "rpo_compliance": "Conformité RPO",
+      "protection_coverage": "Couverture de protection",
+      "replication_jobs": "Jobs de réplication"
     },
     "days": {
       "sunday": "Dimanche",

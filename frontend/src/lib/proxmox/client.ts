@@ -41,12 +41,16 @@ export async function pveFetch<T>(
   let body: any = undefined
 
   if (init.body !== undefined && init.body !== null) {
-    body =
-      typeof init.body === "string" || init.body instanceof Uint8Array
-        ? init.body
-        : JSON.stringify(init.body)
-
-    if (!headers["Content-Type"]) headers["Content-Type"] = "application/json"
+    if (init.body instanceof URLSearchParams) {
+      body = init.body.toString()
+      if (!headers["Content-Type"]) headers["Content-Type"] = "application/x-www-form-urlencoded"
+    } else {
+      body =
+        typeof init.body === "string" || init.body instanceof Uint8Array
+          ? init.body
+          : JSON.stringify(init.body)
+      if (!headers["Content-Type"]) headers["Content-Type"] = "application/json"
+    }
   }
 
   const res = await request(url, {

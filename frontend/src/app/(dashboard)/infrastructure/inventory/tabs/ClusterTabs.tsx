@@ -578,7 +578,9 @@ export default function ClusterTabs(props: any) {
                                         <TableCell sx={{ fontWeight: 600 }}>{node.node || node.name}</TableCell>
                                         <TableCell>{idx + 1}</TableCell>
                                         <TableCell>
-                                          {node.status === 'online' ? (
+                                          {node.status === 'maintenance' ? (
+                                            <Chip size="small" color="warning" label="MAINT" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                          ) : node.status === 'online' ? (
                                             <i className="ri-check-line" style={{ color: '#4caf50' }} />
                                           ) : (
                                             <i className="ri-close-line" style={{ color: '#f44336' }} />
@@ -2691,30 +2693,31 @@ export default function ClusterTabs(props: any) {
                               </Box>
                               <Box>
                                 {/* Header */}
-                                <Box sx={{ 
-                                  display: 'grid', 
-                                  gridTemplateColumns: '2fr 1fr 1fr 1fr', 
-                                  gap: 2, 
-                                  px: 2, 
-                                  py: 1, 
+                                <Box sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                                  gap: 2,
+                                  px: 2,
+                                  py: 1,
                                   bgcolor: 'action.hover',
                                   borderBottom: '1px solid',
                                   borderColor: 'divider'
                                 }}>
                                   <Typography variant="caption" fontWeight={600}>Nodename</Typography>
                                   <Typography variant="caption" fontWeight={600}>ID</Typography>
+                                  <Typography variant="caption" fontWeight={600}>Status</Typography>
                                   <Typography variant="caption" fontWeight={600}>Votes</Typography>
-                                  <Typography variant="caption" fontWeight={600}>Link 0</Typography>
+                                  <Typography variant="caption" fontWeight={600}>IP Address</Typography>
                                 </Box>
                                 {/* Rows */}
                                 {clusterConfig.nodes.map((node: any) => (
-                                  <Box 
+                                  <Box
                                     key={node.name}
-                                    sx={{ 
-                                      display: 'grid', 
-                                      gridTemplateColumns: '2fr 1fr 1fr 1fr', 
-                                      gap: 2, 
-                                      px: 2, 
+                                    sx={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                                      gap: 2,
+                                      px: 2,
                                       py: 1.5,
                                       borderBottom: '1px solid',
                                       borderColor: 'divider',
@@ -2724,13 +2727,13 @@ export default function ClusterTabs(props: any) {
                                     }}
                                   >
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <Box 
-                                        sx={{ 
-                                          width: 8, 
-                                          height: 8, 
-                                          borderRadius: '50%', 
-                                          bgcolor: node.online ? 'success.main' : 'error.main' 
-                                        }} 
+                                      <Box
+                                        sx={{
+                                          width: 8,
+                                          height: 8,
+                                          borderRadius: '50%',
+                                          bgcolor: node.maintenance ? 'warning.main' : node.online ? 'success.main' : 'error.main'
+                                        }}
                                       />
                                       <Typography variant="body2" fontWeight={node.local ? 700 : 400}>
                                         {node.name}
@@ -2738,6 +2741,15 @@ export default function ClusterTabs(props: any) {
                                       </Typography>
                                     </Box>
                                     <Typography variant="body2">{node.id}</Typography>
+                                    <Typography variant="body2">
+                                      {node.maintenance ? (
+                                        <Chip size="small" color="warning" label="MAINT" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                      ) : node.online ? (
+                                        <Chip size="small" color="success" label="UP" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                      ) : (
+                                        <Chip size="small" color="error" label="DOWN" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                      )}
+                                    </Typography>
                                     <Typography variant="body2">1</Typography>
                                     <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                       {node.ip || '—'}

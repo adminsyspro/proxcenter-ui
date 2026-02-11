@@ -337,7 +337,7 @@ return {
         connId: sel.id,
         node: n.node,
         name: n.node,
-        status: n.status === 'online' ? 'online' as const : 'offline' as const,
+        status: n.maintenance === 'maintenance' ? 'maintenance' as const : n.status === 'online' ? 'online' as const : 'offline' as const,
         cpu: cpuPct(n.cpu),
         ram: pct(Number(n.mem ?? 0), Number(n.maxmem ?? 0)),
         storage: pct(Number(n.disk ?? 0), Number(n.maxdisk ?? 0)),

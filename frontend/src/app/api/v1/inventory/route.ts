@@ -218,25 +218,21 @@ export async function GET() {
             let ip: string | undefined
 
             if (Array.isArray(networks)) {
-              // Priorité aux bridges et interfaces physiques
-              for (const iface of networks) {
-                const ifaceName = (iface.iface || '').toLowerCase()
-
-                if (ifaceName.startsWith('vmbr') || ifaceName.startsWith('eth') || ifaceName.startsWith('ens') || ifaceName.startsWith('enp')) {
-                  if (iface.address && !iface.address.startsWith('127.')) {
-                    ip = iface.address
-                    break
-                  }
-                }
-              }
-
-              // Fallback: prendre la première IP non-loopback
-              if (!ip) {
-                for (const iface of networks) {
-                  if (iface.address && !iface.address.startsWith('127.')) {
-                    ip = iface.address
-                    break
-                  }
+              const active = networks.filter(
+                (iface: any) => iface.address && iface.active && !iface.address.startsWith('127.')
+              )
+              // Prefer vmbr0 (standard Proxmox management bridge)
+              const vmbr0 = active.find((i: any) => i.iface === 'vmbr0')
+              if (vmbr0) {
+                ip = vmbr0.address
+              } else {
+                // Fallback to any bridge interface
+                const bridge = active.find((i: any) => i.iface?.startsWith('vmbr'))
+                if (bridge) {
+                  ip = bridge.address
+                } else {
+                  // Fallback to first active interface
+                  if (active.length > 0) ip = active[0].address
                 }
               }
             }

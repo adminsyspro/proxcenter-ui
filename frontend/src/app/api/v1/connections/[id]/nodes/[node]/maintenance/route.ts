@@ -27,13 +27,18 @@ export async function GET(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null)
+    const [config, nodeResources] = await Promise.all([
+      pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null),
+      pveFetch<any[]>(conn, '/cluster/resources?type=node').catch(() => []),
+    ])
 
-    // Config is the authoritative source for maintenance mode.
-    // hastate from CRM may lag behind by up to ~120s after config is cleared.
     const configMaintenance = config?.maintenance || null
 
-    return NextResponse.json({ data: { maintenance: configMaintenance } })
+    // hastate as fallback when config fetch fails or doesn't report maintenance
+    const nodeResource = (nodeResources || []).find((nr: any) => nr?.node === node)
+    const hastateMaintenance = nodeResource?.hastate === 'maintenance' ? 'maintenance' : null
+
+    return NextResponse.json({ data: { maintenance: configMaintenance || hastateMaintenance } })
   } catch (e: any) {
     console.error("[maintenance] GET Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })

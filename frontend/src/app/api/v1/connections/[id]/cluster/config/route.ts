@@ -34,9 +34,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       nodes = status.filter((x) => x?.type === "node").map(n => ({
         name: n.name,
         id: n.nodeid,
-        ip: n.ip,
+        ip: n.ip, // corosync IP — will be enriched with management IP below
         online: n.online === 1,
         local: n.local === 1,
+        maintenance: false,
       }))
 
       clusterStatus = {
@@ -46,6 +47,46 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       }
     } catch {
       // Standalone node
+    }
+
+    // Enrich nodes with management IPs (vmbr0) and maintenance status
+    if (nodes.length > 0) {
+      // Fetch hastate for maintenance detection
+      let nodeHastateMap = new Map<string, string>()
+      try {
+        const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=node')
+        for (const r of resources || []) {
+          if (r?.node && r?.hastate) nodeHastateMap.set(r.node, r.hastate)
+        }
+      } catch {}
+
+      // Fetch management IPs from network interfaces in parallel
+      const enriched = await Promise.all(nodes.map(async (node: any) => {
+        const hastate = nodeHastateMap.get(node.name)
+        const maintenance = hastate === 'maintenance'
+
+        // Try to get management IP from node network interfaces
+        let managementIp = node.ip
+        try {
+          const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node.name)}/network`)
+          if (Array.isArray(networks)) {
+            const active = networks.filter(
+              (iface: any) => iface.address && iface.active && !iface.address.startsWith('127.')
+            )
+            const vmbr0 = active.find((i: any) => i.iface === 'vmbr0')
+            if (vmbr0?.address) {
+              managementIp = vmbr0.address
+            } else {
+              const bridge = active.find((i: any) => i.iface?.startsWith('vmbr'))
+              if (bridge?.address) managementIp = bridge.address
+            }
+          }
+        } catch {}
+
+        return { ...node, ip: managementIp, maintenance }
+      }))
+
+      nodes = enriched
     }
 
     // Si c'est un cluster, récupérer les informations de join

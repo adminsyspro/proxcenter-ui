@@ -1391,6 +1391,7 @@
     "subtitle": "Réplication Ceph RBD inter-clusters et reprise d'activité",
     "tabs": {
       "dashboard": "Tableau de bord",
+      "replication": "Réplication",
       "protection": "Protection",
       "recoveryPlans": "Plans de reprise"
     },

@@ -62,8 +62,8 @@ const ServerIcon = ({ size = 16, color = 'currentColor' }: { size?: number; colo
 
 const StatusChip = ({ status }: { status: string }) => {
   if (status === 'online') return <Chip size='small' color='success' label='UP' sx={{ height: 20, fontSize: '0.7rem' }} />
-  if (status === 'maintenance') return <Chip size='small' color='warning' label='MAINT' sx={{ height: 20, fontSize: '0.7rem' }} />
-  
+  if (status === 'maintenance') return <i className="ri-tools-fill" style={{ fontSize: 16, color: '#ff9800' }} />
+
 return <Chip size='small' color='error' label='DOWN' sx={{ height: 20, fontSize: '0.7rem' }} />
 }
 

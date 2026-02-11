@@ -579,7 +579,7 @@ export default function ClusterTabs(props: any) {
                                         <TableCell>{idx + 1}</TableCell>
                                         <TableCell>
                                           {node.status === 'maintenance' ? (
-                                            <Chip size="small" color="warning" label="MAINT" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                            <i className="ri-tools-fill" style={{ fontSize: 16, color: '#ff9800' }} />
                                           ) : node.status === 'online' ? (
                                             <i className="ri-check-line" style={{ color: '#4caf50' }} />
                                           ) : (
@@ -2741,9 +2741,9 @@ export default function ClusterTabs(props: any) {
                                       </Typography>
                                     </Box>
                                     <Typography variant="body2">{node.id}</Typography>
-                                    <Typography variant="body2">
+                                    <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
                                       {node.maintenance ? (
-                                        <Chip size="small" color="warning" label="MAINT" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                        <i className="ri-tools-fill" style={{ fontSize: 16, color: '#ff9800' }} />
                                       ) : node.online ? (
                                         <Chip size="small" color="success" label="UP" sx={{ height: 20, fontSize: '0.7rem' }} />
                                       ) : (

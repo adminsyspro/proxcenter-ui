@@ -312,6 +312,7 @@ export default function SiteRecoveryPage() {
             onFailover={(id) => openFailoverDialog(id, 'failover')}
             onFailback={(id) => openFailoverDialog(id, 'failback')}
             onDeletePlan={handleDeletePlan}
+            connections={connections}
           />
         )}
 

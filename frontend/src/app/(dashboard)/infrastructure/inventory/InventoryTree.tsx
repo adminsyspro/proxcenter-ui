@@ -782,17 +782,6 @@ return next
     }
   }
 
-  // Shell handler
-  const handleNodeShell = () => {
-    if (!nodeContextMenu) return
-    const { connId, node } = nodeContextMenu
-    handleCloseNodeContextMenu()
-
-    // Open shell in a new window
-    const url = `/infrastructure/inventory/shell?connId=${encodeURIComponent(connId)}&node=${encodeURIComponent(node)}`
-    window.open(url, `shell-${connId}-${node}`, 'width=1024,height=600,menubar=no,toolbar=no,location=no,status=no')
-  }
-
   // Exécuter une action sur la VM
   const handleVmAction = async (action: string) => {
     if (!contextMenu) return
@@ -2616,31 +2605,22 @@ return (
           </Typography>
         </Box>
         <MenuItem onClick={() => handleBulkActionClick('start-all')}>
-          <ListItemIcon>
+          <ListItemIcon sx={{ minWidth: 32 }}>
             <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
           </ListItemIcon>
           <ListItemText>{t('bulkActions.startAllVms')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleBulkActionClick('shutdown-all')}>
-          <ListItemIcon>
+          <ListItemIcon sx={{ minWidth: 32 }}>
             <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />
           </ListItemIcon>
           <ListItemText>{t('bulkActions.shutdownAllVms')}</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => handleBulkActionClick('migrate-all')}>
-          <ListItemIcon>
+          <ListItemIcon sx={{ minWidth: 32 }}>
             <MoveUpIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
-        </MenuItem>
-
-        <Divider />
-
-        <MenuItem onClick={handleNodeShell}>
-          <ListItemIcon>
-            <TerminalIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Shell</ListItemText>
         </MenuItem>
 
         <Divider />
@@ -2649,7 +2629,7 @@ return (
           onClick={handleMaintenanceClick}
           disabled={maintenanceBusy}
         >
-          <ListItemIcon>
+          <ListItemIcon sx={{ minWidth: 32 }}>
             <i className={nodeContextMenu?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'} style={{ fontSize: 20, color: nodeContextMenu?.maintenance ? '#4caf50' : '#ff9800' }} />
           </ListItemIcon>
           <ListItemText>

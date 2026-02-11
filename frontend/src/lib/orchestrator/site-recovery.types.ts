@@ -154,6 +154,16 @@ export interface ReplicationHealthKPIs {
   last_sync: string
   replicated_bytes: number
   error_count: number
+  total_jobs: number
+  rpo_compliance: number  // 0-100 percentage
+}
+
+export interface JobStatusSummary {
+  synced: number
+  syncing: number
+  pending: number
+  error: number
+  paused: number
 }
 
 export interface ReplicationHealthStatus {
@@ -162,4 +172,5 @@ export interface ReplicationHealthStatus {
   latency_ms: number
   kpis: ReplicationHealthKPIs
   recent_activity: ReplicationActivity[]
+  job_summary: JobStatusSummary
 }

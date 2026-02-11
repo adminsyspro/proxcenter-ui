@@ -481,7 +481,7 @@ export default function ClusterTabs(props: any) {
                                           variant="determinate"
                                           value={cpuPercent}
                                           size={80}
-                                          thickness={4}
+                                          thickness={22}
                                           sx={{ color: cpuPercent > 80 ? 'error.main' : cpuPercent > 60 ? 'warning.main' : 'success.main' }}
                                         />
                                         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -500,7 +500,7 @@ export default function ClusterTabs(props: any) {
                                           variant="determinate"
                                           value={memPercent}
                                           size={80}
-                                          thickness={4}
+                                          thickness={22}
                                           sx={{ color: memPercent > 80 ? 'error.main' : memPercent > 60 ? 'warning.main' : 'success.main' }}
                                         />
                                         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -519,7 +519,7 @@ export default function ClusterTabs(props: any) {
                                           variant="determinate"
                                           value={storagePercent}
                                           size={80}
-                                          thickness={4}
+                                          thickness={22}
                                           sx={{ color: storagePercent > 80 ? 'error.main' : storagePercent > 60 ? 'warning.main' : 'success.main' }}
                                         />
                                         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -589,8 +589,25 @@ export default function ClusterTabs(props: any) {
                                         <TableCell>
                                           <Chip size="small" label="Community" sx={{ height: 20, fontSize: 10 }} />
                                         </TableCell>
-                                        <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{node.ip || '-'}</TableCell>
-                                        <TableCell>{cpuPercent}%</TableCell>
+                                        <TableCell sx={{ fontSize: 12 }}>{node.ip || '-'}</TableCell>
+                                        <TableCell>
+                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <LinearProgress
+                                              variant="determinate"
+                                              value={cpuPercent}
+                                              sx={{
+                                                width: 60,
+                                                height: 6,
+                                                borderRadius: 1,
+                                                bgcolor: 'action.hover',
+                                                '& .MuiLinearProgress-bar': {
+                                                  bgcolor: cpuPercent > 80 ? 'error.main' : cpuPercent > 60 ? 'warning.main' : 'primary.main'
+                                                }
+                                              }}
+                                            />
+                                            <Typography variant="caption">{cpuPercent}%</Typography>
+                                          </Box>
+                                        </TableCell>
                                         <TableCell>
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                             <LinearProgress 

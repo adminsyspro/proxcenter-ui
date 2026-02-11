@@ -2,14 +2,116 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { prisma } from "@/lib/db/prisma"
+import { decryptSecret } from "@/lib/crypto/secret"
 
 export const runtime = "nodejs"
+
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
+
+/**
+ * Execute an SSH command via the orchestrator
+ */
+async function executeSSHCommand(
+  connectionId: string,
+  nodeIp: string,
+  command: string
+): Promise<{ success: boolean; output?: string; error?: string }> {
+  const connection = await prisma.connection.findUnique({
+    where: { id: connectionId },
+    select: {
+      sshEnabled: true,
+      sshPort: true,
+      sshUser: true,
+      sshAuthMethod: true,
+      sshKeyEnc: true,
+      sshPassEnc: true,
+    },
+  })
+
+  if (!connection?.sshEnabled) {
+    return { success: false, error: "SSH not enabled for this connection" }
+  }
+
+  const sshCredentials: any = {
+    host: nodeIp,
+    port: connection.sshPort || 22,
+    user: connection.sshUser || "root",
+    command,
+  }
+
+  if (connection.sshKeyEnc) {
+    try {
+      sshCredentials.key = decryptSecret(connection.sshKeyEnc)
+    } catch {
+      return { success: false, error: "Failed to decrypt SSH key" }
+    }
+  }
+
+  if (connection.sshPassEnc) {
+    try {
+      const decrypted = decryptSecret(connection.sshPassEnc)
+      if (connection.sshAuthMethod === 'key') {
+        sshCredentials.passphrase = decrypted
+      } else {
+        sshCredentials.password = decrypted
+      }
+    } catch {
+      // Ignore passphrase decryption errors
+    }
+  }
+
+  try {
+    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sshCredentials),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      return { success: true, output: data.output }
+    } else {
+      const err = await res.json().catch(() => ({}))
+      return { success: false, error: err?.error || res.statusText }
+    }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+/**
+ * Get the IP of a Proxmox node
+ */
+async function getNodeIp(conn: any, nodeName: string): Promise<string> {
+  try {
+    const clusterNodes = await pveFetch<any[]>(conn, '/cluster/config/nodes')
+    const clusterNode = clusterNodes?.find((n: any) => n.name === nodeName)
+    if (clusterNode?.ip) return clusterNode.ip
+  } catch {}
+
+  try {
+    const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`)
+    for (const iface of networks || []) {
+      if (iface.address && iface.active && !iface.address.startsWith('127.')) {
+        return iface.address
+      }
+    }
+  } catch {}
+
+  try {
+    const host = conn.host || conn.baseUrl || ''
+    const cleanHost = host.replace(/^https?:\/\//, '').replace(/:\d+$/, '').replace(/\/.*$/, '')
+    if (cleanHost && !cleanHost.includes('/')) return cleanHost
+  } catch {}
+
+  return nodeName
+}
 
 /**
  * GET /api/v1/connections/[id]/nodes/[node]/maintenance
  *
- * Returns current maintenance status by checking both node config
- * and cluster resources hastate (HA maintenance)
+ * Returns current maintenance status via hastate from cluster resources.
  */
 export async function GET(
   _req: Request,
@@ -27,18 +129,11 @@ export async function GET(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const [config, nodeResources] = await Promise.all([
-      pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null),
-      pveFetch<any[]>(conn, '/cluster/resources?type=node').catch(() => []),
-    ])
-
-    const configMaintenance = config?.maintenance || null
-
-    // hastate as fallback when config fetch fails or doesn't report maintenance
+    const nodeResources = await pveFetch<any[]>(conn, '/cluster/resources?type=node').catch(() => [])
     const nodeResource = (nodeResources || []).find((nr: any) => nr?.node === node)
-    const hastateMaintenance = nodeResource?.hastate === 'maintenance' ? 'maintenance' : null
+    const maintenance = nodeResource?.hastate === 'maintenance' ? 'maintenance' : null
 
-    return NextResponse.json({ data: { maintenance: configMaintenance || hastateMaintenance } })
+    return NextResponse.json({ data: { maintenance } })
   } catch (e: any) {
     console.error("[maintenance] GET Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })
@@ -48,7 +143,7 @@ export async function GET(
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/maintenance
  *
- * Entre en mode maintenance (PUT /nodes/{node}/config avec maintenance=upgrade)
+ * Enter maintenance mode via SSH: ha-manager crm-command node-maintenance enable <node>
  */
 export async function POST(
   _req: Request,
@@ -57,7 +152,6 @@ export async function POST(
   try {
     const { id, node } = await ctx.params
 
-    // RBAC
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", resourceId)
     if (denied) return denied
@@ -67,13 +161,20 @@ export async function POST(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    await pveFetch(conn, `/nodes/${encodeURIComponent(node)}/config`, {
-      method: 'PUT',
-      body: new URLSearchParams({ maintenance: 'upgrade' }).toString(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    })
+    const nodeIp = await getNodeIp(conn, node)
+    const command = `ha-manager crm-command node-maintenance enable ${node}`
 
-    return NextResponse.json({ success: true })
+    console.log(`[maintenance] POST ${node}: executing via SSH on ${nodeIp}: ${command}`)
+    const result = await executeSSHCommand(id, nodeIp, command)
+
+    if (result.success) {
+      return NextResponse.json({ success: true, method: 'ssh', output: result.output })
+    } else {
+      return NextResponse.json({
+        error: result.error,
+        hint: `Run manually on a PVE node: ${command}`
+      }, { status: 500 })
+    }
   } catch (e: any) {
     console.error("[maintenance] POST Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to enter maintenance mode" }, { status: 500 })
@@ -83,7 +184,7 @@ export async function POST(
 /**
  * DELETE /api/v1/connections/[id]/nodes/[node]/maintenance
  *
- * Sort du mode maintenance (PUT /nodes/{node}/config avec delete=maintenance)
+ * Exit maintenance mode via SSH: ha-manager crm-command node-maintenance disable <node>
  */
 export async function DELETE(
   _req: Request,
@@ -92,7 +193,6 @@ export async function DELETE(
   try {
     const { id, node } = await ctx.params
 
-    // RBAC
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", resourceId)
     if (denied) return denied
@@ -102,23 +202,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    // Read config before to confirm maintenance is set
-    const configBefore = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null)
-    console.log(`[maintenance] DELETE ${node}: config before =`, configBefore?.maintenance ?? '(none)')
+    const nodeIp = await getNodeIp(conn, node)
+    const command = `ha-manager crm-command node-maintenance disable ${node}`
 
-    // Clear maintenance — use .toString() explicitly to avoid any serialization issues
-    await pveFetch(conn, `/nodes/${encodeURIComponent(node)}/config`, {
-      method: 'PUT',
-      body: new URLSearchParams({ delete: 'maintenance' }).toString(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    })
+    console.log(`[maintenance] DELETE ${node}: executing via SSH on ${nodeIp}: ${command}`)
+    const result = await executeSSHCommand(id, nodeIp, command)
 
-    // Verify config after
-    const configAfter = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null)
-    console.log(`[maintenance] DELETE ${node}: config after =`, configAfter?.maintenance ?? '(cleared)')
-
-    const cleared = !configAfter?.maintenance
-    return NextResponse.json({ success: true, cleared, before: configBefore?.maintenance || null, after: configAfter?.maintenance || null })
+    if (result.success) {
+      return NextResponse.json({ success: true, method: 'ssh', output: result.output })
+    } else {
+      return NextResponse.json({
+        error: result.error,
+        hint: `Run manually on a PVE node: ${command}`
+      }, { status: 500 })
+    }
   } catch (e: any) {
     console.error("[maintenance] DELETE Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to exit maintenance mode" }, { status: 500 })

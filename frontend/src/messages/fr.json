@@ -425,7 +425,8 @@
     "exitMaintenance": "Sortir de la maintenance",
     "confirmEnterMaintenance": "Voulez-vous mettre ce nœud en mode maintenance ? Les VMs ne seront plus migrées automatiquement vers ce nœud.",
     "confirmExitMaintenance": "Voulez-vous sortir ce nœud du mode maintenance ?",
-    "maintenanceModeActive": "Ce nœud est actuellement en mode maintenance"
+    "maintenanceModeActive": "Ce nœud est actuellement en mode maintenance",
+    "maintenanceRequiresSsh": "Cette action nécessite une connexion SSH configurée sur cette connexion."
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",

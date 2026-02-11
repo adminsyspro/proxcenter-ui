@@ -192,6 +192,7 @@ export default function InventoryDetails({
   const [actionBusy, setActionBusy] = useState(false)
   const [exitMaintenanceDialogOpen, setExitMaintenanceDialogOpen] = useState(false)
   const [exitMaintenanceBusy, setExitMaintenanceBusy] = useState(false)
+  const [exitMaintenanceError, setExitMaintenanceError] = useState<string | null>(null)
 
   // État pour le lock de la VM
   const [vmLock, setVmLock] = useState<{ locked: boolean; lockType?: string }>({ locked: false })
@@ -4556,9 +4557,17 @@ return vm?.isCluster ?? false
                   <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
                     {t('inventory.node')}: {selection?.id ? parseNodeId(selection.id).node : ''}
                   </Typography>
+                  <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
+                    {t('inventory.maintenanceRequiresSsh')}
+                  </Typography>
+                  {exitMaintenanceError && (
+                    <Alert severity="error" sx={{ mt: 2 }}>
+                      {exitMaintenanceError}
+                    </Alert>
+                  )}
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
-                  <Button onClick={() => setExitMaintenanceDialogOpen(false)} color="inherit">
+                  <Button onClick={() => { setExitMaintenanceDialogOpen(false); setExitMaintenanceError(null) }} color="inherit">
                     {t('common.cancel')}
                   </Button>
                   <Button
@@ -4569,12 +4578,18 @@ return vm?.isCluster ?? false
                     onClick={async () => {
                       const { connId, node } = parseNodeId(selection!.id)
                       setExitMaintenanceBusy(true)
+                      setExitMaintenanceError(null)
                       try {
-                        await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { method: 'DELETE' })
+                        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { method: 'DELETE' })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok) {
+                          setExitMaintenanceError(data?.error || res.statusText)
+                          return
+                        }
                         setExitMaintenanceDialogOpen(false)
                         if (onRefresh) await onRefresh()
                       } catch (e: any) {
-                        console.error('[maintenance] Exit error:', e?.message)
+                        setExitMaintenanceError(e?.message || 'Unknown error')
                       } finally {
                         setExitMaintenanceBusy(false)
                       }

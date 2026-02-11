@@ -425,7 +425,8 @@
     "exitMaintenance": "Exit maintenance",
     "confirmEnterMaintenance": "Do you want to put this node in maintenance mode? VMs will no longer be automatically migrated to this node.",
     "confirmExitMaintenance": "Do you want to exit maintenance mode for this node?",
-    "maintenanceModeActive": "This node is currently in maintenance mode"
+    "maintenanceModeActive": "This node is currently in maintenance mode",
+    "maintenanceRequiresSsh": "This action requires SSH to be configured on this connection."
   },
   "inventoryPage": {
     "newTag": "New tag...",

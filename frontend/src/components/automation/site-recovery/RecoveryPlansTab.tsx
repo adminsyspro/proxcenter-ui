@@ -56,60 +56,62 @@ const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
   )
 }
 
-const PlanCard = ({ plan, onClick, t }: { plan: RecoveryPlan; onClick: () => void; t: any }) => {
-  const theme = useTheme()
+const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: () => void; t: any; connName: (id: string) => string }) => {
   const daysSinceTest = daysSince(plan.last_test)
   const testWarning = daysSinceTest === null || daysSinceTest > 30
 
   return (
-    <Card
-      variant='outlined'
+    <Box
       onClick={onClick}
       sx={{
-        borderRadius: 2, cursor: 'pointer', transition: 'all 0.2s ease',
-        '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' }
+        display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.25,
+        cursor: 'pointer', transition: 'all 0.15s ease', borderRadius: 1,
+        '&:hover': { bgcolor: 'action.hover' }
       }}
     >
-      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-          <Box>
-            <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.25 }}>{plan.name}</Typography>
-            {plan.description && (
-              <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block' }}>
-                {plan.description}
-              </Typography>
-            )}
-          </Box>
-          <PlanStatusBadge status={plan.status} t={t} />
-        </Box>
+      {/* Name + description */}
+      <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
+        <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.3 }} noWrap>{plan.name}</Typography>
+        {plan.description && (
+          <Typography variant='caption' sx={{ color: 'text.secondary', lineHeight: 1.2 }} noWrap>{plan.description}</Typography>
+        )}
+      </Box>
 
-        {/* Cluster info */}
-        <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-          {plan.source_cluster} → {plan.target_cluster}
+      {/* Source → Destination */}
+      <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
+        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>
+          {connName(plan.source_cluster)} → {connName(plan.target_cluster)}
         </Typography>
+      </Box>
 
-        {/* Tier summary */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <TierSummary vms={plan.vms} t={t} />
-          <Box sx={{ textAlign: 'right' }}>
-            <Typography variant='caption' sx={{
-              color: testWarning ? 'warning.main' : 'text.secondary',
-              fontWeight: testWarning ? 600 : 400
-            }}>
-              {plan.last_test
-                ? `${t('siteRecovery.plans.lastTest')}: ${daysSinceTest}d`
-                : t('siteRecovery.plans.neverTested')}
-            </Typography>
-            {testWarning && (
-              <Box sx={{ color: 'warning.main', fontSize: '0.7rem' }}>
-                <i className='ri-alert-line' /> {t('siteRecovery.plans.testOverdue')}
-              </Box>
-            )}
+      {/* Tier summary */}
+      <Box sx={{ flex: '0 0 auto' }}>
+        <TierSummary vms={plan.vms} t={t} />
+      </Box>
+
+      {/* Last test */}
+      <Box sx={{ flex: '0 0 auto', textAlign: 'right', minWidth: 90 }}>
+        <Typography variant='caption' sx={{
+          color: testWarning ? 'warning.main' : 'text.secondary',
+          fontWeight: testWarning ? 600 : 400,
+          fontSize: '0.7rem'
+        }}>
+          {plan.last_test
+            ? `${daysSinceTest}d`
+            : t('siteRecovery.plans.neverTested')}
+        </Typography>
+        {testWarning && (
+          <Box sx={{ color: 'warning.main', fontSize: '0.6rem', lineHeight: 1.2 }}>
+            <i className='ri-alert-line' />
           </Box>
-        </Box>
-      </CardContent>
-    </Card>
+        )}
+      </Box>
+
+      {/* Status */}
+      <Box sx={{ flex: '0 0 auto' }}>
+        <PlanStatusBadge status={plan.status} t={t} />
+      </Box>
+    </Box>
   )
 }
 
@@ -126,12 +128,14 @@ interface RecoveryPlansTabProps {
   onFailover: (id: string) => void
   onFailback: (id: string) => void
   onDeletePlan: (id: string) => void
+  connections?: Array<{ id: string; name: string }>
 }
 
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
-  onTestFailover, onFailover, onFailback, onDeletePlan
+  onTestFailover, onFailover, onFailback, onDeletePlan,
+  connections
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
   const theme = useTheme()
@@ -139,6 +143,11 @@ export default function RecoveryPlansTab({
   const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set([1, 2, 3]))
 
   const selected = useMemo(() => (plans || []).find(p => p.id === selectedPlanId), [plans, selectedPlanId])
+
+  const connName = useMemo(() => {
+    const map = new Map((connections || []).map(c => [c.id, c.name]))
+    return (id: string) => map.get(id) || id
+  }, [connections])
 
   const openPlan = (id: string) => {
     onSelectPlan(id)
@@ -187,9 +196,33 @@ export default function RecoveryPlansTab({
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, 1fr)' } }}>
-          {(plans || []).map(p => <PlanCard key={p.id} plan={p} onClick={() => openPlan(p.id)} t={t} />)}
-        </Box>
+        <Card variant='outlined' sx={{ borderRadius: 2 }}>
+          {/* Header */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant='caption' sx={{ flex: '1 1 30%', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+              {t('siteRecovery.plans.planName')}
+            </Typography>
+            <Typography variant='caption' sx={{ flex: '1 1 30%', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+              {t('siteRecovery.plans.sourceDestination')}
+            </Typography>
+            <Typography variant='caption' sx={{ flex: '0 0 auto', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+              VMs
+            </Typography>
+            <Typography variant='caption' sx={{ flex: '0 0 auto', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem', minWidth: 90, textAlign: 'right' }}>
+              {t('siteRecovery.plans.lastTest')}
+            </Typography>
+            <Typography variant='caption' sx={{ flex: '0 0 auto', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+              {t('common.status')}
+            </Typography>
+          </Box>
+          {/* Rows */}
+          {(plans || []).map((p, i) => (
+            <Box key={p.id}>
+              {i > 0 && <Divider />}
+              <PlanRow plan={p} onClick={() => openPlan(p.id)} t={t} connName={connName} />
+            </Box>
+          ))}
+        </Card>
       )}
 
       {/* Detail Drawer */}
@@ -212,7 +245,7 @@ export default function RecoveryPlansTab({
               <PlanStatusBadge status={selected.status} t={t} />
 
               <Typography variant='caption' sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
-                {selected.source_cluster} → {selected.target_cluster}
+                {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
               </Typography>
 
               <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>

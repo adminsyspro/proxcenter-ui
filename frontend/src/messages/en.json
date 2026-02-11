@@ -1464,6 +1464,8 @@
       "selectJob": "Select a job to view details."
     },
     "plans": {
+      "planName": "Plan",
+      "sourceDestination": "Source / Destination",
       "lastTest": "Last test",
       "neverTested": "Never tested",
       "testOverdue": "Test overdue (>30d)",

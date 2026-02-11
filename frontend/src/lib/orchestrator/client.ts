@@ -112,6 +112,8 @@ export interface AffinityRule {
   required: boolean
   vmids?: number[]
   nodes?: string[]
+  from_tag?: boolean
+  from_pool?: boolean
 }
 
 export interface ClusterMetrics {

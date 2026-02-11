@@ -175,16 +175,24 @@ export async function GET() {
         const connConfig = await getConnectionById(conn.id)
         
         // Charger nodes, guests, HA et Ceph en parallèle pour cette connexion
-        const [nodesResult, guestsResult, haResult, cephResult] = await Promise.allSettled([
+        const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
           pveFetch<NodeData[]>(connConfig, '/nodes'),
           pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
           pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
           pveFetch<any>(connConfig, '/cluster/ceph/status'),
+          pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
         ])
 
         const nodes: NodeData[] = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
         const guests: GuestData[] = guestsResult.status === 'fulfilled' ? guestsResult.value || [] : []
         const haResources: HaResource[] = haResult.status === 'fulfilled' ? haResult.value || [] : []
+        const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []
+
+        // Build hastate map from cluster resources (fallback for maintenance detection)
+        const nodeHastateMap = new Map<string, string>()
+        for (const nr of nodeResources) {
+          if (nr?.node && nr?.hastate) nodeHastateMap.set(nr.node, nr.hastate)
+        }
         
         // Extraire le statut Ceph (HEALTH_OK, HEALTH_WARN, HEALTH_ERR)
         let cephHealth: string | undefined
@@ -269,9 +277,10 @@ export async function GET() {
         for (const n of nodes) {
           if (!n?.node) continue
           const extra = nodeIpMap.get(n.node)
-          // Config is the authoritative source for maintenance mode.
-          // hastate from CRM may lag behind by up to ~120s after config is cleared.
-          const maintenance = extra?.maintenance || undefined
+          const hastate = nodeHastateMap.get(n.node)
+          // Config is authoritative; hastate is a fallback when per-node config fetch fails.
+          // After exiting maintenance, config clears immediately; hastate may lag ~120s.
+          const maintenance = extra?.maintenance || (hastate === 'maintenance' ? 'maintenance' : undefined)
           nodeMap.set(n.node, {
             ...n,
             ip: extra?.ip,

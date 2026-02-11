@@ -1471,6 +1471,7 @@ return Object.entries(metricsData as any)
     const migrationIds = activeMigrationIds.split(',')
 
     // Fonction pour récupérer la progression d'une migration
+    let needsRefresh = false
     const fetchProgress = async (migrationId: string) => {
       try {
         const res = await fetch(`/api/v1/orchestrator/drs/migrations/${migrationId}/progress`)
@@ -1479,6 +1480,12 @@ return Object.entries(metricsData as any)
           const data = await res.json()
 
           setMigrationsProgress(prev => ({ ...prev, [migrationId]: data }))
+
+          // If progress shows task is done, trigger a migrations list refresh
+          // so the "running" migration gets updated to completed/failed
+          if (data.progress >= 100 || data.status === 'stopped') {
+            needsRefresh = true
+          }
         }
       } catch (err) {
         console.error('Error fetching migration progress:', err)
@@ -1486,12 +1493,16 @@ return Object.entries(metricsData as any)
     }
 
     // Récupérer la progression de toutes les migrations actives
-    migrationIds.forEach(id => fetchProgress(id))
+    const fetchAll = async () => {
+      needsRefresh = false
+      await Promise.all(migrationIds.map(id => fetchProgress(id)))
+      if (needsRefresh) mutateMigrations()
+    }
+
+    fetchAll()
 
     // Rafraîchir toutes les 2 secondes
-    const interval = setInterval(() => {
-      migrationIds.forEach(id => fetchProgress(id))
-    }, 2000)
+    const interval = setInterval(fetchAll, 2000)
 
     return () => clearInterval(interval)
   }, [activeMigrationIds])

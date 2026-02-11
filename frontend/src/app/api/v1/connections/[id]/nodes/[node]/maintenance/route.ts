@@ -69,7 +69,8 @@ export async function POST(
 
     await pveFetch(conn, `/nodes/${encodeURIComponent(node)}/config`, {
       method: 'PUT',
-      body: new URLSearchParams({ maintenance: 'upgrade' }),
+      body: new URLSearchParams({ maintenance: 'upgrade' }).toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     })
 
     return NextResponse.json({ success: true })
@@ -101,12 +102,23 @@ export async function DELETE(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
+    // Read config before to confirm maintenance is set
+    const configBefore = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null)
+    console.log(`[maintenance] DELETE ${node}: config before =`, configBefore?.maintenance ?? '(none)')
+
+    // Clear maintenance — use .toString() explicitly to avoid any serialization issues
     await pveFetch(conn, `/nodes/${encodeURIComponent(node)}/config`, {
       method: 'PUT',
-      body: new URLSearchParams({ delete: 'maintenance' }),
+      body: new URLSearchParams({ delete: 'maintenance' }).toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     })
 
-    return NextResponse.json({ success: true })
+    // Verify config after
+    const configAfter = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/config`, { method: 'GET' }).catch(() => null)
+    console.log(`[maintenance] DELETE ${node}: config after =`, configAfter?.maintenance ?? '(cleared)')
+
+    const cleared = !configAfter?.maintenance
+    return NextResponse.json({ success: true, cleared, before: configBefore?.maintenance || null, after: configAfter?.maintenance || null })
   } catch (e: any) {
     console.error("[maintenance] DELETE Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to exit maintenance mode" }, { status: 500 })

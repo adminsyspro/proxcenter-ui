@@ -362,6 +362,19 @@
     "deleteVm": "Supprimer la VM",
     "deleteVmDisks": "Supprimer également les disques associés",
     "vmRunningWarning": "Arrêtez la VM avant de la supprimer",
+    "health": {
+      "resourceUsage": "Utilisation des ressources",
+      "vmDistribution": "Distribution des VMs",
+      "topLoaded": "Hôtes les plus chargés",
+      "warnings": "Alertes",
+      "noWarnings": "Tout est OK — aucune alerte",
+      "highCpu": "Hôtes avec CPU élevé (>80%)",
+      "highRam": "Hôtes avec RAM élevée (>80%)",
+      "noSnapshots": "VMs actives sans snapshot",
+      "running": "En cours",
+      "stopped": "Arrêtées",
+      "other": "Autres"
+    },
     "tabs": {
       "summary": "Résumé",
       "hardware": "Matériel",

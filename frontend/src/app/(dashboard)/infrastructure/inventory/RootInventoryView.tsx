@@ -22,6 +22,7 @@ import {
   Table,
   Tooltip as MuiTooltip,
   Typography,
+  alpha,
   useTheme,
 } from '@mui/material'
 
@@ -175,6 +176,24 @@ function RootInventoryView({
     return { running, stopped, other, total: allVms.length }
   }, [allVms])
   
+  // Global resource stats
+  const globalStats = useMemo(() => calculateStats(allVms), [allVms])
+
+  // Host stats sorted by load (for top loaded hosts card)
+  const hostStats = useMemo(() => {
+    return hosts
+      .map(h => ({ ...h, stats: calculateStats(h.vms) }))
+      .sort((a, b) => Math.max(b.stats.avgCpu, b.stats.avgRam) - Math.max(a.stats.avgCpu, a.stats.avgRam))
+  }, [hosts])
+
+  // Warnings
+  const warnings = useMemo(() => {
+    const highCpuHosts = hostStats.filter(h => h.stats.avgCpu > 80).length
+    const highRamHosts = hostStats.filter(h => h.stats.avgRam > 80).length
+    const noSnapshotVms = allVms.filter(vm => vm.status === 'running' && (!vm.snapshots || vm.snapshots === 0)).length
+    return { highCpuHosts, highRamHosts, noSnapshotVms, total: highCpuHosts + highRamHosts + noSnapshotVms }
+  }, [hostStats, allVms])
+
   const toggleCluster = (connId: string) => {
     setExpandedClusters(prev => {
       const next = new Set(prev)
@@ -315,6 +334,234 @@ function RootInventoryView({
         </CardContent>
       </Card>
       
+      {/* Health Overview Cards */}
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+        gap: 2,
+        mb: 2
+      }}>
+        {/* Card 1: Resource Usage */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.info.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-cpu-line" style={{ fontSize: 18, color: theme.palette.info.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.resourceUsage')}</Typography>
+            </Stack>
+            {/* CPU bar */}
+            <Box sx={{ mb: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography variant="caption" sx={{ opacity: 0.7 }}>CPU</Typography>
+                <Typography variant="caption" fontWeight={700} sx={{
+                  color: globalStats.avgCpu > 90 ? 'error.main' : globalStats.avgCpu > 70 ? 'warning.main' : 'info.main'
+                }}>
+                  {globalStats.avgCpu.toFixed(1)}%
+                </Typography>
+              </Stack>
+              <Box sx={{ width: '100%', height: 8, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1, overflow: 'hidden' }}>
+                <Box sx={{
+                  width: `${Math.min(100, globalStats.avgCpu)}%`, height: '100%', borderRadius: 1,
+                  bgcolor: globalStats.avgCpu > 90 ? 'error.main' : globalStats.avgCpu > 70 ? 'warning.main' : 'info.main',
+                  transition: 'width 0.3s ease'
+                }} />
+              </Box>
+            </Box>
+            {/* RAM bar */}
+            <Box>
+              <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography variant="caption" sx={{ opacity: 0.7 }}>RAM</Typography>
+                <Typography variant="caption" fontWeight={700} sx={{
+                  color: globalStats.avgRam > 90 ? 'error.main' : globalStats.avgRam > 70 ? 'warning.main' : 'secondary.main'
+                }}>
+                  {globalStats.avgRam.toFixed(1)}%
+                </Typography>
+              </Stack>
+              <Box sx={{ width: '100%', height: 8, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 1, overflow: 'hidden' }}>
+                <Box sx={{
+                  width: `${Math.min(100, globalStats.avgRam)}%`, height: '100%', borderRadius: 1,
+                  bgcolor: globalStats.avgRam > 90 ? 'error.main' : globalStats.avgRam > 70 ? 'warning.main' : 'secondary.main',
+                  transition: 'width 0.3s ease'
+                }} />
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: VM Distribution */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.success.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-pie-chart-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmDistribution')}</Typography>
+            </Stack>
+            {/* Stacked bar */}
+            <Box sx={{ width: '100%', height: 12, borderRadius: 1.5, overflow: 'hidden', display: 'flex', mb: 1.5 }}>
+              {vmStats.total > 0 && (
+                <>
+                  <Box sx={{
+                    width: `${(vmStats.running / vmStats.total) * 100}%`, height: '100%',
+                    bgcolor: 'success.main', transition: 'width 0.3s ease'
+                  }} />
+                  <Box sx={{
+                    width: `${(vmStats.stopped / vmStats.total) * 100}%`, height: '100%',
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+                    transition: 'width 0.3s ease'
+                  }} />
+                  {vmStats.other > 0 && (
+                    <Box sx={{
+                      width: `${(vmStats.other / vmStats.total) * 100}%`, height: '100%',
+                      bgcolor: 'warning.main', transition: 'width 0.3s ease'
+                    }} />
+                  )}
+                </>
+              )}
+            </Box>
+            {/* Legend */}
+            <Stack direction="row" spacing={2} flexWrap="wrap">
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.running')}</Typography>
+                <Typography variant="caption" fontWeight={700}>{vmStats.running}</Typography>
+              </Stack>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' }} />
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.stopped')}</Typography>
+                <Typography variant="caption" fontWeight={700}>{vmStats.stopped}</Typography>
+              </Stack>
+              {vmStats.other > 0 && (
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.other')}</Typography>
+                  <Typography variant="caption" fontWeight={700}>{vmStats.other}</Typography>
+                </Stack>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {/* Card 3: Top Loaded Hosts */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.warning.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-bar-chart-2-line" style={{ fontSize: 18, color: theme.palette.warning.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.topLoaded')}</Typography>
+            </Stack>
+            <Stack spacing={1}>
+              {hostStats.slice(0, 3).map(h => (
+                <Box key={h.key}>
+                  <Typography variant="caption" fontWeight={600} sx={{ mb: 0.25, display: 'block' }}>{h.node}</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <MuiTooltip title={`CPU: ${h.stats.avgCpu.toFixed(1)}%`}>
+                      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 22 }}>CPU</Typography>
+                        <Box sx={{ flex: 1, height: 6, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 0.75, overflow: 'hidden' }}>
+                          <Box sx={{
+                            width: `${Math.min(100, h.stats.avgCpu)}%`, height: '100%', borderRadius: 0.75,
+                            bgcolor: h.stats.avgCpu > 90 ? 'error.main' : h.stats.avgCpu > 70 ? 'warning.main' : 'info.main'
+                          }} />
+                        </Box>
+                        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{h.stats.avgCpu.toFixed(0)}%</Typography>
+                      </Box>
+                    </MuiTooltip>
+                    <MuiTooltip title={`RAM: ${h.stats.avgRam.toFixed(1)}%`}>
+                      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 24 }}>RAM</Typography>
+                        <Box sx={{ flex: 1, height: 6, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 0.75, overflow: 'hidden' }}>
+                          <Box sx={{
+                            width: `${Math.min(100, h.stats.avgRam)}%`, height: '100%', borderRadius: 0.75,
+                            bgcolor: h.stats.avgRam > 90 ? 'error.main' : h.stats.avgRam > 70 ? 'warning.main' : 'secondary.main'
+                          }} />
+                        </Box>
+                        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{h.stats.avgRam.toFixed(0)}%</Typography>
+                      </Box>
+                    </MuiTooltip>
+                  </Stack>
+                </Box>
+              ))}
+              {hostStats.length === 0 && (
+                <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {/* Card 4: Warnings */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: warnings.total > 0 ? alpha(theme.palette.error.main, 0.12) : alpha(theme.palette.success.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className={warnings.total > 0 ? "ri-alert-line" : "ri-shield-check-line"} style={{
+                  fontSize: 18,
+                  color: warnings.total > 0 ? theme.palette.error.main : theme.palette.success.main
+                }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.warnings')}</Typography>
+              {warnings.total > 0 && (
+                <Chip size="small" label={warnings.total} color="error" sx={{ height: 20, fontSize: 11, fontWeight: 700 }} />
+              )}
+            </Stack>
+            {warnings.total === 0 ? (
+              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 500 }}>
+                <i className="ri-check-line" style={{ fontSize: 14, verticalAlign: 'middle', marginRight: 4 }} />
+                {t('inventory.health.noWarnings')}
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {warnings.highCpuHosts > 0 && (
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }} />
+                    <Typography variant="caption">
+                      <Typography component="span" variant="caption" fontWeight={700} color="warning.main">{warnings.highCpuHosts}</Typography>
+                      {' '}{t('inventory.health.highCpu')}
+                    </Typography>
+                  </Stack>
+                )}
+                {warnings.highRamHosts > 0 && (
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'error.main', flexShrink: 0 }} />
+                    <Typography variant="caption">
+                      <Typography component="span" variant="caption" fontWeight={700} color="error.main">{warnings.highRamHosts}</Typography>
+                      {' '}{t('inventory.health.highRam')}
+                    </Typography>
+                  </Stack>
+                )}
+                {warnings.noSnapshotVms > 0 && (
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }} />
+                    <Typography variant="caption">
+                      <Typography component="span" variant="caption" fontWeight={700} color="warning.main">{warnings.noSnapshotVms}</Typography>
+                      {' '}{t('inventory.health.noSnapshots')}
+                    </Typography>
+                  </Stack>
+                )}
+              </Stack>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+
       {/* Séparateur PVE */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <i className="ri-server-fill" style={{ fontSize: 16, color: '#F29221' }} />

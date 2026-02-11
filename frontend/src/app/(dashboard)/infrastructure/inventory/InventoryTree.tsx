@@ -526,11 +526,20 @@ return next
   const [cloneTarget, setCloneTarget] = useState<VmContextMenu>(null)
   const [migrateDialogOpen, setMigrateDialogOpen] = useState(false)
   const [migrateTarget, setMigrateTarget] = useState<VmContextMenu>(null)
-  // Menu contextuel Node (maintenance)
+  // Menu contextuel Node (maintenance + bulk actions + shell)
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu>(null)
   const [maintenanceBusy, setMaintenanceBusy] = useState(false)
   const [maintenanceTarget, setMaintenanceTarget] = useState<{ connId: string; node: string; maintenance?: string } | null>(null)
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
+  // Bulk action dialog state
+  const [bulkActionDialog, setBulkActionDialog] = useState<{
+    open: boolean
+    action: 'start-all' | 'shutdown-all' | 'migrate-all' | null
+    connId: string
+    node: string
+    targetNode: string
+  }>({ open: false, action: null, connId: '', node: '', targetNode: '' })
+  const [bulkActionBusy, setBulkActionBusy] = useState(false)
 
   const [unlocking, setUnlocking] = useState(false)
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
@@ -682,6 +691,106 @@ return next
     } finally {
       setMaintenanceBusy(false)
     }
+  }
+
+  // Helper: get VMs for a node from clusters data
+  const getNodeVms = useCallback((connId: string, nodeName: string) => {
+    for (const c of clusters) {
+      if (c.connId === connId) {
+        const n = c.nodes.find(nd => nd.node === nodeName)
+        return (n?.vms || []).filter(v => !v.template)
+      }
+    }
+    return []
+  }, [clusters])
+
+  // Helper: get other nodes in the same cluster
+  const getOtherNodes = useCallback((connId: string, nodeName: string) => {
+    for (const c of clusters) {
+      if (c.connId === connId) {
+        return c.nodes.filter(n => n.node !== nodeName && n.status === 'online').map(n => n.node)
+      }
+    }
+    return []
+  }, [clusters])
+
+  // Bulk action handlers
+  const handleBulkActionClick = (action: 'start-all' | 'shutdown-all' | 'migrate-all') => {
+    if (!nodeContextMenu) return
+    const { connId, node } = nodeContextMenu
+    setBulkActionDialog({ open: true, action, connId, node, targetNode: '' })
+    handleCloseNodeContextMenu()
+  }
+
+  const handleBulkActionConfirm = async () => {
+    const { action, connId, node, targetNode } = bulkActionDialog
+    if (!action) return
+
+    const vms = getNodeVms(connId, node)
+    let vmsToProcess: typeof vms = []
+    let apiAction = ''
+
+    switch (action) {
+      case 'start-all':
+        vmsToProcess = vms.filter(v => v.status === 'stopped')
+        apiAction = 'start'
+        break
+      case 'shutdown-all':
+        vmsToProcess = vms.filter(v => v.status === 'running')
+        apiAction = 'shutdown'
+        break
+      case 'migrate-all':
+        if (!targetNode) return
+        vmsToProcess = vms
+        apiAction = 'migrate'
+        break
+    }
+
+    if (vmsToProcess.length === 0) {
+      setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })
+      return
+    }
+
+    setBulkActionBusy(true)
+    try {
+      const batchSize = 5
+      for (let i = 0; i < vmsToProcess.length; i += batchSize) {
+        const batch = vmsToProcess.slice(i, i + batchSize)
+        await Promise.all(batch.map(async (vm) => {
+          try {
+            let url: string
+            let body: string | undefined
+            if (apiAction === 'migrate') {
+              url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/migrate`
+              body = JSON.stringify({ target: targetNode, online: vm.status === 'running' })
+            } else {
+              url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
+            }
+            await fetch(url, {
+              method: 'POST',
+              headers: body ? { 'Content-Type': 'application/json' } : undefined,
+              body,
+            })
+          } catch {}
+        }))
+      }
+      // Refresh tree after bulk action
+      setTimeout(() => setReloadTick(x => x + 1), 2000)
+    } finally {
+      setBulkActionBusy(false)
+      setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })
+    }
+  }
+
+  // Shell handler
+  const handleNodeShell = () => {
+    if (!nodeContextMenu) return
+    const { connId, node } = nodeContextMenu
+    handleCloseNodeContextMenu()
+
+    // Open shell in a new window
+    const url = `/infrastructure/inventory/shell?connId=${encodeURIComponent(connId)}&node=${encodeURIComponent(node)}`
+    window.open(url, `shell-${connId}-${node}`, 'width=1024,height=600,menubar=no,toolbar=no,location=no,status=no')
   }
 
   // Exécuter une action sur la VM
@@ -2506,6 +2615,36 @@ return (
             NODE
           </Typography>
         </Box>
+        <MenuItem onClick={() => handleBulkActionClick('start-all')}>
+          <ListItemIcon>
+            <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
+          </ListItemIcon>
+          <ListItemText>{t('bulkActions.startAllVms')}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleBulkActionClick('shutdown-all')}>
+          <ListItemIcon>
+            <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />
+          </ListItemIcon>
+          <ListItemText>{t('bulkActions.shutdownAllVms')}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleBulkActionClick('migrate-all')}>
+          <ListItemIcon>
+            <MoveUpIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
+        </MenuItem>
+
+        <Divider />
+
+        <MenuItem onClick={handleNodeShell}>
+          <ListItemIcon>
+            <TerminalIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Shell</ListItemText>
+        </MenuItem>
+
+        <Divider />
+
         <MenuItem
           onClick={handleMaintenanceClick}
           disabled={maintenanceBusy}
@@ -2570,6 +2709,81 @@ return (
             color={maintenanceTarget?.maintenance ? 'success' : 'warning'}
             disabled={maintenanceBusy}
             startIcon={maintenanceBusy ? <CircularProgress size={16} /> : undefined}
+          >
+            {t('common.confirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog confirmation bulk action */}
+      <Dialog
+        open={bulkActionDialog.open}
+        onClose={() => setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{
+            width: 40, height: 40, borderRadius: 2,
+            bgcolor: bulkActionDialog.action === 'start-all' ? 'rgba(76,175,80,0.12)' : bulkActionDialog.action === 'migrate-all' ? 'rgba(33,150,243,0.12)' : 'rgba(255,152,0,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            {bulkActionDialog.action === 'start-all' && <PlayArrowIcon fontSize="small" sx={{ color: '#4caf50' }} />}
+            {bulkActionDialog.action === 'shutdown-all' && <PowerSettingsNewIcon fontSize="small" sx={{ color: '#ff9800' }} />}
+            {bulkActionDialog.action === 'migrate-all' && <MoveUpIcon fontSize="small" sx={{ color: '#2196f3' }} />}
+          </Box>
+          {bulkActionDialog.action === 'start-all' && t('bulkActions.startAllVms')}
+          {bulkActionDialog.action === 'shutdown-all' && t('bulkActions.shutdownAllVms')}
+          {bulkActionDialog.action === 'migrate-all' && t('bulkActions.migrateAllVms')}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {bulkActionDialog.action === 'start-all' && t('bulkActions.confirmStartAll')}
+            {bulkActionDialog.action === 'shutdown-all' && t('bulkActions.confirmShutdownAll')}
+            {bulkActionDialog.action === 'migrate-all' && t('bulkActions.confirmMigrateAll')}
+          </DialogContentText>
+          <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
+            {t('inventory.node')}: {bulkActionDialog.node}
+          </Typography>
+          {bulkActionDialog.action === 'start-all' && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.6 }}>
+              {getNodeVms(bulkActionDialog.connId, bulkActionDialog.node).filter(v => v.status === 'stopped').length} VMs
+            </Typography>
+          )}
+          {bulkActionDialog.action === 'shutdown-all' && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.6 }}>
+              {getNodeVms(bulkActionDialog.connId, bulkActionDialog.node).filter(v => v.status === 'running').length} VMs
+            </Typography>
+          )}
+          {bulkActionDialog.action === 'migrate-all' && (
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel size="small">{t('bulkActions.targetNode')}</InputLabel>
+              <Select
+                size="small"
+                value={bulkActionDialog.targetNode}
+                label={t('bulkActions.targetNode')}
+                onChange={(e) => setBulkActionDialog(prev => ({ ...prev, targetNode: e.target.value }))}
+              >
+                {getOtherNodes(bulkActionDialog.connId, bulkActionDialog.node).map(n => (
+                  <MenuItem key={n} value={n}>{n}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })}
+            color="inherit"
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            onClick={handleBulkActionConfirm}
+            variant="contained"
+            color={bulkActionDialog.action === 'start-all' ? 'success' : bulkActionDialog.action === 'migrate-all' ? 'primary' : 'warning'}
+            disabled={bulkActionBusy || (bulkActionDialog.action === 'migrate-all' && !bulkActionDialog.targetNode)}
+            startIcon={bulkActionBusy ? <CircularProgress size={16} /> : undefined}
           >
             {t('common.confirm')}
           </Button>

@@ -202,43 +202,24 @@ export default function SiteRecoveryPage() {
   return (
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-        {/* Header actions */}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-          <Button
-            variant='outlined'
-            size='small'
-            startIcon={<i className='ri-add-line' />}
-            onClick={() => setCreatePlanOpen(true)}
+        {/* Tabs + Actions */}
+        <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v)}
+            sx={{ flex: 1 }}
           >
-            {t('siteRecovery.createPlan.title')}
-          </Button>
-          <Button
-            variant='contained'
-            size='small'
-            startIcon={<i className='ri-add-line' />}
-            onClick={() => setCreateJobOpen(true)}
-          >
-            {t('siteRecovery.createJob.title')}
-          </Button>
-        </Box>
-
-        {/* Tabs */}
-        <Tabs
-          value={tab}
-          onChange={(_, v) => setTab(v)}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
           <Tab
             icon={<i className='ri-dashboard-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.dashboard')}
           />
           <Tab
-            icon={<i className='ri-shield-line' style={{ fontSize: 18 }} />}
+            icon={<i className='ri-refresh-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {t('siteRecovery.tabs.protection')}
+                {t('siteRecovery.tabs.replication')}
                 {errorCount > 0 && (
                   <Chip size='small' label={errorCount} color='error' sx={{ height: 18, fontSize: '0.65rem' }} />
                 )}
@@ -251,6 +232,25 @@ export default function SiteRecoveryPage() {
             label={t('siteRecovery.tabs.recoveryPlans')}
           />
         </Tabs>
+          <Box sx={{ display: 'flex', gap: 1, ml: 'auto', pl: 2 }}>
+            <Button
+              variant='outlined'
+              size='small'
+              startIcon={<i className='ri-add-line' />}
+              onClick={() => setCreatePlanOpen(true)}
+            >
+              {t('siteRecovery.createPlan.title')}
+            </Button>
+            <Button
+              variant='contained'
+              size='small'
+              startIcon={<i className='ri-add-line' />}
+              onClick={() => setCreateJobOpen(true)}
+            >
+              {t('siteRecovery.createJob.title')}
+            </Button>
+          </Box>
+        </Box>
 
         {/* Tab Content */}
         {tab === 0 && (

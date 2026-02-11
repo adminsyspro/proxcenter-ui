@@ -1390,6 +1390,7 @@
     "subtitle": "Ceph RBD cross-cluster replication & disaster recovery",
     "tabs": {
       "dashboard": "Dashboard",
+      "replication": "Replication",
       "protection": "Protection",
       "recoveryPlans": "Recovery Plans"
     },

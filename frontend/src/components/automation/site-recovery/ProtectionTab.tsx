@@ -71,66 +71,64 @@ const DetailRow = ({ icon, label, value, mono }: { icon: string; label: string; 
   </Box>
 )
 
-const JobCard = ({ job, onClick, t, connName }: { job: ReplicationJob; onClick: () => void; t: any; connName: (id: string) => string }) => {
+const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void; t: any }) => {
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
   const isSyncing = job.status === 'syncing'
   const rpoActual = computeRpoActual(job.last_sync)
+  const rpoOk = rpoActual != null && rpoActual <= job.rpo_target
 
   return (
     <Card
       variant='outlined'
       onClick={onClick}
       sx={{
-        borderRadius: 2, cursor: 'pointer', transition: 'all 0.2s ease',
+        borderRadius: 1.5, cursor: 'pointer', transition: 'all 0.2s ease',
         borderColor: isError ? 'error.main' : 'divider',
         '&:hover': { borderColor: isError ? 'error.light' : 'primary.main', bgcolor: 'action.hover' }
       }}
     >
       {isSyncing && <LinearProgress variant='determinate' value={progress} sx={{ height: 2 }} />}
 
-      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Box>
-            <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.25 }}>{jobLabel(job)}</Typography>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-              {connName(job.source_cluster)} → {connName(job.target_cluster)}
-            </Typography>
-          </Box>
-          <StatusChip status={job.status} t={t} />
-        </Box>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* VM names */}
+          <Typography variant='body2' sx={{
+            fontWeight: 600, flex: 1, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+          }}>
+            {jobLabel(job)}
+          </Typography>
 
-        {/* Metrics */}
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Box>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>RPO</Typography>
-            <Typography variant='body2' sx={{
-              fontWeight: 600,
-              color: rpoActual != null && rpoActual <= job.rpo_target ? 'success.main' : 'text.secondary'
-            }}>
+          {/* RPO */}
+          <Box sx={{ textAlign: 'center', minWidth: 60, display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.2 }}>RPO</Typography>
+            <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.75rem', color: rpoOk ? 'success.main' : 'text.secondary' }}>
               {formatDuration(rpoActual)}
             </Typography>
           </Box>
-          <Box sx={{ ml: 'auto', textAlign: 'right' }}>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.lastSync')}</Typography>
-            <Typography variant='body2' sx={{ fontWeight: 500, fontFamily: 'monospace', fontSize: '0.75rem' }}>
+
+          {/* Last Sync */}
+          <Box sx={{ textAlign: 'center', minWidth: 100, display: { xs: 'none', md: 'block' } }}>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.2 }}>{t('siteRecovery.protection.lastSync')}</Typography>
+            <Typography variant='body2' sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
               {job.last_sync ? new Date(job.last_sync).toLocaleString() : '—'}
             </Typography>
           </Box>
-        </Box>
 
-        {/* Syncing details */}
-        {isSyncing && (
-          <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-              {Math.round(progress)}%
-            </Typography>
-            <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 600 }}>
-              {formatBytes(job.throughput_bps)}/s
-            </Typography>
-          </Box>
-        )}
+          {/* Syncing throughput */}
+          {isSyncing && (
+            <Box sx={{ textAlign: 'center', minWidth: 60, display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.2 }}>{Math.round(progress)}%</Typography>
+              <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 600 }}>
+                {formatBytes(job.throughput_bps)}/s
+              </Typography>
+            </Box>
+          )}
+
+          {/* Status */}
+          <StatusChip status={job.status} t={t} />
+        </Box>
       </CardContent>
     </Card>
   )
@@ -187,6 +185,19 @@ export default function ProtectionTab({
     })
   }, [jobs, q, statusFilter, connName])
 
+  const grouped = useMemo(() => {
+    const map = new Map<string, ReplicationJob[]>()
+
+    for (const job of filtered) {
+      const key = `${job.source_cluster}::${job.target_cluster}`
+
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(job)
+    }
+
+    return map
+  }, [filtered])
+
   const selected = useMemo(() => (jobs || []).find(j => j.id === selectedJobId), [jobs, selectedJobId])
 
   const openJob = (id: string) => {
@@ -241,7 +252,7 @@ export default function ProtectionTab({
         </CardContent>
       </Card>
 
-      {/* Jobs Grid */}
+      {/* Jobs List */}
       {filtered.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6, px: 3 }}>
           <Box sx={{ fontSize: '2.5rem', mb: 1, opacity: 0.3 }}><i className='ri-shield-line' /></Box>
@@ -255,9 +266,30 @@ export default function ProtectionTab({
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, 1fr)' } }}>
-          {filtered.map(j => <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} t={t} connName={connName} />)}
-        </Box>
+        <Stack spacing={0}>
+          {Array.from(grouped.entries()).map(([key, groupJobs], groupIndex) => {
+            const [sourceId, targetId] = key.split('::')
+
+            return (
+              <Box key={key}>
+                {/* Group header */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, mt: groupIndex > 0 ? 2.5 : 0 }}>
+                  <i className='ri-server-line' style={{ opacity: 0.5 }} />
+                  <Typography variant='subtitle2' sx={{ fontWeight: 600 }}>
+                    {connName(sourceId)} → {connName(targetId)}
+                  </Typography>
+                  <Chip size='small' label={`${groupJobs.length} job${groupJobs.length > 1 ? 's' : ''}`} variant='outlined' sx={{ height: 20, fontSize: '0.65rem' }} />
+                </Box>
+                {/* Group jobs */}
+                <Stack spacing={1}>
+                  {groupJobs.map(j => (
+                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} t={t} />
+                  ))}
+                </Stack>
+              </Box>
+            )
+          })}
+        </Stack>
       )}
 
       {/* Detail Drawer */}

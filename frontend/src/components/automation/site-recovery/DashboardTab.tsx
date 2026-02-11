@@ -183,6 +183,32 @@ const ConnectivityIndicator = ({ connectivity, latency, t }: {
   )
 }
 
+const ConnectivityBadge = ({ connectivity, latency, t }: {
+  connectivity: string; latency: number; t: any
+}) => {
+  const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+    connected: 'success',
+    degraded: 'warning',
+    disconnected: 'error'
+  }
+  const labelMap: Record<string, string> = {
+    connected: t('siteRecovery.dashboard.connected'),
+    degraded: t('siteRecovery.dashboard.degraded'),
+    disconnected: t('siteRecovery.dashboard.noConnection')
+  }
+
+  return (
+    <Chip
+      size='small'
+      icon={<i className='ri-link' />}
+      label={`${labelMap[connectivity] || connectivity}${latency > 0 ? ` · ${latency}ms` : ''}`}
+      color={colorMap[connectivity] || 'default'}
+      variant='outlined'
+      sx={{ height: 24 }}
+    />
+  )
+}
+
 const RPOGauge = ({ compliance, t }: { compliance: number; t: any }) => {
   const theme = useTheme()
   const color = compliance >= 90
@@ -422,12 +448,32 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
 
   return (
     <Stack spacing={2.5}>
-      {/* Site Health */}
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-        {health.sites[0] && <SiteCard site={health.sites[0]} t={t} />}
-        <ConnectivityIndicator connectivity={health.connectivity} latency={health.latency_ms} t={t} />
-        {health.sites[1] && <SiteCard site={health.sites[1]} t={t} />}
-      </Box>
+      {/* Sites Overview */}
+      {health.sites.length <= 2 ? (
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
+          {health.sites[0] && <SiteCard site={health.sites[0]} t={t} />}
+          {health.sites.length === 2 && (
+            <ConnectivityIndicator connectivity={health.connectivity} latency={health.latency_ms} t={t} />
+          )}
+          {health.sites[1] && <SiteCard site={health.sites[1]} t={t} />}
+        </Box>
+      ) : (
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <ConnectivityBadge connectivity={health.connectivity} latency={health.latency_ms} t={t} />
+          </Box>
+          <Box sx={{
+            display: 'grid', gap: 2,
+            gridTemplateColumns: {
+              xs: '1fr',
+              md: 'repeat(2, 1fr)',
+              lg: `repeat(${Math.min(health.sites.length, 3)}, 1fr)`
+            }
+          }}>
+            {health.sites.map(site => <SiteCard key={site.cluster_id} site={site} t={t} />)}
+          </Box>
+        </Box>
+      )}
 
       {/* KPI Row */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(6, 1fr)' } }}>

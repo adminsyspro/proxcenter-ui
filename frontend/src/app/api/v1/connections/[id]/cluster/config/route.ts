@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 
 export const runtime = "nodejs"
 
@@ -69,18 +70,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         let managementIp = node.ip
         try {
           const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node.name)}/network`)
-          if (Array.isArray(networks)) {
-            const active = networks.filter(
-              (iface: any) => iface.address && iface.active && !iface.address.startsWith('127.')
-            )
-            const vmbr0 = active.find((i: any) => i.iface === 'vmbr0')
-            if (vmbr0?.address) {
-              managementIp = vmbr0.address
-            } else {
-              const bridge = active.find((i: any) => i.iface?.startsWith('vmbr'))
-              if (bridge?.address) managementIp = bridge.address
-            }
-          }
+          managementIp = resolveManagementIp(networks) || node.ip
         } catch {}
 
         return { ...node, ip: managementIp, maintenance }

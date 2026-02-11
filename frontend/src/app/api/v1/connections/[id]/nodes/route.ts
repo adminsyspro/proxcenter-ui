@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 
 export const runtime = "nodejs"
 
@@ -43,38 +44,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       let ip: string | null = null
 
       try {
-        // Récupérer les interfaces réseau du node
         const networks = await pveFetch<any[]>(
           conn,
           `/nodes/${encodeURIComponent(nodeName)}/network`
         )
-
-        if (Array.isArray(networks)) {
-          // Chercher l'IP sur les interfaces principales (vmbr0, eth0, ens18, etc.)
-          for (const iface of networks) {
-            const ifaceName = (iface.iface || '').toLowerCase()
-
-
-            // Priorité aux bridges et interfaces physiques
-            if (ifaceName.startsWith('vmbr') || ifaceName.startsWith('eth') || ifaceName.startsWith('ens') || ifaceName.startsWith('enp')) {
-              if (iface.address && !iface.address.startsWith('127.')) {
-                ip = iface.address
-                break
-              }
-            }
-          }
-
-
-          // Fallback: prendre la première IP non-loopback
-          if (!ip) {
-            for (const iface of networks) {
-              if (iface.address && !iface.address.startsWith('127.')) {
-                ip = iface.address
-                break
-              }
-            }
-          }
-        }
+        ip = resolveManagementIp(networks) || null
       } catch {
         // Pas d'accès aux interfaces réseau
       }

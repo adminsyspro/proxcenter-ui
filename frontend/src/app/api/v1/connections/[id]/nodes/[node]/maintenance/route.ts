@@ -4,6 +4,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 
 export const runtime = "nodejs"
 
@@ -82,23 +83,13 @@ async function executeSSHCommand(
 
 /**
  * Get the management IP of a Proxmox node.
- * Priority: node network interfaces (vmbr0 preferred) > DNS resolution > cluster config > connection host
  */
 async function getNodeIp(conn: any, nodeName: string): Promise<string> {
-  // 1. Try node network interfaces — most reliable for management IP
+  // 1. Try node network interfaces (gateway = management)
   try {
     const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`)
-    const ifaces = (networks || []).filter(
-      (iface: any) => iface.address && iface.active && !iface.address.startsWith('127.')
-    )
-    // Prefer vmbr0 (standard Proxmox management bridge)
-    const vmbr0 = ifaces.find((i: any) => i.iface === 'vmbr0')
-    if (vmbr0?.address) return vmbr0.address
-    // Fallback to any bridge interface
-    const bridge = ifaces.find((i: any) => i.iface?.startsWith('vmbr'))
-    if (bridge?.address) return bridge.address
-    // Fallback to first active interface
-    if (ifaces.length > 0) return ifaces[0].address
+    const ip = resolveManagementIp(networks)
+    if (ip) return ip
   } catch {}
 
   // 2. Try DNS resolution of the node name
@@ -108,14 +99,7 @@ async function getNodeIp(conn: any, nodeName: string): Promise<string> {
     if (resolved?.[0]) return resolved[0]
   } catch {}
 
-  // 3. Try cluster config (may return corosync IP — less reliable)
-  try {
-    const clusterNodes = await pveFetch<any[]>(conn, '/cluster/config/nodes')
-    const clusterNode = clusterNodes?.find((n: any) => n.name === nodeName)
-    if (clusterNode?.ip) return clusterNode.ip
-  } catch {}
-
-  // 4. Fallback to connection host
+  // 3. Fallback to connection host
   try {
     const host = conn.host || conn.baseUrl || ''
     const cleanHost = host.replace(/^https?:\/\//, '').replace(/:\d+$/, '').replace(/\/.*$/, '')

@@ -529,7 +529,7 @@ return next
   // Menu contextuel Node (maintenance)
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu>(null)
   const [maintenanceBusy, setMaintenanceBusy] = useState(false)
-  const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false)
+  const [maintenanceTarget, setMaintenanceTarget] = useState<{ connId: string; node: string; maintenance?: string } | null>(null)
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
 
   const [unlocking, setUnlocking] = useState(false)
@@ -652,14 +652,15 @@ return next
 
   const handleMaintenanceClick = () => {
     if (!nodeContextMenu) return
-    handleCloseNodeContextMenu()
+    const { connId, node, maintenance } = nodeContextMenu
+    setMaintenanceTarget({ connId, node, maintenance })
     setMaintenanceError(null)
-    setMaintenanceConfirmOpen(true)
+    handleCloseNodeContextMenu()
   }
 
   const handleMaintenanceConfirm = async () => {
-    if (!nodeContextMenu) return
-    const { connId, node, maintenance } = nodeContextMenu
+    if (!maintenanceTarget) return
+    const { connId, node, maintenance } = maintenanceTarget
     const entering = !maintenance
 
     setMaintenanceBusy(true)
@@ -674,8 +675,7 @@ return next
         setMaintenanceError(data?.error || res.statusText)
         return
       }
-      setMaintenanceConfirmOpen(false)
-      setNodeContextMenu(null)
+      setMaintenanceTarget(null)
       setReloadTick(x => x + 1)
     } catch (e: any) {
       setMaintenanceError(e?.message || 'Unknown error')
@@ -2521,32 +2521,32 @@ return (
 
       {/* Dialog confirmation maintenance */}
       <Dialog
-        open={maintenanceConfirmOpen}
-        onClose={() => { setMaintenanceConfirmOpen(false); setNodeContextMenu(null) }}
+        open={maintenanceTarget !== null}
+        onClose={() => setMaintenanceTarget(null)}
         maxWidth="xs"
         fullWidth
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{
             width: 40, height: 40, borderRadius: 2,
-            bgcolor: nodeContextMenu?.maintenance ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)',
+            bgcolor: maintenanceTarget?.maintenance ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             <i
-              className={nodeContextMenu?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'}
-              style={{ fontSize: 22, color: nodeContextMenu?.maintenance ? '#4caf50' : '#ff9800' }}
+              className={maintenanceTarget?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'}
+              style={{ fontSize: 22, color: maintenanceTarget?.maintenance ? '#4caf50' : '#ff9800' }}
             />
           </Box>
-          {nodeContextMenu?.maintenance ? t('inventory.exitMaintenance') : t('inventory.enterMaintenance')}
+          {maintenanceTarget?.maintenance ? t('inventory.exitMaintenance') : t('inventory.enterMaintenance')}
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {nodeContextMenu?.maintenance
+            {maintenanceTarget?.maintenance
               ? t('inventory.confirmExitMaintenance')
               : t('inventory.confirmEnterMaintenance')}
           </DialogContentText>
           <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
-            {t('inventory.node')}: {nodeContextMenu?.node}
+            {t('inventory.node')}: {maintenanceTarget?.node}
           </Typography>
           <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
             {t('inventory.maintenanceRequiresSsh')}
@@ -2559,7 +2559,7 @@ return (
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button
-            onClick={() => { setMaintenanceConfirmOpen(false); setNodeContextMenu(null) }}
+            onClick={() => setMaintenanceTarget(null)}
             color="inherit"
           >
             {t('common.cancel')}
@@ -2567,7 +2567,7 @@ return (
           <Button
             onClick={handleMaintenanceConfirm}
             variant="contained"
-            color={nodeContextMenu?.maintenance ? 'success' : 'warning'}
+            color={maintenanceTarget?.maintenance ? 'success' : 'warning'}
             disabled={maintenanceBusy}
             startIcon={maintenanceBusy ? <CircularProgress size={16} /> : undefined}
           >

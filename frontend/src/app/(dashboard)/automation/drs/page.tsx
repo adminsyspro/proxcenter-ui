@@ -1327,7 +1327,12 @@ return () => setPageInfo('', '', '')
 
   const { data: affinityRulesRaw, mutate: mutateRules } = useDRSRules(isEnterprise)
 
-  const affinityRules: any[] = ensureArray(affinityRulesRaw as any)
+  const affinityRules: any[] = ensureArray(affinityRulesRaw as any).map((r: any) => ({
+    ...r,
+    connectionId: r.connectionId || r.connection_id,
+    fromTag: r.fromTag || r.from_tag || false,
+    fromPool: r.fromPool || r.from_pool || false,
+  }))
 
   // Récupérer les connexions PVE pour avoir les noms
   const { data: connectionsData } =

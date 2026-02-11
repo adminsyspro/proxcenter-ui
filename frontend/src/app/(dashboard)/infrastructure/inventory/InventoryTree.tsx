@@ -98,16 +98,26 @@ function StatusIcon({ status, type, isMigrating, maintenance }: { status?: strin
     }
     if (status === 'online') {
       return (
-        <PlayArrowIcon
+        <Box
+          component="span"
           sx={{
-            fontSize: 14,
-            color: '#4caf50',
-            filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))'
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 14,
+            height: 14,
           }}
-        />
+        >
+          <PlayArrowIcon
+            sx={{
+              fontSize: 14,
+              color: '#4caf50',
+              filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))'
+            }}
+          />
+        </Box>
       )
     }
-
 
     // Node offline ou erreur
     return (
@@ -132,25 +142,47 @@ function StatusIcon({ status, type, isMigrating, maintenance }: { status?: strin
   // Pour les VMs
   if (status === 'running') {
     return (
-      <PlayArrowIcon 
-        sx={{ 
-          fontSize: 14, 
-          color: '#4caf50',
-          filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))'
-        }} 
-      />
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 14,
+          height: 14,
+        }}
+      >
+        <PlayArrowIcon
+          sx={{
+            fontSize: 14,
+            color: '#4caf50',
+            filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))'
+          }}
+        />
+      </Box>
     )
   }
 
   // VM stopped ou autre état
   return (
-    <StopIcon 
-      sx={{ 
-        fontSize: 14, 
-        color: 'text.disabled',
-        opacity: 0.5
-      }} 
-    />
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 14,
+        height: 14,
+      }}
+    >
+      <StopIcon
+        sx={{
+          fontSize: 14,
+          color: 'text.disabled',
+          opacity: 0.5
+        }}
+      />
+    </Box>
   )
 }
 

@@ -6,6 +6,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS } from "@/lib/rbac"
 import { formatBytes } from "@/utils/format"
+import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 
 export const runtime = "nodejs"
 
@@ -215,29 +216,7 @@ export async function GET() {
               `/nodes/${encodeURIComponent(node.node)}/network`
             ).catch(() => null)
 
-            let ip: string | undefined
-
-            if (Array.isArray(networks)) {
-              const active = networks.filter(
-                (iface: any) => iface.address && iface.active && !iface.address.startsWith('127.')
-              )
-              // Prefer vmbr0 (standard Proxmox management bridge)
-              const vmbr0 = active.find((i: any) => i.iface === 'vmbr0')
-              if (vmbr0) {
-                ip = vmbr0.address
-              } else {
-                // Fallback to any bridge interface
-                const bridge = active.find((i: any) => i.iface?.startsWith('vmbr'))
-                if (bridge) {
-                  ip = bridge.address
-                } else {
-                  // Fallback to first active interface
-                  if (active.length > 0) ip = active[0].address
-                }
-              }
-            }
-
-            return { node: node.node, ip }
+            return { node: node.node, ip: resolveManagementIp(networks) }
           } catch {
             return { node: node.node, ip: undefined }
           }

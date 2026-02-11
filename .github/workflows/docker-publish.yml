@@ -70,6 +70,15 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
+      - name: Make Frontend package public
+        if: github.event_name != 'pull_request'
+        run: |
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/user/packages/container/proxcenter-frontend \
+            -d '{"visibility":"public"}'
+
   # ========================================
   # Build Orchestrator Image
   # ========================================

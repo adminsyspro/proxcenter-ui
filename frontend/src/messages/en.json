@@ -365,20 +365,10 @@
     "health": {
       "resourceUsage": "Resource Usage",
       "vmDistribution": "VM Distribution",
-      "topLoaded": "Top Loaded Hosts",
-      "warnings": "Warnings",
-      "noWarnings": "All clear — no warnings",
-      "highCpu": "Hosts with high CPU (>80%)",
-      "highRam": "Hosts with high RAM (>80%)",
-      "noSnapshots": "Running VMs without snapshots",
       "running": "Running",
       "stopped": "Stopped",
       "other": "Other",
-      "osDistribution": "OS Distribution",
-      "haCoverage": "HA Coverage",
       "vmTypeSplit": "VM Types",
-      "staleVms": "Stopped VMs",
-      "noStaleVms": "All VMs are running",
       "topConsumers": "Top Consumers"
     },
     "tabs": {

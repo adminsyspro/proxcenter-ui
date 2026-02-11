@@ -13,6 +13,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Divider,
   FormControl,
@@ -528,6 +529,7 @@ return next
   // Menu contextuel Node (maintenance)
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu>(null)
   const [maintenanceBusy, setMaintenanceBusy] = useState(false)
+  const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false)
 
   const [unlocking, setUnlocking] = useState(false)
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
@@ -647,16 +649,18 @@ return next
     setNodeContextMenu(null)
   }
 
-  const handleToggleMaintenance = async () => {
+  const handleMaintenanceClick = () => {
+    if (!nodeContextMenu) return
+    handleCloseNodeContextMenu()
+    setMaintenanceConfirmOpen(true)
+  }
+
+  const handleMaintenanceConfirm = async () => {
     if (!nodeContextMenu) return
     const { connId, node, maintenance } = nodeContextMenu
     const entering = !maintenance
 
-    if (!confirm(entering ? t('inventory.confirmEnterMaintenance') : t('inventory.confirmExitMaintenance'))) {
-      handleCloseNodeContextMenu()
-      return
-    }
-
+    setMaintenanceConfirmOpen(false)
     setMaintenanceBusy(true)
     try {
       const res = await fetch(
@@ -672,7 +676,7 @@ return next
       console.error('[maintenance] Error:', e?.message)
     } finally {
       setMaintenanceBusy(false)
-      handleCloseNodeContextMenu()
+      setNodeContextMenu(null)
     }
   }
 
@@ -2499,7 +2503,7 @@ return (
           </Typography>
         </Box>
         <MenuItem
-          onClick={handleToggleMaintenance}
+          onClick={handleMaintenanceClick}
           disabled={maintenanceBusy}
         >
           <ListItemIcon>
@@ -2510,6 +2514,55 @@ return (
           </ListItemText>
         </MenuItem>
       </Menu>
+
+      {/* Dialog confirmation maintenance */}
+      <Dialog
+        open={maintenanceConfirmOpen}
+        onClose={() => { setMaintenanceConfirmOpen(false); setNodeContextMenu(null) }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{
+            width: 40, height: 40, borderRadius: 2,
+            bgcolor: nodeContextMenu?.maintenance ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <i
+              className={nodeContextMenu?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'}
+              style={{ fontSize: 22, color: nodeContextMenu?.maintenance ? '#4caf50' : '#ff9800' }}
+            />
+          </Box>
+          {nodeContextMenu?.maintenance ? t('inventory.exitMaintenance') : t('inventory.enterMaintenance')}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {nodeContextMenu?.maintenance
+              ? t('inventory.confirmExitMaintenance')
+              : t('inventory.confirmEnterMaintenance')}
+          </DialogContentText>
+          <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
+            {t('inventory.node')}: {nodeContextMenu?.node}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => { setMaintenanceConfirmOpen(false); setNodeContextMenu(null) }}
+            color="inherit"
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            onClick={handleMaintenanceConfirm}
+            variant="contained"
+            color={nodeContextMenu?.maintenance ? 'success' : 'warning'}
+            disabled={maintenanceBusy}
+            startIcon={maintenanceBusy ? <CircularProgress size={16} /> : undefined}
+          >
+            {t('common.confirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de clonage */}
       <CloneVmDialog

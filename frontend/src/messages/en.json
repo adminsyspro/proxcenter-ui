@@ -373,7 +373,13 @@
       "noSnapshots": "Running VMs without snapshots",
       "running": "Running",
       "stopped": "Stopped",
-      "other": "Other"
+      "other": "Other",
+      "osDistribution": "OS Distribution",
+      "haCoverage": "HA Coverage",
+      "vmTypeSplit": "VM Types",
+      "staleVms": "Stopped VMs",
+      "noStaleVms": "All VMs are running",
+      "topConsumers": "Top Consumers"
     },
     "tabs": {
       "summary": "Summary",

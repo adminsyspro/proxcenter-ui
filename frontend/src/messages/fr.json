@@ -373,7 +373,13 @@
       "noSnapshots": "VMs actives sans snapshot",
       "running": "En cours",
       "stopped": "Arrêtées",
-      "other": "Autres"
+      "other": "Autres",
+      "osDistribution": "Distribution OS",
+      "haCoverage": "Couverture HA",
+      "vmTypeSplit": "Types de VMs",
+      "staleVms": "VMs arrêtées",
+      "noStaleVms": "Toutes les VMs sont actives",
+      "topConsumers": "Plus gros consommateurs"
     },
     "tabs": {
       "summary": "Résumé",

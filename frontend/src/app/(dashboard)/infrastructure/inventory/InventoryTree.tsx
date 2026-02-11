@@ -530,6 +530,7 @@ return next
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu>(null)
   const [maintenanceBusy, setMaintenanceBusy] = useState(false)
   const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false)
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
 
   const [unlocking, setUnlocking] = useState(false)
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
@@ -652,6 +653,7 @@ return next
   const handleMaintenanceClick = () => {
     if (!nodeContextMenu) return
     handleCloseNodeContextMenu()
+    setMaintenanceError(null)
     setMaintenanceConfirmOpen(true)
   }
 
@@ -660,23 +662,25 @@ return next
     const { connId, node, maintenance } = nodeContextMenu
     const entering = !maintenance
 
-    setMaintenanceConfirmOpen(false)
     setMaintenanceBusy(true)
+    setMaintenanceError(null)
     try {
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
         { method: entering ? 'POST' : 'DELETE' }
       )
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        console.error('[maintenance] Error:', err?.error || res.statusText)
+        setMaintenanceError(data?.error || res.statusText)
+        return
       }
+      setMaintenanceConfirmOpen(false)
+      setNodeContextMenu(null)
       setReloadTick(x => x + 1)
     } catch (e: any) {
-      console.error('[maintenance] Error:', e?.message)
+      setMaintenanceError(e?.message || 'Unknown error')
     } finally {
       setMaintenanceBusy(false)
-      setNodeContextMenu(null)
     }
   }
 
@@ -2544,6 +2548,14 @@ return (
           <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
             {t('inventory.node')}: {nodeContextMenu?.node}
           </Typography>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
+            {t('inventory.maintenanceRequiresSsh')}
+          </Typography>
+          {maintenanceError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {maintenanceError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button

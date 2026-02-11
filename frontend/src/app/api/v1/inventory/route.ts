@@ -205,21 +205,15 @@ export async function GET() {
           }
         }
 
-        // Récupérer les IPs et config (maintenance) des nodes en parallèle
+        // Récupérer les IPs des nodes en parallèle
         const nodeIpPromises = nodes.map(async (node) => {
-          if (!node?.node) return { node: node.node, ip: undefined, maintenance: undefined }
+          if (!node?.node) return { node: node.node, ip: undefined }
 
           try {
-            const [networks, config] = await Promise.all([
-              pveFetch<any[]>(
-                connConfig,
-                `/nodes/${encodeURIComponent(node.node)}/network`
-              ).catch(() => null),
-              pveFetch<any>(
-                connConfig,
-                `/nodes/${encodeURIComponent(node.node)}/config`
-              ).catch(() => null),
-            ])
+            const networks = await pveFetch<any[]>(
+              connConfig,
+              `/nodes/${encodeURIComponent(node.node)}/network`
+            ).catch(() => null)
 
             let ip: string | undefined
 
@@ -247,19 +241,17 @@ export async function GET() {
               }
             }
 
-            const maintenance = config?.maintenance as string | undefined
-
-            return { node: node.node, ip, maintenance }
+            return { node: node.node, ip }
           } catch {
-            return { node: node.node, ip: undefined, maintenance: undefined }
+            return { node: node.node, ip: undefined }
           }
         })
-        
-        const nodeIps = await Promise.all(nodeIpPromises)
-        const nodeIpMap = new Map<string, { ip?: string; maintenance?: string }>()
 
-        for (const { node, ip, maintenance } of nodeIps) {
-          if (node) nodeIpMap.set(node, { ip, maintenance })
+        const nodeIps = await Promise.all(nodeIpPromises)
+        const nodeIpMap = new Map<string, { ip?: string }>()
+
+        for (const { node, ip } of nodeIps) {
+          if (node) nodeIpMap.set(node, { ip })
         }
 
         // Créer une map des ressources HA pour lookup rapide
@@ -278,9 +270,9 @@ export async function GET() {
           if (!n?.node) continue
           const extra = nodeIpMap.get(n.node)
           const hastate = nodeHastateMap.get(n.node)
-          // Config is authoritative; hastate is a fallback when per-node config fetch fails.
-          // After exiting maintenance, config clears immediately; hastate may lag ~120s.
-          const maintenance = extra?.maintenance || (hastate === 'maintenance' ? 'maintenance' : undefined)
+          // Maintenance is only detectable via hastate from /cluster/resources.
+          // PVE does not expose maintenance toggle via REST API (CLI only: ha-manager crm-command).
+          const maintenance = hastate === 'maintenance' ? 'maintenance' : undefined
           nodeMap.set(n.node, {
             ...n,
             ip: extra?.ip,

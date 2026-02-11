@@ -1533,7 +1533,9 @@
       "failbackTitle": "Execute Failback",
       "failbackDescription": "WARNING: This will failback all VMs to the primary site. DR site VMs will be stopped and data will be synchronized.",
       "typeToConfirm": "Type \"{name}\" to confirm this operation:",
-      "inProgress": "Operation in progress..."
+      "inProgress": "Operation in progress...",
+      "networkIsolated": "Network Isolated",
+      "openConsole": "Open Console"
     }
   },
   "templates": {

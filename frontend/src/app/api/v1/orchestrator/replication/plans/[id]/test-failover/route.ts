@@ -5,15 +5,17 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
     if (denied) return denied
 
     const { id } = await params
+    let body: { network_isolated?: boolean } | undefined
+    try { body = await request.json() } catch { /* empty body is fine */ }
     const client = getOrchestratorClient()
-    const response = await client.testFailover(id)
+    const response = await client.testFailover(id, body)
 
     return NextResponse.json(response.data)
   } catch (e: any) {

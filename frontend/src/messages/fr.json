@@ -1534,7 +1534,9 @@
       "failbackTitle": "Exécuter le failback",
       "failbackDescription": "ATTENTION : Cela ramènera toutes les VMs vers le site primaire. Les VMs du site DR seront arrêtées et les données seront synchronisées.",
       "typeToConfirm": "Tapez \"{name}\" pour confirmer cette opération :",
-      "inProgress": "Opération en cours..."
+      "inProgress": "Opération en cours...",
+      "networkIsolated": "Réseau isolé",
+      "openConsole": "Ouvrir la console"
     }
   },
   "templates": {

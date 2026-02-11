@@ -194,6 +194,52 @@ function RootInventoryView({
     return { highCpuHosts, highRamHosts, noSnapshotVms, total: highCpuHosts + highRamHosts + noSnapshotVms }
   }, [hostStats, allVms])
 
+  // OS distribution (Linux / Windows / Other)
+  const osDistribution = useMemo(() => {
+    let linux = 0, windows = 0, other = 0
+    allVms.forEach(vm => {
+      const osType = vm.osInfo?.type
+      if (osType === 'linux') linux++
+      else if (osType === 'windows') windows++
+      else other++
+    })
+    return { linux, windows, other, total: allVms.length }
+  }, [allVms])
+
+  // HA coverage
+  const haCoverage = useMemo(() => {
+    const runningVms = allVms.filter(vm => vm.status === 'running')
+    const haProtected = runningVms.filter(vm => vm.hastate && vm.hastate !== 'unmanaged').length
+    return { protected: haProtected, total: runningVms.length }
+  }, [allVms])
+
+  // VM type split (QEMU vs LXC)
+  const vmTypeSplit = useMemo(() => {
+    const qemu = allVms.filter(vm => vm.type === 'qemu').length
+    const lxc = allVms.filter(vm => vm.type === 'lxc').length
+    return { qemu, lxc, total: allVms.length }
+  }, [allVms])
+
+  // Stale VMs (stopped)
+  const staleVms = useMemo(() => {
+    return allVms.filter(vm => vm.status === 'stopped')
+  }, [allVms])
+
+  // Top 3 consumers (running VMs by CPU or RAM)
+  const topConsumers = useMemo(() => {
+    return allVms
+      .filter(vm => vm.status === 'running' && vm.cpu !== undefined)
+      .map(vm => ({
+        name: vm.name,
+        vmid: vm.vmid,
+        node: vm.node,
+        cpu: (vm.cpu ?? 0) * 100,
+        ram: vm.mem !== undefined && vm.maxmem ? (vm.mem / vm.maxmem) * 100 : 0,
+      }))
+      .sort((a, b) => Math.max(b.cpu, b.ram) - Math.max(a.cpu, a.ram))
+      .slice(0, 3)
+  }, [allVms])
+
   const toggleCluster = (connId: string) => {
     setExpandedClusters(prev => {
       const next = new Set(prev)
@@ -558,6 +604,232 @@ function RootInventoryView({
                 )}
               </Stack>
             )}
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* Infrastructure Insights Cards */}
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', xl: 'repeat(5, 1fr)' },
+        gap: 2,
+        mb: 2
+      }}>
+        {/* Card 5: OS Distribution */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-pie-chart-2-line" style={{ fontSize: 18, color: theme.palette.primary.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.osDistribution')}</Typography>
+            </Stack>
+            {/* Stacked bar */}
+            <Box sx={{ width: '100%', height: 12, borderRadius: 1.5, overflow: 'hidden', display: 'flex', mb: 1.5 }}>
+              {osDistribution.total > 0 && (
+                <>
+                  {osDistribution.linux > 0 && (
+                    <MuiTooltip title={`Linux: ${osDistribution.linux}`}>
+                      <Box sx={{ width: `${(osDistribution.linux / osDistribution.total) * 100}%`, height: '100%', bgcolor: '#f97316', transition: 'width 0.3s ease' }} />
+                    </MuiTooltip>
+                  )}
+                  {osDistribution.windows > 0 && (
+                    <MuiTooltip title={`Windows: ${osDistribution.windows}`}>
+                      <Box sx={{ width: `${(osDistribution.windows / osDistribution.total) * 100}%`, height: '100%', bgcolor: '#0ea5e9', transition: 'width 0.3s ease' }} />
+                    </MuiTooltip>
+                  )}
+                  {osDistribution.other > 0 && (
+                    <MuiTooltip title={`${t('inventory.health.other')}: ${osDistribution.other}`}>
+                      <Box sx={{ width: `${(osDistribution.other / osDistribution.total) * 100}%`, height: '100%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', transition: 'width 0.3s ease' }} />
+                    </MuiTooltip>
+                  )}
+                </>
+              )}
+            </Box>
+            <Stack direction="row" spacing={1.5} flexWrap="wrap">
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f97316' }} />
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>Linux</Typography>
+                <Typography variant="caption" fontWeight={700}>{osDistribution.linux}</Typography>
+              </Stack>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#0ea5e9' }} />
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>Windows</Typography>
+                <Typography variant="caption" fontWeight={700}>{osDistribution.windows}</Typography>
+              </Stack>
+              {osDistribution.other > 0 && (
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' }} />
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.other')}</Typography>
+                  <Typography variant="caption" fontWeight={700}>{osDistribution.other}</Typography>
+                </Stack>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {/* Card 6: HA Coverage */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.success.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-shield-star-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.haCoverage')}</Typography>
+            </Stack>
+            <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 1 }}>
+              <Typography variant="h4" fontWeight={900} color={haCoverage.total > 0 && haCoverage.protected === 0 ? 'warning.main' : 'success.main'}>
+                {haCoverage.total > 0 ? Math.round((haCoverage.protected / haCoverage.total) * 100) : 0}%
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                ({haCoverage.protected}/{haCoverage.total} VMs)
+              </Typography>
+            </Stack>
+            <Box sx={{ width: '100%', height: 8, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 1, overflow: 'hidden' }}>
+              <Box sx={{
+                width: `${haCoverage.total > 0 ? (haCoverage.protected / haCoverage.total) * 100 : 0}%`,
+                height: '100%', borderRadius: 1,
+                bgcolor: haCoverage.total > 0 && haCoverage.protected === 0 ? 'warning.main' : 'success.main',
+                transition: 'width 0.3s ease'
+              }} />
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Card 7: VM Type Split */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.info.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-instance-line" style={{ fontSize: 18, color: theme.palette.info.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmTypeSplit')}</Typography>
+            </Stack>
+            {/* Stacked bar */}
+            <Box sx={{ width: '100%', height: 12, borderRadius: 1.5, overflow: 'hidden', display: 'flex', mb: 1.5 }}>
+              {vmTypeSplit.total > 0 && (
+                <>
+                  <MuiTooltip title={`QEMU: ${vmTypeSplit.qemu}`}>
+                    <Box sx={{ width: `${(vmTypeSplit.qemu / vmTypeSplit.total) * 100}%`, height: '100%', bgcolor: 'info.main', transition: 'width 0.3s ease' }} />
+                  </MuiTooltip>
+                  <MuiTooltip title={`LXC: ${vmTypeSplit.lxc}`}>
+                    <Box sx={{ width: `${(vmTypeSplit.lxc / vmTypeSplit.total) * 100}%`, height: '100%', bgcolor: '#a855f7', transition: 'width 0.3s ease' }} />
+                  </MuiTooltip>
+                </>
+              )}
+            </Box>
+            <Stack direction="row" spacing={2}>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>QEMU</Typography>
+                <Typography variant="caption" fontWeight={700}>{vmTypeSplit.qemu}</Typography>
+              </Stack>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#a855f7' }} />
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>LXC</Typography>
+                <Typography variant="caption" fontWeight={700}>{vmTypeSplit.lxc}</Typography>
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {/* Card 8: Stale VMs */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: staleVms.length > 0 ? alpha(theme.palette.warning.main, 0.12) : alpha(theme.palette.success.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-zzz-line" style={{ fontSize: 18, color: staleVms.length > 0 ? theme.palette.warning.main : theme.palette.success.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.staleVms')}</Typography>
+            </Stack>
+            <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mb: 1 }}>
+              <Typography variant="h4" fontWeight={900} color={staleVms.length > 0 ? 'warning.main' : 'success.main'}>
+                {staleVms.length}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                / {vmStats.total} VMs
+              </Typography>
+            </Stack>
+            {staleVms.length > 0 ? (
+              <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                {staleVms.slice(0, 3).map(vm => vm.name).join(', ')}
+                {staleVms.length > 3 ? ` +${staleVms.length - 3}` : ''}
+              </Typography>
+            ) : (
+              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 500 }}>
+                <i className="ri-check-line" style={{ fontSize: 14, verticalAlign: 'middle', marginRight: 4 }} />
+                {t('inventory.health.noStaleVms')}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Card 9: Top Consumers */}
+        <Card variant="outlined" sx={{ p: 0 }}>
+          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+              <Box sx={{
+                width: 32, height: 32, borderRadius: 1.5,
+                bgcolor: alpha(theme.palette.error.main, 0.12),
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <i className="ri-fire-line" style={{ fontSize: 18, color: theme.palette.error.main }} />
+              </Box>
+              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.topConsumers')}</Typography>
+            </Stack>
+            <Stack spacing={1}>
+              {topConsumers.map((vm, i) => (
+                <Box key={`${vm.node}-${vm.vmid}`}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.25 }}>
+                    <Typography variant="caption" fontWeight={600} sx={{ maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {vm.name}
+                    </Typography>
+                    <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.5 }}>{vm.vmid}</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 22 }}>CPU</Typography>
+                      <Box sx={{ flex: 1, height: 5, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 0.75, overflow: 'hidden' }}>
+                        <Box sx={{
+                          width: `${Math.min(100, vm.cpu)}%`, height: '100%', borderRadius: 0.75,
+                          bgcolor: vm.cpu > 90 ? 'error.main' : vm.cpu > 70 ? 'warning.main' : 'info.main'
+                        }} />
+                      </Box>
+                      <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{vm.cpu.toFixed(0)}%</Typography>
+                    </Box>
+                    <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 24 }}>RAM</Typography>
+                      <Box sx={{ flex: 1, height: 5, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 0.75, overflow: 'hidden' }}>
+                        <Box sx={{
+                          width: `${Math.min(100, vm.ram)}%`, height: '100%', borderRadius: 0.75,
+                          bgcolor: vm.ram > 90 ? 'error.main' : vm.ram > 70 ? 'warning.main' : 'secondary.main'
+                        }} />
+                      </Box>
+                      <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{vm.ram.toFixed(0)}%</Typography>
+                    </Box>
+                  </Stack>
+                </Box>
+              ))}
+              {topConsumers.length === 0 && (
+                <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
+              )}
+            </Stack>
           </CardContent>
         </Card>
       </Box>

@@ -2112,6 +2112,8 @@
     "migrationsLabel": "Migrations",
     "inProgress": "in progress",
     "nodesLabel": "nodes",
+    "healthScore": "Health Score",
+    "resourceDistribution": "Resource Distribution",
     "rec": "rec.",
     "noNodeInMaintenance": "No node in maintenance. All nodes are operational.",
     "noAffinityRules": "No affinity rules configured",

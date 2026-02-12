@@ -1404,7 +1404,8 @@
       "dashboard": "Tableau de bord",
       "replication": "Réplication",
       "protection": "Protection",
-      "recoveryPlans": "Plans de reprise"
+      "recoveryPlans": "Plans de reprise",
+      "emergencyDR": "DR d'urgence"
     },
     "status": {
       "all": "Tous les statuts",
@@ -1419,7 +1420,8 @@
       "degraded": "Dégradé",
       "executing": "En cours",
       "failed": "Échoué",
-      "not_ready": "Non prêt"
+      "not_ready": "Non prêt",
+      "failed_over": "Basculé"
     },
     "dashboard": {
       "primary": "Primaire",
@@ -1545,6 +1547,29 @@
       "stopped": "arrêtée(s)",
       "disksRolledBack": "disque(s) RBD restauré(s)",
       "jobsResumed": "job(s) de réplication repris"
+    },
+    "emergencyDR": {
+      "title": "DR d'urgence",
+      "noVMs": "Aucune VM prête pour le DR",
+      "noVMsDesc": "Configurez des jobs de réplication pour activer la reprise d'activité d'urgence.",
+      "drReadyVMs": "VMs prêtes DR",
+      "inPlans": "dans des plans",
+      "standalone": "autonomes",
+      "replicationHealth": "Santé réplication",
+      "vmName": "Nom VM",
+      "sourceVMID": "VMID source",
+      "drVMID": "VMID DR",
+      "replStatus": "Statut répl.",
+      "lastSync": "Dernière sync",
+      "rpo": "RPO",
+      "tier": "Priorité",
+      "actions": "Actions",
+      "startVM": "Démarrer la VM sur le site DR",
+      "stopVM": "Arrêter la VM sur le site DR",
+      "emergencyFailover": "Failover d'urgence",
+      "standaloneTitle": "VMs autonomes",
+      "vmStarted": "{name} (VMID {vmid}) démarrée sur le site DR",
+      "vmStopped": "{name} (VMID {vmid}) arrêtée sur le site DR"
     }
   },
   "templates": {

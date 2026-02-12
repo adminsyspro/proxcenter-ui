@@ -61,7 +61,7 @@ export interface ReplicationJobLog {
 // Recovery Plans
 // ============================================
 
-export type RecoveryPlanStatus = 'ready' | 'degraded' | 'executing' | 'failed' | 'not_ready'
+export type RecoveryPlanStatus = 'ready' | 'degraded' | 'executing' | 'failed' | 'not_ready' | 'failed_over'
 
 export interface RecoveryPlanVM {
   vm_id: number

@@ -26,7 +26,8 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
     degraded: { color: 'warning' },
     executing: { color: 'info' },
     failed: { color: 'error' },
-    not_ready: { color: 'default' }
+    not_ready: { color: 'default' },
+    failed_over: { color: 'error' }
   }
 
   const c = config[status] || config.not_ready

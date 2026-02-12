@@ -776,9 +776,10 @@ export async function GET(request: Request) {
     // F5: Storage pool tracking
     const storagePoolMap = new Map<string, { name: string; type: string; used: number; total: number; nodes: Set<string> }>()
 
-    // F6: Network metrics tracking
+    // F6: Network metrics tracking (keyed by connId:nodeName to avoid collisions)
     const networkPerNode = new Map<string, { name: string; netin: number; netout: number }>()
-    const networkTrendsByDay = new Map<string, { netin: number[]; netout: number[] }>()
+    // Track per-node-per-day for proper aggregation: day -> nodeKey -> data points
+    const networkTrendsByDay = new Map<string, Map<string, { netin: number[]; netout: number[] }>>()
 
     const allVms: Array<{
       id: string
@@ -863,6 +864,7 @@ export async function GET(request: Request) {
               }
 
               // F6: Extract network metrics from node RRD
+              const netNodeKey = `${conn.id}:${node.node}`
               let nodeNetIn = 0, nodeNetOut = 0, netPoints = 0
               for (const point of result.value) {
                 if (!point.time) continue
@@ -874,14 +876,16 @@ export async function GET(request: Request) {
                   netPoints++
 
                   const dayKey = new Date(point.time * 1000).toISOString().split('T')[0]
-                  if (!networkTrendsByDay.has(dayKey)) networkTrendsByDay.set(dayKey, { netin: [], netout: [] })
-                  const dayNet = networkTrendsByDay.get(dayKey)!
-                  dayNet.netin.push(netin)
-                  dayNet.netout.push(netout)
+                  if (!networkTrendsByDay.has(dayKey)) networkTrendsByDay.set(dayKey, new Map())
+                  const dayNodes = networkTrendsByDay.get(dayKey)!
+                  if (!dayNodes.has(netNodeKey)) dayNodes.set(netNodeKey, { netin: [], netout: [] })
+                  const nodeDay = dayNodes.get(netNodeKey)!
+                  nodeDay.netin.push(netin)
+                  nodeDay.netout.push(netout)
                 }
               }
               if (netPoints > 0) {
-                networkPerNode.set(node.node, {
+                networkPerNode.set(netNodeKey, {
                   name: node.node,
                   netin: nodeNetIn / netPoints,
                   netout: nodeNetOut / netPoints,
@@ -1200,14 +1204,20 @@ export async function GET(request: Request) {
     const totalNetIn = Array.from(networkPerNode.values()).reduce((s, n) => s + n.netin, 0)
     const totalNetOut = Array.from(networkPerNode.values()).reduce((s, n) => s + n.netout, 0)
 
-    // F6: Network trends (last 30 days)
+    // F6: Network trends (last 30 days) — sum per-node averages for proper aggregation
     const sortedNetDays = Array.from(networkTrendsByDay.keys()).sort().slice(-30)
     const networkTrends = sortedNetDays.map(day => {
-      const d = networkTrendsByDay.get(day)!
+      const dayNodes = networkTrendsByDay.get(day)!
+      let dayNetin = 0, dayNetout = 0
+      // For each node on this day, compute the node's average, then sum across nodes
+      for (const nodeData of dayNodes.values()) {
+        dayNetin += nodeData.netin.reduce((a, b) => a + b, 0) / nodeData.netin.length
+        dayNetout += nodeData.netout.reduce((a, b) => a + b, 0) / nodeData.netout.length
+      }
       return {
         t: new Date(day).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-        netin: d.netin.reduce((a, b) => a + b, 0) / d.netin.length,
-        netout: d.netout.reduce((a, b) => a + b, 0) / d.netout.length,
+        netin: dayNetin,
+        netout: dayNetout,
       }
     })
 

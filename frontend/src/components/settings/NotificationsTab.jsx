@@ -525,6 +525,20 @@ return
                 </Box>
               }
             />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={settings.enable_replication ?? true}
+                  onChange={e => setSettings(s => ({ ...s, enable_replication: e.target.checked }))}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className='ri-refresh-line' style={{ color: '#F29221' }} />
+                  {t('notifications.replication')}
+                </Box>
+              }
+            />
           </Box>
         </CardContent>
       </Card>

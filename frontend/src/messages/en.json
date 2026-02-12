@@ -974,6 +974,7 @@
     "backups": "Backups",
     "maintenance": "Maintenance",
     "reports": "Reports",
+    "replication": "Replication",
     "filtersAndLimits": "Filters and limits",
     "minSeverity": "Minimum severity",
     "allNotifications": "All notifications",

@@ -834,17 +834,29 @@ export async function GET(request: Request) {
           // Récupérer les données RRD de tous les nodes en parallèle
           const rrdTimeout = { signal: AbortSignal.timeout(10000) }
 
-          const nodeRrdResults = await Promise.allSettled(
-            onlineNodes.map(node =>
-              pveFetch<RrdPoint[]>(
-                connData,
-                `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=year&cf=AVERAGE`,
-                rrdTimeout
+          // RRD year (CPU/RAM trends) + RRD month (Network I/O, higher resolution) in parallel
+          const [nodeRrdResults, nodeRrdMonthResults] = await Promise.all([
+            Promise.allSettled(
+              onlineNodes.map(node =>
+                pveFetch<RrdPoint[]>(
+                  connData,
+                  `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=year&cf=AVERAGE`,
+                  rrdTimeout
+                )
               )
-            )
-          )
+            ),
+            Promise.allSettled(
+              onlineNodes.map(node =>
+                pveFetch<RrdPoint[]>(
+                  connData,
+                  `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=month&cf=AVERAGE`,
+                  rrdTimeout
+                )
+              )
+            ),
+          ])
 
-          // Traiter les résultats RRD des nodes
+          // Traiter les résultats RRD des nodes (year — CPU/RAM)
           for (let i = 0; i < onlineNodes.length; i++) {
             const node = onlineNodes[i]
             const nodeKey = `${conn.id}:${node.node}`
@@ -862,9 +874,18 @@ export async function GET(request: Request) {
                 allCpuValues.push(...dayData.cpu)
                 allRamValues.push(...dayData.ram)
               }
+            } else if (result.status === 'rejected') {
+              console.warn(`[resources] RRD year error for node ${node.node}:`, result.reason)
+            }
+          }
 
-              // F6: Extract network metrics from node RRD
-              const netNodeKey = `${conn.id}:${node.node}`
+          // F6: Traiter les résultats RRD des nodes (month — Network I/O, ~12h resolution)
+          for (let i = 0; i < onlineNodes.length; i++) {
+            const node = onlineNodes[i]
+            const netNodeKey = `${conn.id}:${node.node}`
+            const result = nodeRrdMonthResults[i]
+
+            if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
               let nodeNetIn = 0, nodeNetOut = 0, netPoints = 0
               for (const point of result.value) {
                 if (!point.time) continue
@@ -892,7 +913,7 @@ export async function GET(request: Request) {
                 })
               }
             } else if (result.status === 'rejected') {
-              console.warn(`[resources] RRD error for node ${node.node}:`, result.reason)
+              console.warn(`[resources] RRD month error for node ${node.node}:`, result.reason)
             }
           }
           

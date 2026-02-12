@@ -921,7 +921,9 @@ return next
 
       try {
         // Utiliser l'API agrégée pour charger tout l'arbre en une seule requête
-        const res = await fetch('/api/v1/inventory')
+        // reloadTick > 0 = refresh manuel ou post-action → bypass le cache serveur
+        const url = reloadTick > 0 ? '/api/v1/inventory?refresh=true' : '/api/v1/inventory'
+        const res = await fetch(url)
 
         if (!res.ok) throw new Error(`HTTP ${res.status} sur /inventory`)
         const json = await res.json()

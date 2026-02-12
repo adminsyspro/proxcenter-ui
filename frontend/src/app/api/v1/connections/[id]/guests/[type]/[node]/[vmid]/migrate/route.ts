@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
+import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 
 export const runtime = "nodejs"
 
@@ -82,8 +83,10 @@ export async function POST(
       }
     )
     
-    return NextResponse.json({ 
-      success: true, 
+    invalidateInventoryCache()
+
+    return NextResponse.json({
+      success: true,
       data: result,
       message: `Migration de VM ${vmid} vers ${target} lancée`
     })

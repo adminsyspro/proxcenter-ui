@@ -34,7 +34,7 @@ export default function ResourcesPage() {
   const { setPageInfo } = usePageTitle()
 
   // Cluster drill-down (F4)
-  const [selectedConnection, setSelectedConnection] = useState('')
+  const [selectedConnection, setSelectedConnection] = useState('all')
 
   // Data hook
   const {
@@ -42,7 +42,7 @@ export default function ResourcesPage() {
     topCpuVms, topRamVms, green, overprovisioning,
     networkMetrics, connections,
     aiAnalysis, loadData, runAiAnalysis, setAiAnalysis,
-  } = useResourceData(selectedConnection || undefined)
+  } = useResourceData(selectedConnection === 'all' ? undefined : selectedConnection)
 
   useEffect(() => {
     setPageInfo(t('navigation.resources'), t('dashboard.widgets.resources'), 'ri-pie-chart-fill')

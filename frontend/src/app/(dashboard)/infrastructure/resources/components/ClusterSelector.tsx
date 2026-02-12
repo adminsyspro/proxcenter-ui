@@ -28,7 +28,7 @@ export default function ClusterSelector({ connections, value, onChange }: {
         onChange={(e) => onChange(e.target.value)}
         sx={{ borderRadius: 2 }}
       >
-        <MenuItem value="">{t('resources.allClusters')}</MenuItem>
+        <MenuItem value="all">{t('resources.allClusters')}</MenuItem>
         {connections.map(conn => (
           <MenuItem key={conn.id} value={conn.id}>{conn.name}</MenuItem>
         ))}

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 
 export const runtime = "nodejs"
 
@@ -68,6 +69,9 @@ export async function POST(_req: Request, ctx: RouteContext) {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     })
+
+    // Invalider le cache inventaire pour que le prochain appel reflète le changement
+    invalidateInventoryCache()
 
     return NextResponse.json({
       data: result,

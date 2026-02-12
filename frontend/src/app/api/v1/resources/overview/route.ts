@@ -639,19 +639,97 @@ return data.nodeCount >= minNodes
   }
 }
 
-export async function GET() {
+// Load resource thresholds from DB (F9)
+async function loadResourceThresholds() {
+  const DEFAULT_THRESHOLDS = {
+    cpu: { warning: 80, critical: 90 },
+    ram: { warning: 80, critical: 90 },
+    storage: { warning: 80, critical: 90 },
+  }
+
   try {
-    // Charger les paramètres Green IT depuis la DB
-    const greenSettings = await loadGreenSettings()
+    const db = getDb()
+    const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
+    const row = stmt.get('resource_thresholds') as { value: string } | undefined
+    if (row?.value) return { ...DEFAULT_THRESHOLDS, ...JSON.parse(row.value) }
+  } catch (e: any) {
+    if (!e?.message?.includes('no such table')) {
+      console.warn('Failed to load resource thresholds:', e?.message)
+    }
+  }
+
+  return DEFAULT_THRESHOLDS
+}
+
+// Save health score snapshot (F8) - one per day
+function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: number, storagePct: number, connectionId?: string) {
+  try {
+    const db = getDb()
+    const today = new Date().toISOString().split('T')[0]
+    const id = `hs_${today}${connectionId ? `_${connectionId}` : ''}`
+    const dateKey = connectionId ? `${today}_${connectionId}` : today
+
+    const stmt = db.prepare(`
+      INSERT OR IGNORE INTO health_score_history (id, date, score, cpu_pct, ram_pct, storage_pct, connection_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    stmt.run(id, dateKey, Math.round(score), cpuPct, ramPct, storagePct, connectionId || null, new Date().toISOString())
+  } catch (e: any) {
+    if (!e?.message?.includes('no such table')) {
+      console.warn('Failed to save health score:', e?.message)
+    }
+  }
+}
+
+// Load health score history (F8)
+function loadHealthScoreHistory(connectionId?: string): Array<{ date: string; score: number; cpu: number; ram: number; storage: number }> {
+  try {
+    const db = getDb()
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 90)
+    const cutoffStr = cutoff.toISOString().split('T')[0]
+
+    let rows: any[]
+    if (connectionId) {
+      const stmt = db.prepare('SELECT date, score, cpu_pct, ram_pct, storage_pct FROM health_score_history WHERE date >= ? AND connection_id = ? ORDER BY date ASC')
+      rows = stmt.all(`${cutoffStr}_${connectionId}`, connectionId)
+    } else {
+      const stmt = db.prepare('SELECT date, score, cpu_pct, ram_pct, storage_pct FROM health_score_history WHERE date >= ? AND connection_id IS NULL ORDER BY date ASC')
+      rows = stmt.all(cutoffStr)
+    }
+
+    return rows.map((r: any) => ({
+      date: r.date.split('_')[0],
+      score: r.score,
+      cpu: r.cpu_pct || 0,
+      ram: r.ram_pct || 0,
+      storage: r.storage_pct || 0,
+    }))
+  } catch (e: any) {
+    return []
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    // Parse query params (F4: connectionId filter)
+    const { searchParams } = new URL(request.url)
+    const filterConnectionId = searchParams.get('connectionId') || undefined
+
+    // Load settings in parallel
+    const [greenSettings, resourceThresholds] = await Promise.all([
+      loadGreenSettings(),
+      loadResourceThresholds(),
+    ])
     const greenConfig = buildGreenConfig(greenSettings)
-    
+
     // Récupérer toutes les connexions PVE
-    const connections = await prisma.connection.findMany({
+    const allConnections = await prisma.connection.findMany({
       where: { type: 'pve' },
       select: { id: true, name: true },
     })
 
-    if (!connections.length) {
+    if (!allConnections.length) {
       return NextResponse.json({
         data: {
           kpis: {
@@ -663,10 +741,16 @@ export async function GET() {
           },
           trends: [],
           topCpuVms: [],
-          topRamVms: []
+          topRamVms: [],
+          connections: [],
         }
       })
     }
+
+    // F4: filter by connectionId if specified
+    const connections = filterConnectionId
+      ? allConnections.filter(c => c.id === filterConnectionId)
+      : allConnections
 
     // Agrégateurs globaux
     let totalCpuUsed = 0
@@ -688,7 +772,14 @@ export async function GET() {
     const allCpuValues: number[] = []
     const allRamValues: number[] = []
     const allStorageValues: number[] = []
-    
+
+    // F5: Storage pool tracking
+    const storagePoolMap = new Map<string, { name: string; type: string; used: number; total: number; nodes: Set<string> }>()
+
+    // F6: Network metrics tracking
+    const networkPerNode = new Map<string, { name: string; netin: number; netout: number }>()
+    const networkTrendsByDay = new Map<string, { netin: number[]; netout: number[] }>()
+
     const allVms: Array<{
       id: string
       name: string
@@ -699,6 +790,8 @@ export async function GET() {
       cpuAllocated: number
       ramAllocated: number
       status: string
+      netin: number
+      netout: number
     }> = []
 
     // Collecter les données de toutes les connexions
@@ -768,6 +861,32 @@ export async function GET() {
                 allCpuValues.push(...dayData.cpu)
                 allRamValues.push(...dayData.ram)
               }
+
+              // F6: Extract network metrics from node RRD
+              let nodeNetIn = 0, nodeNetOut = 0, netPoints = 0
+              for (const point of result.value) {
+                if (!point.time) continue
+                const netin = Number(point.netin ?? 0)
+                const netout = Number(point.netout ?? 0)
+                if (netin > 0 || netout > 0) {
+                  nodeNetIn += netin
+                  nodeNetOut += netout
+                  netPoints++
+
+                  const dayKey = new Date(point.time * 1000).toISOString().split('T')[0]
+                  if (!networkTrendsByDay.has(dayKey)) networkTrendsByDay.set(dayKey, { netin: [], netout: [] })
+                  const dayNet = networkTrendsByDay.get(dayKey)!
+                  dayNet.netin.push(netin)
+                  dayNet.netout.push(netout)
+                }
+              }
+              if (netPoints > 0) {
+                networkPerNode.set(node.node, {
+                  name: node.node,
+                  netin: nodeNetIn / netPoints,
+                  netout: nodeNetOut / netPoints,
+                })
+              }
             } else if (result.status === 'rejected') {
               console.warn(`[resources] RRD error for node ${node.node}:`, result.reason)
             }
@@ -779,6 +898,24 @@ export async function GET() {
           for (const storage of availableStorages) {
             totalStorageCapacity += storage.maxdisk || 0
             totalStorageUsed += storage.disk || 0
+
+            // F5: Aggregate by pool name
+            if (storage.storage) {
+              const poolKey = storage.storage
+              if (!storagePoolMap.has(poolKey)) {
+                storagePoolMap.set(poolKey, {
+                  name: poolKey,
+                  type: storage.plugintype || storage.type || 'unknown',
+                  used: 0,
+                  total: 0,
+                  nodes: new Set(),
+                })
+              }
+              const pool = storagePoolMap.get(poolKey)!
+              pool.used += storage.disk || 0
+              pool.total += storage.maxdisk || 0
+              if (storage.node) pool.nodes.add(storage.node)
+            }
           }
 
           // Identifier les storages qui ont besoin de requêtes RRD
@@ -875,7 +1012,9 @@ export async function GET() {
               ram: ramPct,
               cpuAllocated: vm.maxcpu || 0,
               ramAllocated: vm.maxmem || 0,
-              status: vm.status
+              status: vm.status,
+              netin: (vm as any).netin || 0,
+              netout: (vm as any).netout || 0,
             })
           }
         } catch (e) {
@@ -1044,23 +1183,85 @@ export async function GET() {
       }
     }
 
+    // F5: Build storage pools array
+    const storagePools = Array.from(storagePoolMap.values()).map(pool => ({
+      name: pool.name,
+      type: pool.type,
+      used: pool.used,
+      total: pool.total,
+      pct: pool.total > 0 ? Math.round((pool.used / pool.total) * 1000) / 10 : 0,
+      nodes: Array.from(pool.nodes),
+    })).sort((a, b) => b.pct - a.pct)
+
+    // F6: Build network metrics
+    const totalNetIn = Array.from(networkPerNode.values()).reduce((s, n) => s + n.netin, 0)
+    const totalNetOut = Array.from(networkPerNode.values()).reduce((s, n) => s + n.netout, 0)
+
+    // F6: Network trends (last 30 days)
+    const sortedNetDays = Array.from(networkTrendsByDay.keys()).sort().slice(-30)
+    const networkTrends = sortedNetDays.map(day => {
+      const d = networkTrendsByDay.get(day)!
+      return {
+        t: new Date(day).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+        netin: d.netin.reduce((a, b) => a + b, 0) / d.netin.length,
+        netout: d.netout.reduce((a, b) => a + b, 0) / d.netout.length,
+      }
+    })
+
+    // F6: Top VMs by network traffic
+    const topNetworkVms = [...allVms]
+      .filter(vm => vm.status === 'running' && (vm.netin > 0 || vm.netout > 0))
+      .sort((a, b) => (b.netin + b.netout) - (a.netin + a.netout))
+      .slice(0, 5)
+      .map(vm => ({ id: vm.id, name: vm.name, node: vm.node, netin: vm.netin, netout: vm.netout }))
+
+    const networkMetrics = (totalNetIn > 0 || totalNetOut > 0 || networkTrends.length > 0) ? {
+      totalIn: totalNetIn,
+      totalOut: totalNetOut,
+      perNode: Array.from(networkPerNode.values()),
+      trends: networkTrends,
+      topVms: topNetworkVms,
+    } : null
+
+    // F8: Save health score snapshot (simple estimate for storage)
+    const healthCpuPct = Math.round(cpuUsedPct * 10) / 10
+    const healthRamPct = Math.round(ramUsedPct * 10) / 10
+    const healthStoragePct = Math.round(storageUsedPct * 10) / 10
+
+    // Simple health score estimate for snapshot (matches frontend algorithm roughly)
+    let snapshotScore = 100
+    if (healthCpuPct > 90) snapshotScore -= 30
+    else if (healthCpuPct > 80) snapshotScore -= 15
+    else if (healthCpuPct > 70) snapshotScore -= 5
+    if (healthRamPct > 90) snapshotScore -= 30
+    else if (healthRamPct > 80) snapshotScore -= 15
+    else if (healthRamPct > 70) snapshotScore -= 5
+    if (healthStoragePct > 90) snapshotScore -= 20
+    else if (healthStoragePct > 80) snapshotScore -= 10
+    snapshotScore = Math.max(0, Math.min(100, snapshotScore))
+
+    saveHealthScoreSnapshot(snapshotScore, healthCpuPct, healthRamPct, healthStoragePct, filterConnectionId)
+
+    // F8: Load history
+    const healthScoreHistory = loadHealthScoreHistory(filterConnectionId)
+
     return NextResponse.json({
       data: {
         kpis: {
-          cpu: { 
-            used: Math.round(cpuUsedPct * 10) / 10, 
-            allocated: totalCpuAllocated, 
+          cpu: {
+            used: healthCpuPct,
+            allocated: totalCpuAllocated,
             total: totalCpuCapacity,
             trend: cpuTrend
           },
-          ram: { 
-            used: Math.round(ramUsedPct * 10) / 10, 
-            allocated: totalRamAllocated, 
+          ram: {
+            used: healthRamPct,
+            allocated: totalRamAllocated,
             total: totalRamCapacity,
             trend: ramTrend
           },
-          storage: { 
-            used: totalStorageUsed, 
+          storage: {
+            used: totalStorageUsed,
             total: totalStorageCapacity,
             trend: storageTrend
           },
@@ -1090,6 +1291,21 @@ export async function GET() {
           efficiency
         }, greenConfig),
 
+        // F5: Storage per pool
+        storagePools,
+
+        // F6: Network I/O
+        networkMetrics,
+
+        // F8: Health score history
+        healthScoreHistory,
+
+        // F9: Resource thresholds
+        thresholds: resourceThresholds,
+
+        // F4: Connections list for drill-down
+        connections: allConnections.map(c => ({ id: c.id, name: c.name })),
+
         // Métadonnées pour debug
         _meta: {
           connectionsCount: connections.length,
@@ -1103,11 +1319,7 @@ export async function GET() {
           rrdDaysAvailable: globalAverages.size,
           trendsCount: trends.length,
           dataSource: globalAverages.size > 0 ? 'rrd_weighted' : 'fallback',
-
-          // Échantillons de données pour debug
-          sampleFirst: trends.length > 0 ? trends[0] : null,
-          sampleMiddle: trends.length > 10 ? trends[Math.floor(trends.length / 2)] : null,
-          sampleLast: trends.length > 0 ? trends[trends.length - 1] : null,
+          filteredByConnection: filterConnectionId || null,
 
           // Plage de données
           dateRange: trends.length > 0 ? {

@@ -174,6 +174,26 @@ export function getDb() {
     // Migration error is non-critical, table may already exist
   }
 
+  // Health score history (Resource Planner F8)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS health_score_history (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL UNIQUE,
+        score INTEGER NOT NULL,
+        cpu_pct REAL,
+        ram_pct REAL,
+        storage_pct REAL,
+        details TEXT,
+        connection_id TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_health_score_date ON health_score_history(date);
+    `)
+  } catch (e) {
+    // Migration error is non-critical
+  }
+
   // ========================================
   // Tables RBAC
   // ========================================

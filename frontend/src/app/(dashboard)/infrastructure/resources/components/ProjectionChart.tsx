@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import {
   Box,
   Card,
   CardContent,
+  Chip,
   Skeleton,
   Stack,
   ToggleButton,
@@ -12,6 +13,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 import {
   ResponsiveContainer,
@@ -24,33 +26,18 @@ import {
   Area,
 } from 'recharts'
 
-import type { ResourceTrend, ResourceThresholds } from '../types'
-import { COLORS, DEFAULT_THRESHOLDS } from '../constants'
+import type { ResourceTrend } from '../types'
+import { COLORS } from '../constants'
 import { InsightsIcon } from './icons'
 
-export default function ProjectionChart({ data, loading, period, thresholds, historyRange, projectionRange, onHistoryRangeChange, onProjectionRangeChange }: {
+export default function ProjectionChart({ data, loading, period }: {
   data: ResourceTrend[]
   loading?: boolean
   period?: { start: string | null; end: string | null; daysCount: number } | null
-  thresholds?: ResourceThresholds
-  historyRange?: number
-  projectionRange?: number
-  onHistoryRangeChange?: (range: number) => void
-  onProjectionRangeChange?: (range: number) => void
 }) {
   const theme = useTheme()
   const t = useTranslations()
   const [selectedResource, setSelectedResource] = useState<'all' | 'cpu' | 'ram' | 'storage'>('all')
-  const th = thresholds || DEFAULT_THRESHOLDS
-
-  const displayData = useMemo(() => {
-    if (!historyRange || !data.length) return data
-    const projCount = projectionRange || 30
-    const histCount = data.length - projCount
-    if (histCount <= 0) return data
-    const trimmedHistStart = Math.max(0, histCount - historyRange)
-    return [...data.slice(trimmedHistStart, histCount), ...data.slice(histCount)]
-  }, [data, historyRange, projectionRange])
 
   if (loading) {
     return (
@@ -63,8 +50,7 @@ export default function ProjectionChart({ data, loading, period, thresholds, his
     )
   }
 
-  const projCount = projectionRange || 30
-  const historicalCount = Math.max(0, displayData.length - projCount)
+  const historicalCount = Math.max(0, data.length - 30)
 
   const formatPeriod = () => {
     if (!period || !period.start || !period.end) return ''
@@ -77,7 +63,7 @@ export default function ProjectionChart({ data, loading, period, thresholds, his
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap spacing={1}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <InsightsIcon sx={{ color: COLORS.primary }} />
             <Typography variant="h6" fontWeight={700}>
@@ -89,34 +75,17 @@ export default function ProjectionChart({ data, loading, period, thresholds, his
               )}
             </Typography>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            {onHistoryRangeChange && (
-              <ToggleButtonGroup value={historyRange || 180} exclusive onChange={(_, v) => v && onHistoryRangeChange(v)} size="small">
-                <ToggleButton value={7} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>7j</ToggleButton>
-                <ToggleButton value={30} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>30j</ToggleButton>
-                <ToggleButton value={90} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>90j</ToggleButton>
-                <ToggleButton value={180} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>180j</ToggleButton>
-              </ToggleButtonGroup>
-            )}
-            {onProjectionRangeChange && (
-              <ToggleButtonGroup value={projectionRange || 30} exclusive onChange={(_, v) => v && onProjectionRangeChange(v)} size="small">
-                <ToggleButton value={7} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>+7j</ToggleButton>
-                <ToggleButton value={30} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>+30j</ToggleButton>
-                <ToggleButton value={90} sx={{ px: 1, py: 0.25, textTransform: 'none', fontSize: '0.7rem' }}>+90j</ToggleButton>
-              </ToggleButtonGroup>
-            )}
-            <ToggleButtonGroup value={selectedResource} exclusive onChange={(_, v) => v && setSelectedResource(v)} size="small">
-              <ToggleButton value="all" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{t('resources.filterAll')}</ToggleButton>
-              <ToggleButton value="cpu" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>CPU</ToggleButton>
-              <ToggleButton value="ram" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>RAM</ToggleButton>
-              <ToggleButton value="storage" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{t('resources.storageLabel')}</ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
+          <ToggleButtonGroup value={selectedResource} exclusive onChange={(_, v) => v && setSelectedResource(v)} size="small">
+            <ToggleButton value="all" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{t('resources.filterAll')}</ToggleButton>
+            <ToggleButton value="cpu" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>CPU</ToggleButton>
+            <ToggleButton value="ram" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>RAM</ToggleButton>
+            <ToggleButton value="storage" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{t('resources.storageLabel')}</ToggleButton>
+          </ToggleButtonGroup>
         </Stack>
 
         <Box sx={{ width: '100%', height: 320 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={displayData}>
+            <ComposedChart data={data}>
               <defs>
                 <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={COLORS.cpu} stopOpacity={0.2} />
@@ -134,9 +103,8 @@ export default function ProjectionChart({ data, loading, period, thresholds, his
               <XAxis dataKey="t" tick={{ fontSize: 10 }} interval="preserveStartEnd" tickLine={false} axisLine={{ stroke: theme.palette.divider }} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} tickLine={false} axisLine={{ stroke: theme.palette.divider }} />
               <RTooltip contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 8 }} formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name]} />
-              <ReferenceLine y={th.cpu.critical} stroke={COLORS.error} strokeDasharray="5 5" strokeOpacity={0.5} />
-              {th.cpu.warning !== th.cpu.critical && <ReferenceLine y={th.cpu.warning} stroke={COLORS.warning} strokeDasharray="3 3" strokeOpacity={0.3} />}
-              {historicalCount > 0 && <ReferenceLine x={displayData[historicalCount - 1]?.t} stroke={theme.palette.divider} strokeDasharray="3 3" label={{ value: 'Projection →', position: 'top', fontSize: 10, fill: theme.palette.text.secondary }} />}
+              <ReferenceLine y={90} stroke={COLORS.error} strokeDasharray="5 5" strokeOpacity={0.5} />
+              {historicalCount > 0 && <ReferenceLine x={data[historicalCount - 1]?.t} stroke={theme.palette.divider} strokeDasharray="3 3" label={{ value: 'Projection →', position: 'top', fontSize: 10, fill: theme.palette.text.secondary }} />}
 
               {(selectedResource === 'all' || selectedResource === 'cpu') && (
                 <>

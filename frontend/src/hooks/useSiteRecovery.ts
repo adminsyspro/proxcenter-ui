@@ -10,7 +10,7 @@ export function useReplicationHealth(isEnterprise: boolean) {
 }
 
 export function useReplicationJobs(isEnterprise: boolean) {
-  return useSWR(isEnterprise ? '/api/v1/orchestrator/replication/jobs' : null, fetcher, { refreshInterval: 10000 })
+  return useSWR(isEnterprise ? '/api/v1/orchestrator/replication/jobs' : null, fetcher, { refreshInterval: 3000 })
 }
 
 export function useRecoveryPlans(isEnterprise: boolean) {

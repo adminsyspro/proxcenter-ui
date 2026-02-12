@@ -58,15 +58,15 @@ interface EmergencyDRTabProps {
   connections: Array<{ id: string; name: string }>
   vmNameMap: Record<number, string>
   onStartVM: (vmId: number, targetCluster: string, jobId: string) => Promise<void>
-  onStopVM: (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => Promise<void>
   onExecuteFailover: (planId: string) => void
+  onExecuteFailback: (planId: string) => void
 }
 
 export default function EmergencyDRTab({
-  jobs, plans, loading, connections, vmNameMap, onStartVM, onStopVM, onExecuteFailover
+  jobs, plans, loading, connections, vmNameMap, onStartVM, onExecuteFailover, onExecuteFailback
 }: EmergencyDRTabProps) {
   const t = useTranslations('siteRecovery')
-  const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting' | 'stopping'>>({})
+  const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting'>>({})
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   })
@@ -146,19 +146,6 @@ export default function EmergencyDRTab({
       setSnackbar({ open: true, message: t('emergencyDR.vmStarted', { name: vm.vmName, vmid: vm.targetVmId }), severity: 'success' })
     } catch (e: any) {
       setSnackbar({ open: true, message: e?.message || 'Failed to start VM', severity: 'error' })
-    } finally {
-      setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
-    }
-  }
-
-  const handleStopVM = async (vm: DRReadyVM) => {
-    const key = `${vm.vmId}`
-    setLoadingVMs(prev => ({ ...prev, [key]: 'stopping' }))
-    try {
-      await onStopVM(vm.vmId, vm.targetCluster, vm.jobId, true)
-      setSnackbar({ open: true, message: t('emergencyDR.vmStopped', { name: vm.vmName, vmid: vm.targetVmId }), severity: 'success' })
-    } catch (e: any) {
-      setSnackbar({ open: true, message: e?.message || 'Failed to stop VM', severity: 'error' })
     } finally {
       setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
     }
@@ -277,17 +264,17 @@ export default function EmergencyDRTab({
                         </Button>
                       </span>
                     </Tooltip>
-                    <Tooltip title={t('emergencyDR.stopVM')}>
+                    <Tooltip title={vm.planId ? t('emergencyDR.failback') : t('emergencyDR.failbackNoPlan')}>
                       <span>
                         <Button
                           size="small"
                           variant="outlined"
-                          color="inherit"
-                          disabled={!!vmLoading}
-                          onClick={() => handleStopVM(vm)}
+                          color="info"
+                          disabled={!vm.planId}
+                          onClick={() => vm.planId && onExecuteFailback(vm.planId)}
                           sx={{ minWidth: 36, px: 1 }}
                         >
-                          {vmLoading === 'stopping' ? <CircularProgress size={16} /> : <i className="ri-stop-line" />}
+                          <i className="ri-arrow-go-back-line" />
                         </Button>
                       </span>
                     </Tooltip>

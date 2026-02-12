@@ -148,12 +148,6 @@ export const menuData = (t = (key) => key) => [
         icon: 'ri-settings-3-line',
         href: '/settings',
         permissions: ['connection.manage', 'admin.settings']
-      },
-      {
-        label: t('navigation.license'),
-        icon: 'ri-bill-line',
-        href: '/settings/billing',
-        permissions: ['admin.settings']
       }
     ]
   }

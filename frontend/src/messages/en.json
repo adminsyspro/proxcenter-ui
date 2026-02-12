@@ -1564,11 +1564,11 @@
       "tier": "Tier",
       "actions": "Actions",
       "startVM": "Start VM on DR site",
-      "stopVM": "Stop VM on DR site",
+      "failback": "Failback to primary site",
+      "failbackNoPlan": "Failback unavailable — VM is not part of a recovery plan",
       "emergencyFailover": "Emergency Failover",
       "standaloneTitle": "Standalone VMs",
-      "vmStarted": "{name} (VMID {vmid}) started on DR site",
-      "vmStopped": "{name} (VMID {vmid}) stopped on DR site"
+      "vmStarted": "{name} (VMID {vmid}) started on DR site"
     }
   },
   "templates": {

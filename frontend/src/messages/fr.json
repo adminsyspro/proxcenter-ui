@@ -1565,11 +1565,11 @@
       "tier": "Priorité",
       "actions": "Actions",
       "startVM": "Démarrer la VM sur le site DR",
-      "stopVM": "Arrêter la VM sur le site DR",
+      "failback": "Failback vers le site principal",
+      "failbackNoPlan": "Failback indisponible — la VM ne fait partie d'aucun plan de recovery",
       "emergencyFailover": "Failover d'urgence",
       "standaloneTitle": "VMs autonomes",
-      "vmStarted": "{name} (VMID {vmid}) démarrée sur le site DR",
-      "vmStopped": "{name} (VMID {vmid}) arrêtée sur le site DR"
+      "vmStarted": "{name} (VMID {vmid}) démarrée sur le site DR"
     }
   },
   "templates": {

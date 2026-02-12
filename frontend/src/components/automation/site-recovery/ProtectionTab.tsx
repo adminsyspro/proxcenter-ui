@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip, Divider, Drawer, IconButton,
-  InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography
+  InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography,
+  alpha, useTheme
 } from '@mui/material'
 
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
@@ -76,11 +77,14 @@ const DetailRow = ({ icon, label, value, mono }: { icon: string; label: string; 
 )
 
 const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick: () => void; vmNameMap?: Record<number, string>; t: any }) => {
+  const theme = useTheme()
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
   const isSyncing = job.status === 'syncing'
   const rpoActual = computeRpoActual(job.last_sync)
   const rpoOk = rpoActual != null && rpoActual <= job.rpo_target
+
+  const flowGradient = `linear-gradient(90deg, transparent 0%, transparent 30%, ${alpha(theme.palette.primary.main, 0.12)} 50%, transparent 70%, transparent 100%)`
 
   return (
     <Card
@@ -91,6 +95,7 @@ const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick:
         borderColor: isError ? 'error.main' : isSyncing ? 'primary.main' : 'divider',
         position: 'relative', overflow: 'hidden',
         '&:hover': { borderColor: isError ? 'error.light' : 'primary.main', bgcolor: 'action.hover' },
+        // Progress fill
         ...(isSyncing ? {
           '&::before': {
             content: '""',
@@ -102,12 +107,39 @@ const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick:
             opacity: 0.07,
             transition: 'width 1.5s ease',
             zIndex: 0,
-          }
+          },
+          // Animated data flow sweep (left → right)
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            top: 0, left: '-100%',
+            height: '100%',
+            width: '100%',
+            background: flowGradient,
+            animation: 'dataFlow 2s ease-in-out infinite',
+            zIndex: 0,
+          },
+          '@keyframes dataFlow': {
+            '0%': { left: '-100%' },
+            '100%': { left: '100%' },
+          },
         } : {})
       }}
     >
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, position: 'relative', zIndex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* Sync icon */}
+          {isSyncing && (
+            <Box sx={{
+              display: 'flex', alignItems: 'center', color: 'primary.main',
+              animation: 'spin 1.5s linear infinite',
+              '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+              fontSize: '1rem', flexShrink: 0,
+            }}>
+              <i className='ri-loader-4-line' />
+            </Box>
+          )}
+
           {/* VM names */}
           <Typography variant='body2' sx={{
             fontWeight: 600, flex: 1, minWidth: 0,

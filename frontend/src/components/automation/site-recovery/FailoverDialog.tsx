@@ -23,9 +23,10 @@ interface FailoverDialogProps {
   cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
   execution: RecoveryExecution | null
   targetConnId?: string
+  connections?: { id: string; name: string }[]
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, targetConnId }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, targetConnId, connections }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const isDestructive = type === 'failover' || type === 'failback'
@@ -92,7 +93,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           <Box sx={{ p: 2, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
             <Typography variant='subtitle2' sx={{ fontWeight: 600, mb: 1 }}>{plan.name}</Typography>
             <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-              {plan.source_cluster} → {plan.target_cluster}
+              {connections?.find(c => c.id === plan.source_cluster)?.name || plan.source_cluster} → {connections?.find(c => c.id === plan.target_cluster)?.name || plan.target_cluster}
             </Typography>
             <Box sx={{ display: 'flex', gap: 1.5 }}>
               {[1, 2, 3].map((tier, i) => tierCounts[i] > 0 && (

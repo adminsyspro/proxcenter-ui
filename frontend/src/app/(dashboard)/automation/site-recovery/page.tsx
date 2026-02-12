@@ -374,6 +374,7 @@ export default function SiteRecoveryPage() {
           cleanupResult={cleanupResult}
           execution={activeExecution}
           targetConnId={failoverPlan?.target_cluster}
+          connections={connections}
         />
       </Box>
     </EnterpriseGuard>

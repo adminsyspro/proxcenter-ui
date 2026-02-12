@@ -7,7 +7,7 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
-  getCachedInventory,
+  getInventoryFromCache,
   setCachedInventory,
   getInflightFetch,
   setInflightFetch,
@@ -461,6 +461,62 @@ return aId - bId
 }
 
 /* ------------------------------------------------------------------ */
+/* Fetch helpers (blocking + background revalidation)                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Blocking fetch with thundering-herd protection.
+ * Used on cache miss or force refresh — the caller awaits the result.
+ */
+async function blockingFetch() {
+  let inflight = getInflightFetch()
+
+  if (!inflight) {
+    const startTime = Date.now()
+    inflight = fetchRawInventory()
+      .then(result => {
+        console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
+        setCachedInventory(result)
+        setInflightFetch(null)
+        return result
+      })
+      .catch(err => {
+        setInflightFetch(null)
+        throw err
+      })
+    setInflightFetch(inflight)
+  } else {
+    console.log('[inventory] Reusing in-flight fetch')
+  }
+
+  return inflight
+}
+
+/**
+ * Trigger a background revalidation if one isn't already in progress.
+ * Fire-and-forget — errors are logged but don't affect the current request.
+ */
+function triggerBackgroundRevalidation() {
+  if (getInflightFetch()) {
+    console.log('[inventory] Background revalidation already in progress, skipping')
+    return
+  }
+
+  const startTime = Date.now()
+  const revalidation = fetchRawInventory()
+    .then(result => {
+      console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
+      setCachedInventory(result)
+      setInflightFetch(null)
+    })
+    .catch(err => {
+      console.error('[inventory] Background revalidation failed:', err?.message)
+      setInflightFetch(null)
+    })
+  setInflightFetch(revalidation as any)
+}
+
+/* ------------------------------------------------------------------ */
 /* GET handler                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -469,33 +525,22 @@ export async function GET(request: NextRequest) {
     const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
 
     // 1) Tenter le cache (sauf si refresh forcé)
-    let raw = forceRefresh ? null : getCachedInventory()
+    const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache()
 
-    if (!raw) {
-      // Thundering herd protection: si un fetch est déjà en cours, le réutiliser
-      let inflight = getInflightFetch()
+    let raw: Awaited<ReturnType<typeof fetchRawInventory>>
 
-      if (!inflight) {
-        const startTime = Date.now()
-        inflight = fetchRawInventory()
-          .then(result => {
-            console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
-            setCachedInventory(result)
-            setInflightFetch(null)
-            return result
-          })
-          .catch(err => {
-            setInflightFetch(null)
-            throw err
-          })
-        setInflightFetch(inflight)
-      } else {
-        console.log('[inventory] Reusing in-flight fetch')
-      }
-
-      raw = await inflight
+    if (cacheResult.status === 'fresh') {
+      // Cache is fresh — serve directly, no fetch needed
+      console.log('[inventory] Serving from cache (fresh)')
+      raw = cacheResult.data
+    } else if (cacheResult.status === 'stale') {
+      // Cache is stale — serve immediately, trigger background revalidation
+      console.log('[inventory] Serving stale data, revalidating in background')
+      raw = cacheResult.data
+      triggerBackgroundRevalidation()
     } else {
-      console.log('[inventory] Serving from cache')
+      // Cache miss or force refresh — blocking fetch required
+      raw = await blockingFetch()
     }
 
     // 2) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache)
@@ -559,7 +604,7 @@ export async function GET(request: NextRequest) {
       data: {
         clusters,
         pbsServers: raw.pbsServers,
-        cached: !forceRefresh && getCachedInventory() !== null,
+        cached: cacheResult.status !== 'miss',
         stats: {
           totalClusters: clusters.length,
           totalNodes,

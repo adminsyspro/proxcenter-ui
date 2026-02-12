@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip, Divider, Drawer, IconButton,
-  InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Typography
+  InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
 
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
@@ -34,13 +34,17 @@ function computeRpoActual(lastSync: string | null | undefined): number | null {
   return diff > 0 ? diff : null
 }
 
-function jobLabel(job: ReplicationJob): string {
-  const names = (job.vm_names || []).filter(Boolean)
-  if (names.length > 0) return names.join(', ')
+function jobLabel(job: ReplicationJob, vmNameMap?: Record<number, string>): string {
   const ids = job.vm_ids || []
   if (ids.length === 0) return 'Replication Job'
-  if (ids.length <= 3) return ids.map(id => `VM ${id}`).join(', ')
-  return `${ids.length} VMs (${ids.slice(0, 2).join(', ')}…)`
+
+  const labels = ids.map(id => {
+    const name = vmNameMap?.[id] || (job.vm_names || [])[ids.indexOf(id)]
+    return name ? `${id} - ${name}` : `VM ${id}`
+  })
+
+  if (labels.length <= 3) return labels.join(', ')
+  return `${ids.length} VMs (${labels.slice(0, 2).join(', ')}…)`
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────
@@ -71,7 +75,7 @@ const DetailRow = ({ icon, label, value, mono }: { icon: string; label: string; 
   </Box>
 )
 
-const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void; t: any }) => {
+const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick: () => void; vmNameMap?: Record<number, string>; t: any }) => {
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
   const isSyncing = job.status === 'syncing'
@@ -84,20 +88,32 @@ const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void
       onClick={onClick}
       sx={{
         borderRadius: 1.5, cursor: 'pointer', transition: 'all 0.2s ease',
-        borderColor: isError ? 'error.main' : 'divider',
-        '&:hover': { borderColor: isError ? 'error.light' : 'primary.main', bgcolor: 'action.hover' }
+        borderColor: isError ? 'error.main' : isSyncing ? 'primary.main' : 'divider',
+        position: 'relative', overflow: 'hidden',
+        '&:hover': { borderColor: isError ? 'error.light' : 'primary.main', bgcolor: 'action.hover' },
+        ...(isSyncing ? {
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0, left: 0,
+            height: '100%',
+            width: `${progress}%`,
+            bgcolor: 'primary.main',
+            opacity: 0.07,
+            transition: 'width 1.5s ease',
+            zIndex: 0,
+          }
+        } : {})
       }}
     >
-      {isSyncing && <LinearProgress variant='determinate' value={progress} sx={{ height: 2 }} />}
-
-      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, position: 'relative', zIndex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           {/* VM names */}
           <Typography variant='body2' sx={{
             fontWeight: 600, flex: 1, minWidth: 0,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
           }}>
-            {jobLabel(job)}
+            {jobLabel(job, vmNameMap)}
           </Typography>
 
           {/* RPO */}
@@ -116,11 +132,13 @@ const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void
             </Typography>
           </Box>
 
-          {/* Syncing throughput */}
+          {/* Syncing throughput + progress */}
           {isSyncing && (
-            <Box sx={{ textAlign: 'center', minWidth: 60, display: { xs: 'none', sm: 'block' } }}>
-              <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.2 }}>{Math.round(progress)}%</Typography>
-              <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 600 }}>
+            <Box sx={{ textAlign: 'center', minWidth: 70, display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 700, display: 'block', lineHeight: 1.2 }}>
+                {progress > 0 ? `${Math.round(progress)}%` : '…'}
+              </Typography>
+              <Typography variant='caption' sx={{ color: 'text.secondary', fontWeight: 500 }}>
                 {formatBytes(job.throughput_bps)}/s
               </Typography>
             </Box>
@@ -130,6 +148,15 @@ const JobCard = ({ job, onClick, t }: { job: ReplicationJob; onClick: () => void
           <StatusChip status={job.status} t={t} />
         </Box>
       </CardContent>
+
+      {/* Bottom progress bar */}
+      {isSyncing && (
+        <LinearProgress
+          variant='determinate'
+          value={progress}
+          sx={{ height: 3, position: 'absolute', bottom: 0, left: 0, right: 0 }}
+        />
+      )}
     </Card>
   )
 }
@@ -147,6 +174,7 @@ interface ProtectionTabProps {
   logs: ReplicationJobLog[]
   logsLoading: boolean
   connections: Connection[]
+  vmNameMap?: Record<number, string>
   onSyncJob: (id: string) => void
   onPauseJob: (id: string) => void
   onResumeJob: (id: string) => void
@@ -156,7 +184,7 @@ interface ProtectionTabProps {
 }
 
 export default function ProtectionTab({
-  jobs, loading, logs, logsLoading, connections,
+  jobs, loading, logs, logsLoading, connections, vmNameMap,
   onSyncJob, onPauseJob, onResumeJob, onDeleteJob,
   selectedJobId, onSelectJob
 }: ProtectionTabProps) {
@@ -164,6 +192,7 @@ export default function ProtectionTab({
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const connMap = useMemo(() => {
     const m: Record<string, string> = {}
@@ -177,13 +206,13 @@ export default function ProtectionTab({
     const qq = q.trim().toLowerCase()
 
     return (jobs || []).filter(j => {
-      const label = jobLabel(j)
+      const label = jobLabel(j, vmNameMap)
       const matchQ = !qq || label.toLowerCase().includes(qq) ||
         connName(j.source_cluster).toLowerCase().includes(qq) || connName(j.target_cluster).toLowerCase().includes(qq)
 
       return matchQ && (statusFilter === 'all' || j.status === statusFilter)
     })
-  }, [jobs, q, statusFilter, connName])
+  }, [jobs, q, statusFilter, connName, vmNameMap])
 
   const grouped = useMemo(() => {
     const map = new Map<string, ReplicationJob[]>()
@@ -209,6 +238,14 @@ export default function ProtectionTab({
     setDrawerOpen(false)
     onSelectJob(null)
   }
+
+  const copyLogs = useCallback(() => {
+    if (!logs || logs.length === 0) return
+    const text = logs.map(l => `[${new Date(l.created_at).toLocaleTimeString()}] [${l.level}] ${l.message}`).join('\n')
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [logs])
 
   if (loading) {
     return (
@@ -283,7 +320,7 @@ export default function ProtectionTab({
                 {/* Group jobs */}
                 <Stack spacing={1}>
                   {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} t={t} />
+                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} vmNameMap={vmNameMap} t={t} />
                   ))}
                 </Stack>
               </Box>
@@ -293,7 +330,7 @@ export default function ProtectionTab({
       )}
 
       {/* Detail Drawer */}
-      <Drawer anchor='right' open={drawerOpen} onClose={closeDrawer} PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}>
+      <Drawer anchor='right' open={drawerOpen} onClose={closeDrawer} PaperProps={{ sx: { width: { xs: '100%', sm: 450 } } }}>
         <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', height: '100%' }}>
           {!selected ? (
             <Alert severity='info'>{t('siteRecovery.protection.selectJob')}</Alert>
@@ -301,9 +338,12 @@ export default function ProtectionTab({
             <>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                 <Box>
-                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>{jobLabel(selected)}</Typography>
+                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>{jobLabel(selected, vmNameMap)}</Typography>
                   <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-                    {(selected.vm_ids || []).length} VM(s) — IDs: {(selected.vm_ids || []).join(', ')}
+                    {(selected.vm_ids || []).length} VM(s) — {(selected.vm_ids || []).map(id => {
+                      const name = vmNameMap?.[id]
+                      return name ? `${id} - ${name}` : `${id}`
+                    }).join(', ')}
                   </Typography>
                 </Box>
                 <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
@@ -331,23 +371,34 @@ export default function ProtectionTab({
                 <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
 
                 {/* Logs */}
-                {logs && logs.length > 0 && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
-                      {t('siteRecovery.protection.recentLogs')}
-                    </Typography>
-                    <Box sx={{ maxHeight: 150, overflow: 'auto', bgcolor: 'action.hover', borderRadius: 1, p: 1 }}>
-                      {logs.slice(0, 20).map((log, i) => (
-                        <Typography key={i} variant='caption' sx={{
-                          display: 'block', fontFamily: 'monospace', fontSize: '0.65rem', lineHeight: 1.6,
-                          color: log.level === 'error' ? 'error.main' : log.level === 'warning' ? 'warning.main' : 'text.secondary'
-                        }}>
-                          [{new Date(log.created_at).toLocaleTimeString()}] {log.message}
-                        </Typography>
-                      ))}
-                    </Box>
-                  </>
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                    {t('siteRecovery.protection.recentLogs')}
+                  </Typography>
+                  {logs && logs.length > 0 && (
+                    <Tooltip title={copied ? 'Copied!' : 'Copy logs'} arrow>
+                      <IconButton size='small' onClick={copyLogs} sx={{ p: 0.5 }}>
+                        <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+                {logs && logs.length > 0 ? (
+                  <Box sx={{ maxHeight: 350, overflow: 'auto', bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                    {logs.slice(0, 50).map((log, i) => (
+                      <Typography key={i} variant='caption' sx={{
+                        display: 'block', fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem', lineHeight: 1.7,
+                        color: log.level === 'error' ? 'error.main' : log.level === 'warning' ? 'warning.main' : 'text.secondary'
+                      }}>
+                        [{new Date(log.created_at).toLocaleTimeString()}] {log.message}
+                      </Typography>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography variant='caption' sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                    No logs available
+                  </Typography>
                 )}
 
                 <Divider sx={{ my: 2 }} />

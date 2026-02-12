@@ -1,6 +1,11 @@
 /**
  * In-memory server-side cache for inventory data.
  *
+ * Uses a **stale-while-revalidate** strategy:
+ *   - FRESH  (< FRESH_TTL):  serve directly, no fetch
+ *   - STALE  (< STALE_TTL):  serve immediately, trigger background refresh
+ *   - EXPIRED (> STALE_TTL): discard, blocking fetch required
+ *
  * Stores the RAW inventory (before RBAC filtering) so that the expensive
  * Proxmox API calls are not repeated on every request.
  * RBAC filtering is applied AFTER cache retrieval — each user still gets
@@ -31,7 +36,11 @@ type CacheEntry = {
   timestamp: number
 }
 
-const DEFAULT_TTL_MS = 30_000 // 30 seconds
+/** Data is considered fresh for 2 minutes — served without revalidation */
+const FRESH_TTL_MS = 2 * 60 * 1_000 // 2 minutes
+
+/** Data is usable (stale) for up to 15 minutes — served while revalidating in background */
+const STALE_TTL_MS = 15 * 60 * 1_000 // 15 minutes
 
 // Use globalThis to survive Next.js hot-reload in development
 const CACHE_KEY = '__proxcenter_inventory_cache__' as const
@@ -47,14 +56,32 @@ function setCache(entry: CacheEntry) {
 // Lock to prevent concurrent fetches (thundering herd)
 let fetchInProgress: Promise<CachedInventory> | null = null
 
-export function getCachedInventory(ttl: number = DEFAULT_TTL_MS): CachedInventory | null {
+type CacheResult =
+  | { status: 'fresh'; data: CachedInventory }
+  | { status: 'stale'; data: CachedInventory }
+  | { status: 'miss' }
+
+/**
+ * Returns the cached inventory with its freshness status.
+ *   - `fresh`  → data is recent, no revalidation needed
+ *   - `stale`  → data is usable but should be revalidated in background
+ *   - `miss`   → no usable data, blocking fetch required
+ */
+export function getInventoryFromCache(): CacheResult {
   const entry = getCache()
-  if (!entry) return null
+  if (!entry) return { status: 'miss' }
 
   const age = Date.now() - entry.timestamp
-  if (age > ttl) return null
 
-  return entry.data
+  if (age <= FRESH_TTL_MS) {
+    return { status: 'fresh', data: entry.data }
+  }
+
+  if (age <= STALE_TTL_MS) {
+    return { status: 'stale', data: entry.data }
+  }
+
+  return { status: 'miss' }
 }
 
 export function setCachedInventory(data: CachedInventory): void {

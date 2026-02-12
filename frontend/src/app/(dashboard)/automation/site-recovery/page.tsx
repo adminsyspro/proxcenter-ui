@@ -101,6 +101,13 @@ export default function SiteRecoveryPage() {
     }))
   , [allVMsData])
 
+  // VM name map for display (vmid → name)
+  const vmNameMap = useMemo(() => {
+    const m: Record<number, string> = {}
+    for (const vm of allVMs) if (vm.vmid && vm.name) m[vm.vmid] = vm.name
+    return m
+  }, [allVMs])
+
   // Selected plan for failover dialog
   const failoverPlan = useMemo(() =>
     (plans || []).find((p: RecoveryPlan) => p.id === failoverDialog.planId) || null
@@ -291,6 +298,7 @@ export default function SiteRecoveryPage() {
             logs={jobLogs || []}
             logsLoading={logsLoading}
             connections={connections}
+            vmNameMap={vmNameMap}
             onSyncJob={handleSyncJob}
             onPauseJob={handlePauseJob}
             onResumeJob={handleResumeJob}

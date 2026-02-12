@@ -1738,6 +1738,16 @@ return next
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             {t('drsPage.resourceDistribution')}
           </Typography>
+          <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'info.main' }} />
+              <Typography variant="caption" sx={{ opacity: 0.7 }}>CPU</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'warning.main' }} />
+              <Typography variant="caption" sx={{ opacity: 0.7 }}>RAM</Typography>
+            </Box>
+          </Box>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={140}>
               <BarChart data={chartData} barCategoryGap="20%">

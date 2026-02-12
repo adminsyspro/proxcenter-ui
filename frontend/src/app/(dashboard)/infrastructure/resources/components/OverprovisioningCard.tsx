@@ -24,8 +24,8 @@ import { useTranslations } from 'next-intl'
 import type { OverprovisioningData } from '../types'
 import { COLORS } from '../constants'
 import {
-  SpeedIcon, MemoryIcon, StorageIcon, LayersIcon,
-  CheckCircleIcon, WarningAmberIcon, TipsAndUpdatesIcon, SavingsIcon,
+  SpeedIcon, MemoryIcon, LayersIcon,
+  CheckCircleIcon, TipsAndUpdatesIcon, SavingsIcon,
 } from './icons'
 
 export default function OverprovisioningCard({ data, loading }: { data: OverprovisioningData | null; loading?: boolean }) {
@@ -107,7 +107,6 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
           </Stack>
           <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ minHeight: 32 }}>
             <Tab label={t('resources.globalView')} sx={{ minHeight: 32, py: 0.5, textTransform: 'none', fontSize: '0.8rem' }} />
-            <Tab label={t('resources.perNode')} sx={{ minHeight: 32, py: 0.5, textTransform: 'none', fontSize: '0.8rem' }} />
             <Tab label={t('resources.vmsToOptimize')} sx={{ minHeight: 32, py: 0.5, textTransform: 'none', fontSize: '0.8rem' }} />
           </Tabs>
         </Stack>
@@ -201,54 +200,6 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
         )}
 
         {activeTab === 1 && (
-          <Stack spacing={1.5}>
-            <Stack direction="row" sx={{ px: 2, py: 1, bgcolor: alpha(COLORS.primary, 0.03), borderRadius: 1 }}>
-              <Typography variant="caption" fontWeight={600} sx={{ width: 140 }}>{t('resources.node')}</Typography>
-              <Typography variant="caption" fontWeight={600} sx={{ flex: 1, textAlign: 'center' }}>CPU Ratio</Typography>
-              <Typography variant="caption" fontWeight={600} sx={{ flex: 1, textAlign: 'center' }}>RAM Ratio</Typography>
-              <Typography variant="caption" fontWeight={600} sx={{ width: 100, textAlign: 'right' }}>{t('resources.status')}</Typography>
-            </Stack>
-            {data.perNode.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}><Typography variant="body2" color="text.secondary">{t('resources.noNodeDataAvailable')}</Typography></Box>
-            ) : (
-              data.perNode.map((node) => {
-                const nodeCpuColor = getRatioColor(node.cpuRatio, 'cpu')
-                const nodeRamColor = getRatioColor(node.ramRatio, 'ram')
-                const worstRatio = Math.max(node.cpuRatio / 4, node.ramRatio / 1.3)
-                const statusColor = worstRatio > 1.5 ? COLORS.error : worstRatio > 1 ? COLORS.warning : COLORS.success
-                return (
-                  <Paper key={node.name} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, '&:hover': { bgcolor: alpha(COLORS.primary, 0.02) } }}>
-                    <Stack direction="row" alignItems="center">
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ width: 140 }}>
-                        <StorageIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                        <Typography variant="body2" fontWeight={600}>{node.name}</Typography>
-                      </Stack>
-                      <Box sx={{ flex: 1, px: 2 }}>
-                        <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-                          <Typography variant="body2" fontWeight={700} sx={{ color: nodeCpuColor }}>{node.cpuRatio.toFixed(1)}:1</Typography>
-                          <Typography variant="caption" color="text.secondary">({node.cpuAllocated}/{node.cpuPhysical})</Typography>
-                        </Stack>
-                        <LinearProgress variant="determinate" value={Math.min(100, (node.cpuRatio / 8) * 100)} sx={{ height: 4, borderRadius: 1, mt: 0.5, bgcolor: alpha(nodeCpuColor, 0.1), '& .MuiLinearProgress-bar': { bgcolor: nodeCpuColor } }} />
-                      </Box>
-                      <Box sx={{ flex: 1, px: 2 }}>
-                        <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-                          <Typography variant="body2" fontWeight={700} sx={{ color: nodeRamColor }}>{node.ramRatio.toFixed(2)}:1</Typography>
-                          <Typography variant="caption" color="text.secondary">({node.ramAllocated.toFixed(0)}/{node.ramPhysical.toFixed(0)} GB)</Typography>
-                        </Stack>
-                        <LinearProgress variant="determinate" value={Math.min(100, (node.ramRatio / 2) * 100)} sx={{ height: 4, borderRadius: 1, mt: 0.5, bgcolor: alpha(nodeRamColor, 0.1), '& .MuiLinearProgress-bar': { bgcolor: nodeRamColor } }} />
-                      </Box>
-                      <Box sx={{ width: 100, textAlign: 'right' }}>
-                        <Chip size="small" icon={worstRatio > 1 ? <WarningAmberIcon sx={{ fontSize: 14 }} /> : <CheckCircleIcon sx={{ fontSize: 14 }} />} label={worstRatio > 1.5 ? t('resources.critical') : worstRatio > 1 ? t('resources.attention') : 'OK'} sx={{ height: 22, fontSize: '0.65rem', bgcolor: alpha(statusColor, 0.15), color: statusColor, '& .MuiChip-icon': { color: statusColor } }} />
-                      </Box>
-                    </Stack>
-                  </Paper>
-                )
-              })
-            )}
-          </Stack>
-        )}
-
-        {activeTab === 2 && (
           <Stack spacing={1.5}>
             <Alert severity="info" sx={{ mb: 1 }}>{t('resources.rightsizingInfo')}</Alert>
             {data.topOverprovisioned.length === 0 ? (

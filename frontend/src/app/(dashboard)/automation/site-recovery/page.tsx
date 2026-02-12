@@ -24,6 +24,7 @@ import {
   DashboardTab,
   ProtectionTab,
   RecoveryPlansTab,
+  EmergencyDRTab,
   CreateJobDialog,
   CreatePlanDialog,
   FailoverDialog
@@ -236,6 +237,32 @@ export default function SiteRecoveryPage() {
     }
   }, [failoverDialog.planId, mutateJobs, mutatePlans])
 
+  const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string) => {
+    const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || 'Failed to start VM')
+    }
+    mutateJobs()
+  }, [mutateJobs])
+
+  const handleStopDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => {
+    const res = await fetch('/api/v1/orchestrator/replication/emergency/stop-vm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId, resume_replication: resumeReplication })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || 'Failed to stop VM')
+    }
+    mutateJobs()
+  }, [mutateJobs])
+
   // Poll execution status every 3s while running
   useEffect(() => {
     if (!activeExecution || activeExecution.status !== 'running') return
@@ -286,6 +313,11 @@ export default function SiteRecoveryPage() {
             icon={<i className='ri-file-shield-2-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.recoveryPlans')}
+          />
+          <Tab
+            icon={<i className='ri-alarm-warning-line' style={{ fontSize: 18 }} />}
+            iconPosition='start'
+            label={t('siteRecovery.tabs.emergencyDR')}
           />
         </Tabs>
           <Box sx={{ display: 'flex', gap: 1, ml: 'auto', pl: 2 }}>
@@ -343,6 +375,19 @@ export default function SiteRecoveryPage() {
             onFailback={(id) => openFailoverDialog(id, 'failback')}
             onDeletePlan={handleDeletePlan}
             connections={connections}
+          />
+        )}
+
+        {tab === 3 && (
+          <EmergencyDRTab
+            jobs={jobs || []}
+            plans={plans || []}
+            loading={jobsLoading || plansLoading}
+            connections={connections}
+            vmNameMap={vmNameMap}
+            onStartVM={handleStartDRVM}
+            onStopVM={handleStopDRVM}
+            onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
           />
         )}
 

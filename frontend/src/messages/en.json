@@ -1403,7 +1403,8 @@
       "dashboard": "Dashboard",
       "replication": "Replication",
       "protection": "Protection",
-      "recoveryPlans": "Recovery Plans"
+      "recoveryPlans": "Recovery Plans",
+      "emergencyDR": "Emergency DR"
     },
     "status": {
       "all": "All statuses",
@@ -1418,7 +1419,8 @@
       "degraded": "Degraded",
       "executing": "Executing",
       "failed": "Failed",
-      "not_ready": "Not Ready"
+      "not_ready": "Not Ready",
+      "failed_over": "Failed Over"
     },
     "dashboard": {
       "primary": "Primary",
@@ -1544,6 +1546,29 @@
       "stopped": "stopped",
       "disksRolledBack": "RBD disk(s) rolled back",
       "jobsResumed": "replication job(s) resumed"
+    },
+    "emergencyDR": {
+      "title": "Emergency DR",
+      "noVMs": "No DR-ready VMs",
+      "noVMsDesc": "Configure replication jobs to enable emergency disaster recovery.",
+      "drReadyVMs": "DR-ready VMs",
+      "inPlans": "in plans",
+      "standalone": "standalone",
+      "replicationHealth": "Replication Health",
+      "vmName": "VM Name",
+      "sourceVMID": "Source VMID",
+      "drVMID": "DR VMID",
+      "replStatus": "Repl. Status",
+      "lastSync": "Last Sync",
+      "rpo": "RPO",
+      "tier": "Tier",
+      "actions": "Actions",
+      "startVM": "Start VM on DR site",
+      "stopVM": "Stop VM on DR site",
+      "emergencyFailover": "Emergency Failover",
+      "standaloneTitle": "Standalone VMs",
+      "vmStarted": "{name} (VMID {vmid}) started on DR site",
+      "vmStopped": "{name} (VMID {vmid}) stopped on DR site"
     }
   },
   "templates": {

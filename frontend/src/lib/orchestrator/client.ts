@@ -452,6 +452,14 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.post<any>(`/replication/plans/${planId}/cleanup-test`)
   }
 
+  startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string }) {
+    return this.post<any>('/replication/emergency/start-vm', body)
+  }
+
+  stopDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; resume_replication?: boolean }) {
+    return this.post<any>('/replication/emergency/stop-vm', body)
+  }
+
   getRecoveryHistory(planId: string) {
     return this.get<any[]>(`/replication/plans/${planId}/history`)
   }

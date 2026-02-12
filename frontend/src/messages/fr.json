@@ -1539,7 +1539,12 @@
       "typeToConfirm": "Tapez \"{name}\" pour confirmer cette opération :",
       "inProgress": "Opération en cours...",
       "networkIsolated": "Réseau isolé",
-      "openConsole": "Ouvrir la console"
+      "openConsole": "Ouvrir la console",
+      "cleanup": "Nettoyer le test",
+      "cleanupDone": "Nettoyage terminé",
+      "stopped": "arrêtée(s)",
+      "disksRolledBack": "disque(s) RBD restauré(s)",
+      "jobsResumed": "job(s) de réplication repris"
     }
   },
   "templates": {

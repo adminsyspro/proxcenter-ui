@@ -448,6 +448,10 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.post<any>(`/replication/plans/${planId}/failback`)
   }
 
+  cleanupTestFailover(planId: string) {
+    return this.post<any>(`/replication/plans/${planId}/cleanup-test`)
+  }
+
   getRecoveryHistory(planId: string) {
     return this.get<any[]>(`/replication/plans/${planId}/history`)
   }

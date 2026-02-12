@@ -60,6 +60,10 @@ export default function SiteRecoveryPage() {
   // Execution tracking
   const [activeExecution, setActiveExecution] = useState<RecoveryExecution | null>(null)
 
+  // Cleanup state
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [cleanupResult, setCleanupResult] = useState<any>(null)
+
   // SWR hooks
   const { data: health, isLoading: healthLoading } = useReplicationHealth(isEnterprise)
   const { data: jobs, isLoading: jobsLoading, mutate: mutateJobs } = useReplicationJobs(isEnterprise)
@@ -189,6 +193,8 @@ export default function SiteRecoveryPage() {
   const openFailoverDialog = useCallback((planId: string, type: 'test' | 'failover' | 'failback') => {
     setFailoverDialog({ open: true, planId, type })
     setActiveExecution(null)
+    setCleanupResult(null)
+    setCleanupLoading(false)
   }, [])
 
   const handleFailoverConfirm = useCallback(async () => {
@@ -213,6 +219,22 @@ export default function SiteRecoveryPage() {
       console.error('Failed to execute:', e)
     }
   }, [failoverDialog, mutatePlans])
+
+  const handleCleanupTest = useCallback(async () => {
+    if (!failoverDialog.planId) return
+    setCleanupLoading(true)
+    try {
+      const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/cleanup-test`, { method: 'POST' })
+      const data = await res.json()
+      setCleanupResult(data)
+      mutateJobs()
+      mutatePlans()
+    } catch (e) {
+      console.error('Failed to cleanup test:', e)
+    } finally {
+      setCleanupLoading(false)
+    }
+  }, [failoverDialog.planId, mutateJobs, mutatePlans])
 
   // Poll execution status every 3s while running
   useEffect(() => {
@@ -347,6 +369,9 @@ export default function SiteRecoveryPage() {
           plan={failoverPlan}
           type={failoverDialog.type}
           onConfirm={handleFailoverConfirm}
+          onCleanup={handleCleanupTest}
+          cleanupLoading={cleanupLoading}
+          cleanupResult={cleanupResult}
           execution={activeExecution}
           targetConnId={failoverPlan?.target_cluster}
         />

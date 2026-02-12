@@ -1538,7 +1538,12 @@
       "typeToConfirm": "Type \"{name}\" to confirm this operation:",
       "inProgress": "Operation in progress...",
       "networkIsolated": "Network Isolated",
-      "openConsole": "Open Console"
+      "openConsole": "Open Console",
+      "cleanup": "Cleanup test",
+      "cleanupDone": "Cleanup completed",
+      "stopped": "stopped",
+      "disksRolledBack": "RBD disk(s) rolled back",
+      "jobsResumed": "replication job(s) resumed"
     }
   },
   "templates": {

@@ -18,11 +18,14 @@ interface FailoverDialogProps {
   plan: RecoveryPlan | null
   type: 'test' | 'failover' | 'failback'
   onConfirm: () => void
+  onCleanup?: () => void
+  cleanupLoading?: boolean
+  cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
   execution: RecoveryExecution | null
   targetConnId?: string
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, execution, targetConnId }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, targetConnId }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const isDestructive = type === 'failover' || type === 'failback'
@@ -126,6 +129,23 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, e
             </Box>
           )}
 
+          {/* Cleanup result */}
+          {cleanupResult && (
+            <Alert severity={cleanupResult.errors.length > 0 ? 'warning' : 'success'}>
+              <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
+                {t('siteRecovery.failover.cleanupDone')}
+              </Typography>
+              <Typography variant='caption' component='div'>
+                {cleanupResult.vms_stopped > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
+                {cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
+                {cleanupResult.jobs_resumed > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
+              </Typography>
+              {cleanupResult.errors.length > 0 && cleanupResult.errors.map((err, i) => (
+                <Typography key={i} variant='caption' sx={{ color: 'error.main', display: 'block', mt: 0.5 }}>{err}</Typography>
+              ))}
+            </Alert>
+          )}
+
           {/* Execution progress */}
           {isExecuting && execution && (
             <Box>
@@ -198,7 +218,23 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, e
           </>
         )}
         {execution && execution.status !== 'running' && (
-          <Button onClick={onClose}>{t('common.close')}</Button>
+          <>
+            {type === 'test' && onCleanup && !cleanupResult && (
+              <Button
+                variant='outlined'
+                color='warning'
+                onClick={onCleanup}
+                disabled={cleanupLoading}
+                startIcon={cleanupLoading
+                  ? <i className='ri-loader-4-line' />
+                  : <i className='ri-delete-back-2-line' />
+                }
+              >
+                {t('siteRecovery.failover.cleanup')}
+              </Button>
+            )}
+            <Button onClick={onClose}>{t('common.close')}</Button>
+          </>
         )}
       </DialogActions>
     </Dialog>

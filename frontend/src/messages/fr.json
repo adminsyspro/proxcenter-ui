@@ -2108,6 +2108,8 @@
     "migrationsLabel": "Migrations",
     "inProgress": "en cours",
     "nodesLabel": "nœuds",
+    "healthScore": "Score de santé",
+    "resourceDistribution": "Distribution des ressources",
     "rec": "rec.",
     "noNodeInMaintenance": "Aucun nœud en maintenance. Tous les nœuds sont opérationnels.",
     "noAffinityRules": "Aucune règle d'affinité configurée",

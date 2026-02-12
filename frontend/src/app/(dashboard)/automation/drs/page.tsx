@@ -6,6 +6,7 @@ import { formatBytes } from '@/utils/format'
 
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -45,7 +46,6 @@ const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ font
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CheckIcon = (props: any) => <i className="ri-check-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CloseIcon = (props: any) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const HistoryIcon = (props: any) => <i className="ri-history-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const SpeedIcon = (props: any) => <i className="ri-speed-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const ExpandMoreIcon = (props: any) => <i className="ri-arrow-down-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const ExpandLessIcon = (props: any) => <i className="ri-arrow-up-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -307,71 +307,6 @@ return []
 // ============================================
 // Sub Components
 // ============================================
-
-// Stat Card pour le header
-const StatCard = ({ 
-  icon, 
-  label, 
-  value, 
-  color = 'primary',
-  subtitle
-}: { 
-  icon: React.ReactNode
-  label: string
-  value: string | number
-  color?: 'primary' | 'success' | 'warning' | 'error' | 'info'
-  subtitle?: string
-}) => {
-  const theme = useTheme()
-
-  const colors = {
-    primary: theme.palette.primary.main,
-    success: theme.palette.success.main,
-    warning: theme.palette.warning.main,
-    error: theme.palette.error.main,
-    info: theme.palette.info.main,
-  }
-  
-  return (
-    <Paper
-      sx={{
-        p: 2,
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 2,
-        bgcolor: alpha(colors[color], 0.08),
-        border: '1px solid',
-        borderColor: alpha(colors[color], 0.2),
-        borderRadius: 2,
-        minWidth: 140
-      }}
-    >
-      <Box sx={{ 
-        p: 1, 
-        borderRadius: 1.5, 
-        bgcolor: alpha(colors[color], 0.15),
-        color: colors[color],
-        display: 'flex'
-      }}>
-        {icon}
-      </Box>
-      <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-          {value}
-        </Typography>
-        <Typography variant="caption" sx={{ opacity: 0.7 }}>
-          {label}
-        </Typography>
-        {subtitle && (
-          <Typography variant="caption" display="block" sx={{ opacity: 0.5, fontSize: '0.65rem' }}>
-            {subtitle}
-          </Typography>
-        )}
-      </Box>
-    </Paper>
-  )
-}
 
 // Gauge component pour visualiser CPU/RAM
 const ResourceGauge = ({ 
@@ -662,27 +597,17 @@ return 'neutral'
                           : alpha(theme.palette.action.hover, 0.04),
 
                     // Bordure gauche épaisse colorée pour les rôles
-                    borderLeft: '4px solid',
+                    borderLeft: isMaintenance || isSource || isTarget ? '4px solid' : 'none',
                     borderLeftColor: isMaintenance
                       ? 'warning.main'
-                      : isSource 
+                      : isSource
                         ? 'error.main'
-                        : isTarget 
+                        : isTarget
                           ? 'success.main'
                           : 'transparent',
-
-                    // Bordure fine autour
-                    border: '1px solid',
-                    borderColor: isMaintenance
-                      ? alpha(theme.palette.warning.main, 0.3)
-                      : isSource 
-                        ? alpha(theme.palette.error.main, 0.25)
-                        : isTarget 
-                          ? alpha(theme.palette.success.main, 0.25)
-                          : alpha(theme.palette.divider, 0.5),
-
-                    // Écraser la bordure gauche avec la version épaisse
-                    borderLeftWidth: isMaintenance || isSource || isTarget ? 4 : 1,
+                    borderTop: 'none',
+                    borderRight: 'none',
+                    borderBottom: 'none',
                     transition: 'all 0.2s ease',
                     '&:hover': {
                       bgcolor: isMaintenance
@@ -1696,14 +1621,55 @@ return next
     const allNodesArr = clusters.flatMap(c => c.metrics.nodes || [])
     const totalVMs = clusters.reduce((acc, c) => acc + (c.metrics.summary?.running_vms || 0), 0)
 
+    // Compute weighted health score across all clusters
+    let healthSum = 0
+    let clusterCount = 0
+    let maxImbalance = 0
+    for (const c of clusters) {
+      const s = c.metrics?.summary
+      if (!s) continue
+      let score = 100
+      const avgMem = s.avg_memory_usage ?? 0
+      const avgCpu = s.avg_cpu_usage ?? 0
+      const imb = s.imbalance ?? 0
+      if (avgMem > 85) score -= 30
+      else if (avgMem > 70) score -= 15
+      if (avgCpu > 80) score -= 20
+      else if (avgCpu > 60) score -= 10
+      if (imb > 10) score -= 20
+      else if (imb > 5) score -= 10
+      healthSum += Math.max(0, score)
+      clusterCount++
+      if (imb > maxImbalance) maxImbalance = imb
+    }
+
     return {
       clusters: clusters.length,
       nodes: allNodesArr.length,
       vms: totalVMs,
       recommendations: pendingRecs.length,
       migrations: migrations.filter(m => m.status === 'running').length,
+      healthScore: clusterCount > 0 ? Math.round(healthSum / clusterCount) : 100,
+      maxImbalance,
     }
   }, [clusters, pendingRecs, migrations])
+
+  // Chart data for resource distribution
+  const chartData = useMemo(() => {
+    if (clusters.length === 1 && clusters[0].metrics.nodes?.length > 1) {
+      // Single cluster: show bars per node
+      return (clusters[0].metrics.nodes || []).map((n: NodeMetrics) => ({
+        name: n.node.length > 10 ? n.node.slice(0, 10) + '…' : n.node,
+        CPU: Math.round(n.cpu_usage * 10) / 10,
+        RAM: Math.round(n.memory_usage * 10) / 10,
+      }))
+    }
+    return clusters.map(c => ({
+      name: (connectionNames[c.id] || c.name || c.id).slice(0, 12),
+      CPU: Math.round((c.metrics.summary?.avg_cpu_usage ?? 0) * 10) / 10,
+      RAM: Math.round((c.metrics.summary?.avg_memory_usage ?? 0) * 10) / 10,
+    }))
+  }, [clusters, connectionNames])
 
   return (
     <EnterpriseGuard requiredFeature={Features.DRS} featureName="DRS (Distributed Resource Scheduler)">
@@ -1722,40 +1688,145 @@ return next
         >
           {t('drsPage.evaluate')}
         </Button>
-        <Chip
-          label={status?.mode?.toUpperCase() || 'MANUAL'}
-          color={status?.mode === 'automatic' ? 'success' : status?.mode === 'partial' ? 'warning' : 'info'}
-        />
       </Box>
 
-      {/* Stats Cards */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-        <StatCard
-          icon={<DnsIcon />}
-          label={t('drsPage.clustersTab')}
-          value={globalStats.clusters}
-          color="primary"
-          subtitle={`${globalStats.nodes} ${t('drsPage.nodesLabel')}`}
-        />
-        <StatCard
-          icon={<StorageIcon />}
-          label={t('drsPage.activeVms')}
-          value={globalStats.vms}
-          color="info"
-        />
-        <StatCard
-          icon={<SwapHorizIcon />}
-          label={t('drsPage.recommendations')}
-          value={globalStats.recommendations}
-          color={globalStats.recommendations > 0 ? 'warning' : 'success'}
-        />
-        <StatCard
-          icon={<PlayArrowIcon />}
-          label={t('drsPage.migrationsLabel')}
-          value={globalStats.migrations}
-          color={globalStats.migrations > 0 ? 'info' : 'primary'}
-          subtitle={t('drsPage.inProgress')}
-        />
+      {/* KPI Dashboard */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 2fr 1fr' }, gap: 2, mb: 3 }}>
+        {/* Column 1 — Health Overview */}
+        <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, borderRadius: 2 }} variant="outlined">
+          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+            <CircularProgress
+              variant="determinate"
+              value={100}
+              size={100}
+              thickness={5}
+              sx={{ color: alpha(
+                globalStats.healthScore >= 80 ? theme.palette.success.main
+                : globalStats.healthScore >= 50 ? theme.palette.warning.main
+                : theme.palette.error.main, 0.15
+              ) }}
+            />
+            <CircularProgress
+              variant="determinate"
+              value={pct(globalStats.healthScore)}
+              size={100}
+              thickness={5}
+              sx={{
+                color: globalStats.healthScore >= 80 ? 'success.main'
+                  : globalStats.healthScore >= 50 ? 'warning.main'
+                  : 'error.main',
+                position: 'absolute', left: 0,
+              }}
+            />
+            <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+              <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
+                {globalStats.healthScore}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>/ 100</Typography>
+            </Box>
+          </Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 0.5 }}>
+            {t('drsPage.healthScore')}
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.6 }}>
+            {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()} • {globalStats.nodes} {t('drsPage.nodesLabel')}
+          </Typography>
+        </Paper>
+
+        {/* Column 2 — Resource Distribution Chart */}
+        <Paper sx={{ p: 2, borderRadius: 2 }} variant="outlined">
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            {t('drsPage.resourceDistribution')}
+          </Typography>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={chartData} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.4)} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} unit="%" />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                />
+                <Bar dataKey="CPU" fill={theme.palette.info.main} radius={[3, 3, 0, 0]} name="CPU" />
+                <Bar dataKey="RAM" fill={theme.palette.warning.main} radius={[3, 3, 0, 0]} name="RAM" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <Box sx={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.noClusterConnected')}</Typography>
+            </Box>
+          )}
+          <Typography variant="caption" sx={{ opacity: 0.6, mt: 0.5, display: 'block', textAlign: 'center' }}>
+            {globalStats.vms} VMs {t('drsPage.activeVms').toLowerCase()}
+          </Typography>
+        </Paper>
+
+        {/* Column 3 — Activity Panel */}
+        <Paper sx={{ p: 2, borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }} variant="outlined">
+          {/* Recommendations */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {globalStats.recommendations > 0
+                ? <WarningAmberIcon style={{ fontSize: 18, color: theme.palette.warning.main }} />
+                : <CheckCircleIcon style={{ fontSize: 18, color: theme.palette.success.main }} />}
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.recommendations')}</Typography>
+            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{globalStats.recommendations}</Typography>
+          </Box>
+
+          {/* Active migrations */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{
+                width: 8, height: 8, borderRadius: '50%',
+                bgcolor: globalStats.migrations > 0 ? 'info.main' : 'text.disabled',
+                ...(globalStats.migrations > 0 && {
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  '@keyframes pulse': {
+                    '0%, 100%': { opacity: 1 },
+                    '50%': { opacity: 0.4 },
+                  },
+                }),
+              }} />
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.migrationsLabel')}</Typography>
+            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{globalStats.migrations}</Typography>
+          </Box>
+
+          <Divider />
+
+          {/* DRS Mode */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>Mode</Typography>
+            <Chip
+              size="small"
+              label={(status?.mode || 'manual').toUpperCase()}
+              color={status?.mode === 'automatic' ? 'success' : status?.mode === 'partial' ? 'warning' : 'info'}
+            />
+          </Box>
+
+          {/* Max Imbalance */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>Imbalance</Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+                color: globalStats.maxImbalance > 10 ? 'error.main'
+                  : globalStats.maxImbalance > 5 ? 'warning.main'
+                  : 'success.main',
+              }}
+            >
+              {globalStats.maxImbalance.toFixed(1)}
+            </Typography>
+          </Box>
+        </Paper>
       </Box>
 
       {/* Tabs */}
@@ -1782,7 +1853,6 @@ return next
             </Box>
           }
         />
-        <Tab icon={<HistoryIcon />} iconPosition="start" label={t('drsPage.history')} />
         <Tab icon={<LocalOfferIcon />} iconPosition="start" label={t('drsPage.affinity')} />
         <Tab icon={<SettingsIcon />} iconPosition="start" label={t('drsPage.configuration')} />
       </Tabs>
@@ -1868,75 +1938,8 @@ return next
         </Stack>
       )}
 
-      {/* Tab: History */}
-      {tab === 2 && (
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent>
-            {migrationsLoading ? (
-              <Stack spacing={1}>
-                {[1, 2, 3].map(i => <Skeleton key={i} height={48} />)}
-              </Stack>
-            ) : migrations.length === 0 ? (
-              <Alert severity="info">{t('drsPage.noMigrationRecorded')}</Alert>
-            ) : (
-              <Stack spacing={0.5}>
-                {migrations.slice(0, 20).map((m, index) => (
-                  <Box
-                    key={m.id || index}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      py: 0.75,
-                      px: 1.5,
-                      borderRadius: 1,
-                      bgcolor: alpha(
-                        m.status === 'completed' 
-                          ? theme.palette.success.main 
-                          : m.status === 'failed'
-                            ? theme.palette.error.main
-                            : theme.palette.info.main,
-                        0.05
-                      )
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <SwapHorizIcon sx={{ opacity: 0.5, fontSize: 18 }} />
-                      <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
-                            {m.vm_name || (m.vmid ? `VM ${m.vmid}` : 'VM inconnue')}
-                          </Typography>
-                          {m.guest_type === 'lxc' && (
-                            <Chip label="CT" size="small" sx={{ height: 14, fontSize: '0.55rem' }} />
-                          )}
-                        </Box>
-                        <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.7rem' }}>
-                          {m.source_node || '?'} → {m.target_node || '?'}
-                        </Typography>
-                      </Box>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.7rem' }}>
-                        {m.started_at ? formatDate(m.started_at) : '—'}
-                      </Typography>
-                      <Chip
-                        size="small"
-                        label={(m.status || 'unknown').toUpperCase()}
-                        color={m.status === 'completed' ? 'success' : m.status === 'failed' ? 'error' : 'info'}
-                        sx={{ height: 20, fontSize: '0.65rem' }}
-                      />
-                    </Box>
-                  </Box>
-                ))}
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Tab: Affinity Rules */}
-      {tab === 3 && (
+      {tab === 2 && (
         <Box>
           {/* Cluster selector */}
           {clusters.length > 1 && (
@@ -1970,7 +1973,7 @@ return next
       )}
 
       {/* Tab: Configuration */}
-      {tab === 4 && (
+      {tab === 3 && (
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent>
             <DRSSettingsPanel

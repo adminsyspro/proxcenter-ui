@@ -37,13 +37,6 @@ export const menuData = (t = (key) => key) => [
         icon: 'ri-file-copy-fill',
         href: '/operations/backups',
         permissions: ['backup.view', 'backup.job.view']
-      },
-      {
-        label: t('navigation.resources'),
-        icon: 'ri-pie-chart-fill',
-        href: '/infrastructure/resources',
-        permissions: ['vm.view', 'node.view'],
-        requiredFeature: 'green_metrics' // Requires Enterprise license
       }
     ]
   },
@@ -75,6 +68,13 @@ export const menuData = (t = (key) => key) => [
         permissions: ['admin.settings'],
         requiredFeature: 'microsegmentation'
       },
+      {
+        label: t('navigation.resources'),
+        icon: 'ri-pie-chart-fill',
+        href: '/infrastructure/resources',
+        permissions: ['vm.view', 'node.view'],
+        requiredFeature: 'green_metrics' // Requires Enterprise license
+      }
     ]
   },
 

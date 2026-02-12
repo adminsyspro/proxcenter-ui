@@ -1111,8 +1111,11 @@ export async function GET(request: Request) {
         const cpuSavings = Math.max(0, cpuAllocated - recommendedCpu)
         const ramSavingsGB = Math.max(0, ramAllocatedGB - recommendedRamGB)
 
+        // Extraire le VMID numérique depuis l'ID composite (connId:type:node:vmid)
+        const numericVmid = vm.id.split(':').pop() || vm.id
+
         return {
-          vmid: vm.id,
+          vmid: numericVmid,
           name: vm.name,
           node: vm.node,
           cpuAllocated,

@@ -970,40 +970,30 @@ export function MigrateVmDialog({
                       
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
                         <Box>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                            <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.8 }}>
-                              CPU {formatCpu(node.cpu)}
+                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6, mb: 0.25, display: 'block' }}>
+                            CPU • {node.maxcpu}c
+                          </Typography>
+                          <Box sx={{ position: 'relative' }}>
+                            <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                              <Box sx={{ height: '100%', width: `${cpuPercent}%`, bgcolor: cpuPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                            </Box>
+                            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                              {formatCpu(node.cpu)}
                             </Typography>
-                            <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6 }}>
-                              {node.maxcpu}c
-                            </Typography>
-                          </Box>
-                          <Box sx={{ height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
-                            <Box sx={{ 
-                              height: '100%', 
-                              width: `${cpuPercent}%`,
-                              bgcolor: cpuPercent > 80 ? 'error.main' : cpuPercent > 60 ? 'warning.main' : 'success.main',
-                              borderRadius: 0.5
-                            }} />
                           </Box>
                         </Box>
-                        
+
                         <Box>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                            <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.8 }}>
-                              RAM {Math.round(memPercent)}%
+                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6, mb: 0.25, display: 'block' }}>
+                            RAM • {formatMemory(node.maxmem)}
+                          </Typography>
+                          <Box sx={{ position: 'relative' }}>
+                            <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                              <Box sx={{ height: '100%', width: `${memPercent}%`, bgcolor: memPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                            </Box>
+                            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                              {Math.round(memPercent)}%
                             </Typography>
-                            <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6 }}>
-                              {formatMemory(node.maxmem)}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
-                            <Box sx={{ 
-                              height: '100%', 
-                              width: `${memPercent}%`,
-                              bgcolor: memPercent > 80 ? 'error.main' : memPercent > 60 ? 'warning.main' : 'success.main',
-                              borderRadius: 0.5
-                            }} />
                           </Box>
                         </Box>
                       </Box>

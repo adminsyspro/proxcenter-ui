@@ -105,18 +105,18 @@ return '#4caf50'
   }
   
   return (
-    <LinearProgress 
-      variant='determinate' 
-      value={Math.min(100, usedPct || 0)} 
-      sx={{ 
-        height, 
-        borderRadius: 1,
+    <LinearProgress
+      variant='determinate'
+      value={Math.min(100, usedPct || 0)}
+      sx={{
+        height: 14,
+        borderRadius: 0,
         bgcolor: 'action.hover',
         '& .MuiLinearProgress-bar': {
-          borderRadius: 1,
+          borderRadius: 0,
           bgcolor: getColor(usedPct)
         }
-      }} 
+      }}
     />
   )
 }

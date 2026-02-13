@@ -661,15 +661,15 @@ return 'neutral'
                         variant="determinate"
                         value={pct(node.cpu_usage)}
                         sx={{
-                          height: 6,
-                          borderRadius: 3,
+                          height: 14,
+                          borderRadius: 0,
                           bgcolor: alpha(theme.palette.primary.main, 0.1),
                           '& .MuiLinearProgress-bar': {
-                            borderRadius: 3,
-                            bgcolor: node.cpu_usage > 80 
-                              ? 'error.main' 
-                              : node.cpu_usage > 60 
-                                ? 'warning.main' 
+                            borderRadius: 0,
+                            bgcolor: node.cpu_usage > 80
+                              ? 'error.main'
+                              : node.cpu_usage > 60
+                                ? 'warning.main'
                                 : 'primary.main'
                           }
                         }}
@@ -688,15 +688,15 @@ return 'neutral'
                         variant="determinate"
                         value={pct(node.memory_usage)}
                         sx={{
-                          height: 6,
-                          borderRadius: 3,
+                          height: 14,
+                          borderRadius: 0,
                           bgcolor: alpha(theme.palette.warning.main, 0.1),
                           '& .MuiLinearProgress-bar': {
-                            borderRadius: 3,
-                            bgcolor: node.memory_usage > 85 
-                              ? 'error.main' 
-                              : node.memory_usage > 70 
-                                ? 'warning.main' 
+                            borderRadius: 0,
+                            bgcolor: node.memory_usage > 85
+                              ? 'error.main'
+                              : node.memory_usage > 70
+                                ? 'warning.main'
                                 : 'success.main'
                           }
                         }}
@@ -824,11 +824,11 @@ const ActiveMigrationRow = ({
           variant="determinate"
           value={pct}
           sx={{
-            height: 6,
-            borderRadius: 3,
+            height: 14,
+            borderRadius: 0,
             bgcolor: alpha(progressColor, 0.15),
             '& .MuiLinearProgress-bar': {
-              borderRadius: 3,
+              borderRadius: 0,
               bgcolor: progressColor,
               transition: 'transform 0.5s ease-in-out'
             }
@@ -1095,13 +1095,13 @@ const StorageWarningPanel = ({
                 variant="determinate"
                 value={pct(targetStorage.usage_percent)}
                 sx={{
-                  height: 8,
-                  borderRadius: 4,
+                  height: 14,
+                  borderRadius: 0,
                   bgcolor: alpha(theme.palette.grey[500], 0.2),
                   '& .MuiLinearProgress-bar': {
-                    borderRadius: 4,
+                    borderRadius: 0,
                     bgcolor: getWarningColor(
-                      targetStorage.usage_percent >= 90 ? 'critical' : 
+                      targetStorage.usage_percent >= 90 ? 'critical' :
                       targetStorage.usage_percent >= 80 ? 'warning' : 'ok'
                     )
                   }
@@ -1124,11 +1124,11 @@ const StorageWarningPanel = ({
                 variant="determinate"
                 value={pct(targetStorage.usage_after_pct)}
                 sx={{
-                  height: 8,
-                  borderRadius: 4,
+                  height: 14,
+                  borderRadius: 0,
                   bgcolor: alpha(theme.palette.grey[500], 0.2),
                   '& .MuiLinearProgress-bar': {
-                    borderRadius: 4,
+                    borderRadius: 0,
                     bgcolor: getWarningColor(targetStorage.warning_level)
                   }
                 }}

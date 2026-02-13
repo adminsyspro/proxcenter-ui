@@ -4777,7 +4777,7 @@ return vm?.isCluster ?? false
                           </Box>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flex: 1, height: 6, bgcolor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                          <Box sx={{ flex: 1, height: 14, bgcolor: 'divider', borderRadius: 0, overflow: 'hidden' }}>
                             <Box 
                               sx={{ 
                                 width: `${ds.usagePercent || 0}%`, 
@@ -5045,7 +5045,7 @@ return vm?.isCluster ?? false
                         </Typography>
                         
                         {/* Progress bar large style Proxmox */}
-                        <Box sx={{ position: 'relative', height: 40, bgcolor: 'divider', borderRadius: 1, overflow: 'hidden', mb: 2 }}>
+                        <Box sx={{ position: 'relative', height: 40, bgcolor: 'divider', borderRadius: 0, overflow: 'hidden', mb: 2 }}>
                           <Box 
                             sx={{ 
                               position: 'absolute',

@@ -139,7 +139,7 @@ export default function GlobalHealthScore({
                   <Typography variant="caption" color="text.secondary">{item.label}</Typography>
                   <Typography variant="caption" fontWeight={600}>{formatPct(item.value)}</Typography>
                 </Stack>
-                <LinearProgress variant="determinate" value={Math.min(100, item.value)} sx={{ height: 6, borderRadius: 1, bgcolor: alpha(item.color, 0.1), '& .MuiLinearProgress-bar': { bgcolor: item.color, borderRadius: 1 } }} />
+                <LinearProgress variant="determinate" value={Math.min(100, item.value)} sx={{ height: 14, borderRadius: 0, bgcolor: alpha(item.color, 0.1), '& .MuiLinearProgress-bar': { bgcolor: item.color, borderRadius: 0 } }} />
               </Box>
             ))}
           </Stack>

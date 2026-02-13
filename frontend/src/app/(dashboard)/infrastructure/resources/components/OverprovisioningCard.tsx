@@ -133,7 +133,7 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
                     <Stack spacing={1}>
                       <Box>
                         <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">{t('resources.allocated')}</Typography><Typography variant="caption" fontWeight={600}>{data.cpu.allocated} vCPUs</Typography></Stack>
-                        <LinearProgress variant="determinate" value={Math.min(100, (data.cpu.allocated / data.cpu.physical) * 100)} sx={{ height: 6, borderRadius: 1, bgcolor: alpha(COLORS.cpu, 0.1), '& .MuiLinearProgress-bar': { bgcolor: COLORS.cpu } }} />
+                        <LinearProgress variant="determinate" value={Math.min(100, (data.cpu.allocated / data.cpu.physical) * 100)} sx={{ height: 14, borderRadius: 0, bgcolor: alpha(COLORS.cpu, 0.1), '& .MuiLinearProgress-bar': { bgcolor: COLORS.cpu, borderRadius: 0 } }} />
                       </Box>
                       <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">{t('resources.physical')}</Typography><Typography variant="caption" fontWeight={600}>{data.cpu.physical} {t('resources.cores')}</Typography></Stack>
                       <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">{t('resources.usedAvg')}</Typography><Typography variant="caption" fontWeight={600}>{data.cpu.used.toFixed(1)} vCPUs</Typography></Stack>
@@ -166,7 +166,7 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
                     <Stack spacing={1}>
                       <Box>
                         <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">{t('resources.allocated')}</Typography><Typography variant="caption" fontWeight={600}>{data.ram.allocated.toFixed(0)} GB</Typography></Stack>
-                        <LinearProgress variant="determinate" value={Math.min(100, (data.ram.allocated / data.ram.physical) * 100)} sx={{ height: 6, borderRadius: 1, bgcolor: alpha(COLORS.ram, 0.1), '& .MuiLinearProgress-bar': { bgcolor: COLORS.ram } }} />
+                        <LinearProgress variant="determinate" value={Math.min(100, (data.ram.allocated / data.ram.physical) * 100)} sx={{ height: 14, borderRadius: 0, bgcolor: alpha(COLORS.ram, 0.1), '& .MuiLinearProgress-bar': { bgcolor: COLORS.ram, borderRadius: 0 } }} />
                       </Box>
                       <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">{t('resources.physical')}</Typography><Typography variant="caption" fontWeight={600}>{data.ram.physical.toFixed(0)} GB</Typography></Stack>
                       <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">{t('resources.usedLabel')}</Typography><Typography variant="caption" fontWeight={600}>{data.ram.used.toFixed(1)} GB</Typography></Stack>

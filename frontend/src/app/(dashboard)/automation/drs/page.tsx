@@ -1728,6 +1728,9 @@ return next
                     borderRadius: 8,
                     fontSize: 12,
                   }}
+                  itemStyle={{ color: theme.palette.text.primary }}
+                  labelStyle={{ color: theme.palette.text.secondary }}
+                  cursor={{ fill: alpha(theme.palette.action.hover, 0.1) }}
                   formatter={(value: number) => [`${value.toFixed(1)}%`]}
                 />
                 <Bar dataKey="CPU" fill={theme.palette.info.main} radius={[3, 3, 0, 0]} name="CPU" />

@@ -59,8 +59,8 @@ function fmtNum(n: number, dec = 1): string {
 
 // ---------- Main export ----------
 export async function exportResourcesPdf(data: ExportData): Promise<void> {
-  const { default: jsPDF } = await import('jspdf')
-  await import('jspdf-autotable')
+  const { jsPDF } = await import('jspdf')
+  const { default: autoTableFn } = await import('jspdf-autotable')
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -132,16 +132,16 @@ export async function exportResourcesPdf(data: ExportData): Promise<void> {
     return y + 2
   }
 
-  // Helper: autoTable wrapper (typed as any since jspdf-autotable adds method to prototype)
+  // Helper: autoTable wrapper using standalone function (jspdf-autotable v5)
   function autoTable(options: Record<string, unknown>): number {
-    ;(doc as any).autoTable({
+    autoTableFn(doc as any, {
       startY: options.startY,
       margin: { left: margin, right: margin },
       styles: { fontSize: 8, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.2 },
       headStyles: { fillColor: hexToRgb(PRIMARY), textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       ...options,
-    })
+    } as any)
     return (doc as any).lastAutoTable.finalY + 4
   }
 

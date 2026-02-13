@@ -602,7 +602,7 @@ export default function ClusterTabs(props: any) {
                                                 bgcolor: 'action.hover',
                                                 '& .MuiLinearProgress-bar': {
                                                   borderRadius: 0,
-                                                  bgcolor: cpuPercent > 80 ? 'error.main' : cpuPercent > 60 ? 'warning.main' : 'primary.main'
+                                                  bgcolor: cpuPercent > 90 ? 'error.main' : 'primary.main'
                                                 }
                                               }}
                                             />
@@ -621,7 +621,7 @@ export default function ClusterTabs(props: any) {
                                                 bgcolor: 'action.hover',
                                                 '& .MuiLinearProgress-bar': {
                                                   borderRadius: 0,
-                                                  bgcolor: memPercent > 80 ? 'error.main' : memPercent > 60 ? 'warning.main' : 'primary.main'
+                                                  bgcolor: memPercent > 90 ? 'error.main' : 'primary.main'
                                                 }
                                               }}
                                             />

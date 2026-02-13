@@ -232,7 +232,7 @@ function RootInventoryView({
   }
   
   // Composant mini barre de progression
-  const MiniProgressBar = ({ value, color, label }: { value: number; color: string; label: string }) => (
+  const MiniProgressBar = ({ value, label }: { value: number; label: string }) => (
     <MuiTooltip title={`${label}: ${value.toFixed(1)}%`}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 120 }}>
         <Typography variant="caption" sx={{ fontSize: 11, opacity: 0.7, minWidth: 28 }}>{label}</Typography>
@@ -246,7 +246,7 @@ function RootInventoryView({
           <Box sx={{
             width: `${Math.min(100, value)}%`,
             height: '100%',
-            bgcolor: value > 90 ? 'error.main' : value > 70 ? 'warning.main' : color,
+            bgcolor: value > 90 ? 'error.main' : 'primary.main',
             borderRadius: 0,
             transition: 'width 0.3s ease'
           }} />
@@ -646,8 +646,8 @@ function RootInventoryView({
                 
                 {/* Indicateurs CPU/RAM du cluster */}
                 <Box sx={{ ml: 'auto', display: 'flex', gap: 2 }} onClick={(e) => e.stopPropagation()}>
-                  <MiniProgressBar value={clusterStats.avgCpu} color="info.main" label="CPU" />
-                  <MiniProgressBar value={clusterStats.avgRam} color="secondary.main" label="RAM" />
+                  <MiniProgressBar value={clusterStats.avgCpu} label="CPU" />
+                  <MiniProgressBar value={clusterStats.avgRam} label="RAM" />
                 </Box>
               </Box>
               
@@ -702,8 +702,8 @@ function RootInventoryView({
                           
                           {/* Indicateurs CPU/RAM du host */}
                           <Box sx={{ ml: 'auto', display: 'flex', gap: 2 }} onClick={(e) => e.stopPropagation()}>
-                            <MiniProgressBar value={hostStats.avgCpu} color="info.main" label="CPU" />
-                            <MiniProgressBar value={hostStats.avgRam} color="secondary.main" label="RAM" />
+                            <MiniProgressBar value={hostStats.avgCpu} label="CPU" />
+                            <MiniProgressBar value={hostStats.avgRam} label="RAM" />
                           </Box>
                         </Box>
                         

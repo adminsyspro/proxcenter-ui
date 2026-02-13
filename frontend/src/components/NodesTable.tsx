@@ -74,10 +74,10 @@ const MetricBar = ({ value, label }: { value: number; label?: string }) => (
         {Math.round(value)}%
       </Typography>
     </Stack>
-    <LinearProgress 
-      variant='determinate' 
-      value={pct(value)} 
-      sx={{ height: 4, borderRadius: 2 }}
+    <LinearProgress
+      variant='determinate'
+      value={pct(value)}
+      sx={{ height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: value > 90 ? 'error.main' : 'primary.main' } }}
     />
   </Box>
 )

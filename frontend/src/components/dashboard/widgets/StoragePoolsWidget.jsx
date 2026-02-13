@@ -114,13 +114,13 @@ return bUsage - aUsage
                 {usagePct}%
               </Typography>
             </Box>
-            <LinearProgress 
-              variant='determinate' 
-              value={usagePct} 
-              sx={{ 
-                height: 4, borderRadius: 2, bgcolor: 'action.hover',
-                '& .MuiLinearProgress-bar': { borderRadius: 2, bgcolor: color }
-              }} 
+            <LinearProgress
+              variant='determinate'
+              value={usagePct}
+              sx={{
+                height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: color }
+              }}
             />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
               <Typography variant='caption' sx={{ opacity: 0.5, fontSize: 9 }}>

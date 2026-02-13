@@ -37,16 +37,16 @@ function CephStatusWidget({ data, loading }) {
       <Box>
         <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, fontSize: 10 }}>{t('storage.title').toUpperCase()}</Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-          <LinearProgress 
-            variant='determinate' 
-            value={ceph.usedPct || 0} 
-            sx={{ 
-              flex: 1, height: 8, borderRadius: 4, bgcolor: 'action.hover',
-              '& .MuiLinearProgress-bar': { 
-                borderRadius: 4, 
-                bgcolor: (ceph.usedPct || 0) > 80 ? '#f44336' : (ceph.usedPct || 0) > 60 ? '#ff9800' : '#4caf50' 
+          <LinearProgress
+            variant='determinate'
+            value={ceph.usedPct || 0}
+            sx={{
+              flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 0,
+                bgcolor: (ceph.usedPct || 0) > 80 ? '#f44336' : (ceph.usedPct || 0) > 60 ? '#ff9800' : '#4caf50'
               }
-            }} 
+            }}
           />
           <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 35 }}>{ceph.usedPct || 0}%</Typography>
         </Box>

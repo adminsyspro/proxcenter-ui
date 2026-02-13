@@ -851,10 +851,10 @@ export default function NodeTabs(props: any) {
                                             <TableCell>
                                               {disk.wearout !== undefined && disk.wearout !== null ? (
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                  <LinearProgress 
-                                                    variant="determinate" 
-                                                    value={100 - (disk.wearout || 0)} 
-                                                    sx={{ width: 50, height: 6, borderRadius: 1 }}
+                                                  <LinearProgress
+                                                    variant="determinate"
+                                                    value={100 - (disk.wearout || 0)}
+                                                    sx={{ width: 50, height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0 } }}
                                                     color={disk.wearout > 20 ? 'success' : disk.wearout > 5 ? 'warning' : 'error'}
                                                   />
                                                   <Typography variant="caption">{disk.wearout}%</Typography>

@@ -236,18 +236,18 @@ function RootInventoryView({
     <MuiTooltip title={`${label}: ${value.toFixed(1)}%`}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 120 }}>
         <Typography variant="caption" sx={{ fontSize: 11, opacity: 0.7, minWidth: 28 }}>{label}</Typography>
-        <Box sx={{ 
+        <Box sx={{
           width: 60,
-          height: 8, 
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', 
-          borderRadius: 1,
+          height: 14,
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+          borderRadius: 0,
           overflow: 'hidden'
         }}>
-          <Box sx={{ 
-            width: `${Math.min(100, value)}%`, 
-            height: '100%', 
+          <Box sx={{
+            width: `${Math.min(100, value)}%`,
+            height: '100%',
             bgcolor: value > 90 ? 'error.main' : value > 70 ? 'warning.main' : color,
-            borderRadius: 1,
+            borderRadius: 0,
             transition: 'width 0.3s ease'
           }} />
         </Box>

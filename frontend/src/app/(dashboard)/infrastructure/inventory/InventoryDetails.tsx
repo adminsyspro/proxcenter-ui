@@ -3703,7 +3703,7 @@ return
 
     // Si c'est l'action console, ouvrir la console
     if (action === 'console') {
-      const url = `/infrastructure/vms/console/${encodeURIComponent(vm.type)}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}?conn=${encodeURIComponent(vm.connId)}`
+      const url = `/console/${encodeURIComponent(vm.type)}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}?connId=${encodeURIComponent(vm.connId)}`
 
       window.open(url, '_blank')
       

@@ -64,36 +64,36 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
       {/* Progress Bars */}
       <Box sx={{ flex: 1 }}>
         <Box sx={{ mb: 1.5 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10 }}>Protection</Typography>
-            <Typography variant="caption" sx={{ fontWeight: 700, fontSize: 10 }}>{Math.round(protectionRate)}%</Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, mb: 0.5, display: 'block' }}>Protection</Typography>
+          <Box sx={{ position: 'relative' }}>
+            <LinearProgress
+              variant="determinate"
+              value={protectionRate}
+              sx={{
+                height: 14,
+                borderRadius: 0,
+                bgcolor: alpha('#ef4444', 0.15),
+                '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 0 }
+              }}
+            />
+            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{Math.round(protectionRate)}%</Typography>
           </Box>
-          <LinearProgress
-            variant="determinate"
-            value={protectionRate}
-            sx={{
-              height: 14,
-              borderRadius: 0,
-              bgcolor: alpha('#ef4444', 0.15),
-              '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 0 }
-            }}
-          />
         </Box>
         <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10 }}>Micro-segmentation</Typography>
-            <Typography variant="caption" sx={{ fontWeight: 700, fontSize: 10 }}>{Math.round(sgRate)}%</Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, mb: 0.5, display: 'block' }}>Micro-segmentation</Typography>
+          <Box sx={{ position: 'relative' }}>
+            <LinearProgress
+              variant="determinate"
+              value={sgRate}
+              sx={{
+                height: 14,
+                borderRadius: 0,
+                bgcolor: alpha('#888', 0.15),
+                '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 0 }
+              }}
+            />
+            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{Math.round(sgRate)}%</Typography>
           </Box>
-          <LinearProgress
-            variant="determinate"
-            value={sgRate}
-            sx={{
-              height: 14,
-              borderRadius: 0,
-              bgcolor: alpha('#888', 0.15),
-              '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 0 }
-            }}
-          />
         </Box>
       </Box>
     </Box>

@@ -172,30 +172,29 @@ const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick:
             </Typography>
           </Box>
 
-          {/* Syncing throughput + progress */}
-          {isSyncing && (
-            <Box sx={{ textAlign: 'center', minWidth: 70, display: { xs: 'none', sm: 'block' } }}>
-              <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 700, display: 'block', lineHeight: 1.2 }}>
-                {progress > 0 ? `${Math.round(progress)}%` : '…'}
-              </Typography>
-              <Typography variant='caption' sx={{ color: 'text.secondary', fontWeight: 500 }}>
-                {formatBytes(job.throughput_bps)}/s
-              </Typography>
-            </Box>
-          )}
-
           {/* Status */}
           <StatusChip status={job.status} t={t} />
         </Box>
       </CardContent>
 
-      {/* Bottom progress bar */}
+      {/* Bottom progress bar with centered stats */}
       {isSyncing && (
-        <LinearProgress
-          variant='determinate'
+        <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+          <LinearProgress
+            variant='determinate'
           value={progress}
-          sx={{ height: 3, position: 'absolute', bottom: 0, left: 0, right: 0 }}
-        />
+            sx={{ height: 14, borderRadius: 0 }}
+          />
+          <Typography variant='caption' sx={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1,
+            textShadow: '0 0 2px rgba(0,0,0,0.5)', gap: 0.75
+          }}>
+            <span>{progress > 0 ? `${Math.round(progress)}%` : '…'}</span>
+            {job.throughput_bps > 0 && <span>{formatBytes(job.throughput_bps)}/s</span>}
+          </Typography>
+        </Box>
       )}
     </Card>
   )

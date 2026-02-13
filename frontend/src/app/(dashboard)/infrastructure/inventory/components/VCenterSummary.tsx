@@ -158,9 +158,9 @@ return `${mins}m`
         {!showConsole && !hostInfo ? (
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1, gap: 1, flexWrap: 'wrap' }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-              <Typography fontWeight={900}>Summary</Typography>
+              {kindLabel !== 'DATASTORE' && <Typography fontWeight={900}>Summary</Typography>}
               <Chip size="small" label={kindLabel} variant="outlined" />
-              {vmState ? (
+              {kindLabel !== 'DATASTORE' && (vmState ? (
                 <Chip
                   size="small"
                   label={vmState}
@@ -174,7 +174,7 @@ return `${mins}m`
                 />
               ) : (
                 <StatusChip status={status} />
-              )}
+              ))}
               {/* KPIs pour les clusters */}
               {kpis && kpis.length > 0 ? (
                 kpis.map((kpi, idx) => (
@@ -668,28 +668,29 @@ return `${mins}m`
               flexDirection: { xs: 'column', md: 'row' },
             }}
           >
-            {/* Bloc CPU/RAM/Storage */}
-            <Box
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
-                p: 1.25,
-                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
-              }}
-            >
-              {/* Pour PBS et Datastore, n'afficher que Storage */}
-              {kindLabel === 'PBS' || kindLabel === 'DATASTORE' ? (
-                <UsageBar themeColor={primaryColor} label="Storage" used={diskUsed} capacity={diskCap} mode="bytes" />
-              ) : (
-                <>
-                  <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
-                  <UsageBar themeColor={primaryColor} label="Memory" used={memUsed} capacity={memCap} mode="bytes" />
-                </>
-              )}
-            </Box>
+            {/* Bloc CPU/RAM/Storage (masqué pour DATASTORE car déjà dans Storage Usage) */}
+            {kindLabel !== 'DATASTORE' && (
+              <Box
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 2,
+                  p: 1.25,
+                  bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
+                }}
+              >
+                {kindLabel === 'PBS' ? (
+                  <UsageBar themeColor={primaryColor} label="Storage" used={diskUsed} capacity={diskCap} mode="bytes" />
+                ) : (
+                  <>
+                    <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
+                    <UsageBar themeColor={primaryColor} label="Memory" used={memUsed} capacity={memCap} mode="bytes" />
+                  </>
+                )}
+              </Box>
+            )}
 
             {/* Bloc Health (uniquement pour CLUSTER) */}
           </Box>

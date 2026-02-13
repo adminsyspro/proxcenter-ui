@@ -1907,9 +1907,6 @@
     "cpuIncompatibleBlocked": "Migration blocked: VM CPU is not compatible with this node",
     "crossCluster": {
       "tabLabel": "Cross-Migration",
-      "beta": "Beta",
-      "title": "Cross-Migration (Proxmox remote_migrate API)",
-      "description": "Migrate this VM to a different Proxmox cluster or standalone node. Requires API token authentication on the target.",
       "source": "SOURCE",
       "lxcNotSupported": "LXC containers are not supported",
       "lxcNotSupportedDesc": "Cross-cluster migration currently only works with QEMU/KVM virtual machines. For LXC containers, consider using backup/restore or manual migration.",

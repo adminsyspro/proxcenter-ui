@@ -26,10 +26,10 @@ function TopConsumersWidget({ data, loading }) {
           TOP {t('monitoring.cpu').toUpperCase()}
         </Typography>
         {topCpu.slice(0, 10).map((vm, idx) => (
-          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-            <Typography variant='caption' sx={{ 
-              width: 100, fontWeight: 500, overflow: 'hidden', 
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 
+          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+            <Typography variant='caption' sx={{
+              width: 100, fontWeight: 500, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11
             }}>
               {vm.name}
             </Typography>
@@ -39,7 +39,7 @@ function TopConsumersWidget({ data, loading }) {
                 value={Math.min(vm.value, 100)}
                 sx={{
                   height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.08)',
-                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: primaryColor }
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: vm.value > 90 ? 'error.main' : primaryColor }
                 }}
               />
             </Box>
@@ -54,7 +54,7 @@ function TopConsumersWidget({ data, loading }) {
           TOP {t('monitoring.memory').toUpperCase()}
         </Typography>
         {topRam.slice(0, 10).map((vm, idx) => (
-          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
             <Typography variant='caption' sx={{
               width: 100, fontWeight: 500, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11
@@ -67,7 +67,7 @@ function TopConsumersWidget({ data, loading }) {
                 value={Math.min(vm.value, 100)}
                 sx={{
                   height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.08)',
-                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: primaryColor }
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: vm.value > 90 ? 'error.main' : primaryColor }
                 }}
               />
             </Box>

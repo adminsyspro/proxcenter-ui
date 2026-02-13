@@ -5053,7 +5053,7 @@ return vm?.isCluster ?? false
                               top: 0,
                               bottom: 0,
                               width: `${data.datastoreInfo.usagePercent || 0}%`, 
-                              bgcolor: (data.datastoreInfo.usagePercent || 0) > 90 ? 'error.main' : (data.datastoreInfo.usagePercent || 0) > 70 ? 'warning.main' : 'primary.main',
+                              bgcolor: (data.datastoreInfo.usagePercent || 0) > 90 ? 'error.main' : 'primary.main',
                               transition: 'width 0.5s ease'
                             }} 
                           />

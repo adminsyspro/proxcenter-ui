@@ -53,7 +53,7 @@ function UsageBar({
             sx={{
               height: '100%',
               width: `${u}%`,
-              bgcolor: themeColor,
+              bgcolor: u > 90 ? 'error.main' : themeColor,
               borderRadius: 0,
               transition: 'all 300ms ease',
             }}
@@ -103,7 +103,7 @@ function UsageBar({
           sx={{
             height: '100%',
             width: `${pctVal}%`,
-            bgcolor: themeColor,
+            bgcolor: pctVal > 90 ? 'error.main' : themeColor,
             borderRadius: 0,
             transition: 'all 300ms ease',
           }}

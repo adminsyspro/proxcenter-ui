@@ -151,7 +151,7 @@ const MetricBar = ({ value }: { value: number }) => (
     <LinearProgress
       variant='determinate'
       value={pct(value)}
-      sx={{ height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0 } }}
+      sx={{ height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: value > 90 ? 'error.main' : 'primary.main' } }}
     />
   </Box>
 )

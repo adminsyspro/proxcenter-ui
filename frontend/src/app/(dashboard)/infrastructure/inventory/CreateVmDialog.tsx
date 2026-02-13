@@ -548,17 +548,17 @@ return
                         <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
                             <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
-                            <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
-                              <Box sx={{ width: `${Math.min(100, group.avgCpu)}%`, height: '100%', bgcolor: group.avgCpu > 80 ? 'error.main' : group.avgCpu > 50 ? 'warning.main' : 'success.main', borderRadius: 1 }} />
+                            <Box sx={{ width: 40, height: 14, position: 'relative', bgcolor: 'action.disabledBackground', borderRadius: 0, overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, group.avgCpu)}%`, height: '100%', bgcolor: group.avgCpu > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{group.avgCpu.toFixed(0)}%</Typography>
                             </Box>
-                            <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{group.avgCpu.toFixed(0)}%</Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
                             <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>RAM</Typography>
-                            <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
-                              <Box sx={{ width: `${Math.min(100, group.avgMem)}%`, height: '100%', bgcolor: group.avgMem > 80 ? 'error.main' : group.avgMem > 50 ? 'warning.main' : 'primary.main', borderRadius: 1 }} />
+                            <Box sx={{ width: 40, height: 14, position: 'relative', bgcolor: 'action.disabledBackground', borderRadius: 0, overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, group.avgMem)}%`, height: '100%', bgcolor: group.avgMem > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{group.avgMem.toFixed(0)}%</Typography>
                             </Box>
-                            <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{group.avgMem.toFixed(0)}%</Typography>
                           </Box>
                         </Stack>
                       </Box>
@@ -598,17 +598,17 @@ return
                           <Stack direction="row" spacing={1.5} sx={{ mr: 1 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
                               <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>CPU</Typography>
-                              <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
-                                <Box sx={{ width: `${Math.min(100, n.cpuPct || 0)}%`, height: '100%', bgcolor: (n.cpuPct || 0) > 80 ? 'error.main' : (n.cpuPct || 0) > 50 ? 'warning.main' : 'success.main', borderRadius: 1 }} />
+                              <Box sx={{ width: 40, height: 14, position: 'relative', bgcolor: 'action.disabledBackground', borderRadius: 0, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${Math.min(100, n.cpuPct || 0)}%`, height: '100%', bgcolor: (n.cpuPct || 0) > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                                <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{(n.cpuPct || 0).toFixed(0)}%</Typography>
                               </Box>
-                              <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{(n.cpuPct || 0).toFixed(0)}%</Typography>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
                               <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7 }}>RAM</Typography>
-                              <Box sx={{ width: 40, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 1, overflow: 'hidden' }}>
-                                <Box sx={{ width: `${Math.min(100, n.memPct || 0)}%`, height: '100%', bgcolor: (n.memPct || 0) > 80 ? 'error.main' : (n.memPct || 0) > 50 ? 'warning.main' : 'primary.main', borderRadius: 1 }} />
+                              <Box sx={{ width: 40, height: 14, position: 'relative', bgcolor: 'action.disabledBackground', borderRadius: 0, overflow: 'hidden' }}>
+                                <Box sx={{ width: `${Math.min(100, n.memPct || 0)}%`, height: '100%', bgcolor: (n.memPct || 0) > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                                <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{(n.memPct || 0).toFixed(0)}%</Typography>
                               </Box>
-                              <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600 }}>{(n.memPct || 0).toFixed(0)}%</Typography>
                             </Box>
                           </Stack>
                         )}

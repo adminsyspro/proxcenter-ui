@@ -226,8 +226,7 @@ return `${mins}m`
             >
               <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
               <UsageBar themeColor={primaryColor} label="Memory" used={memUsed} capacity={memCap} mode="bytes" />
-              <UsageBar themeColor={primaryColor} label="Storage" used={diskUsed} capacity={diskCap} mode="bytes" />
-              
+
               {/* IP et Uptime */}
               <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -688,7 +687,6 @@ return `${mins}m`
                 <>
                   <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
                   <UsageBar themeColor={primaryColor} label="Memory" used={memUsed} capacity={memCap} mode="bytes" />
-                  <UsageBar themeColor={primaryColor} label="Storage" used={diskUsed} capacity={diskCap} mode="bytes" />
                 </>
               )}
             </Box>

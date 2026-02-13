@@ -234,14 +234,15 @@ function RootInventoryView({
   // Composant mini barre de progression
   const MiniProgressBar = ({ value, label }: { value: number; label: string }) => (
     <MuiTooltip title={`${label}: ${value.toFixed(1)}%`}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 120 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 90 }}>
         <Typography variant="caption" sx={{ fontSize: 11, opacity: 0.7, minWidth: 28 }}>{label}</Typography>
         <Box sx={{
           width: 60,
           height: 14,
           bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
           borderRadius: 0,
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative'
         }}>
           <Box sx={{
             width: `${Math.min(100, value)}%`,
@@ -250,10 +251,10 @@ function RootInventoryView({
             borderRadius: 0,
             transition: 'width 0.3s ease'
           }} />
+          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+            {value.toFixed(0)}%
+          </Typography>
         </Box>
-        <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 600, minWidth: 32, textAlign: 'right' }}>
-          {value.toFixed(0)}%
-        </Typography>
       </Box>
     </MuiTooltip>
   )

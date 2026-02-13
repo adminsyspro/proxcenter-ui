@@ -68,15 +68,17 @@ return <Chip size='small' color='error' label='DOWN' sx={{ height: 20, fontSize:
 }
 
 const MetricBar = ({ value, label }: { value: number; label?: string }) => (
-  <Box sx={{ width: '100%', position: 'relative' }}>
-    <LinearProgress
-      variant='determinate'
-      value={pct(value)}
-      sx={{ height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: value > 90 ? 'error.main' : 'primary.main' } }}
-    />
-    <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-      {Math.round(value)}%
-    </Typography>
+  <Box sx={{ width: '100%', position: 'relative', display: 'flex', alignItems: 'center' }}>
+    <Box sx={{ width: '100%', position: 'relative' }}>
+      <LinearProgress
+        variant='determinate'
+        value={pct(value)}
+        sx={{ height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: value > 90 ? 'error.main' : 'primary.main' } }}
+      />
+      <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+        {Math.round(value)}%
+      </Typography>
+    </Box>
   </Box>
 )
 
@@ -289,6 +291,8 @@ function NodesTable({
             borderBottom: '1px solid',
             borderColor: 'divider',
             py: compact ? 0.5 : 1,
+            display: 'flex',
+            alignItems: 'center',
           },
           '& .MuiDataGrid-columnHeaders': {
             borderBottom: '1px solid',

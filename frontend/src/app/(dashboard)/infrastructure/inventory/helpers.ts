@@ -410,6 +410,8 @@ return {
 
     if (!n) throw new Error('Node not found')
 
+    const isCluster = nodes.length > 1
+
     let vmsData: DetailsPayload['vmsData'] = []
 
     if (resourcesR && resourcesR.ok) {
@@ -435,6 +437,7 @@ return {
           uptime: Number(vm.uptime ?? 0),
           tags: parseTags(vm.tags),
           template: vm.template === 1,
+          isCluster,
         }))
       } catch {}
     }
@@ -581,6 +584,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       },
       vmsData,
       clusterName,
+      isCluster,
     }
   }
 

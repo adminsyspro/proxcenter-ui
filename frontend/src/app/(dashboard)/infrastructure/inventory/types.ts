@@ -161,6 +161,7 @@ export type DetailsPayload = {
     uptime?: number
     tags?: string[]
     template?: boolean
+    isCluster?: boolean
   }>
 
   cephHealth?: string

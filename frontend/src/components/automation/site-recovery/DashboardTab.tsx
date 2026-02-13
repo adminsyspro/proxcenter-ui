@@ -9,7 +9,7 @@ import {
 } from '@mui/material'
 
 import type {
-  ReplicationHealthStatus, ReplicationActivity, SiteInfo, JobStatusSummary
+  ReplicationHealthStatus, ReplicationActivity, JobStatusSummary
 } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -92,94 +92,6 @@ const KPICard = ({ icon, label, value, subtitle, color = 'default' }: {
         </Box>
       </CardContent>
     </Card>
-  )
-}
-
-const SiteCard = ({ site, t }: { site: SiteInfo; t: any }) => {
-  const theme = useTheme()
-  const statusColors: Record<string, string> = {
-    online: theme.palette.success.main,
-    degraded: theme.palette.warning.main,
-    offline: theme.palette.error.main
-  }
-
-  return (
-    <Card variant='outlined' sx={{ borderRadius: 2, flex: 1 }}>
-      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-          <Box>
-            <Typography variant='subtitle2' sx={{ fontWeight: 700 }}>{site.name || site.cluster_id}</Typography>
-            <Chip
-              size='small'
-              label={site.role === 'primary' ? t('siteRecovery.dashboard.primary') : t('siteRecovery.dashboard.disasterRecovery')}
-              color={site.role === 'primary' ? 'primary' : 'secondary'}
-              variant='outlined'
-              sx={{ mt: 0.5 }}
-            />
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box sx={{
-              width: 8, height: 8, borderRadius: '50%',
-              bgcolor: statusColors[site.status] || theme.palette.text.disabled,
-              boxShadow: site.status === 'online' ? `0 0 8px ${statusColors[site.status]}` : 'none'
-            }} />
-            <Typography variant='caption' sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
-              {site.status}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 3 }}>
-          <Box>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.dashboard.nodes')}</Typography>
-            <Typography variant='body2' sx={{ fontWeight: 600 }}>{site.node_count}</Typography>
-          </Box>
-          <Box>
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.dashboard.vms')}</Typography>
-            <Typography variant='body2' sx={{ fontWeight: 600 }}>{site.vm_count}</Typography>
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  )
-}
-
-const ConnectivityIndicator = ({ connectivity, latency, t }: {
-  connectivity: string; latency: number; t: any
-}) => {
-  const theme = useTheme()
-  const colorMap: Record<string, string> = {
-    connected: theme.palette.success.main,
-    degraded: theme.palette.warning.main,
-    disconnected: theme.palette.error.main
-  }
-  const color = colorMap[connectivity] || theme.palette.text.disabled
-
-  return (
-    <Box sx={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      px: 3, minWidth: 100
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-        <Box sx={{ width: 24, height: 2, bgcolor: color, borderRadius: 1 }} />
-        <Box sx={{
-          width: 10, height: 10, borderRadius: '50%', border: `2px solid ${color}`,
-          bgcolor: connectivity === 'connected' ? color : 'transparent',
-          animation: connectivity === 'connected' ? 'pulse 2s infinite' : 'none',
-          '@keyframes pulse': {
-            '0%, 100%': { opacity: 1 },
-            '50%': { opacity: 0.5 }
-          }
-        }} />
-        <Box sx={{ width: 24, height: 2, bgcolor: color, borderRadius: 1 }} />
-      </Box>
-      <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-        {connectivity === 'connected'
-          ? t('siteRecovery.dashboard.connected')
-          : connectivity === 'degraded'
-            ? t('siteRecovery.dashboard.degraded')
-            : t('siteRecovery.dashboard.noConnection')}
-      </Typography>
-    </Box>
   )
 }
 
@@ -421,11 +333,6 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
   if (loading) {
     return (
       <Stack spacing={2.5}>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Skeleton variant='rounded' height={120} sx={{ flex: 1 }} />
-          <Skeleton variant='rounded' height={120} width={100} />
-          <Skeleton variant='rounded' height={120} sx={{ flex: 1 }} />
-        </Box>
         <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} variant='rounded' height={80} />)}
         </Box>
@@ -448,34 +355,11 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
 
   return (
     <Stack spacing={2.5}>
-      {/* Sites Overview */}
-      {health.sites.length <= 2 ? (
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
-          {health.sites[0] && <SiteCard site={health.sites[0]} t={t} />}
-          {health.sites.length === 2 && (
-            <ConnectivityIndicator connectivity={health.connectivity} latency={health.latency_ms} t={t} />
-          )}
-          {health.sites[1] && <SiteCard site={health.sites[1]} t={t} />}
-        </Box>
-      ) : (
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-            <ConnectivityBadge connectivity={health.connectivity} latency={health.latency_ms} t={t} />
-          </Box>
-          <Box sx={{
-            display: 'grid', gap: 2,
-            gridTemplateColumns: {
-              xs: '1fr',
-              md: 'repeat(2, 1fr)',
-              lg: `repeat(${Math.min(health.sites.length, 3)}, 1fr)`
-            }
-          }}>
-            {health.sites.map(site => <SiteCard key={site.cluster_id} site={site} t={t} />)}
-          </Box>
-        </Box>
-      )}
+      {/* Connectivity + KPI Row */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: -1 }}>
+        <ConnectivityBadge connectivity={health.connectivity} latency={health.latency_ms} t={t} />
+      </Box>
 
-      {/* KPI Row */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(6, 1fr)' } }}>
         <KPICard
           icon='ri-shield-check-line'

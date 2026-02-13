@@ -978,12 +978,11 @@ export function MigrateVmDialog({
                       </Box>
 
                       {recommended && (
-                        <Chip
-                          label={t('hardware.recommended')}
-                          size="small"
-                          color="success"
-                          sx={{ height: 18, fontSize: '0.6rem', flexShrink: 0 }}
-                        />
+                        <Tooltip title={t('hardware.recommended')} arrow>
+                          <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main', flexShrink: 0 }}>
+                            <i className="ri-star-fill" style={{ fontSize: 16 }} />
+                          </Box>
+                        </Tooltip>
                       )}
                     </Box>
                   )

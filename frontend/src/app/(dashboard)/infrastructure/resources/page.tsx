@@ -17,7 +17,7 @@ import {
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useResourceData } from './hooks/useResourceData'
 import { calculateImprovedPredictions } from './algorithms/improvedPrediction'
-import { calculateHealthScore } from './algorithms/healthScore'
+import { calculateHealthScoreWithDetails } from './algorithms/healthScore'
 
 import { RefreshIcon } from './components/icons'
 import GlobalHealthScore from './components/GlobalHealthScore'
@@ -60,9 +60,10 @@ export default function ResourcesPage() {
     return calculateImprovedPredictions(kpis, trends)
   }, [kpis, trends])
 
-  const healthScore = useMemo(() => {
-    if (!kpis) return 0
-    return calculateHealthScore(kpis, alerts)
+  const { healthScore, healthBreakdown } = useMemo(() => {
+    if (!kpis) return { healthScore: 0, healthBreakdown: null }
+    const result = calculateHealthScoreWithDetails(kpis, alerts)
+    return { healthScore: result.score, healthBreakdown: result.breakdown }
   }, [kpis, alerts])
 
   const handleRefresh = () => {
@@ -97,7 +98,7 @@ export default function ResourcesPage() {
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
         <Box sx={{ mb: 3 }}>
-          <GlobalHealthScore score={healthScore} kpis={kpis} alerts={alerts} loading={loading} />
+          <GlobalHealthScore score={healthScore} kpis={kpis} alerts={alerts} breakdown={healthBreakdown} loading={loading} />
         </Box>
 
         <Grid container spacing={3}>

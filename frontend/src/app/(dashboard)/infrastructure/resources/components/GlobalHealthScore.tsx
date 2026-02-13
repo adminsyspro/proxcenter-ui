@@ -1,15 +1,19 @@
 'use client'
 
+import { useState } from 'react'
 import {
   Box,
   Card,
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Divider,
+  IconButton,
   LinearProgress,
   Skeleton,
   Stack,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -17,6 +21,7 @@ import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
 import type { KpiData, PredictiveAlert } from '../types'
+import type { HealthScoreBreakdown } from '../algorithms/healthScore'
 import { COLORS } from '../constants'
 import { formatPct } from '../helpers'
 import {
@@ -33,7 +38,7 @@ function getScoreColor(s: number) {
 function getScoreLabel(s: number) {
   if (s >= 80) return 'Excellent'
   if (s >= 60) return 'Bon'
-  if (s >= 40) return 'À surveiller'
+  if (s >= 40) return 'A surveiller'
   return 'Critique'
 }
 
@@ -44,19 +49,51 @@ function getScoreIcon(s: number) {
   return <ErrorIcon sx={{ fontSize: 32 }} />
 }
 
+const BreakdownRow = ({ label, icon, penalty, reason, maxPenalty }: {
+  label: string; icon: string; penalty: number; reason: string; maxPenalty: number
+}) => {
+  const isPositive = penalty > 0
+  const isNeutral = penalty === 0
+  const color = isPositive ? COLORS.success : isNeutral ? 'text.secondary' : penalty >= -5 ? COLORS.warning : COLORS.error
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75 }}>
+      <Box sx={{ width: 24, textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
+        <i className={icon} />
+      </Box>
+      <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 80 }}>{label}</Typography>
+      <Box sx={{ flex: 1 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>{reason}</Typography>
+      </Box>
+      <Chip
+        size="small"
+        label={isPositive ? `+${penalty}` : penalty === 0 ? '0' : `${penalty}`}
+        sx={{
+          height: 22, minWidth: 44, fontWeight: 700, fontSize: '0.75rem',
+          bgcolor: alpha(typeof color === 'string' && color.startsWith('#') ? color : '#888', 0.12),
+          color,
+        }}
+      />
+    </Box>
+  )
+}
+
 export default function GlobalHealthScore({
   score,
   kpis,
   alerts,
+  breakdown,
   loading,
 }: {
   score: number
   kpis: KpiData | null
   alerts: PredictiveAlert[]
+  breakdown: HealthScoreBreakdown | null
   loading?: boolean
 }) {
   const theme = useTheme()
   const t = useTranslations()
+  const [showDetails, setShowDetails] = useState(false)
 
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length
   const warningAlerts = alerts.filter(a => a.severity === 'warning').length
@@ -104,6 +141,13 @@ export default function GlobalHealthScore({
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
               <Box sx={{ color }}>{getScoreIcon(score)}</Box>
               <Typography variant="h4" fontWeight={700}>{t('resources.infrastructureHealth')}</Typography>
+              {breakdown && (
+                <Tooltip title={showDetails ? 'Hide details' : 'Show score breakdown'}>
+                  <IconButton size="small" onClick={() => setShowDetails(!showDetails)} sx={{ ml: 0.5 }}>
+                    <i className={showDetails ? 'ri-arrow-up-s-line' : 'ri-information-line'} style={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Stack>
             <Chip label={getScoreLabel(score)} sx={{ bgcolor: alpha(color, 0.15), color, fontWeight: 700, fontSize: '0.9rem', height: 32, mb: 2 }} />
             <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
@@ -144,6 +188,25 @@ export default function GlobalHealthScore({
             ))}
           </Stack>
         </Stack>
+
+        {/* Score Breakdown */}
+        {breakdown && (
+          <Collapse in={showDetails}>
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+              Score Breakdown
+              <Typography component="span" variant="caption" sx={{ ml: 1, opacity: 0.6 }}>Base: 100 pts</Typography>
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 0.5 }}>
+              <BreakdownRow label="CPU" icon="ri-cpu-line" penalty={breakdown.cpu.penalty} reason={breakdown.cpu.reason} maxPenalty={20} />
+              <BreakdownRow label="RAM" icon="ri-database-2-line" penalty={breakdown.ram.penalty} reason={breakdown.ram.reason} maxPenalty={25} />
+              <BreakdownRow label="Storage" icon="ri-hard-drive-3-line" penalty={breakdown.storage.penalty} reason={breakdown.storage.reason} maxPenalty={25} />
+              <BreakdownRow label="Alertes" icon="ri-alarm-warning-line" penalty={breakdown.alerts.penalty} reason={breakdown.alerts.reason} maxPenalty={30} />
+              <BreakdownRow label="Efficiency" icon="ri-speed-line" penalty={breakdown.efficiency.penalty} reason={breakdown.efficiency.reason} maxPenalty={15} />
+              <BreakdownRow label="VMs off" icon="ri-shut-down-line" penalty={breakdown.stoppedVms.penalty} reason={breakdown.stoppedVms.reason} maxPenalty={10} />
+            </Box>
+          </Collapse>
+        )}
       </CardContent>
     </Card>
   )

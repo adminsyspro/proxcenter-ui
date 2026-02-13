@@ -97,7 +97,7 @@ export default function PredictiveAlertsCard({ alerts, loading }: { alerts: Pred
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2.5 }}>
           <AccessTimeIcon sx={{ color: COLORS.primary }} />
           <Typography variant="h6" fontWeight={700}>{t('resources.capacityForecasts')}</Typography>
-          <Chip size="small" label={t('resources.polynomialRegression')} sx={{ ml: 'auto', height: 20, fontSize: '0.6rem', bgcolor: alpha(COLORS.primary, 0.1), color: COLORS.primary }} />
+          <Chip size="small" label={t('resources.polynomialRegression')} sx={{ ml: 'auto', height: 22, fontSize: '0.7rem', bgcolor: alpha(COLORS.primary, 0.1), color: COLORS.primary }} />
         </Stack>
         <Stack spacing={1.5} sx={{ flex: 1 }}>
           {alerts.map(alert => {
@@ -106,29 +106,29 @@ export default function PredictiveAlertsCard({ alerts, loading }: { alerts: Pred
             const trendTypeLabel = getTrendTypeLabel(alert.trendType)
 
             return (
-              <Paper key={alert.resource} sx={{ flex: 1, p: 2, bgcolor: alpha(severityColor, 0.04), border: '1px solid', borderColor: alpha(severityColor, 0.2), borderRadius: 2, '&:hover': { bgcolor: alpha(severityColor, 0.08) }, display: 'flex', alignItems: 'center' }}>
+              <Paper key={alert.resource} sx={{ flex: 1, p: 2.5, bgcolor: alpha(severityColor, 0.04), border: '1px solid', borderColor: alpha(severityColor, 0.2), borderRadius: 2, '&:hover': { bgcolor: alpha(severityColor, 0.08) }, display: 'flex', alignItems: 'center' }}>
                 <Stack direction="row" spacing={2} alignItems="center" sx={{ width: '100%' }}>
-                  <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: alpha(resourceColor, 0.1), color: resourceColor, display: 'flex' }}>{getResourceIcon(alert.resource)}</Box>
+                  <Box sx={{ p: 1.25, borderRadius: 1.5, bgcolor: alpha(resourceColor, 0.1), color: resourceColor, display: 'flex' }}>{getResourceIcon(alert.resource)}</Box>
                   <Box sx={{ flex: 1 }}>
                     <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
-                      <Typography variant="subtitle2" fontWeight={700}>{getResourceLabel(alert.resource)}</Typography>
-                      <Chip size="small" icon={getTrendIcon(alert.trend)} label={`${alert.trend === 'up' ? '+' : alert.trend === 'down' ? '-' : ''}${Math.abs(alert.predictedValue - alert.currentValue).toFixed(1)}%`} sx={{ height: 20, fontSize: '0.7rem', bgcolor: alpha(alert.trend === 'up' ? COLORS.warning : alert.trend === 'down' ? COLORS.success : COLORS.info, 0.1), color: alert.trend === 'up' ? COLORS.warning : alert.trend === 'down' ? COLORS.success : COLORS.info, '& .MuiChip-icon': { fontSize: 14 } }} />
+                      <Typography variant="subtitle1" fontWeight={700}>{getResourceLabel(alert.resource)}</Typography>
+                      <Chip size="small" icon={getTrendIcon(alert.trend)} label={`${alert.trend === 'up' ? '+' : alert.trend === 'down' ? '-' : ''}${Math.abs(alert.predictedValue - alert.currentValue).toFixed(1)}%`} sx={{ height: 22, fontSize: '0.8rem', bgcolor: alpha(alert.trend === 'up' ? COLORS.warning : alert.trend === 'down' ? COLORS.success : COLORS.info, 0.1), color: alert.trend === 'up' ? COLORS.warning : alert.trend === 'down' ? COLORS.success : COLORS.info, '& .MuiChip-icon': { fontSize: 16 } }} />
                       {trendTypeLabel && (
-                        <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.65rem' }}>{trendTypeLabel}</Typography>
+                        <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>{trendTypeLabel}</Typography>
                       )}
                     </Stack>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Typography variant="body2" color="text.secondary">
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
+                      <Typography variant="body1" color="text.secondary" sx={{ fontSize: '0.95rem' }}>
                         {formatPct(alert.currentValue)} → {formatPct(alert.predictedValue)}
-                        <Typography component="span" variant="caption" sx={{ opacity: 0.7 }}> (30j)</Typography>
+                        <Typography component="span" variant="body2" sx={{ opacity: 0.7 }}> (30j)</Typography>
                       </Typography>
                       {alert.confidence !== undefined && (
                         <Chip
                           size="small"
                           label={`${Math.round(alert.confidence)}% conf.`}
                           sx={{
-                            height: 16,
-                            fontSize: '0.55rem',
+                            height: 20,
+                            fontSize: '0.7rem',
                             bgcolor: alpha(alert.confidence > 70 ? COLORS.success : alert.confidence > 40 ? COLORS.warning : COLORS.error, 0.1),
                             color: alert.confidence > 70 ? COLORS.success : alert.confidence > 40 ? COLORS.warning : COLORS.error,
                           }}
@@ -139,13 +139,13 @@ export default function PredictiveAlertsCard({ alerts, loading }: { alerts: Pred
                   <Box sx={{ textAlign: 'right' }}>
                     {alert.daysToThreshold ? (
                       <>
-                        <Typography variant="h6" fontWeight={700} sx={{ color: severityColor, lineHeight: 1 }}>{alert.daysToThreshold}j</Typography>
-                        <Typography variant="caption" color="text.secondary">{t('resources.before')} {alert.threshold}%</Typography>
+                        <Typography variant="h5" fontWeight={700} sx={{ color: severityColor, lineHeight: 1 }}>{alert.daysToThreshold}j</Typography>
+                        <Typography variant="body2" color="text.secondary">{t('resources.before')} {alert.threshold}%</Typography>
                       </>
                     ) : (
                       <>
-                        <CheckCircleIcon sx={{ color: COLORS.success, fontSize: 24 }} />
-                        <Typography variant="caption" color="text.secondary" display="block">OK</Typography>
+                        <CheckCircleIcon sx={{ color: COLORS.success, fontSize: 28 }} />
+                        <Typography variant="body2" color="text.secondary" display="block">OK</Typography>
                       </>
                     )}
                   </Box>

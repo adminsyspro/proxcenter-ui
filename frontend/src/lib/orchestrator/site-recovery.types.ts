@@ -10,6 +10,7 @@ export interface ReplicationJob {
   id: string
   vm_ids: number[]
   vm_names: string[]
+  tags: string[]            // stored tags for dynamic resolution (empty = VM-based job)
   source_cluster: string
   target_cluster: string
   target_pool: string

@@ -924,79 +924,67 @@ export function MigrateVmDialog({
                 {t('hardware.noNodeAvailable')}
               </Alert>
             ) : (
-              <Stack spacing={0.75}>
+              <Stack spacing={0.5}>
                 {nodes.map((node) => {
                   const cpuPercent = getCpuPercent(node)
                   const memPercent = getMemoryPercent(node)
                   const recommended = isRecommended(node)
-                  
+
                   return (
                     <Box
                       key={node.node}
                       onClick={() => setSelectedNode(node.node)}
                       sx={{
-                        p: 1.25,
+                        px: 1.25,
+                        py: 0.75,
                         border: '1px solid',
                         borderColor: selectedNode === node.node ? 'primary.main' : 'divider',
                         borderRadius: 1.5,
                         cursor: 'pointer',
                         bgcolor: selectedNode === node.node ? 'action.selected' : 'transparent',
                         '&:hover': { bgcolor: 'action.hover' },
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
                       }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <i className="ri-server-line" style={{ fontSize: 14, opacity: 0.7 }} />
-                            {node.node}
-                          </Typography>
-                          {recommended && (
-                            <Chip
-                              label={t('hardware.recommended')}
-                              size="small"
-                              color="success"
-                              sx={{ height: 18, fontSize: '0.6rem' }}
-                            />
-                          )}
-                        </Box>
-                        <Chip
-                          label={node.status}
-                          size="small"
-                          color={node.status === 'online' ? 'success' : 'default'}
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: '0.6rem' }}
-                        />
-                      </Box>
-                      
-                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                        <Box>
-                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6, mb: 0.25, display: 'block' }}>
-                            CPU • {node.maxcpu}c
-                          </Typography>
-                          <Box sx={{ position: 'relative' }}>
-                            <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
-                              <Box sx={{ height: '100%', width: `${cpuPercent}%`, bgcolor: cpuPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
-                            </Box>
-                            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                              {formatCpu(node.cpu)}
-                            </Typography>
-                          </Box>
-                        </Box>
+                      <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 100, flexShrink: 0 }}>
+                        <i className="ri-server-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                        {node.node}
+                      </Typography>
 
-                        <Box>
-                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6, mb: 0.25, display: 'block' }}>
-                            RAM • {formatMemory(node.maxmem)}
-                          </Typography>
-                          <Box sx={{ position: 'relative' }}>
-                            <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
-                              <Box sx={{ height: '100%', width: `${memPercent}%`, bgcolor: memPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
-                            </Box>
-                            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                              {Math.round(memPercent)}%
-                            </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
+                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 22 }}>CPU</Typography>
+                        <Box sx={{ flex: 1, position: 'relative' }}>
+                          <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${cpuPercent}%`, bgcolor: cpuPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
                           </Box>
+                          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                            {formatCpu(node.cpu)}
+                          </Typography>
                         </Box>
                       </Box>
+
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
+                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 26 }}>RAM</Typography>
+                        <Box sx={{ flex: 1, position: 'relative' }}>
+                          <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${memPercent}%`, bgcolor: memPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                            {Math.round(memPercent)}%
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {recommended && (
+                        <Chip
+                          label={t('hardware.recommended')}
+                          size="small"
+                          color="success"
+                          sx={{ height: 18, fontSize: '0.6rem', flexShrink: 0 }}
+                        />
+                      )}
                     </Box>
                   )
                 })}

@@ -828,14 +828,7 @@ export function MigrateVmDialog({
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: crossClusterAvailable ? 1 : 0.5 }}>
                   {t('hardware.crossCluster.tabLabel')}
-                  {crossClusterAvailable ? (
-                    <Chip
-                      label={t('hardware.crossCluster.beta')}
-                      size="small"
-                      color="warning"
-                      sx={{ height: 18, fontSize: '0.6rem' }}
-                    />
-                  ) : (
+                  {!crossClusterAvailable && (
                     <Chip
                       label="Enterprise"
                       size="small"
@@ -861,14 +854,7 @@ export function MigrateVmDialog({
             <Typography variant="subtitle2" fontWeight={600}>
               {t('hardware.crossCluster.tabLabel')}
             </Typography>
-            {crossClusterAvailable ? (
-              <Chip
-                label={t('hardware.crossCluster.beta')}
-                size="small"
-                color="warning"
-                sx={{ height: 18, fontSize: '0.6rem' }}
-              />
-            ) : (
+            {!crossClusterAvailable && (
               <Chip
                 label="Enterprise"
                 size="small"

@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Card, CardContent, Chip, LinearProgress,
+  Alert, Box, Card, CardContent, Chip,
   Skeleton, Stack, Typography, alpha, useTheme
 } from '@mui/material'
 
@@ -92,32 +92,6 @@ const KPICard = ({ icon, label, value, subtitle, color = 'default' }: {
         </Box>
       </CardContent>
     </Card>
-  )
-}
-
-const ConnectivityBadge = ({ connectivity, latency, t }: {
-  connectivity: string; latency: number; t: any
-}) => {
-  const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-    connected: 'success',
-    degraded: 'warning',
-    disconnected: 'error'
-  }
-  const labelMap: Record<string, string> = {
-    connected: t('siteRecovery.dashboard.connected'),
-    degraded: t('siteRecovery.dashboard.degraded'),
-    disconnected: t('siteRecovery.dashboard.noConnection')
-  }
-
-  return (
-    <Chip
-      size='small'
-      icon={<i className='ri-link' />}
-      label={`${labelMap[connectivity] || connectivity}${latency > 0 ? ` · ${latency}ms` : ''}`}
-      color={colorMap[connectivity] || 'default'}
-      variant='outlined'
-      sx={{ height: 24 }}
-    />
   )
 }
 
@@ -224,6 +198,7 @@ const ProtectionCoverage = ({ protectedVMs, unprotectedVMs, t }: {
   const theme = useTheme()
   const total = protectedVMs + unprotectedVMs
   const pct = total > 0 ? (protectedVMs / total) * 100 : 0
+  const protectedArc = total > 0 ? (protectedVMs / total) * 94.2 : 0 // circumference = 2π×15 ≈ 94.2
 
   return (
     <Card variant='outlined' sx={{ borderRadius: 2 }}>
@@ -231,37 +206,41 @@ const ProtectionCoverage = ({ protectedVMs, unprotectedVMs, t }: {
         <Typography variant='subtitle2' sx={{ fontWeight: 600, mb: 1.5 }}>
           {t('siteRecovery.dashboard.protectionCoverage')}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-          <Box sx={{ flex: 1 }}>
-            <LinearProgress
-              variant='determinate'
-              value={pct}
-              sx={{
-                height: 10, borderRadius: 1,
-                bgcolor: alpha(theme.palette.error.main, 0.12),
-                '& .MuiLinearProgress-bar': {
-                  bgcolor: theme.palette.success.main,
-                  borderRadius: 1
-                }
-              }}
-            />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* Donut chart */}
+          <Box sx={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+            <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+              <circle cx="18" cy="18" r="15" fill="none"
+                stroke={alpha(theme.palette.error.main, 0.25)} strokeWidth="3" />
+              <circle cx="18" cy="18" r="15" fill="none"
+                stroke={theme.palette.success.main} strokeWidth="3"
+                strokeDasharray={`${protectedArc} ${94.2 - protectedArc}`}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dasharray 0.6s ease' }}
+              />
+            </svg>
+            <Box sx={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Typography variant='body2' sx={{ fontWeight: 700, color: pct >= 80 ? 'success.main' : pct >= 50 ? 'warning.main' : 'error.main' }}>
+                {Math.round(pct)}%
+              </Typography>
+            </Box>
           </Box>
-          <Typography variant='body2' sx={{ fontWeight: 700, minWidth: 40, textAlign: 'right' }}>
-            {Math.round(pct)}%
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-              {t('siteRecovery.dashboard.protectedVms')}: <strong>{protectedVMs}</strong>
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />
-            <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-              {t('siteRecovery.dashboard.unprotectedVms')}: <strong>{unprotectedVMs}</strong>
-            </Typography>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+              <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                {t('siteRecovery.dashboard.protectedVms')}: <strong>{protectedVMs}</strong>
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />
+              <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                {t('siteRecovery.dashboard.unprotectedVms')}: <strong>{unprotectedVMs}</strong>
+              </Typography>
+            </Box>
           </Box>
         </Box>
       </CardContent>
@@ -355,12 +334,8 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
 
   return (
     <Stack spacing={2.5}>
-      {/* Connectivity + KPI Row */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: -1 }}>
-        <ConnectivityBadge connectivity={health.connectivity} latency={health.latency_ms} t={t} />
-      </Box>
-
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(6, 1fr)' } }}>
+      {/* KPI Row */}
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' } }}>
         <KPICard
           icon='ri-shield-check-line'
           label={t('siteRecovery.dashboard.protectedVms')}
@@ -383,11 +358,6 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
           icon='ri-refresh-line'
           label={t('siteRecovery.dashboard.lastSync')}
           value={kpis.last_sync ? timeAgo(kpis.last_sync) : '—'}
-        />
-        <KPICard
-          icon='ri-hard-drive-3-line'
-          label={t('siteRecovery.dashboard.replicatedVolume')}
-          value={formatBytes(kpis.replicated_bytes)}
         />
         <KPICard
           icon='ri-error-warning-line'

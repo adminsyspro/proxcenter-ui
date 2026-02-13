@@ -651,56 +651,42 @@ return 'neutral'
                   <Box sx={{ flex: 1, display: 'flex', gap: 3 }}>
                     {/* CPU */}
                     <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="caption" sx={{ opacity: 0.6 }}>CPU</Typography>
-                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                      <Typography variant="caption" sx={{ opacity: 0.6, mb: 0.5, display: 'block' }}>CPU</Typography>
+                      <Box sx={{ position: 'relative' }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={pct(node.cpu_usage)}
+                          sx={{
+                            height: 14,
+                            borderRadius: 0,
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: node.cpu_usage > 90 ? 'error.main' : 'primary.main' }
+                          }}
+                        />
+                        <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
                           {node.cpu_usage.toFixed(1)}%
                         </Typography>
                       </Box>
-                      <LinearProgress
-                        variant="determinate"
-                        value={pct(node.cpu_usage)}
-                        sx={{
-                          height: 14,
-                          borderRadius: 0,
-                          bgcolor: alpha(theme.palette.primary.main, 0.1),
-                          '& .MuiLinearProgress-bar': {
-                            borderRadius: 0,
-                            bgcolor: node.cpu_usage > 80
-                              ? 'error.main'
-                              : node.cpu_usage > 60
-                                ? 'warning.main'
-                                : 'primary.main'
-                          }
-                        }}
-                      />
                     </Box>
 
                     {/* RAM */}
                     <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="caption" sx={{ opacity: 0.6 }}>RAM</Typography>
-                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                      <Typography variant="caption" sx={{ opacity: 0.6, mb: 0.5, display: 'block' }}>RAM</Typography>
+                      <Box sx={{ position: 'relative' }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={pct(node.memory_usage)}
+                          sx={{
+                            height: 14,
+                            borderRadius: 0,
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: node.memory_usage > 90 ? 'error.main' : 'primary.main' }
+                          }}
+                        />
+                        <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
                           {node.memory_usage.toFixed(1)}%
                         </Typography>
                       </Box>
-                      <LinearProgress
-                        variant="determinate"
-                        value={pct(node.memory_usage)}
-                        sx={{
-                          height: 14,
-                          borderRadius: 0,
-                          bgcolor: alpha(theme.palette.warning.main, 0.1),
-                          '& .MuiLinearProgress-bar': {
-                            borderRadius: 0,
-                            bgcolor: node.memory_usage > 85
-                              ? 'error.main'
-                              : node.memory_usage > 70
-                                ? 'warning.main'
-                                : 'success.main'
-                          }
-                        }}
-                      />
                     </Box>
                   </Box>
 
@@ -804,36 +790,29 @@ const ActiveMigrationRow = ({
           />
         </Box>
 
-        {/* Percentage */}
-        <Typography 
-          variant="body2" 
-          sx={{ 
-            fontWeight: 700, 
-            minWidth: 50,
-            textAlign: 'right',
-            color: progressColor
-          }}
-        >
-          {pct.toFixed(0)}%
-        </Typography>
       </Box>
 
       {/* Progress bar */}
       <Box sx={{ width: '100%' }}>
-        <LinearProgress
-          variant="determinate"
-          value={pct}
-          sx={{
-            height: 14,
-            borderRadius: 0,
-            bgcolor: alpha(progressColor, 0.15),
-            '& .MuiLinearProgress-bar': {
+        <Box sx={{ position: 'relative' }}>
+          <LinearProgress
+            variant="determinate"
+            value={pct}
+            sx={{
+              height: 14,
               borderRadius: 0,
-              bgcolor: progressColor,
-              transition: 'transform 0.5s ease-in-out'
-            }
-          }}
-        />
+              bgcolor: alpha(progressColor, 0.15),
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 0,
+                bgcolor: progressColor,
+                transition: 'transform 0.5s ease-in-out'
+              }
+            }}
+          />
+          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+            {pct.toFixed(0)}%
+          </Typography>
+        </Box>
         <Typography variant="caption" sx={{ opacity: 0.7, mt: 0.5, display: 'block' }}>
           {message}
         </Typography>
@@ -1085,54 +1064,42 @@ const StorageWarningPanel = ({
           <Box sx={{ mb: 1.5 }}>
             {/* État actuel */}
             <Box sx={{ mb: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('drsPage.currently')}</Typography>
-                <Typography variant="caption">
-                  {formatBytes(targetStorage.used_size)} / {formatBytes(targetStorage.total_size)} ({targetStorage.usage_percent.toFixed(1)}%)
+              <Typography variant="caption" sx={{ opacity: 0.7, mb: 0.5, display: 'block' }}>{t('drsPage.currently')} — {formatBytes(targetStorage.used_size)} / {formatBytes(targetStorage.total_size)}</Typography>
+              <Box sx={{ position: 'relative' }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={pct(targetStorage.usage_percent)}
+                  sx={{
+                    height: 14,
+                    borderRadius: 0,
+                    bgcolor: alpha(theme.palette.grey[500], 0.2),
+                    '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: targetStorage.usage_percent >= 90 ? 'error.main' : 'primary.main' }
+                  }}
+                />
+                <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                  {targetStorage.usage_percent.toFixed(1)}%
                 </Typography>
               </Box>
-              <LinearProgress
-                variant="determinate"
-                value={pct(targetStorage.usage_percent)}
-                sx={{
-                  height: 14,
-                  borderRadius: 0,
-                  bgcolor: alpha(theme.palette.grey[500], 0.2),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 0,
-                    bgcolor: getWarningColor(
-                      targetStorage.usage_percent >= 90 ? 'critical' :
-                      targetStorage.usage_percent >= 80 ? 'warning' : 'ok'
-                    )
-                  }
-                }}
-              />
             </Box>
 
             {/* Après migration */}
             <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('drsPage.afterMigration')}</Typography>
-                <Typography variant="caption" sx={{ 
-                  fontWeight: 600,
-                  color: getWarningColor(targetStorage.warning_level)
-                }}>
-                  {formatBytes(targetStorage.used_after)} / {formatBytes(targetStorage.total_size)} ({targetStorage.usage_after_pct.toFixed(1)}%)
+              <Typography variant="caption" sx={{ opacity: 0.7, mb: 0.5, display: 'block', color: getWarningColor(targetStorage.warning_level) }}>{t('drsPage.afterMigration')} — {formatBytes(targetStorage.used_after)} / {formatBytes(targetStorage.total_size)}</Typography>
+              <Box sx={{ position: 'relative' }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={pct(targetStorage.usage_after_pct)}
+                  sx={{
+                    height: 14,
+                    borderRadius: 0,
+                    bgcolor: alpha(theme.palette.grey[500], 0.2),
+                    '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: getWarningColor(targetStorage.warning_level) }
+                  }}
+                />
+                <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                  {targetStorage.usage_after_pct.toFixed(1)}%
                 </Typography>
               </Box>
-              <LinearProgress
-                variant="determinate"
-                value={pct(targetStorage.usage_after_pct)}
-                sx={{
-                  height: 14,
-                  borderRadius: 0,
-                  bgcolor: alpha(theme.palette.grey[500], 0.2),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 0,
-                    bgcolor: getWarningColor(targetStorage.warning_level)
-                  }
-                }}
-              />
             </Box>
           </Box>
 
@@ -1822,19 +1789,28 @@ return next
           </Box>
 
           {/* Max Imbalance */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>Imbalance</Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 700,
-                color: globalStats.maxImbalance > 10 ? 'error.main'
-                  : globalStats.maxImbalance > 5 ? 'warning.main'
-                  : 'success.main',
-              }}
-            >
-              {globalStats.maxImbalance.toFixed(1)}
-            </Typography>
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Imbalance</Typography>
+            <Box sx={{ position: 'relative' }}>
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(100, globalStats.maxImbalance * 5)}
+                sx={{
+                  height: 14,
+                  borderRadius: 0,
+                  bgcolor: alpha(theme.palette.grey[500], 0.15),
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 0,
+                    bgcolor: globalStats.maxImbalance > 10 ? theme.palette.error.main
+                      : globalStats.maxImbalance > 5 ? theme.palette.warning.main
+                      : theme.palette.success.main,
+                  }
+                }}
+              />
+              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                {globalStats.maxImbalance.toFixed(1)}
+              </Typography>
+            </Box>
           </Box>
         </Paper>
       </Box>

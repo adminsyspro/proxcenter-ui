@@ -36,19 +36,16 @@ function CephStatusWidget({ data, loading }) {
       {/* Storage */}
       <Box>
         <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, fontSize: 10 }}>{t('storage.title').toUpperCase()}</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+        <Box sx={{ position: 'relative', mt: 0.5 }}>
           <LinearProgress
             variant='determinate'
             value={ceph.usedPct || 0}
             sx={{
-              flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
-              '& .MuiLinearProgress-bar': {
-                borderRadius: 0,
-                bgcolor: (ceph.usedPct || 0) > 80 ? '#f44336' : (ceph.usedPct || 0) > 60 ? '#ff9800' : '#4caf50'
-              }
+              height: 14, borderRadius: 0, bgcolor: 'action.hover',
+              '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (ceph.usedPct || 0) > 90 ? '#f44336' : 'primary.main' }
             }}
           />
-          <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 35 }}>{ceph.usedPct || 0}%</Typography>
+          <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{ceph.usedPct || 0}%</Typography>
         </Box>
       </Box>
 

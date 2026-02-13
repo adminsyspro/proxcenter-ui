@@ -104,24 +104,24 @@ return bUsage - aUsage
                 <Typography variant='caption' sx={{ fontWeight: 700, fontSize: 11 }}>
                   {storage.storage}
                 </Typography>
-                <Chip 
-                  size='small' 
-                  label={storage.type || 'dir'} 
-                  sx={{ height: 16, fontSize: 9, opacity: 0.7 }} 
+                <Chip
+                  size='small'
+                  label={storage.type || 'dir'}
+                  sx={{ height: 16, fontSize: 9, opacity: 0.7 }}
                 />
               </Box>
-              <Typography variant='caption' sx={{ fontWeight: 700, color, fontSize: 11 }}>
-                {usagePct}%
-              </Typography>
             </Box>
-            <LinearProgress
-              variant='determinate'
-              value={usagePct}
-              sx={{
-                height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: color }
-              }}
-            />
+            <Box sx={{ position: 'relative' }}>
+              <LinearProgress
+                variant='determinate'
+                value={usagePct}
+                sx={{
+                  height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: color }
+                }}
+              />
+              <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{usagePct}%</Typography>
+            </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
               <Typography variant='caption' sx={{ opacity: 0.5, fontSize: 9 }}>
                 {storage.connectionName}

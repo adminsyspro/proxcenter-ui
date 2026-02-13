@@ -53,39 +53,29 @@ function NodesTableWidget({ data, loading }) {
                 />
               </TableCell>
               <TableCell sx={{ py: 0.75 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ position: 'relative' }}>
                   <LinearProgress
                     variant='determinate'
                     value={node.cpuPct || 0}
                     sx={{
-                      flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 0,
-                        bgcolor: (node.cpuPct || 0) > 80 ? '#f44336' : (node.cpuPct || 0) > 60 ? '#ff9800' : '#4caf50'
-                      }
+                      height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                      '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (node.cpuPct || 0) > 90 ? '#f44336' : 'primary.main' }
                     }}
                   />
-                  <Typography variant='body2' sx={{ minWidth: 32, textAlign: 'right', fontWeight: 700, fontSize: 11 }}>
-                    {node.cpuPct || 0}%
-                  </Typography>
+                  <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{node.cpuPct || 0}%</Typography>
                 </Box>
               </TableCell>
               <TableCell sx={{ py: 0.75 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ position: 'relative' }}>
                   <LinearProgress
                     variant='determinate'
                     value={node.memPct || 0}
                     sx={{
-                      flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 0,
-                        bgcolor: (node.memPct || 0) > 80 ? '#f44336' : (node.memPct || 0) > 60 ? '#ff9800' : '#4caf50'
-                      }
+                      height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                      '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (node.memPct || 0) > 90 ? '#f44336' : 'primary.main' }
                     }}
                   />
-                  <Typography variant='body2' sx={{ minWidth: 32, textAlign: 'right', fontWeight: 700, fontSize: 11 }}>
-                    {node.memPct || 0}%
-                  </Typography>
+                  <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{node.memPct || 0}%</Typography>
                 </Box>
               </TableCell>
             </TableRow>

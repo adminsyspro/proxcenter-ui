@@ -33,7 +33,7 @@ function TopConsumersWidget({ data, loading }) {
             }}>
               {vm.name}
             </Typography>
-            <Box sx={{ flex: 1 }}>
+            <Box sx={{ flex: 1, position: 'relative' }}>
               <LinearProgress
                 variant='determinate'
                 value={Math.min(vm.value, 100)}
@@ -42,10 +42,8 @@ function TopConsumersWidget({ data, loading }) {
                   '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: vm.value > 90 ? 'error.main' : primaryColor }
                 }}
               />
+              <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{vm.value}%</Typography>
             </Box>
-            <Typography variant='caption' sx={{ width: 32, textAlign: 'right', fontSize: 10 }}>
-              {vm.value}%
-            </Typography>
           </Box>
         ))}
       </Box>
@@ -61,7 +59,7 @@ function TopConsumersWidget({ data, loading }) {
             }}>
               {vm.name}
             </Typography>
-            <Box sx={{ flex: 1 }}>
+            <Box sx={{ flex: 1, position: 'relative' }}>
               <LinearProgress
                 variant='determinate'
                 value={Math.min(vm.value, 100)}
@@ -70,10 +68,8 @@ function TopConsumersWidget({ data, loading }) {
                   '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: vm.value > 90 ? 'error.main' : primaryColor }
                 }}
               />
+              <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{vm.value}%</Typography>
             </Box>
-            <Typography variant='caption' sx={{ width: 32, textAlign: 'right', fontSize: 10 }}>
-              {vm.value}%
-            </Typography>
           </Box>
         ))}
       </Box>

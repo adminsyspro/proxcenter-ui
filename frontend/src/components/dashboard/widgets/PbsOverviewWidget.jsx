@@ -23,19 +23,16 @@ function PbsOverviewWidget({ data, loading }) {
         <Box>
           <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, fontSize: 10 }}>{t('storage.title').toUpperCase()} PBS</Typography>
           <Box sx={{ mt: 0.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <Box sx={{ position: 'relative', mb: 0.5 }}>
               <LinearProgress
                 variant='determinate'
                 value={pbs.usagePct || 0}
                 sx={{
-                  flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 0,
-                    bgcolor: (pbs.usagePct || 0) > 80 ? '#f44336' : (pbs.usagePct || 0) > 60 ? '#ff9800' : '#4caf50'
-                  }
+                  height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (pbs.usagePct || 0) > 90 ? '#f44336' : 'primary.main' }
                 }}
               />
-              <Typography variant='caption' sx={{ fontWeight: 700, minWidth: 35 }}>{pbs.usagePct || 0}%</Typography>
+              <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{pbs.usagePct || 0}%</Typography>
             </Box>
             <Typography variant='caption' sx={{ opacity: 0.6, fontSize: 9 }}>
               {pbs.totalUsedFormatted} / {pbs.totalSizeFormatted}

@@ -36,7 +36,15 @@ function computeRpoActual(lastSync: string | null | undefined): number | null {
 }
 
 function jobLabel(job: ReplicationJob, vmNameMap?: Record<number, string>): string {
+  const tags = job.tags || []
   const ids = job.vm_ids || []
+
+  // Tag-based jobs: show tags + VM count
+  if (tags.length > 0) {
+    const tagStr = tags.map(t => `#${t}`).join(', ')
+    return `${tagStr} (${ids.length} VM${ids.length !== 1 ? 's' : ''})`
+  }
+
   if (ids.length === 0) return 'Replication Job'
 
   const labels = ids.map(id => {

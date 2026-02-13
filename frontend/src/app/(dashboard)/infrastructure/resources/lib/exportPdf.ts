@@ -1,6 +1,6 @@
 import type { KpiData, PredictiveAlert, OverprovisioningData, GreenMetrics, NetworkMetrics, TopVm } from '../types'
 import type { HealthScoreBreakdown } from '../algorithms/healthScore'
-import { formatPct, formatBytes, formatBytesPerSec } from '../helpers'
+import { formatPct, formatBytes } from '../helpers'
 import { COLORS } from '../constants'
 
 type ExportData = {
@@ -15,24 +15,28 @@ type ExportData = {
   topRamVms: TopVm[]
 }
 
-// ---------- Colors ----------
+// ────────── Design tokens ──────────
 const PRIMARY = '#6366f1'
+const PRIMARY_DARK = '#4f46e5'
 const TEXT_DARK = '#1e293b'
 const TEXT_MED = '#475569'
 const TEXT_LIGHT = '#94a3b8'
 const BG_LIGHT = '#f8fafc'
+const BG_CARD = '#f1f5f9'
 const LINE = '#e2e8f0'
+const WHITE = '#ffffff'
 
-function severityColor(sev: string): [number, number, number] {
+const GREEN_PALETTE = { A: '#059669', B: '#10b981', C: '#f59e0b', D: '#f97316', E: '#ef4444' }
+
+function severityBg(sev: string): [number, number, number] {
   switch (sev) {
-    case 'critical': case 'high': return [254, 226, 226]   // red-100
-    case 'warning': case 'medium': return [254, 243, 199]  // amber-100
-    case 'ok': case 'low': case 'info': return [220, 252, 231] // green-100
+    case 'critical': case 'high': return [254, 226, 226]
+    case 'warning': case 'medium': return [254, 243, 199]
+    case 'ok': case 'low': case 'info': return [220, 252, 231]
     default: return [241, 245, 249]
   }
 }
-
-function severityTextColor(sev: string): [number, number, number] {
+function severityFg(sev: string): [number, number, number] {
   switch (sev) {
     case 'critical': case 'high': return [185, 28, 28]
     case 'warning': case 'medium': return [146, 64, 14]
@@ -40,378 +44,674 @@ function severityTextColor(sev: string): [number, number, number] {
     default: return [71, 85, 105]
   }
 }
+function healthLabel(s: number) { return s >= 85 ? 'Excellent' : s >= 70 ? 'Good' : s >= 50 ? 'Needs attention' : 'Critical' }
+function hex(h: string): [number, number, number] { const v = parseInt(h.replace('#', ''), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255] }
+function n(v: number, d = 1) { return v.toFixed(d) }
+function pueGrade(pue: number) { if (pue <= 1.2) return 'A'; if (pue <= 1.4) return 'B'; if (pue <= 1.6) return 'C'; if (pue <= 2.0) return 'D'; return 'E' }
+function pueLabel(pue: number) { if (pue <= 1.2) return 'Best-in-class (hyperscaler level)'; if (pue <= 1.4) return 'Very efficient'; if (pue <= 1.6) return 'Average datacenter'; if (pue <= 2.0) return 'Below average — optimization recommended'; return 'Inefficient — immediate action required' }
 
-function healthLabel(score: number): string {
-  if (score >= 85) return 'Excellent'
-  if (score >= 70) return 'Good'
-  if (score >= 50) return 'Needs attention'
-  return 'Critical'
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const v = parseInt(hex.replace('#', ''), 16)
-  return [(v >> 16) & 255, (v >> 8) & 255, v & 255]
-}
-
-function fmtNum(n: number, dec = 1): string {
-  return n.toFixed(dec)
-}
-
-// ---------- Main export ----------
+// ────────── Main export ──────────
 export async function exportResourcesPdf(data: ExportData): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const { default: autoTableFn } = await import('jspdf-autotable')
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const margin = 15
-  const contentW = pageW - margin * 2
+  const W = doc.internal.pageSize.getWidth()   // 210
+  const H = doc.internal.pageSize.getHeight()  // 297
+  const M = 15  // margin
+  const CW = W - M * 2  // content width
   const now = new Date()
-  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const dateFull = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const dateShort = now.toISOString().slice(0, 10)
   let totalPages = 0
 
-  // Helper: draw header on top of current page
-  function addHeader(title: string) {
+  // ── Helpers ──
+
+  function header(title: string, subtitle?: string) {
+    // Gradient-like header band
+    doc.setFillColor(PRIMARY_DARK)
+    doc.rect(0, 0, W, 30, 'F')
     doc.setFillColor(PRIMARY)
-    doc.rect(0, 0, pageW, 28, 'F')
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(18)
-    doc.setTextColor(255, 255, 255)
-    doc.text('ProxCenter', margin, 12)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.text(title, margin, 20)
-    doc.text(dateStr, pageW - margin, 20, { align: 'right' })
+    doc.rect(0, 0, W, 26, 'F')
+    doc.setFont('helvetica', 'bold').setFontSize(20).setTextColor(WHITE)
+    doc.text('ProxCenter', M, 13)
+    doc.setFontSize(10).setFont('helvetica', 'normal')
+    doc.text(title, M, 21)
+    if (subtitle) {
+      doc.setFontSize(7).setTextColor(200, 200, 255)
+      doc.text(subtitle, M, 25)
+    }
+    doc.setFontSize(8).setTextColor(WHITE)
+    doc.text(dateFull, W - M, 21, { align: 'right' })
   }
 
-  // Helper: draw footer
-  function addFooter(page: number) {
-    const y = pageH - 8
-    doc.setDrawColor(LINE)
-    doc.setLineWidth(0.3)
-    doc.line(margin, y - 3, pageW - margin, y - 3)
-    doc.setFontSize(7)
-    doc.setTextColor(TEXT_LIGHT)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Generated by ProxCenter — ${dateStr}`, margin, y)
-    doc.text(`Page ${page} / ${totalPages}`, pageW - margin, y, { align: 'right' })
+  function footer(page: number) {
+    const y = H - 8
+    doc.setDrawColor(LINE).setLineWidth(0.3)
+    doc.line(M, y - 3, W - M, y - 3)
+    doc.setFontSize(7).setTextColor(TEXT_LIGHT).setFont('helvetica', 'normal')
+    doc.text(`Generated by ProxCenter — ${dateFull} — Confidential`, M, y)
+    doc.text(`Page ${page} / ${totalPages}`, W - M, y, { align: 'right' })
   }
 
-  // Helper: section title
-  function addSectionTitle(title: string, y: number): number {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    doc.setTextColor(...hexToRgb(PRIMARY))
-    doc.text(title, margin, y)
-    doc.setDrawColor(...hexToRgb(PRIMARY))
-    doc.setLineWidth(0.5)
-    doc.line(margin, y + 1.5, margin + doc.getTextWidth(title), y + 1.5)
-    return y + 8
+  function section(title: string, y: number): number {
+    doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...hex(PRIMARY))
+    doc.text(title, M, y)
+    doc.setDrawColor(...hex(PRIMARY)).setLineWidth(0.5)
+    doc.line(M, y + 1.5, M + doc.getTextWidth(title) + 2, y + 1.5)
+    return y + 7
   }
 
-  // Helper: key-value rows
-  function addKvTable(rows: [string, string][], startY: number): number {
-    let y = startY
+  function kvTable(rows: [string, string][], y: number, colRatio = 0.5): number {
     doc.setFontSize(9)
-    const colW = contentW / 2
+    const lw = CW * colRatio
     for (let i = 0; i < rows.length; i++) {
-      if (i % 2 === 0) {
-        doc.setFillColor(BG_LIGHT)
-        doc.rect(margin, y - 3.5, contentW, 5.5, 'F')
-      }
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(TEXT_MED)
-      doc.text(rows[i][0], margin + 2, y)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(TEXT_DARK)
-      doc.text(rows[i][1], margin + colW, y)
+      if (i % 2 === 0) { doc.setFillColor(BG_LIGHT); doc.rect(M, y - 3.5, CW, 5.5, 'F') }
+      doc.setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+      doc.text(rows[i][0], M + 2, y)
+      doc.setFont('helvetica', 'bold').setTextColor(TEXT_DARK)
+      doc.text(rows[i][1], M + lw, y)
       y += 5.5
     }
     return y + 2
   }
 
-  // Helper: autoTable wrapper using standalone function (jspdf-autotable v5)
-  function autoTable(options: Record<string, unknown>): number {
+  function at(opts: Record<string, unknown>): number {
     autoTableFn(doc as any, {
-      startY: options.startY,
-      margin: { left: margin, right: margin },
+      startY: opts.startY, margin: { left: M, right: M },
       styles: { fontSize: 8, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.2 },
-      headStyles: { fillColor: hexToRgb(PRIMARY), textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      headStyles: { fillColor: hex(PRIMARY), textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      ...options,
+      ...opts,
     } as any)
     return (doc as any).lastAutoTable.finalY + 4
   }
 
-  // ========== PAGE 1 : Cover + KPIs + Health Score ==========
-  addHeader('Infrastructure Capacity Report')
-  let y = 36
+  // ── Chart primitives ──
 
-  // -- Health Score --
-  y = addSectionTitle('Health Score', y)
+  /** Horizontal progress bar with label */
+  function progressBar(x: number, y: number, w: number, pct: number, color: string, label: string, valueStr: string): number {
+    doc.setFontSize(8).setFont('helvetica', 'bold').setTextColor(TEXT_DARK)
+    doc.text(label, x, y)
+    doc.setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+    doc.text(valueStr, x + w, y, { align: 'right' })
+    const barY = y + 1.5, barH = 4
+    doc.setFillColor(BG_CARD); doc.roundedRect(x, barY, w, barH, 2, 2, 'F')
+    const fill = Math.max(0, Math.min(1, pct / 100)) * w
+    if (fill > 0) { doc.setFillColor(color); doc.roundedRect(x, barY, Math.max(4, fill), barH, 2, 2, 'F') }
+    return barY + barH + 3
+  }
+
+  /** Arc gauge for score (semi-circle) */
+  function gauge(cx: number, cy: number, r: number, score: number, label: string, color: string) {
+    const steps = 60
+    // Background arc
+    doc.setDrawColor(BG_CARD).setLineWidth(3)
+    for (let i = 0; i < steps; i++) {
+      const a1 = Math.PI + (i / steps) * Math.PI
+      const a2 = Math.PI + ((i + 1) / steps) * Math.PI
+      doc.line(cx + r * Math.cos(a1), cy + r * Math.sin(a1), cx + r * Math.cos(a2), cy + r * Math.sin(a2))
+    }
+    // Filled arc
+    const filled = Math.round((score / 100) * steps)
+    doc.setDrawColor(color).setLineWidth(3)
+    for (let i = 0; i < filled; i++) {
+      const a1 = Math.PI + (i / steps) * Math.PI
+      const a2 = Math.PI + ((i + 1) / steps) * Math.PI
+      doc.line(cx + r * Math.cos(a1), cy + r * Math.sin(a1), cx + r * Math.cos(a2), cy + r * Math.sin(a2))
+    }
+    // Score text
+    doc.setFont('helvetica', 'bold').setFontSize(18).setTextColor(color)
+    doc.text(`${score}`, cx, cy - 2, { align: 'center' })
+    doc.setFontSize(8).setTextColor(TEXT_MED).setFont('helvetica', 'normal')
+    doc.text(label, cx, cy + 4, { align: 'center' })
+  }
+
+  /** Horizontal bar chart (multiple items) */
+  function hBarChart(x: number, y: number, w: number, items: { label: string; value: number; color: string }[], maxVal?: number): number {
+    const max = maxVal ?? Math.max(...items.map(i => i.value), 1)
+    const barH = 5, gap = 2
+    for (const item of items) {
+      doc.setFontSize(7).setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+      doc.text(item.label, x, y + 3.5)
+      const barX = x + 35
+      const barW = w - 35 - 20
+      doc.setFillColor(BG_CARD); doc.roundedRect(barX, y, barW, barH, 1.5, 1.5, 'F')
+      const fill = Math.max(3, (item.value / max) * barW)
+      doc.setFillColor(item.color); doc.roundedRect(barX, y, fill, barH, 1.5, 1.5, 'F')
+      doc.setFontSize(7).setFont('helvetica', 'bold').setTextColor(TEXT_DARK)
+      doc.text(`${n(item.value)}`, barX + barW + 2, y + 3.5)
+      y += barH + gap
+    }
+    return y + 2
+  }
+
+  /** KPI card (rounded rect with icon-like colored bar on left) */
+  function kpiCard(x: number, y: number, w: number, h: number, label: string, value: string, sub: string, color: string) {
+    doc.setFillColor(WHITE); doc.roundedRect(x, y, w, h, 2, 2, 'F')
+    doc.setDrawColor(LINE).setLineWidth(0.3); doc.roundedRect(x, y, w, h, 2, 2, 'S')
+    doc.setFillColor(color); doc.roundedRect(x, y, 3, h, 1.5, 0, 'F')
+    doc.rect(x + 1.5, y, 1.5, h, 'F') // flatten right side of left bar
+    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(TEXT_MED)
+    doc.text(label, x + 6, y + 4.5)
+    doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(TEXT_DARK)
+    doc.text(value, x + 6, y + 11.5)
+    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(TEXT_LIGHT)
+    doc.text(sub, x + 6, y + 15.5)
+  }
+
+  /** Letter-grade badge */
+  function gradeBadge(x: number, y: number, grade: string, color: string) {
+    doc.setFillColor(color); doc.roundedRect(x, y, 14, 14, 3, 3, 'F')
+    doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(WHITE)
+    doc.text(grade, x + 7, y + 10.5, { align: 'center' })
+  }
+
+  // ── Convenience: check page space ──
+  function ensureSpace(needed: number, y: number, headerTitle: string, headerSub?: string): number {
+    if (y + needed > H - 20) {
+      doc.addPage(); header(headerTitle, headerSub); y = 36
+    }
+    return y
+  }
+
   const { kpis, healthScore, healthBreakdown } = data
-  const label = healthLabel(healthScore)
+  const storagePct = kpis.storage.total > 0 ? (kpis.storage.used / kpis.storage.total) * 100 : 0
   const scoreColor = healthScore >= 85 ? COLORS.success : healthScore >= 70 ? COLORS.info : healthScore >= 50 ? COLORS.warning : COLORS.error
 
-  doc.setFontSize(28)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...hexToRgb(scoreColor))
-  doc.text(`${healthScore}`, margin + 2, y + 10)
-  doc.setFontSize(14)
-  doc.text(`/ 100`, margin + 22, y + 10)
-  doc.setFontSize(11)
-  doc.setTextColor(TEXT_MED)
-  doc.text(label, margin + 42, y + 10)
-  y += 18
+  // ═══════════════════════════════════════════════════════════════
+  // PAGE 1 — Executive Summary
+  // ═══════════════════════════════════════════════════════════════
+  header('Infrastructure Capacity Report', 'Executive Summary — Capacity Planning & Resource Optimization')
+  let y = 34
 
-  // Breakdown table
-  const breakdownRows = Object.entries(healthBreakdown).map(([key, val]) => {
+  // KPI cards row
+  const cardW = (CW - 9) / 4, cardH = 18
+  kpiCard(M, y, cardW, cardH, 'CPU USAGE', formatPct(kpis.cpu.used), `${kpis.cpu.allocated} vCPU / ${kpis.cpu.total} cores`, COLORS.cpu)
+  kpiCard(M + cardW + 3, y, cardW, cardH, 'RAM USAGE', formatPct(kpis.ram.used), `${formatBytes(kpis.ram.allocated)} / ${formatBytes(kpis.ram.total)}`, COLORS.ram)
+  kpiCard(M + (cardW + 3) * 2, y, cardW, cardH, 'STORAGE', formatPct(storagePct), `${formatBytes(kpis.storage.used)} / ${formatBytes(kpis.storage.total)}`, COLORS.storage)
+  kpiCard(M + (cardW + 3) * 3, y, cardW, cardH, 'VMs', `${kpis.vms.running}`, `${kpis.vms.running} running / ${kpis.vms.stopped} stopped`, COLORS.primary)
+  y += cardH + 6
+
+  // Health Score gauge + breakdown side by side
+  y = section('Infrastructure Health Score', y)
+  gauge(M + 30, y + 22, 18, healthScore, healthLabel(healthScore), scoreColor)
+
+  // Breakdown on the right
+  const bx = M + 68
+  doc.setFontSize(8).setFont('helvetica', 'bold').setTextColor(TEXT_DARK)
+  doc.text('Score Breakdown', bx, y + 2)
+  let by = y + 7
+  for (const [key, val] of Object.entries(healthBreakdown)) {
     const sign = val.penalty > 0 ? '+' : ''
-    return [key.toUpperCase(), `${sign}${val.penalty} pts`, val.reason]
-  })
-  y = autoTable({
-    startY: y,
-    head: [['Category', 'Impact', 'Detail']],
-    body: breakdownRows,
-    columnStyles: {
-      0: { cellWidth: 30, fontStyle: 'bold' },
-      1: { cellWidth: 25, halign: 'center' },
-    },
-    didParseCell: (d: any) => {
-      if (d.section === 'body' && d.column.index === 1) {
-        const val = parseInt(d.cell.raw as string)
-        if (val < 0) d.cell.styles.textColor = hexToRgb(COLORS.error)
-        else if (val > 0) d.cell.styles.textColor = hexToRgb(COLORS.success)
-      }
-    },
-  })
+    const c = val.penalty < 0 ? COLORS.error : val.penalty > 0 ? COLORS.success : TEXT_MED
+    doc.setFontSize(7).setFont('helvetica', 'bold').setTextColor(c)
+    doc.text(`${sign}${val.penalty}`, bx, by)
+    doc.setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+    doc.text(`${key.charAt(0).toUpperCase() + key.slice(1)} — ${val.reason}`, bx + 12, by)
+    by += 5
+  }
+  y = Math.max(y + 40, by + 4)
 
-  // -- KPIs --
-  y = addSectionTitle('Key Performance Indicators', y)
-  const storagePct = kpis.storage.total > 0 ? (kpis.storage.used / kpis.storage.total) * 100 : 0
-  const kpiRows: [string, string][] = [
-    ['CPU Used', formatPct(kpis.cpu.used)],
-    ['CPU Allocated', `${kpis.cpu.allocated} vCPUs`],
-    ['CPU Total', `${kpis.cpu.total} cores`],
-    ['RAM Used', formatPct(kpis.ram.used)],
-    ['RAM Allocated', formatBytes(kpis.ram.allocated)],
-    ['RAM Total', formatBytes(kpis.ram.total)],
-    ['Storage Used', `${formatBytes(kpis.storage.used)} / ${formatBytes(kpis.storage.total)} (${formatPct(storagePct)})`],
-    ['VMs Running', `${kpis.vms.running} / ${kpis.vms.total}`],
-    ['VMs Stopped', `${kpis.vms.stopped}`],
-    ['Efficiency', formatPct(kpis.efficiency)],
-  ]
-  y = addKvTable(kpiRows, y)
+  // Resource usage bars
+  y = section('Resource Utilization', y)
+  y = progressBar(M, y, CW, kpis.cpu.used, COLORS.cpu, 'CPU', formatPct(kpis.cpu.used))
+  y = progressBar(M, y, CW, kpis.ram.used, COLORS.ram, 'RAM', formatPct(kpis.ram.used))
+  y = progressBar(M, y, CW, storagePct, COLORS.storage, 'Storage', formatPct(storagePct))
+  y = progressBar(M, y, CW, kpis.efficiency, COLORS.success, 'Efficiency', formatPct(kpis.efficiency))
+  y += 2
 
-  // ========== PAGE 2 : Forecasts + Alerts ==========
+  // VM distribution
+  y = section('Virtual Machine Distribution', y)
+  const vmTotal = kpis.vms.total || 1
+  const runPct = (kpis.vms.running / vmTotal) * 100
+  const stopPct = (kpis.vms.stopped / vmTotal) * 100
+  // Stacked bar
+  const sbY = y + 1, sbH = 6
+  doc.setFillColor(COLORS.success); doc.roundedRect(M, sbY, CW, sbH, 2, 2, 'F')
+  if (stopPct > 0) {
+    const stopW = (stopPct / 100) * CW
+    doc.setFillColor(COLORS.error); doc.roundedRect(M + CW - stopW, sbY, stopW, sbH, 0, 2, 'F')
+  }
+  y = sbY + sbH + 3
+  doc.setFontSize(7).setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+  doc.text(`Running: ${kpis.vms.running} (${Math.round(runPct)}%)`, M, y)
+  doc.text(`Stopped: ${kpis.vms.stopped} (${Math.round(stopPct)}%)`, M + 60, y)
+  doc.text(`Total: ${kpis.vms.total}`, M + 120, y)
+  y += 6
+
+  // Top CPU/RAM VMs chart
+  if (data.topCpuVms.length > 0) {
+    y = ensureSpace(45, y, 'Infrastructure Capacity Report', 'Executive Summary')
+    y = section('Top VMs by CPU Usage', y)
+    y = hBarChart(M, y, CW, data.topCpuVms.slice(0, 5).map(vm => ({
+      label: vm.name.length > 15 ? vm.name.slice(0, 14) + '...' : vm.name,
+      value: vm.cpu,
+      color: COLORS.cpu,
+    })), 100)
+  }
+  if (data.topRamVms.length > 0) {
+    y = ensureSpace(45, y, 'Infrastructure Capacity Report', 'Executive Summary')
+    y = section('Top VMs by RAM Usage', y)
+    y = hBarChart(M, y, CW, data.topRamVms.slice(0, 5).map(vm => ({
+      label: vm.name.length > 15 ? vm.name.slice(0, 14) + '...' : vm.name,
+      value: vm.ram,
+      color: COLORS.ram,
+    })), 100)
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PAGE 2 — Capacity Forecasts & Predictive Alerts
+  // ═══════════════════════════════════════════════════════════════
   doc.addPage()
-  addHeader('Capacity Forecasts & Predictive Alerts')
-  y = 36
+  header('Capacity Forecasts & Predictive Alerts', '30-day projection using EWMA trend analysis')
+  y = 34
 
-  y = addSectionTitle('Predictive Alerts', y)
-
+  y = section('Predictive Alerts', y)
   if (data.alerts.length === 0) {
-    doc.setFontSize(9)
-    doc.setTextColor(TEXT_MED)
-    doc.text('No predictive alerts — all resources within safe thresholds.', margin + 2, y)
+    doc.setFontSize(9).setTextColor(TEXT_MED)
+    doc.text('No predictive alerts — all resources within safe thresholds.', M + 2, y)
     y += 8
   } else {
-    const alertBody = data.alerts.map(a => [
-      a.resource.toUpperCase(),
-      formatPct(a.currentValue),
-      formatPct(a.predictedValue),
-      a.trend,
-      a.daysToThreshold !== null ? `${a.daysToThreshold}d` : '—',
-      a.severity,
-      a.confidence !== undefined ? `${Math.round(a.confidence * 100)}%` : '—',
-      a.trendType ?? '—',
-    ])
-    y = autoTable({
+    y = at({
       startY: y,
       head: [['Resource', 'Current', 'Predicted (30d)', 'Trend', 'Days to Threshold', 'Severity', 'Confidence', 'Trend Type']],
-      body: alertBody,
+      body: data.alerts.map(a => [
+        a.resource.toUpperCase(), formatPct(a.currentValue), formatPct(a.predictedValue), a.trend,
+        a.daysToThreshold !== null ? `${a.daysToThreshold}d` : '—', a.severity,
+        a.confidence !== undefined ? `${Math.round(a.confidence * 100)}%` : '—', a.trendType ?? '—',
+      ]),
       columnStyles: { 0: { fontStyle: 'bold' } },
       didParseCell: (d: any) => {
         if (d.section === 'body' && d.column.index === 5) {
-          d.cell.styles.fillColor = severityColor(d.cell.raw as string)
-          d.cell.styles.textColor = severityTextColor(d.cell.raw as string)
+          d.cell.styles.fillColor = severityBg(d.cell.raw as string)
+          d.cell.styles.textColor = severityFg(d.cell.raw as string)
           d.cell.styles.fontStyle = 'bold'
         }
       },
     })
 
-    // Summary text
-    const criticals = data.alerts.filter(a => a.severity === 'critical')
-    const warnings = data.alerts.filter(a => a.severity === 'warning')
-    y += 2
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(TEXT_DARK)
-    doc.text('Summary:', margin, y)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(TEXT_MED)
-    const parts: string[] = []
-    if (criticals.length) parts.push(`${criticals.length} critical alert(s)`)
-    if (warnings.length) parts.push(`${warnings.length} warning(s)`)
-    if (parts.length === 0) parts.push('No critical or warning alerts')
-    doc.text(parts.join(', '), margin + 22, y)
-    y += 5
-    if (criticals.length > 0) {
-      const most = criticals[0]
-      doc.text(`Most at risk: ${most.resource.toUpperCase()} — predicted ${formatPct(most.predictedValue)} in 30 days`, margin + 22, y)
+    // Alert summary cards
+    const crits = data.alerts.filter(a => a.severity === 'critical')
+    const warns = data.alerts.filter(a => a.severity === 'warning')
+    const oks = data.alerts.filter(a => a.severity === 'ok')
+    const thirdW = (CW - 6) / 3
+    kpiCard(M, y, thirdW, 16, 'CRITICAL', `${crits.length}`, crits.length ? `${crits.map(a => a.resource.toUpperCase()).join(', ')}` : 'None', COLORS.error)
+    kpiCard(M + thirdW + 3, y, thirdW, 16, 'WARNING', `${warns.length}`, warns.length ? `${warns.map(a => a.resource.toUpperCase()).join(', ')}` : 'None', COLORS.warning)
+    kpiCard(M + (thirdW + 3) * 2, y, thirdW, 16, 'OK', `${oks.length}`, oks.length ? `${oks.map(a => a.resource.toUpperCase()).join(', ')}` : 'All clear', COLORS.success)
+    y += 22
+
+    // Risk analysis text
+    if (crits.length > 0) {
+      y = section('Risk Analysis', y)
+      doc.setFontSize(8).setFont('helvetica', 'normal').setTextColor(TEXT_DARK)
+      const riskLines: string[] = []
+      for (const a of crits) {
+        const days = a.daysToThreshold !== null ? `in approximately ${a.daysToThreshold} days` : 'timeline unknown'
+        riskLines.push(`${a.resource.toUpperCase()}: Currently at ${formatPct(a.currentValue)}, projected to reach ${formatPct(a.predictedValue)} within 30 days. Threshold breach expected ${days}. Trend: ${a.trendType ?? a.trend}.`)
+      }
+      const wrapped = doc.splitTextToSize(riskLines.join('\n\n'), CW)
+      doc.text(wrapped, M, y)
+      y += wrapped.length * 3.5 + 4
     }
   }
 
-  // ========== PAGE 3 : Overprovisioning ==========
+  // Forecast bars: current vs predicted
+  if (data.alerts.length > 0) {
+    y = ensureSpace(40, y, 'Capacity Forecasts & Predictive Alerts')
+    y = section('Current vs. Predicted (30 days)', y)
+    for (const a of data.alerts) {
+      const color = a.resource === 'cpu' ? COLORS.cpu : a.resource === 'ram' ? COLORS.ram : COLORS.storage
+      // Current bar
+      doc.setFontSize(7).setFont('helvetica', 'bold').setTextColor(TEXT_DARK)
+      doc.text(a.resource.toUpperCase(), M, y + 3)
+      const barX = M + 22, barW = CW - 22
+      doc.setFillColor(BG_CARD); doc.roundedRect(barX, y, barW, 4, 1.5, 1.5, 'F')
+      doc.setFillColor(color)
+      doc.roundedRect(barX, y, Math.max(3, (a.currentValue / 100) * barW), 4, 1.5, 1.5, 'F')
+      doc.setFontSize(6).setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+      doc.text(`Now: ${formatPct(a.currentValue)}`, barX + barW + 1, y + 3)
+      y += 5
+      // Predicted bar (lighter, with dashed effect)
+      doc.setFillColor(BG_CARD); doc.roundedRect(barX, y, barW, 4, 1.5, 1.5, 'F')
+      const predColor = a.severity === 'critical' ? COLORS.error : a.severity === 'warning' ? COLORS.warning : color
+      doc.setFillColor(predColor)
+      doc.roundedRect(barX, y, Math.max(3, (a.predictedValue / 100) * barW), 4, 1.5, 1.5, 'F')
+      doc.setFontSize(6).setTextColor(TEXT_MED)
+      doc.text(`30d:  ${formatPct(a.predictedValue)}`, barX + barW + 1, y + 3)
+      y += 7
+    }
+    y += 2
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PAGE 3 — Overprovisioning
+  // ═══════════════════════════════════════════════════════════════
   if (data.overprovisioning) {
     doc.addPage()
-    addHeader('Overprovisioning Analysis')
-    y = 36
+    header('Overprovisioning Analysis', 'Resource allocation efficiency & rightsizing recommendations')
+    y = 34
 
     const op = data.overprovisioning
 
-    y = addSectionTitle('Global Overprovisioning', y)
-    const opGlobalRows: [string, string][] = [
-      ['CPU Ratio (allocated:physical)', `${fmtNum(op.cpu.ratio)}:1`],
-      ['CPU Efficiency', formatPct(op.cpu.efficiency)],
-      ['RAM Ratio (allocated:physical)', `${fmtNum(op.ram.ratio)}:1`],
-      ['RAM Efficiency', formatPct(op.ram.efficiency)],
-    ]
-    y = addKvTable(opGlobalRows, y)
+    // Overprovisioning ratio gauge cards
+    y = section('Global Overprovisioning Ratios', y)
+    const halfW = (CW - 4) / 2
+    // CPU ratio card
+    const cpuRatioColor = op.cpu.ratio <= 2 ? COLORS.success : op.cpu.ratio <= 4 ? COLORS.warning : COLORS.error
+    const ramRatioColor = op.ram.ratio <= 1.5 ? COLORS.success : op.ram.ratio <= 3 ? COLORS.warning : COLORS.error
+    doc.setFillColor(WHITE); doc.roundedRect(M, y, halfW, 28, 2, 2, 'FD')
+    doc.setDrawColor(LINE).setLineWidth(0.3)
+    doc.setFillColor(cpuRatioColor); doc.roundedRect(M, y, 3, 28, 1.5, 0, 'F'); doc.rect(M + 1.5, y, 1.5, 28, 'F')
+    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(TEXT_MED)
+    doc.text('CPU OVERPROVISIONING', M + 7, y + 5)
+    doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(TEXT_DARK)
+    doc.text(`${n(op.cpu.ratio)}:1`, M + 7, y + 14)
+    doc.setFontSize(7).setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+    doc.text(`Efficiency: ${formatPct(op.cpu.efficiency)}`, M + 7, y + 19)
+    doc.text(`${op.cpu.allocated} allocated / ${op.cpu.physical} physical`, M + 7, y + 24)
+
+    doc.setFillColor(WHITE); doc.roundedRect(M + halfW + 4, y, halfW, 28, 2, 2, 'FD')
+    doc.setFillColor(ramRatioColor); doc.roundedRect(M + halfW + 4, y, 3, 28, 1.5, 0, 'F'); doc.rect(M + halfW + 5.5, y, 1.5, 28, 'F')
+    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(TEXT_MED)
+    doc.text('RAM OVERPROVISIONING', M + halfW + 11, y + 5)
+    doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(TEXT_DARK)
+    doc.text(`${n(op.ram.ratio)}:1`, M + halfW + 11, y + 14)
+    doc.setFontSize(7).setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+    doc.text(`Efficiency: ${formatPct(op.ram.efficiency)}`, M + halfW + 11, y + 19)
+    doc.text(`${n(op.ram.allocated, 0)} GB alloc / ${n(op.ram.physical, 0)} GB phys`, M + halfW + 11, y + 24)
+    y += 34
 
     // Per-node table
     if (op.perNode.length > 0) {
-      y = addSectionTitle('Per-Node Breakdown', y)
-      const nodeBody = op.perNode.map(n => [
-        n.name,
-        `${fmtNum(n.cpuRatio)}:1`,
-        `${fmtNum(n.ramRatio)}:1`,
-        `${n.cpuAllocated}`,
-        `${n.cpuPhysical}`,
-        formatBytes(n.ramAllocated),
-        formatBytes(n.ramPhysical),
-      ])
-      y = autoTable({
+      y = section('Per-Node Breakdown', y)
+
+      // Per-node bar chart
+      if (op.perNode.length <= 10) {
+        y = hBarChart(M, y, CW / 2 - 2, op.perNode.map(nd => ({ label: nd.name, value: nd.cpuRatio, color: COLORS.cpu })))
+        // RAM chart beside it (we can't easily do side-by-side so put below)
+      }
+
+      y = at({
         startY: y,
         head: [['Node', 'CPU Ratio', 'RAM Ratio', 'CPU Alloc', 'CPU Phys', 'RAM Alloc', 'RAM Phys']],
-        body: nodeBody,
+        body: op.perNode.map(nd => [
+          nd.name, `${n(nd.cpuRatio)}:1`, `${n(nd.ramRatio)}:1`,
+          `${nd.cpuAllocated}`, `${nd.cpuPhysical}`, formatBytes(nd.ramAllocated), formatBytes(nd.ramPhysical),
+        ]),
         columnStyles: { 0: { fontStyle: 'bold' } },
+        didParseCell: (d: any) => {
+          if (d.section === 'body' && d.column.index === 1) {
+            const val = parseFloat(d.cell.raw as string)
+            if (val > 4) { d.cell.styles.fillColor = severityBg('critical'); d.cell.styles.textColor = severityFg('critical') }
+            else if (val > 2) { d.cell.styles.fillColor = severityBg('warning'); d.cell.styles.textColor = severityFg('warning') }
+          }
+          if (d.section === 'body' && d.column.index === 2) {
+            const val = parseFloat(d.cell.raw as string)
+            if (val > 3) { d.cell.styles.fillColor = severityBg('critical'); d.cell.styles.textColor = severityFg('critical') }
+            else if (val > 1.5) { d.cell.styles.fillColor = severityBg('warning'); d.cell.styles.textColor = severityFg('warning') }
+          }
+        },
       })
     }
 
     // Top overprovisioned VMs
     if (op.topOverprovisioned.length > 0) {
-      y = addSectionTitle('Top VMs to Optimize', y)
-
-      // Check if we need a new page
-      if (y > pageH - 60) {
-        doc.addPage()
-        addHeader('Overprovisioning Analysis (cont.)')
-        y = 36
-      }
-
-      const vmBody = op.topOverprovisioned.map(vm => [
-        vm.name,
-        vm.node,
-        `${vm.cpuAllocated}`,
-        formatPct(vm.cpuUsedPct),
-        `${vm.recommendedCpu}`,
-        `${fmtNum(vm.ramAllocatedGB)} GB`,
-        formatPct(vm.ramUsedPct),
-        `${fmtNum(vm.recommendedRamGB)} GB`,
-        `CPU: ${vm.potentialSavings.cpu}, RAM: ${fmtNum(vm.potentialSavings.ramGB)} GB`,
-      ])
-      y = autoTable({
+      y = ensureSpace(50, y, 'Overprovisioning Analysis', 'Rightsizing recommendations')
+      y = section('Top VMs — Rightsizing Recommendations', y)
+      y = at({
         startY: y,
         head: [['VM', 'Node', 'CPU Alloc', 'CPU Used%', 'Reco CPU', 'RAM Alloc', 'RAM Used%', 'Reco RAM', 'Savings']],
-        body: vmBody,
+        body: op.topOverprovisioned.map(vm => [
+          vm.name, vm.node, `${vm.cpuAllocated}`, formatPct(vm.cpuUsedPct), `${vm.recommendedCpu}`,
+          `${n(vm.ramAllocatedGB)} GB`, formatPct(vm.ramUsedPct), `${n(vm.recommendedRamGB)} GB`,
+          `CPU: ${vm.potentialSavings.cpu}, RAM: ${n(vm.potentialSavings.ramGB)} GB`,
+        ]),
         columnStyles: { 0: { fontStyle: 'bold' } },
         styles: { fontSize: 7, cellPadding: 1.5 },
       })
+
+      // Savings summary
+      const totalCpuSavings = op.topOverprovisioned.reduce((s, vm) => s + vm.potentialSavings.cpu, 0)
+      const totalRamSavings = op.topOverprovisioned.reduce((s, vm) => s + vm.potentialSavings.ramGB, 0)
+      if (totalCpuSavings > 0 || totalRamSavings > 0) {
+        doc.setFillColor('#f0fdf4')
+        doc.roundedRect(M, y, CW, 12, 2, 2, 'F')
+        doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...hex(COLORS.success))
+        doc.text('Potential Savings from Rightsizing', M + 4, y + 5)
+        doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(TEXT_DARK)
+        doc.text(`CPU: ${totalCpuSavings} vCPUs reclaimable    |    RAM: ${n(totalRamSavings)} GB reclaimable    |    VMs concerned: ${op.topOverprovisioned.length}`, M + 4, y + 10)
+        y += 16
+      }
     }
   }
 
-  // ========== PAGE 4 : Green Metrics ==========
+  // ═══════════════════════════════════════════════════════════════
+  // PAGE 4 — Green Metrics / Environmental Report (enhanced)
+  // ═══════════════════════════════════════════════════════════════
   if (data.green) {
     doc.addPage()
-    addHeader('Green Metrics / RSE')
-    y = 36
+    header('Environmental & Sustainability Report', 'CSR Metrics — Energy efficiency, carbon footprint & cost analysis')
+    y = 34
+
     const g = data.green
+    const grade = pueGrade(g.efficiency.pue)
+    const gradeColor = GREEN_PALETTE[grade as keyof typeof GREEN_PALETTE]
 
-    y = addSectionTitle('Efficiency', y)
-    y = addKvTable([
-      ['PUE (Power Usage Effectiveness)', fmtNum(g.efficiency.pue, 2)],
-      ['VMs per kW', fmtNum(g.efficiency.vmPerKw, 2)],
-      ['Green Score', `${Math.round(g.efficiency.score)} / 100`],
-    ], y)
+    // Executive overview box
+    doc.setFillColor('#f0fdf4')
+    doc.roundedRect(M, y, CW, 20, 3, 3, 'F')
+    doc.setDrawColor('#bbf7d0').setLineWidth(0.5)
+    doc.roundedRect(M, y, CW, 20, 3, 3, 'S')
+    doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...hex(GREEN_PALETTE.A))
+    doc.text('Executive Overview', M + 5, y + 6)
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(TEXT_DARK)
+    const overviewText = `Your infrastructure consumes an estimated ${n(g.power.yearly)} kWh per year, generating ${n(g.co2.yearly)} kg of CO2 emissions (${n(g.co2.yearly / 1000, 2)} tonnes). At current energy rates (${n(g.cost.pricePerKwh, 4)} \u20AC/kWh), the annual energy cost is ${n(g.cost.yearly, 2)} \u20AC. Your PUE rating of ${n(g.efficiency.pue, 2)} earns a grade of ${grade} — ${pueLabel(g.efficiency.pue).toLowerCase()}.`
+    const wrapped = doc.splitTextToSize(overviewText, CW - 10)
+    doc.text(wrapped, M + 5, y + 11)
+    y += 26
 
-    y = addSectionTitle('Power Consumption', y)
-    y = addKvTable([
-      ['Current Power', `${Math.round(g.power.current)} W`],
-      ['Monthly Consumption', `${fmtNum(g.power.monthly)} kWh`],
-      ['Yearly Consumption', `${fmtNum(g.power.yearly)} kWh`],
-    ], y)
+    // ─── Energy Efficiency ───
+    y = section('Energy Efficiency Rating', y)
 
-    y = addSectionTitle('CO2 Emissions', y)
-    y = addKvTable([
-      ['Monthly CO2', `${fmtNum(g.co2.monthly)} kg`],
-      ['Yearly CO2', `${fmtNum(g.co2.yearly)} kg`],
-      ['Equivalent (car)', `${Math.round(g.co2.equivalentKmCar)} km`],
-      ['Equivalent (trees)', `${fmtNum(g.co2.equivalentTrees, 0)} trees`],
-    ], y)
+    // Grade badge + gauge side by side
+    gradeBadge(M + 2, y, grade, gradeColor)
+    doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(TEXT_DARK)
+    doc.text(`PUE ${n(g.efficiency.pue, 2)}`, M + 20, y + 5)
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(TEXT_MED)
+    doc.text(pueLabel(g.efficiency.pue), M + 20, y + 10)
 
-    y = addSectionTitle('Energy Cost', y)
-    y = addKvTable([
-      ['Monthly Cost', `${fmtNum(g.cost.monthly, 2)} \u20AC`],
-      ['Yearly Cost', `${fmtNum(g.cost.yearly, 2)} \u20AC`],
-      ['Price per kWh', `${fmtNum(g.cost.pricePerKwh, 4)} \u20AC`],
-    ], y)
+    // PUE scale
+    const scaleY = y + 15, scaleW = CW, scaleH = 4
+    const pueStops = [1.0, 1.2, 1.4, 1.6, 2.0, 2.5]
+    const pueColors = ['#059669', '#10b981', '#f59e0b', '#f97316', '#ef4444']
+    const segW = scaleW / pueColors.length
+    for (let i = 0; i < pueColors.length; i++) {
+      doc.setFillColor(pueColors[i])
+      if (i === 0) doc.roundedRect(M + i * segW, scaleY, segW, scaleH, 2, 0, 'F')
+      else if (i === pueColors.length - 1) doc.roundedRect(M + i * segW, scaleY, segW, scaleH, 0, 2, 'F')
+      else doc.rect(M + i * segW, scaleY, segW, scaleH, 'F')
+    }
+    // Marker for current PUE
+    const puePos = Math.min(1, Math.max(0, (g.efficiency.pue - 1.0) / 1.5)) * scaleW
+    doc.setFillColor(TEXT_DARK)
+    const mx = M + puePos
+    doc.triangle(mx - 2, scaleY - 1, mx + 2, scaleY - 1, mx, scaleY + 0.5, 'F')
+    // Scale labels
+    doc.setFontSize(6).setTextColor(TEXT_LIGHT)
+    for (let i = 0; i < pueStops.length; i++) {
+      doc.text(`${pueStops[i]}`, M + i * segW, scaleY + scaleH + 3)
+    }
+    y = scaleY + scaleH + 8
+
+    // Industry benchmark table
+    y = section('Industry Benchmarks Comparison', y)
+    y = at({
+      startY: y,
+      head: [['Category', 'PUE Range', 'Grade', 'Your Position']],
+      body: [
+        ['Hyperscaler (Google, AWS)', '1.06 – 1.20', 'A', g.efficiency.pue <= 1.2 ? 'YOU ARE HERE' : ''],
+        ['Enterprise best practice', '1.20 – 1.40', 'B', g.efficiency.pue > 1.2 && g.efficiency.pue <= 1.4 ? 'YOU ARE HERE' : ''],
+        ['Average datacenter', '1.40 – 1.60', 'C', g.efficiency.pue > 1.4 && g.efficiency.pue <= 1.6 ? 'YOU ARE HERE' : ''],
+        ['Legacy / unoptimized', '1.60 – 2.00', 'D', g.efficiency.pue > 1.6 && g.efficiency.pue <= 2.0 ? 'YOU ARE HERE' : ''],
+        ['Highly inefficient', '> 2.00', 'E', g.efficiency.pue > 2.0 ? 'YOU ARE HERE' : ''],
+      ],
+      columnStyles: { 3: { fontStyle: 'bold' } },
+      didParseCell: (d: any) => {
+        if (d.section === 'body' && d.column.index === 3 && d.cell.raw === 'YOU ARE HERE') {
+          d.cell.styles.fillColor = [220, 252, 231]
+          d.cell.styles.textColor = hex(GREEN_PALETTE.A)
+        }
+      },
+    })
+
+    // Additional efficiency KPIs
+    y = section('Efficiency Metrics', y)
+    const thirdW2 = (CW - 6) / 3
+    kpiCard(M, y, thirdW2, 18, 'GREEN SCORE', `${Math.round(g.efficiency.score)}/100`, g.efficiency.score >= 70 ? 'Good efficiency' : 'Room for improvement', g.efficiency.score >= 70 ? COLORS.success : COLORS.warning)
+    kpiCard(M + thirdW2 + 3, y, thirdW2, 18, 'VMs / kW', n(g.efficiency.vmPerKw, 2), 'Workload density', COLORS.info)
+    kpiCard(M + (thirdW2 + 3) * 2, y, thirdW2, 18, 'PUE', n(g.efficiency.pue, 2), `Grade ${grade}`, gradeColor)
+    y += 24
+
+    // ─── Carbon Footprint ───
+    y = ensureSpace(80, y, 'Environmental & Sustainability Report', 'Carbon footprint & cost analysis')
+    y = section('Carbon Footprint', y)
+
+    const co2Rows: [string, string][] = [
+      ['CO2 Emission Factor', `${n(g.co2.factor, 1)} gCO2/kWh`],
+      ['Monthly CO2 Emissions', `${n(g.co2.monthly, 2)} kg CO2`],
+      ['Yearly CO2 Emissions', `${n(g.co2.yearly, 2)} kg CO2 (${n(g.co2.yearly / 1000, 3)} tonnes)`],
+    ]
+    y = kvTable(co2Rows, y)
+
+    // Environmental equivalences
+    y = section('Environmental Equivalences (yearly)', y)
+    doc.setFillColor(BG_CARD)
+    doc.roundedRect(M, y, CW, 22, 2, 2, 'F')
+    const eqColW = CW / 3
+    const items = [
+      { icon: 'Car travel', value: `${Math.round(g.co2.equivalentKmCar)} km`, sub: 'Average passenger vehicle' },
+      { icon: 'Trees needed', value: `${n(g.co2.equivalentTrees, 0)}`, sub: 'Trees to absorb yearly CO2' },
+      { icon: 'Households', value: `${n(g.co2.yearly / 1500, 1)}`, sub: 'EU avg household equivalent' },
+    ]
+    for (let i = 0; i < items.length; i++) {
+      const ix = M + i * eqColW + 6
+      doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(TEXT_MED)
+      doc.text(items[i].icon, ix, y + 5)
+      doc.setFont('helvetica', 'bold').setFontSize(14).setTextColor(TEXT_DARK)
+      doc.text(items[i].value, ix, y + 13)
+      doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(TEXT_LIGHT)
+      doc.text(items[i].sub, ix, y + 17)
+    }
+    y += 28
+
+    // ─── Energy Cost Analysis ───
+    y = section('Energy Cost Analysis', y)
+    const costRows: [string, string][] = [
+      ['Energy Price', `${n(g.cost.pricePerKwh, 4)} \u20AC/kWh`],
+      ['Current Power Draw', `${Math.round(g.power.current)} W`],
+      ['Max Power Capacity', `${Math.round(g.power.max)} W`],
+      ['Monthly Consumption', `${n(g.power.monthly, 1)} kWh`],
+      ['Yearly Consumption', `${n(g.power.yearly, 1)} kWh`],
+      ['Monthly Cost', `${n(g.cost.monthly, 2)} \u20AC`],
+      ['Yearly Cost', `${n(g.cost.yearly, 2)} \u20AC`],
+    ]
+    y = kvTable(costRows, y)
+
+    // Cost projection box
+    y = ensureSpace(22, y, 'Environmental & Sustainability Report')
+    doc.setFillColor('#eff6ff')
+    doc.roundedRect(M, y, CW, 16, 2, 2, 'F')
+    doc.setDrawColor('#bfdbfe').setLineWidth(0.3); doc.roundedRect(M, y, CW, 16, 2, 2, 'S')
+    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...hex(COLORS.info))
+    doc.text('3-Year Cost Projection (at constant consumption)', M + 4, y + 5)
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(TEXT_DARK)
+    const y3cost = g.cost.yearly * 3
+    const y3co2 = g.co2.yearly * 3
+    doc.text(`Total energy cost: ${n(y3cost, 2)} \u20AC   |   Total CO2: ${n(y3co2, 1)} kg (${n(y3co2 / 1000, 2)} tonnes)   |   Consumption: ${n(g.power.yearly * 3, 0)} kWh`, M + 4, y + 11)
+    y += 22
+
+    // Recommendations
+    y = ensureSpace(30, y, 'Environmental & Sustainability Report')
+    y = section('Recommendations', y)
+    const recs: string[] = []
+    if (g.efficiency.pue > 1.4) recs.push('Improve cooling efficiency — consider hot/cold aisle containment, raising set temperatures, or free cooling to reduce PUE.')
+    if (g.efficiency.pue > 1.6) recs.push('Investigate power distribution losses — UPS modernization and PDU optimization can significantly improve PUE.')
+    if (data.overprovisioning && data.overprovisioning.cpu.ratio > 3) recs.push('Reduce CPU overprovisioning — consolidate workloads to power down underutilized hosts and decrease total power draw.')
+    if (kpis.vms.stopped / (kpis.vms.total || 1) > 0.2) recs.push('Decommission stopped VMs — orphaned VMs may still hold allocated resources, increasing overhead without providing value.')
+    if (g.co2.yearly > 500) recs.push('Consider carbon offset programs or renewable energy sourcing to mitigate environmental impact.')
+    if (recs.length === 0) recs.push('Your infrastructure is well optimized. Continue monitoring PUE and CO2 metrics to maintain efficiency.')
+    doc.setFontSize(8).setFont('helvetica', 'normal').setTextColor(TEXT_DARK)
+    for (const rec of recs) {
+      y = ensureSpace(10, y, 'Environmental & Sustainability Report')
+      const lines = doc.splitTextToSize(`\u2022  ${rec}`, CW - 4)
+      doc.text(lines, M + 2, y)
+      y += lines.length * 3.5 + 2
+    }
   }
 
-  // ========== PAGE 5 : Network I/O ==========
+  // ═══════════════════════════════════════════════════════════════
+  // PAGE 5 — Network I/O
+  // ═══════════════════════════════════════════════════════════════
   if (data.networkMetrics) {
     doc.addPage()
-    addHeader('Network I/O')
-    y = 36
-    const net = data.networkMetrics
+    header('Network I/O Analysis', 'Bandwidth usage per node and top consumers')
+    y = 34
 
-    y = addSectionTitle('Totals', y)
-    y = addKvTable([
-      ['Total In', formatBytes(net.totalIn)],
-      ['Total Out', formatBytes(net.totalOut)],
-    ], y)
+    const net = data.networkMetrics
+    const halfW2 = (CW - 4) / 2
+    kpiCard(M, y, halfW2, 18, 'TOTAL INBOUND', formatBytes(net.totalIn), 'Cumulative network input', COLORS.network)
+    kpiCard(M + halfW2 + 4, y, halfW2, 18, 'TOTAL OUTBOUND', formatBytes(net.totalOut), 'Cumulative network output', COLORS.info)
+    y += 24
 
     if (net.perNode.length > 0) {
-      y = addSectionTitle('Per-Node Network', y)
-      const nodeBody = net.perNode.map(n => [n.name, formatBytes(n.netin), formatBytes(n.netout)])
-      y = autoTable({
+      y = section('Per-Node Network Traffic', y)
+
+      // Bar chart
+      const maxNet = Math.max(...net.perNode.map(nd => Math.max(nd.netin, nd.netout)), 1)
+      for (const nd of net.perNode) {
+        doc.setFontSize(7).setFont('helvetica', 'bold').setTextColor(TEXT_DARK)
+        doc.text(nd.name.length > 18 ? nd.name.slice(0, 17) + '...' : nd.name, M, y + 3)
+        const bx = M + 32, bw = CW - 32 - 30
+        // In bar
+        doc.setFillColor(BG_CARD); doc.roundedRect(bx, y, bw, 3.5, 1, 1, 'F')
+        doc.setFillColor(COLORS.network); doc.roundedRect(bx, y, Math.max(2, (nd.netin / maxNet) * bw), 3.5, 1, 1, 'F')
+        doc.setFontSize(6).setFont('helvetica', 'normal').setTextColor(TEXT_MED)
+        doc.text(`IN: ${formatBytes(nd.netin)}`, bx + bw + 1, y + 2.5)
+        y += 4
+        // Out bar
+        doc.setFillColor(BG_CARD); doc.roundedRect(bx, y, bw, 3.5, 1, 1, 'F')
+        doc.setFillColor(COLORS.info); doc.roundedRect(bx, y, Math.max(2, (nd.netout / maxNet) * bw), 3.5, 1, 1, 'F')
+        doc.text(`OUT: ${formatBytes(nd.netout)}`, bx + bw + 1, y + 2.5)
+        y += 6
+      }
+      y += 4
+
+      y = at({
         startY: y,
         head: [['Node', 'Net In', 'Net Out']],
-        body: nodeBody,
+        body: net.perNode.map(nd => [nd.name, formatBytes(nd.netin), formatBytes(nd.netout)]),
         columnStyles: { 0: { fontStyle: 'bold' } },
       })
     }
 
     if (net.topVms.length > 0) {
-      y = addSectionTitle('Top VMs by Network', y)
-      const vmBody = net.topVms.map(v => [v.name, v.node, formatBytes(v.netin), formatBytes(v.netout)])
-      y = autoTable({
+      y = ensureSpace(40, y, 'Network I/O Analysis')
+      y = section('Top VMs by Network Traffic', y)
+      y = at({
         startY: y,
         head: [['VM', 'Node', 'Net In', 'Net Out']],
-        body: vmBody,
+        body: net.topVms.map(v => [v.name, v.node, formatBytes(v.netin), formatBytes(v.netout)]),
         columnStyles: { 0: { fontStyle: 'bold' } },
       })
     }
   }
 
-  // ========== Finalize: add footers to all pages ==========
+  // ═══════════════════════════════════════════════════════════════
+  // Finalize — footers on all pages
+  // ═══════════════════════════════════════════════════════════════
   totalPages = doc.getNumberOfPages()
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i)
-    addFooter(i)
-  }
+  for (let i = 1; i <= totalPages; i++) { doc.setPage(i); footer(i) }
 
   doc.save(`proxcenter-capacity-report-${dateShort}.pdf`)
 }

@@ -1098,15 +1098,17 @@ export async function GET(request: Request) {
     const ramAllocationEfficiency = totalRamAllocatedGB > 0 ? (totalRamUsedGB / totalRamAllocatedGB) * 100 : 0
 
     // Données par nœud
-    const perNodeOverprovisioning = Array.from(nodeCapacities.entries()).map(([nodeName, capacity]) => {
+    const perNodeOverprovisioning = Array.from(nodeCapacities.entries()).map(([compositeKey, capacity]) => {
+      // compositeKey = "connId:pveNodeName" — extract actual PVE node name
+      const actualNodeName = compositeKey.includes(':') ? compositeKey.split(':').slice(1).join(':') : compositeKey
       // Calculer les allocations par nœud
-      const nodeVms = allVms.filter(vm => vm.node === nodeName && vm.status === 'running')
+      const nodeVms = allVms.filter(vm => vm.node === actualNodeName && vm.status === 'running')
       const nodeCpuAllocated = nodeVms.reduce((sum, vm) => sum + (vm.cpuAllocated || 0), 0)
       const nodeRamAllocated = nodeVms.reduce((sum, vm) => sum + (vm.ramAllocated || 0), 0) / (1024 * 1024 * 1024)
       const nodeRamCapacity = capacity.maxMem / (1024 * 1024 * 1024)
 
       return {
-        name: nodeName,
+        name: actualNodeName,
         cpuRatio: capacity.maxCpu > 0 ? nodeCpuAllocated / capacity.maxCpu : 0,
         ramRatio: nodeRamCapacity > 0 ? nodeRamAllocated / nodeRamCapacity : 0,
         cpuAllocated: nodeCpuAllocated,

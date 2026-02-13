@@ -591,12 +591,11 @@ export default function ClusterTabs(props: any) {
                                         </TableCell>
                                         <TableCell sx={{ fontSize: 12 }}>{node.ip || '-'}</TableCell>
                                         <TableCell>
-                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                          <Box sx={{ position: 'relative', width: 60 }}>
                                             <LinearProgress
                                               variant="determinate"
                                               value={cpuPercent}
                                               sx={{
-                                                width: 60,
                                                 height: 14,
                                                 borderRadius: 0,
                                                 bgcolor: 'action.hover',
@@ -606,16 +605,15 @@ export default function ClusterTabs(props: any) {
                                                 }
                                               }}
                                             />
-                                            <Typography variant="caption">{cpuPercent}%</Typography>
+                                            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{cpuPercent}%</Typography>
                                           </Box>
                                         </TableCell>
                                         <TableCell>
-                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                          <Box sx={{ position: 'relative', width: 60 }}>
                                             <LinearProgress
                                               variant="determinate"
                                               value={memPercent}
                                               sx={{
-                                                width: 60,
                                                 height: 14,
                                                 borderRadius: 0,
                                                 bgcolor: 'action.hover',
@@ -625,7 +623,7 @@ export default function ClusterTabs(props: any) {
                                                 }
                                               }}
                                             />
-                                            <Typography variant="caption">{memPercent}%</Typography>
+                                            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{memPercent}%</Typography>
                                           </Box>
                                         </TableCell>
                                         <TableCell sx={{ fontSize: 12 }}>{node.uptime ? formatUptime(node.uptime) : '-'}</TableCell>

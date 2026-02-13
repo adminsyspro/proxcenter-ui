@@ -433,7 +433,7 @@ function RootInventoryView({
               </Box>
               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmDistribution')}</Typography>
             </Stack>
-            <Stack direction="row" alignItems="center" spacing={2}>
+            <Stack direction="row" alignItems="center" justifyContent="center" spacing={2}>
               <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -494,7 +494,7 @@ function RootInventoryView({
               </Box>
               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmTypeSplit')}</Typography>
             </Stack>
-            <Stack direction="row" alignItems="center" spacing={2}>
+            <Stack direction="row" alignItems="center" justifyContent="center" spacing={2}>
               <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -533,10 +533,10 @@ function RootInventoryView({
           </CardContent>
         </Card>
 
-        {/* Card 4: Top Consumers */}
+        {/* Card 4: Top Consumers - Donut chart */}
         <Card variant="outlined" sx={{ p: 0 }}>
           <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <Box sx={{
                 width: 32, height: 32, borderRadius: 1.5,
                 bgcolor: alpha(theme.palette.error.main, 0.12),
@@ -546,43 +546,39 @@ function RootInventoryView({
               </Box>
               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.topConsumers')}</Typography>
             </Stack>
-            <Stack spacing={1}>
-              {topConsumers.map((vm, i) => (
-                <Box key={`${vm.node}-${vm.vmid}`}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.25 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {vm.name}
-                    </Typography>
-                    <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.5 }}>{vm.vmid}</Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 22 }}>CPU</Typography>
-                      <Box sx={{ flex: 1, height: 14, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 0, overflow: 'hidden' }}>
-                        <Box sx={{
-                          width: `${Math.min(100, vm.cpu)}%`, height: '100%', borderRadius: 0,
-                          bgcolor: vm.cpu > 90 ? 'error.main' : vm.cpu > 70 ? 'warning.main' : 'info.main'
-                        }} />
-                      </Box>
-                      <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{vm.cpu.toFixed(0)}%</Typography>
-                    </Box>
-                    <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 24 }}>RAM</Typography>
-                      <Box sx={{ flex: 1, height: 14, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 0, overflow: 'hidden' }}>
-                        <Box sx={{
-                          width: `${Math.min(100, vm.ram)}%`, height: '100%', borderRadius: 0,
-                          bgcolor: vm.ram > 90 ? 'error.main' : vm.ram > 70 ? 'warning.main' : 'secondary.main'
-                        }} />
-                      </Box>
-                      <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{vm.ram.toFixed(0)}%</Typography>
-                    </Box>
-                  </Stack>
+            {topConsumers.length > 0 ? (
+              <Stack direction="row" alignItems="center" justifyContent="center" spacing={2}>
+                <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={topConsumers.map(vm => ({ name: vm.name, value: Math.round(Math.max(vm.cpu, vm.ram)) }))}
+                        cx="50%" cy="50%" innerRadius={28} outerRadius={40}
+                        dataKey="value" stroke="none" paddingAngle={3}
+                      >
+                        {topConsumers.map((_, i) => (
+                          <Cell key={i} fill={[theme.palette.error.main, theme.palette.warning.main, theme.palette.info.main][i] || theme.palette.grey[500]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                    <Typography variant="caption" fontWeight={800} sx={{ fontSize: 13, lineHeight: 1 }}>TOP</Typography>
+                  </Box>
                 </Box>
-              ))}
-              {topConsumers.length === 0 && (
-                <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
-              )}
-            </Stack>
+                <Stack spacing={0.5}>
+                  {topConsumers.map((vm, i) => (
+                    <Stack key={`${vm.node}-${vm.vmid}`} direction="row" alignItems="center" spacing={0.5}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: [theme.palette.error.main, theme.palette.warning.main, theme.palette.info.main][i] }} />
+                      <Typography variant="caption" sx={{ opacity: 0.8, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vm.name}</Typography>
+                      <Typography variant="caption" fontWeight={700}>{Math.round(Math.max(vm.cpu, vm.ram))}%</Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Stack>
+            ) : (
+              <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
+            )}
           </CardContent>
         </Card>
       </Box>

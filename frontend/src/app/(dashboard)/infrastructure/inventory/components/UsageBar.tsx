@@ -43,8 +43,8 @@ function UsageBar({
 
         <Box
           sx={{
-            height: 6,
-            borderRadius: 999,
+            height: 14,
+            borderRadius: 0,
             bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
             overflow: 'hidden',
           }}
@@ -54,7 +54,7 @@ function UsageBar({
               height: '100%',
               width: `${u}%`,
               bgcolor: themeColor,
-              borderRadius: 999,
+              borderRadius: 0,
               transition: 'all 300ms ease',
             }}
           />
@@ -93,8 +93,8 @@ function UsageBar({
 
       <Box
         sx={{
-          height: 6,
-          borderRadius: 999,
+          height: 14,
+          borderRadius: 0,
           bgcolor: 'rgba(255,255,255,0.12)',
           overflow: 'hidden',
         }}
@@ -104,7 +104,7 @@ function UsageBar({
             height: '100%',
             width: `${pctVal}%`,
             bgcolor: themeColor,
-            borderRadius: 999,
+            borderRadius: 0,
             transition: 'all 300ms ease',
           }}
         />

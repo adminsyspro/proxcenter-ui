@@ -1794,7 +1794,7 @@ return next
             <Box sx={{ position: 'relative' }}>
               <LinearProgress
                 variant="determinate"
-                value={Math.min(100, globalStats.maxImbalance * 5)}
+                value={Math.min(100, globalStats.maxImbalance)}
                 sx={{
                   height: 14,
                   borderRadius: 0,

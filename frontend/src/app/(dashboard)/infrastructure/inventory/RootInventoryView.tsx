@@ -10,6 +10,7 @@ import {
   CardContent,
   Chip,
   Divider,
+  IconButton,
   List,
   ListItem,
   ListItemIcon,
@@ -332,12 +333,12 @@ function RootInventoryView({
                 </Button>
               )}
               <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-              <Button size="small" variant="text" onClick={expandAll} startIcon={<i className="ri-expand-diagonal-line" />}>
-                {t('common.expandAll')}
-              </Button>
-              <Button size="small" variant="text" onClick={collapseAll} startIcon={<i className="ri-collapse-diagonal-line" />}>
-                {t('common.collapseAll')}
-              </Button>
+              <IconButton size="small" onClick={expandAll} title={t('common.expandAll')}>
+                <i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />
+              </IconButton>
+              <IconButton size="small" onClick={collapseAll} title={t('common.collapseAll')}>
+                <i className="ri-collapse-diagonal-line" style={{ fontSize: 16 }} />
+              </IconButton>
             </Stack>
           </Stack>
         </CardContent>

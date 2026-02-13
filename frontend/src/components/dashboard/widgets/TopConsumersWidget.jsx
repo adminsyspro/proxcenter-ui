@@ -34,13 +34,13 @@ function TopConsumersWidget({ data, loading }) {
               {vm.name}
             </Typography>
             <Box sx={{ flex: 1 }}>
-              <LinearProgress 
-                variant='determinate' 
-                value={Math.min(vm.value, 100)} 
-                sx={{ 
-                  height: 5, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.08)', 
-                  '& .MuiLinearProgress-bar': { bgcolor: primaryColor } 
-                }} 
+              <LinearProgress
+                variant='determinate'
+                value={Math.min(vm.value, 100)}
+                sx={{
+                  height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.08)',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: primaryColor }
+                }}
               />
             </Box>
             <Typography variant='caption' sx={{ width: 32, textAlign: 'right', fontSize: 10 }}>
@@ -55,20 +55,20 @@ function TopConsumersWidget({ data, loading }) {
         </Typography>
         {topRam.slice(0, 10).map((vm, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-            <Typography variant='caption' sx={{ 
-              width: 100, fontWeight: 500, overflow: 'hidden', 
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 
+            <Typography variant='caption' sx={{
+              width: 100, fontWeight: 500, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11
             }}>
               {vm.name}
             </Typography>
             <Box sx={{ flex: 1 }}>
-              <LinearProgress 
-                variant='determinate' 
-                value={Math.min(vm.value, 100)} 
-                sx={{ 
-                  height: 5, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.08)', 
-                  '& .MuiLinearProgress-bar': { bgcolor: primaryColor } 
-                }} 
+              <LinearProgress
+                variant='determinate'
+                value={Math.min(vm.value, 100)}
+                sx={{
+                  height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.08)',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: primaryColor }
+                }}
               />
             </Box>
             <Typography variant='caption' sx={{ width: 32, textAlign: 'right', fontSize: 10 }}>

@@ -72,10 +72,10 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
             variant="determinate"
             value={protectionRate}
             sx={{
-              height: 6,
-              borderRadius: 3,
+              height: 14,
+              borderRadius: 0,
               bgcolor: alpha('#ef4444', 0.15),
-              '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 3 }
+              '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 0 }
             }}
           />
         </Box>
@@ -88,10 +88,10 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
             variant="determinate"
             value={sgRate}
             sx={{
-              height: 6,
-              borderRadius: 3,
+              height: 14,
+              borderRadius: 0,
               bgcolor: alpha('#888', 0.15),
-              '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 3 }
+              '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 0 }
             }}
           />
         </Box>

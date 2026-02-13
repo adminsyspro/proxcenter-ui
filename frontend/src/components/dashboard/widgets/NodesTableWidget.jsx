@@ -54,16 +54,16 @@ function NodesTableWidget({ data, loading }) {
               </TableCell>
               <TableCell sx={{ py: 0.75 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <LinearProgress 
-                    variant='determinate' 
-                    value={node.cpuPct || 0} 
-                    sx={{ 
-                      flex: 1, height: 6, borderRadius: 3, bgcolor: 'action.hover',
-                      '& .MuiLinearProgress-bar': { 
-                        borderRadius: 3, 
-                        bgcolor: (node.cpuPct || 0) > 80 ? '#f44336' : (node.cpuPct || 0) > 60 ? '#ff9800' : '#4caf50' 
+                  <LinearProgress
+                    variant='determinate'
+                    value={node.cpuPct || 0}
+                    sx={{
+                      flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                      '& .MuiLinearProgress-bar': {
+                        borderRadius: 0,
+                        bgcolor: (node.cpuPct || 0) > 80 ? '#f44336' : (node.cpuPct || 0) > 60 ? '#ff9800' : '#4caf50'
                       }
-                    }} 
+                    }}
                   />
                   <Typography variant='body2' sx={{ minWidth: 32, textAlign: 'right', fontWeight: 700, fontSize: 11 }}>
                     {node.cpuPct || 0}%
@@ -72,16 +72,16 @@ function NodesTableWidget({ data, loading }) {
               </TableCell>
               <TableCell sx={{ py: 0.75 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <LinearProgress 
-                    variant='determinate' 
-                    value={node.memPct || 0} 
-                    sx={{ 
-                      flex: 1, height: 6, borderRadius: 3, bgcolor: 'action.hover',
-                      '& .MuiLinearProgress-bar': { 
-                        borderRadius: 3, 
-                        bgcolor: (node.memPct || 0) > 80 ? '#f44336' : (node.memPct || 0) > 60 ? '#ff9800' : '#4caf50' 
+                  <LinearProgress
+                    variant='determinate'
+                    value={node.memPct || 0}
+                    sx={{
+                      flex: 1, height: 14, borderRadius: 0, bgcolor: 'action.hover',
+                      '& .MuiLinearProgress-bar': {
+                        borderRadius: 0,
+                        bgcolor: (node.memPct || 0) > 80 ? '#f44336' : (node.memPct || 0) > 60 ? '#ff9800' : '#4caf50'
                       }
-                    }} 
+                    }}
                   />
                   <Typography variant='body2' sx={{ minWidth: 32, textAlign: 'right', fontWeight: 700, fontSize: 11 }}>
                     {node.memPct || 0}%

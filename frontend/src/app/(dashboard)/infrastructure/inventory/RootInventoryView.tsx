@@ -557,9 +557,9 @@ function RootInventoryView({
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 22 }}>CPU</Typography>
-                      <Box sx={{ flex: 1, height: 5, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 0.75, overflow: 'hidden' }}>
+                      <Box sx={{ flex: 1, height: 14, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 0, overflow: 'hidden' }}>
                         <Box sx={{
-                          width: `${Math.min(100, vm.cpu)}%`, height: '100%', borderRadius: 0.75,
+                          width: `${Math.min(100, vm.cpu)}%`, height: '100%', borderRadius: 0,
                           bgcolor: vm.cpu > 90 ? 'error.main' : vm.cpu > 70 ? 'warning.main' : 'info.main'
                         }} />
                       </Box>
@@ -567,9 +567,9 @@ function RootInventoryView({
                     </Box>
                     <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 24 }}>RAM</Typography>
-                      <Box sx={{ flex: 1, height: 5, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 0.75, overflow: 'hidden' }}>
+                      <Box sx={{ flex: 1, height: 14, bgcolor: alpha(theme.palette.secondary.main, 0.1), borderRadius: 0, overflow: 'hidden' }}>
                         <Box sx={{
-                          width: `${Math.min(100, vm.ram)}%`, height: '100%', borderRadius: 0.75,
+                          width: `${Math.min(100, vm.ram)}%`, height: '100%', borderRadius: 0,
                           bgcolor: vm.ram > 90 ? 'error.main' : vm.ram > 70 ? 'warning.main' : 'secondary.main'
                         }} />
                       </Box>

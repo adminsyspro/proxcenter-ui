@@ -22,7 +22,7 @@ export const menuData = (t = (key) => key) => [
       },
       {
         label: t('navigation.topology'),
-        icon: 'ri-mind-map-line',
+        icon: 'ri-mind-map',
         href: '/infrastructure/topology',
         permissions: ['vm.view', 'node.view']
       },

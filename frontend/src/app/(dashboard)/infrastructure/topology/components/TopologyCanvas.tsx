@@ -40,12 +40,11 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
   const t = useTranslations('topology')
   const { fitView } = useReactFlow()
 
-  // Fit view when nodes change
+  // Fit view when nodes change — zoom to a comfortable level for large infras
   useEffect(() => {
     if (nodes.length > 0) {
-      // Small delay to ensure DOM is ready
       const timer = setTimeout(() => {
-        fitView({ padding: 0.2, duration: 300 })
+        fitView({ padding: 0.15, duration: 300, maxZoom: 1 })
       }, 100)
 
       return () => clearTimeout(timer)
@@ -95,7 +94,7 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
           gap: 1,
         }}
       >
-        <i className='ri-mind-map-line' style={{ fontSize: 48, opacity: 0.3 }} />
+        <i className='ri-mind-map' style={{ fontSize: 48, opacity: 0.3 }} />
         <Typography variant='h6' color='text.secondary'>
           {t('noData')}
         </Typography>
@@ -115,8 +114,8 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
       onPaneClick={onPaneClick}
       defaultEdgeOptions={defaultEdgeOptions}
       fitView
-      fitViewOptions={{ padding: 0.2 }}
-      minZoom={0.1}
+      fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+      minZoom={0.05}
       maxZoom={2}
       proOptions={{ hideAttribution: true }}
     >

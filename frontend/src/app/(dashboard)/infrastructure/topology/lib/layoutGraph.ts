@@ -5,7 +5,7 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
   const g = new dagre.graphlib.Graph()
 
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 100 })
+  g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 120 })
 
   nodes.forEach((node) => {
     const width = (node.data as any).width ?? 200

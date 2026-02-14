@@ -28,7 +28,7 @@ export default function TopologyPage() {
 
   // Page title
   useEffect(() => {
-    setPageInfo(t('navigation.topology'), t('topology.title'), 'ri-mind-map-line')
+    setPageInfo(t('navigation.topology'), t('topology.title'), 'ri-mind-map')
 
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t])

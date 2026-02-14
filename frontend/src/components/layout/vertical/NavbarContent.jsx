@@ -554,12 +554,33 @@ return () => window.removeEventListener('keydown', onKeyDown)
             </Tooltip>
           )}
 
-          {/* Search (Ctrl+K) */}
-          <Tooltip title={`${t('navbar.search')} (Ctrl+K)`}>
-            <IconButton size='small' onClick={() => setSearchOpen(true)}>
-              <i className='ri-search-line' />
-            </IconButton>
-          </Tooltip>
+          {/* Search bar (Ctrl+K) */}
+          <Box
+            onClick={() => setSearchOpen(true)}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              cursor: 'pointer',
+              minWidth: 180,
+              transition: 'all 0.2s',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'action.hover'
+              }
+            }}
+          >
+            <i className='ri-search-line' style={{ opacity: 0.5, fontSize: '1rem' }} />
+            <Typography variant='body2' sx={{ opacity: 0.5, flex: 1, fontSize: '0.8rem', userSelect: 'none' }}>
+              {t('navbar.search')}...
+            </Typography>
+            <Chip size='small' label='Ctrl+K' variant='outlined' sx={{ height: 20, fontSize: '0.65rem', '& .MuiChip-label': { px: 0.75 } }} />
+          </Box>
 
           {/* Lang */}
           <Tooltip title={t('navbar.language')}>

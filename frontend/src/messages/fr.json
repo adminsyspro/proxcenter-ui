@@ -2830,9 +2830,11 @@
     "noCephDesc": "Aucun cluster Ceph détecté sur vos connexions. Activez Ceph sur un cluster Proxmox pour voir les détails ici."
   },
   "commandPalette": {
-    "placeholder": "Rechercher pages, VMs, actions...",
+    "placeholder": "Rechercher pages, VMs, nœuds, PBS...",
     "pages": "Pages",
     "virtualMachines": "Machines virtuelles",
+    "nodes": "Nœuds PVE",
+    "pbsServers": "Serveurs PBS",
     "actions": "Actions",
     "noResults": "Aucun résultat",
     "noResultsDesc": "Essayez un autre terme de recherche.",

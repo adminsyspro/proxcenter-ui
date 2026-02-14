@@ -66,10 +66,34 @@ export default function InventoryPage() {
   const [enrichedData, setEnrichedData] = useState<Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }>>({})
 
   // Deep-link: auto-select VM from URL search params (?vmid=123&connId=...&node=...&type=qemu)
+  // Also handles ?selectType=node&selectId=connId:nodeName and ?selectType=pbs&selectId=pbsId
   const deepLinkHandled = useRef(false)
 
   useEffect(() => {
-    if (deepLinkHandled.current || rawVms.length === 0) return
+    if (deepLinkHandled.current) return
+
+    const selectType = searchParams.get('selectType')
+    const selectId = searchParams.get('selectId')
+
+    // Handle node/pbs deep-links (don't need rawVms to be loaded)
+    if (selectType === 'node' && selectId) {
+      deepLinkHandled.current = true
+      setSelection({ type: 'node', id: selectId })
+      setViewMode('hosts')
+
+      return
+    }
+
+    if (selectType === 'pbs' && selectId) {
+      deepLinkHandled.current = true
+      setSelection({ type: 'pbs', id: selectId })
+      setViewMode('tree')
+
+      return
+    }
+
+    // VM deep-link — needs rawVms loaded
+    if (rawVms.length === 0) return
 
     const vmid = searchParams.get('vmid')
     if (!vmid) return

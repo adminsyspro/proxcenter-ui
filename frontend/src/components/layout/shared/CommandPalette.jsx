@@ -55,8 +55,10 @@ function fuzzyMatch(query, text) {
 // ---------------------------------------------------------------------------
 const statusColor = (status) => {
   switch (status) {
-    case 'running': return '#4caf50'
-    case 'stopped': return '#f44336'
+    case 'running':
+    case 'online': return '#4caf50'
+    case 'stopped':
+    case 'offline': return '#f44336'
     default: return '#9e9e9e'
   }
 }
@@ -75,7 +77,11 @@ const CommandPalette = ({ open, onClose }) => {
   const [activeIndex, setActiveIndex] = useState(0)
   const [vms, setVms] = useState([])
   const [vmsLoading, setVmsLoading] = useState(false)
+  const [nodes, setNodes] = useState([])
+  const [pbsServers, setPbsServers] = useState([])
+  const [infraLoading, setInfraLoading] = useState(false)
   const vmsCacheRef = useRef({ data: null, timestamp: 0 })
+  const infraCacheRef = useRef({ data: null, timestamp: 0 })
 
   const resultsContainerRef = useRef(null)
   const itemRefs = useRef([])
@@ -104,6 +110,43 @@ const CommandPalette = ({ open, onClose }) => {
           })
           .catch(() => setVms([]))
           .finally(() => setVmsLoading(false))
+      }
+
+      // Fetch nodes & PBS servers with 60s cache
+      const infraCache = infraCacheRef.current
+
+      if (infraCache.data && now - infraCache.timestamp < 60000) {
+        setNodes(infraCache.data.nodes)
+        setPbsServers(infraCache.data.pbsServers)
+      } else {
+        setInfraLoading(true)
+        fetch('/api/v1/inventory')
+          .then(res => res.ok ? res.json() : null)
+          .then(json => {
+            if (!json?.data) {
+              setNodes([])
+              setPbsServers([])
+
+              return
+            }
+
+            // Flatten clusters[].nodes[] with connId/connName from parent cluster
+            const nodeList = (json.data.clusters || []).flatMap(cluster =>
+              (cluster.nodes || []).map(node => ({
+                ...node,
+                connId: cluster.id,
+                connName: cluster.name
+              }))
+            )
+
+            const pbsList = json.data.pbsServers || []
+
+            infraCacheRef.current = { data: { nodes: nodeList, pbsServers: pbsList }, timestamp: Date.now() }
+            setNodes(nodeList)
+            setPbsServers(pbsList)
+          })
+          .catch(() => { setNodes([]); setPbsServers([]) })
+          .finally(() => setInfraLoading(false))
       }
     }
   }, [open])
@@ -161,11 +204,13 @@ const CommandPalette = ({ open, onClose }) => {
   // -----------------------------------------------------------------------
   // 3. Filtered results — fuzzy search across all 3 sources
   // -----------------------------------------------------------------------
-  const { filteredPages, filteredVms, filteredActions, flatResults } = useMemo(() => {
+  const { filteredPages, filteredVms, filteredNodes, filteredPbs, filteredActions, flatResults } = useMemo(() => {
     const q = query.trim()
 
     let fPages = pages
     let fVms = []
+    let fNodes = []
+    let fPbs = []
     let fActions = actions
 
     if (q) {
@@ -185,6 +230,22 @@ const CommandPalette = ({ open, onClose }) => {
         .filter(vm => vm.match)
         .sort((a, b) => b.score - a.score)
 
+      fNodes = nodes
+        .map(n => {
+          const nameMatch = fuzzyMatch(q, n.node || '')
+          const connMatch = fuzzyMatch(q, n.connName || '')
+          const best = nameMatch.score >= connMatch.score ? nameMatch : connMatch
+
+          return { ...n, ...best }
+        })
+        .filter(n => n.match)
+        .sort((a, b) => b.score - a.score)
+
+      fPbs = pbsServers
+        .map(p => ({ ...p, ...fuzzyMatch(q, p.name || '') }))
+        .filter(p => p.match)
+        .sort((a, b) => b.score - a.score)
+
       fActions = actions
         .map(a => ({ ...a, ...fuzzyMatch(q, a.label) }))
         .filter(a => a.match)
@@ -194,17 +255,21 @@ const CommandPalette = ({ open, onClose }) => {
     // Cap sections for performance
     fPages = fPages.slice(0, 10)
     fVms = fVms.slice(0, 20)
+    fNodes = fNodes.slice(0, 10)
+    fPbs = fPbs.slice(0, 5)
     fActions = fActions.slice(0, 10)
 
     // Flat array for keyboard nav
     const flat = [
       ...fPages.map(p => ({ ...p, _type: 'page' })),
       ...fVms.map(vm => ({ ...vm, _type: 'vm' })),
+      ...fNodes.map(n => ({ ...n, _type: 'node' })),
+      ...fPbs.map(p => ({ ...p, _type: 'pbs' })),
       ...fActions.map(a => ({ ...a, _type: 'action' }))
     ]
 
-    return { filteredPages: fPages, filteredVms: fVms, filteredActions: fActions, flatResults: flat }
-  }, [query, pages, vms, actions])
+    return { filteredPages: fPages, filteredVms: fVms, filteredNodes: fNodes, filteredPbs: fPbs, filteredActions: fActions, flatResults: flat }
+  }, [query, pages, vms, nodes, pbsServers, actions])
 
   // Reset activeIndex when results change
   useEffect(() => {
@@ -223,6 +288,11 @@ const CommandPalette = ({ open, onClose }) => {
       const vmType = item.type === 'vm' ? 'qemu' : (item.type || 'qemu')
       const params = new URLSearchParams({ vmid: String(item.vmid), connId, node, type: vmType })
       router.push(`/infrastructure/inventory?${params.toString()}`)
+    } else if (item._type === 'node') {
+      const selectId = `${item.connId}:${item.node}`
+      router.push(`/infrastructure/inventory?selectType=node&selectId=${encodeURIComponent(selectId)}`)
+    } else if (item._type === 'pbs') {
+      router.push(`/infrastructure/inventory?selectType=pbs&selectId=${encodeURIComponent(item.id)}`)
     } else {
       router.push(item.href)
     }
@@ -269,7 +339,7 @@ const CommandPalette = ({ open, onClose }) => {
   }
 
   const hasResults = flatResults.length > 0
-  const showNoResults = query.trim() && !hasResults && !vmsLoading
+  const showNoResults = query.trim() && !hasResults && !vmsLoading && !infraLoading
 
   return (
     <Dialog
@@ -498,6 +568,215 @@ const CommandPalette = ({ open, onClose }) => {
                             }}
                           >
                             {vm.connectionName || vm.node}
+                          </Typography>
+                        </>
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+              )
+            })}
+          </>
+        )}
+
+        {/* NODES section */}
+        {filteredNodes.length > 0 && (
+          <>
+            <Typography
+              variant='overline'
+              sx={{
+                px: 2.5,
+                py: 0.5,
+                mt: 1,
+                display: 'block',
+                opacity: 0.5,
+                fontSize: '0.65rem',
+                letterSpacing: 1.2,
+                fontWeight: 700
+              }}
+            >
+              {tCmd('nodes')}
+            </Typography>
+            {filteredNodes.map((node, i) => {
+              const idx = nextIdx()
+
+              return (
+                <Box
+                  key={`node-${node.connId}-${node.node}`}
+                  ref={el => { itemRefs.current[idx] = el }}
+                  onClick={() => navigateTo({ ...node, _type: 'node' })}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 2.5,
+                    py: 1,
+                    cursor: 'pointer',
+                    borderRadius: 1,
+                    mx: 1,
+                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
+                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
+                    '&:hover': {
+                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
+                    },
+                    transition: 'background-color 0.1s'
+                  }}
+                >
+                  <i
+                    className='ri-server-line'
+                    style={{
+                      fontSize: 18,
+                      opacity: activeIndex === idx ? 1 : 0.6
+                    }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography
+                        variant='body2'
+                        sx={{
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {node.node}
+                      </Typography>
+                      <Box
+                        sx={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: '50%',
+                          bgcolor: statusColor(node.status),
+                          flexShrink: 0
+                        }}
+                      />
+                    </Box>
+                    {node.connName && (
+                      <Typography
+                        variant='caption'
+                        sx={{
+                          opacity: activeIndex === idx ? 0.8 : 0.5,
+                          fontSize: '0.65rem'
+                        }}
+                      >
+                        {node.connName}
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              )
+            })}
+          </>
+        )}
+
+        {/* PBS SERVERS section */}
+        {filteredPbs.length > 0 && (
+          <>
+            <Typography
+              variant='overline'
+              sx={{
+                px: 2.5,
+                py: 0.5,
+                mt: 1,
+                display: 'block',
+                opacity: 0.5,
+                fontSize: '0.65rem',
+                letterSpacing: 1.2,
+                fontWeight: 700
+              }}
+            >
+              {tCmd('pbsServers')}
+            </Typography>
+            {filteredPbs.map((pbs, i) => {
+              const idx = nextIdx()
+
+              return (
+                <Box
+                  key={`pbs-${pbs.id}`}
+                  ref={el => { itemRefs.current[idx] = el }}
+                  onClick={() => navigateTo({ ...pbs, _type: 'pbs' })}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 2.5,
+                    py: 1,
+                    cursor: 'pointer',
+                    borderRadius: 1,
+                    mx: 1,
+                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
+                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
+                    '&:hover': {
+                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
+                    },
+                    transition: 'background-color 0.1s'
+                  }}
+                >
+                  <i
+                    className='ri-shield-check-line'
+                    style={{
+                      fontSize: 18,
+                      opacity: activeIndex === idx ? 1 : 0.6
+                    }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography
+                        variant='body2'
+                        sx={{
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {pbs.name}
+                      </Typography>
+                      <Box
+                        sx={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: '50%',
+                          bgcolor: statusColor(pbs.status),
+                          flexShrink: 0
+                        }}
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {pbs.version && (
+                        <Typography
+                          variant='caption'
+                          sx={{
+                            opacity: activeIndex === idx ? 0.8 : 0.5,
+                            fontSize: '0.65rem',
+                            fontFamily: '"JetBrains Mono", monospace'
+                          }}
+                        >
+                          v{pbs.version}
+                        </Typography>
+                      )}
+                      {pbs.stats?.datastoreCount > 0 && (
+                        <>
+                          {pbs.version && (
+                            <Typography
+                              component='span'
+                              sx={{
+                                opacity: activeIndex === idx ? 0.6 : 0.3,
+                                fontSize: '0.6rem'
+                              }}
+                            >
+                              •
+                            </Typography>
+                          )}
+                          <Typography
+                            variant='caption'
+                            sx={{
+                              opacity: activeIndex === idx ? 0.8 : 0.5,
+                              fontSize: '0.65rem'
+                            }}
+                          >
+                            {pbs.stats.datastoreCount} datastore{pbs.stats.datastoreCount > 1 ? 's' : ''}
                           </Typography>
                         </>
                       )}

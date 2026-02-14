@@ -2783,7 +2783,12 @@
     "totalSnapshots": "{count} snapshots",
     "search": "Rechercher...",
     "allNodes": "Tous les nœuds",
-    "refresh": "Rafraîchir"
+    "refresh": "Rafraîchir",
+    "deleteConfirm": "Supprimer le snapshot",
+    "deleteConfirmMsg": "Voulez-vous vraiment supprimer le snapshot \"{name}\" de {vm} ?",
+    "deleting": "Suppression...",
+    "deleted": "Suppression du snapshot lancée",
+    "cancel": "Annuler"
   },
   "cve": {
     "title": "Scanner CVE",

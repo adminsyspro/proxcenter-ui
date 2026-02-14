@@ -2786,7 +2786,12 @@
     "totalSnapshots": "{count} snapshots",
     "search": "Search...",
     "allNodes": "All nodes",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "deleteConfirm": "Delete snapshot",
+    "deleteConfirmMsg": "Are you sure you want to delete snapshot \"{name}\" from {vm}?",
+    "deleting": "Deleting...",
+    "deleted": "Snapshot deletion started",
+    "cancel": "Cancel"
   },
   "cve": {
     "title": "CVE Scanner",

@@ -6,6 +6,11 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   IconButton,
   InputAdornment,
@@ -23,6 +28,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+import { useToast } from '@/contexts/ToastContext'
 
 interface SnapshotEntry {
   vmid: number
@@ -48,6 +54,7 @@ type SortDir = 'asc' | 'desc'
 export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) {
   const t = useTranslations('snapshotsTab')
   const theme = useTheme()
+  const toast = useToast()
   const [snapshots, setSnapshots] = useState<SnapshotEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -55,6 +62,8 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
   const [sortField, setSortField] = useState<SortField>('snaptime')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [vmCount, setVmCount] = useState(0)
+  const [deleteTarget, setDeleteTarget] = useState<SnapshotEntry | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchSnapshots = async () => {
     setLoading(true)
@@ -91,6 +100,30 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
     } else {
       setSortField(field)
       setSortDir(field === 'snaptime' ? 'desc' : 'asc')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const vmKey = `${connectionId}:${deleteTarget.vmType}:${deleteTarget.node}:${deleteTarget.vmid}`
+    try {
+      const res = await fetch(
+        `/api/v1/guests/${encodeURIComponent(vmKey)}/snapshots?name=${encodeURIComponent(deleteTarget.name)}`,
+        { method: 'DELETE' }
+      )
+      const json = await res.json()
+      if (json.error) {
+        toast.error(json.error)
+      } else {
+        toast.success(t('deleted'))
+        setTimeout(fetchSnapshots, 2000)
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Error')
+    } finally {
+      setDeleting(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -281,12 +314,13 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
                 </TableSortLabel>
               </TableCell>
               <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('ramState')}</TableCell>
+              <TableCell sx={{ width: 60 }} />
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={node ? 5 : 6} sx={{ textAlign: 'center', py: 4, opacity: 0.5 }}>
+                <TableCell colSpan={node ? 6 : 7} sx={{ textAlign: 'center', py: 4, opacity: 0.5 }}>
                   {t('noSnapshots')}
                 </TableCell>
               </TableRow>
@@ -359,12 +393,51 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
                       <Typography sx={{ fontSize: 12, opacity: 0.4 }}>-</Typography>
                     )}
                   </TableCell>
+                  <TableCell sx={{ width: 60 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setDeleteTarget(snap)}
+                      sx={{ color: 'error.main', opacity: 0.6, '&:hover': { opacity: 1 } }}
+                    >
+                      <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
+                    </IconButton>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 700, fontSize: 16 }}>
+          {t('deleteConfirm')}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {deleteTarget && t('deleteConfirmMsg', {
+              name: deleteTarget.name,
+              vm: `${deleteTarget.vmid} (${deleteTarget.vmName})`
+            })}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting} size="small">
+            {t('cancel')}
+          </Button>
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            disabled={deleting}
+            size="small"
+            startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : <i className="ri-delete-bin-line" />}
+          >
+            {deleting ? t('deleting') : t('deleteConfirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

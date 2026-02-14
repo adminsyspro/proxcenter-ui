@@ -1,13 +1,16 @@
 'use client'
 
+import { useState } from 'react'
+
 import dynamic from 'next/dynamic'
 
-import { Box, Typography } from '@mui/material'
+import { Box, Card, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import EmptyState from '@/components/EmptyState'
 
 import type { InventoryCluster } from '../types'
+import GeoDetailsSidebar from './GeoDetailsSidebar'
 
 const GeoMapInner = dynamic(() => import('./GeoMapInner'), { ssr: false })
 
@@ -18,6 +21,7 @@ interface TopologyGeoViewProps {
 
 export default function TopologyGeoView({ connections, isLoading }: TopologyGeoViewProps) {
   const t = useTranslations('topology')
+  const [selectedCluster, setSelectedCluster] = useState<InventoryCluster | null>(null)
 
   // Filter connections that have valid lat/lng
   const geoConnections = connections.filter(
@@ -37,14 +41,18 @@ export default function TopologyGeoView({ connections, isLoading }: TopologyGeoV
   }
 
   return (
-    <Box sx={{ flex: 1, position: 'relative', borderRadius: 1, overflow: 'hidden' }}>
+    <Card sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       {isLoading ? (
-        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
           <Typography color='text.secondary'>{t('noData')}</Typography>
         </Box>
       ) : (
-        <GeoMapInner connections={geoConnections} />
+        <GeoMapInner connections={geoConnections} onSelectCluster={setSelectedCluster} />
       )}
-    </Box>
+
+      {selectedCluster && (
+        <GeoDetailsSidebar cluster={selectedCluster} onClose={() => setSelectedCluster(null)} />
+      )}
+    </Card>
   )
 }

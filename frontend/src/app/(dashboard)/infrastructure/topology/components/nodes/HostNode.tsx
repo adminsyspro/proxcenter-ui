@@ -38,6 +38,7 @@ function HostNodeComponent({ data }: NodeProps) {
       <Handle type='target' position={Position.Top} style={{ background: '#666' }} />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <img src='/images/proxcenter-logo.svg' alt='' width={15} height={15} style={{ flexShrink: 0 }} />
         <Box
           sx={{
             width: 8,

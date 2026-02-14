@@ -135,26 +135,6 @@ jobs:
           platforms: linux/amd64
 
   # ========================================
-  # Deploy to server (auto-restart)
-  # ========================================
-  deploy:
-    needs: [build-frontend, build-orchestrator]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/proxcenter
-            docker compose pull
-            docker compose up -d
-
-  # ========================================
   # Create Release (on tags)
   # ========================================
   release:

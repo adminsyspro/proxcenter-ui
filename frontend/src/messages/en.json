@@ -1340,27 +1340,6 @@
     "network": "Network",
     "iops": "IOPS"
   },
-  "monitoringPage": {
-    "subtitle": "Performance monitoring",
-    "overallHealth": "Overall health",
-    "healthExcellent": "Excellent",
-    "healthGood": "Good",
-    "healthWatch": "Watch",
-    "healthCritical": "Critical",
-    "globalUsage": "Global usage",
-    "ram": "RAM",
-    "latency": "Latency",
-    "clusterAverage": "Cluster average",
-    "refresh": "Refresh",
-    "auto": "Auto",
-    "trends24h": "Trends (24h)",
-    "hotspots": "Hotspots",
-    "hotspotsDescription": "The elements that consume/impact the most.",
-    "metric": "Metric",
-    "value": "Value",
-    "trend": "Trend",
-    "unknownError": "Unknown error"
-  },
   "resources": {
     "infrastructureHealth": "Infrastructure Health",
     "efficiency": "Efficiency",

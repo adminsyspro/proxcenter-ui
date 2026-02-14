@@ -60,7 +60,9 @@ export async function GET(req: Request) {
 
       return {
         ...rest,
-        sshConfigured: !!(sshKeyEnc || sshPassEnc)
+        sshConfigured: !!(sshKeyEnc || sshPassEnc),
+        sshKeyConfigured: !!sshKeyEnc,
+        sshPassConfigured: !!sshPassEnc,
       }
     })
 

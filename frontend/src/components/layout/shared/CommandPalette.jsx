@@ -95,11 +95,12 @@ const CommandPalette = ({ open, onClose }) => {
       } else {
         setVmsLoading(true)
         fetch('/api/v1/vms')
-          .then(res => res.ok ? res.json() : { data: [] })
+          .then(res => res.ok ? res.json() : null)
           .then(json => {
-            const vmList = json.data || json || []
-            vmsCacheRef.current = { data: vmList, timestamp: Date.now() }
-            setVms(vmList)
+            if (!json) return setVms([])
+            const vmList = json?.data?.vms || json?.data || []
+            vmsCacheRef.current = { data: Array.isArray(vmList) ? vmList : [], timestamp: Date.now() }
+            setVms(Array.isArray(vmList) ? vmList : [])
           })
           .catch(() => setVms([]))
           .finally(() => setVmsLoading(false))

@@ -9,7 +9,7 @@ import type {
   VmSummaryNodeData,
   NodeStatus,
 } from '../types'
-import { getResourceStatus } from './topologyColors'
+import { getResourceStatus, getStatusColor, getVmStatusColor } from './topologyColors'
 
 export function buildTopologyGraph(
   data: InventoryData,
@@ -116,8 +116,8 @@ export function buildTopologyGraph(
         source: clusterId,
         target: hostId,
         type: 'smoothstep',
-        animated: false,
-        style: { stroke: '#666', strokeWidth: 1.5 },
+        animated: nodeIsOnline,
+        style: { stroke: getStatusColor(hostData.status), strokeWidth: 1.5 },
       })
 
       // VMs: individual or summary
@@ -159,8 +159,11 @@ export function buildTopologyGraph(
               source: hostId,
               target: vmId,
               type: 'smoothstep',
-              animated: false,
-              style: { stroke: '#999', strokeWidth: 1 },
+              animated: guest.status === 'running',
+              style: {
+                stroke: guest.status === 'running' ? getVmStatusColor(guest.status) : '#9e9e9e',
+                strokeWidth: 1,
+              },
             })
           }
         } else {
@@ -187,13 +190,16 @@ export function buildTopologyGraph(
             data: summaryData,
           })
 
+          const runningRatio = guests.length > 0 ? running / guests.length : 0
+          const summaryEdgeColor = runningRatio > 0.5 ? '#4caf50' : runningRatio > 0 ? '#ff9800' : '#9e9e9e'
+
           edges.push({
             id: `e-${hostId}-${summaryId}`,
             source: hostId,
             target: summaryId,
             type: 'smoothstep',
-            animated: false,
-            style: { stroke: '#999', strokeWidth: 1 },
+            animated: running > 0,
+            style: { stroke: summaryEdgeColor, strokeWidth: 1 },
           })
         }
       }

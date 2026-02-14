@@ -65,7 +65,7 @@ export default function TopologyPage() {
           />
 
           {selectedNode && (
-            <TopologyDetailsSidebar node={selectedNode} onClose={() => setSelectedNode(null)} />
+            <TopologyDetailsSidebar node={selectedNode} onClose={() => setSelectedNode(null)} connections={connections} />
           )}
         </Card>
       </ReactFlowProvider>

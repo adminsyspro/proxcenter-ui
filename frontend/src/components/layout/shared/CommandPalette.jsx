@@ -218,7 +218,11 @@ const CommandPalette = ({ open, onClose }) => {
     if (!item) return
 
     if (item._type === 'vm' || item.type === 'vm') {
-      router.push(`/infrastructure/inventory?vmid=${item.vmid}`)
+      const connId = item.connectionId || item.connId || ''
+      const node = item.node || ''
+      const vmType = item.type === 'vm' ? 'qemu' : (item.type || 'qemu')
+      const params = new URLSearchParams({ vmid: String(item.vmid), connId, node, type: vmType })
+      router.push(`/infrastructure/inventory?${params.toString()}`)
     } else {
       router.push(item.href)
     }

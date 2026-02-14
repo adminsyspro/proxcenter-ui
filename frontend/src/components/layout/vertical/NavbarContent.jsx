@@ -426,7 +426,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 2, px: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 2, px: 2, position: 'relative' }}>
         {/* Page Title - Left side */}
         <Box sx={{ flex: 1, display: { xs: 'none', md: 'flex' }, alignItems: 'baseline', minWidth: 0 }}>
           {title && (
@@ -485,6 +485,36 @@ return () => window.removeEventListener('keydown', onKeyDown)
               )}
             </Box>
           )}
+        </Box>
+
+        {/* Search bar (Ctrl+K) - Centered absolutely */}
+        <Box sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
+          <Box
+            onClick={() => setSearchOpen(true)}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              cursor: 'pointer',
+              width: 280,
+              transition: 'all 0.2s',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'action.hover'
+              }
+            }}
+          >
+            <i className='ri-search-line' style={{ opacity: 0.5, fontSize: '1rem' }} />
+            <Typography variant='body2' sx={{ opacity: 0.5, flex: 1, fontSize: '0.8rem', userSelect: 'none' }}>
+              {t('navbar.search')}...
+            </Typography>
+            <Chip size='small' label='Ctrl+K' variant='outlined' sx={{ height: 20, fontSize: '0.65rem', '& .MuiChip-label': { px: 0.75 } }} />
+          </Box>
         </Box>
 
         {/* RIGHT ICONS */}
@@ -553,34 +583,6 @@ return () => window.removeEventListener('keydown', onKeyDown)
               </Box>
             </Tooltip>
           )}
-
-          {/* Search bar (Ctrl+K) */}
-          <Box
-            onClick={() => setSearchOpen(true)}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 1.5,
-              py: 0.5,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-              cursor: 'pointer',
-              minWidth: 180,
-              transition: 'all 0.2s',
-              '&:hover': {
-                borderColor: 'primary.main',
-                bgcolor: 'action.hover'
-              }
-            }}
-          >
-            <i className='ri-search-line' style={{ opacity: 0.5, fontSize: '1rem' }} />
-            <Typography variant='body2' sx={{ opacity: 0.5, flex: 1, fontSize: '0.8rem', userSelect: 'none' }}>
-              {t('navbar.search')}...
-            </Typography>
-            <Chip size='small' label='Ctrl+K' variant='outlined' sx={{ height: 20, fontSize: '0.65rem', '& .MuiChip-label': { px: 0.75 } }} />
-          </Box>
 
           {/* Lang */}
           <Tooltip title={t('navbar.language')}>

@@ -9,6 +9,7 @@ import type {
   VmNodeData,
   VmSummaryNodeData,
   VlanGroupNodeData,
+  TagGroupNodeData,
   ProxCenterNodeData,
   NodeStatus,
 } from '../types'
@@ -18,7 +19,8 @@ import { getResourceStatus, getStatusColor, getVmStatusColor } from './topologyC
 function buildVmNode(
   conn: { id: string },
   nodeName: string,
-  guest: InventoryGuest
+  guest: InventoryGuest,
+  idSuffix?: string
 ): { node: Node; data: VmNodeData } {
   const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
   const vmCpu = guest.cpu || 0
@@ -39,9 +41,13 @@ function buildVmNode(
     height: 50,
   }
 
+  const id = idSuffix
+    ? `vm-net-${idSuffix}-${conn.id}-${nodeName}-${vmid}`
+    : `vm-${conn.id}-${nodeName}-${vmid}`
+
   return {
     node: {
-      id: `vm-${conn.id}-${nodeName}-${vmid}`,
+      id,
       type: 'vm',
       position: { x: 0, y: 0 },
       data: vmData,
@@ -64,7 +70,143 @@ function buildVmEdge(sourceId: string, vmId: string, status: string): Edge {
   }
 }
 
-export function buildTopologyGraph(
+/* ------------------------------------------------------------------ */
+/* Network (VLAN-only) view                                           */
+/* ------------------------------------------------------------------ */
+
+function buildNetworkView(
+  data: InventoryData,
+  filters: TopologyFilters,
+  networkMap?: NetworkMap
+): { nodes: Node[]; edges: Edge[] } {
+  const nodes: Node[] = []
+  const edges: Edge[] = []
+
+  if (!data?.clusters) return { nodes, edges }
+
+  const clusters = filters.connectionId
+    ? data.clusters.filter((c) => c.id === filters.connectionId)
+    : data.clusters
+
+  // Collect all VMs across all connections grouped by VLAN
+  const vlanBuckets = new Map<
+    string,
+    { vlanTag: number | null; bridge: string; vms: Array<{ conn: { id: string }; nodeName: string; guest: InventoryGuest; nicKey: string }> }
+  >()
+
+  let grandTotalVms = 0
+  let grandTotalNodes = 0
+
+  for (const conn of clusters) {
+    grandTotalNodes += conn.nodes.length
+
+    for (const node of conn.nodes) {
+      let guests = node.guests || []
+
+      if (filters.vmStatus && filters.vmStatus !== 'all') {
+        guests = guests.filter((g) => g.status === filters.vmStatus)
+      }
+
+      grandTotalVms += guests.length
+
+      for (const guest of guests) {
+        const vmid = typeof guest.vmid === 'string' ? guest.vmid : String(guest.vmid)
+        const type = guest.type || 'qemu'
+        const netKey = `${conn.id}:${type}:${node.node}:${vmid}`
+        const nics = networkMap?.get(netKey) || []
+
+        if (nics.length === 0) {
+          // No network info — put in "No VLAN" bucket
+          const groupKey = 'no-vlan'
+
+          if (!vlanBuckets.has(groupKey)) {
+            vlanBuckets.set(groupKey, { vlanTag: null, bridge: 'unknown', vms: [] })
+          }
+
+          vlanBuckets.get(groupKey)!.vms.push({ conn, nodeName: node.node, guest, nicKey: groupKey })
+        } else {
+          // One entry per NIC (multi-NIC = appears in multiple VLANs)
+          for (const nic of nics) {
+            const vlanTag = nic.vlanTag ?? null
+            const bridge = nic.bridge ?? 'unknown'
+            const groupKey = vlanTag != null ? `vlan-${vlanTag}` : 'no-vlan'
+
+            if (!vlanBuckets.has(groupKey)) {
+              vlanBuckets.set(groupKey, { vlanTag, bridge, vms: [] })
+            }
+
+            vlanBuckets.get(groupKey)!.vms.push({ conn, nodeName: node.node, guest, nicKey: groupKey })
+          }
+        }
+      }
+    }
+  }
+
+  // ProxCenter root
+  const proxcenterData: ProxCenterNodeData = {
+    label: 'ProxCenter',
+    clusterCount: clusters.length,
+    totalNodes: grandTotalNodes,
+    totalVms: grandTotalVms,
+    width: 300,
+    height: 90,
+  }
+
+  nodes.push({
+    id: 'proxcenter',
+    type: 'proxcenter',
+    position: { x: 0, y: 0 },
+    data: proxcenterData,
+  })
+
+  // Create VLAN group nodes and VM nodes
+  for (const [groupKey, bucket] of vlanBuckets) {
+    const vlanNodeId = `vlan-net-${groupKey}`
+
+    const vlanData: VlanGroupNodeData = {
+      label: bucket.vlanTag != null ? `VLAN ${bucket.vlanTag}` : 'No VLAN',
+      connectionId: '',
+      nodeName: '',
+      vlanTag: bucket.vlanTag,
+      bridge: bucket.bridge,
+      vmCount: bucket.vms.length,
+      width: 170,
+      height: 50,
+    }
+
+    nodes.push({
+      id: vlanNodeId,
+      type: 'vlanGroup',
+      position: { x: 0, y: 0 },
+      data: vlanData,
+    })
+
+    edges.push({
+      id: `e-proxcenter-${vlanNodeId}`,
+      source: 'proxcenter',
+      target: vlanNodeId,
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: '#1976d2', strokeWidth: 2 },
+    })
+
+    // VM nodes under this VLAN
+    for (const entry of bucket.vms) {
+      const { node: vmNode } = buildVmNode(entry.conn, entry.nodeName, entry.guest, groupKey)
+
+      nodes.push(vmNode)
+      edges.push(buildVmEdge(vlanNodeId, vmNode.id, entry.guest.status))
+    }
+  }
+
+  return { nodes, edges }
+}
+
+/* ------------------------------------------------------------------ */
+/* Infrastructure view (default)                                      */
+/* ------------------------------------------------------------------ */
+
+function buildInfraView(
   data: InventoryData,
   filters: TopologyFilters,
   networkMap?: NetworkMap
@@ -90,6 +232,7 @@ export function buildTopologyGraph(
     let totalVms = 0
     let worstStatus: NodeStatus = 'ok'
     let cpuSum = 0
+    let ramSum = 0
     let nodeCountOnline = 0
 
     for (const node of conn.nodes) {
@@ -107,6 +250,7 @@ export function buildTopologyGraph(
 
       if (nodeIsOnline) {
         cpuSum += nodeCpuUsage
+        ramSum += nodeRamUsage
         nodeCountOnline++
       }
 
@@ -127,9 +271,10 @@ export function buildTopologyGraph(
       nodeCount: conn.nodes.length,
       vmCount: totalVms,
       cpuUsage: nodeCountOnline > 0 ? cpuSum / nodeCountOnline : 0,
+      ramUsage: nodeCountOnline > 0 ? ramSum / nodeCountOnline : 0,
       status: isOnline ? worstStatus : 'offline',
       width: 220,
-      height: 100,
+      height: 115,
     }
 
     nodes.push({
@@ -251,8 +396,59 @@ export function buildTopologyGraph(
                 edges.push(buildVmEdge(vlanNodeId, vmNode.id, guest.status))
               }
             }
+          } else if (filters.groupByTag) {
+            // Group VMs by first Proxmox tag
+            const tagGroups = new Map<string, InventoryGuest[]>()
+
+            for (const guest of guests) {
+              const tags = guest.tags?.split(';').filter(Boolean) || []
+              const firstTag = tags[0] || '__none__'
+
+              if (!tagGroups.has(firstTag)) {
+                tagGroups.set(firstTag, [])
+              }
+
+              tagGroups.get(firstTag)!.push(guest)
+            }
+
+            for (const [tag, tagGuests] of tagGroups) {
+              const tagNodeId = `tag-${conn.id}-${node.node}-${tag}`
+
+              const tagData: TagGroupNodeData = {
+                label: tag === '__none__' ? 'No Tag' : tag,
+                connectionId: conn.id,
+                nodeName: node.node,
+                tag,
+                vmCount: tagGuests.length,
+                width: 170,
+                height: 45,
+              }
+
+              nodes.push({
+                id: tagNodeId,
+                type: 'tagGroup',
+                position: { x: 0, y: 0 },
+                data: tagData,
+              })
+
+              edges.push({
+                id: `e-${hostId}-${tagNodeId}`,
+                source: hostId,
+                target: tagNodeId,
+                type: 'smoothstep',
+                animated: true,
+                style: { stroke: '#7b1fa2', strokeWidth: 1.5 },
+              })
+
+              for (const guest of tagGuests) {
+                const { node: vmNode } = buildVmNode(conn, node.node, guest)
+
+                nodes.push(vmNode)
+                edges.push(buildVmEdge(tagNodeId, vmNode.id, guest.status))
+              }
+            }
           } else {
-            // Individual VM nodes (no VLAN grouping)
+            // Individual VM nodes (no grouping)
             for (const guest of guests) {
               const { node: vmNode } = buildVmNode(conn, node.node, guest)
 
@@ -331,4 +527,20 @@ export function buildTopologyGraph(
   }
 
   return { nodes, edges }
+}
+
+/* ------------------------------------------------------------------ */
+/* Main entry — dispatches based on viewMode                          */
+/* ------------------------------------------------------------------ */
+
+export function buildTopologyGraph(
+  data: InventoryData,
+  filters: TopologyFilters,
+  networkMap?: NetworkMap
+): { nodes: Node[]; edges: Edge[] } {
+  if (filters.viewMode === 'network') {
+    return buildNetworkView(data, filters, networkMap)
+  }
+
+  return buildInfraView(data, filters, networkMap)
 }

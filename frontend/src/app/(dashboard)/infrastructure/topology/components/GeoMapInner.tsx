@@ -81,6 +81,10 @@ export default function GeoMapInner({ connections }: GeoMapInnerProps) {
     .filter((c) => c.latitude != null && c.longitude != null)
     .map((c) => [c.latitude!, c.longitude!])
 
+  // Force popup text colors — Leaflet popups have white bg, MUI inherits dark mode colors
+  const popupTextColor = isDark ? '#1e1e2d' : '#1e1e2d'
+  const popupSecondaryColor = isDark ? '#666' : '#666'
+
   return (
     <MapContainer
       center={positions[0] || [48.8566, 2.3522]}
@@ -126,12 +130,12 @@ export default function GeoMapInner({ connections }: GeoMapInnerProps) {
             icon={createClusterIcon(conn.status)}
           >
             <Popup>
-              <Box sx={{ minWidth: 200, p: 0.5 }}>
-                <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.5 }}>
+              <Box sx={{ minWidth: 200, p: 0.5, color: popupTextColor }}>
+                <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.5, color: popupTextColor }}>
                   {conn.name}
                 </Typography>
                 {conn.locationLabel && (
-                  <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 1 }}>
+                  <Typography variant='caption' sx={{ display: 'block', mb: 1, color: popupSecondaryColor }}>
                     <i className='ri-map-pin-2-fill' style={{ fontSize: 12, marginRight: 4 }} />
                     {conn.locationLabel}
                   </Typography>
@@ -152,16 +156,16 @@ export default function GeoMapInner({ connections }: GeoMapInnerProps) {
                   {conn.status.toUpperCase()}
                 </Box>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5, mt: 0.5 }}>
-                  <Typography variant='caption'>
+                  <Typography variant='caption' sx={{ color: popupTextColor }}>
                     {t('nodes')}: <strong>{totalNodes}</strong>
                   </Typography>
-                  <Typography variant='caption'>
+                  <Typography variant='caption' sx={{ color: popupTextColor }}>
                     {t('vms')}: <strong>{runningVms}/{totalVms}</strong>
                   </Typography>
-                  <Typography variant='caption'>
+                  <Typography variant='caption' sx={{ color: popupTextColor }}>
                     CPU: <strong>{cpuPct}%</strong>
                   </Typography>
-                  <Typography variant='caption'>
+                  <Typography variant='caption' sx={{ color: popupTextColor }}>
                     RAM: <strong>{ramPct}%</strong>
                   </Typography>
                 </Box>

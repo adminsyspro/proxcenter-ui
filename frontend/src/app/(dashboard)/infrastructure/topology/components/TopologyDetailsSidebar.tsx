@@ -468,14 +468,6 @@ function HostDetails({ data, connections }: { data: HostNodeData; connections: I
       <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
         <Box>
           <Typography variant='caption' color='text.secondary'>
-            {t('vms')}
-          </Typography>
-          <Typography variant='body1' fontWeight={600}>
-            {data.vmCount}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant='caption' color='text.secondary'>
             {t('uptime')}
           </Typography>
           <Typography variant='body1' fontWeight={600}>

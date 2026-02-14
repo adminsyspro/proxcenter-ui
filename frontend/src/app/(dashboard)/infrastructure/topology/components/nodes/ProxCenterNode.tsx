@@ -52,20 +52,20 @@ function ProxCenterNodeComponent({ data }: NodeProps) {
         },
       }}
     >
-      <LogoIcon size={36} accentColor={primaryColor} />
+      <LogoIcon size={44} accentColor={primaryColor} />
 
       <Box sx={{ flex: 1 }}>
-        <Typography variant='body2' fontWeight={700}>
+        <Typography variant='body1' fontWeight={800} sx={{ fontSize: '1rem' }}>
           {d.label}
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25 }}>
-          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+        <Box sx={{ display: 'flex', gap: 2, mt: 0.5 }}>
+          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.7rem' }}>
             {d.clusterCount} clusters
           </Typography>
-          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.7rem' }}>
             {d.totalNodes} nodes
           </Typography>
-          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.7rem' }}>
             {d.totalVms} VMs
           </Typography>
         </Box>

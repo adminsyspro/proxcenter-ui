@@ -125,6 +125,24 @@ export interface TagGroupNodeData {
   height: number
 }
 
+export interface VlanContainerVm {
+  vmid: number
+  name: string
+  vmType: string
+  vmStatus: string
+  nodeName: string
+}
+
+export interface VlanContainerNodeData {
+  [key: string]: unknown
+  label: string
+  vlanTag: number | null
+  bridge: string
+  vms: VlanContainerVm[]
+  width: number
+  height: number
+}
+
 export interface ProxCenterNodeData {
   [key: string]: unknown
   label: string
@@ -143,4 +161,5 @@ export type SelectedNodeInfo =
   | { type: 'vmSummary'; data: VmSummaryNodeData }
   | { type: 'vlanGroup'; data: VlanGroupNodeData }
   | { type: 'tagGroup'; data: TagGroupNodeData }
+  | { type: 'vlanContainer'; data: VlanContainerNodeData }
   | { type: 'proxcenter'; data: ProxCenterNodeData }

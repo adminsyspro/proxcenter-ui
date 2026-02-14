@@ -15,6 +15,7 @@ import type {
   VmNodeData,
   VmSummaryNodeData,
   VlanGroupNodeData,
+  VlanContainerNodeData,
   TagGroupNodeData,
   ProxCenterNodeData,
   InventoryCluster,
@@ -689,6 +690,85 @@ function VlanGroupDetails({ data }: { data: VlanGroupNodeData }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* VLAN Container details (network view)                              */
+/* ------------------------------------------------------------------ */
+
+function VlanContainerDetails({ data }: { data: VlanContainerNodeData }) {
+  const t = useTranslations('topology')
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <i className='ri-router-line' style={{ fontSize: 20, color: '#1976d2' }} />
+        <Typography variant='subtitle1' fontWeight={700}>
+          {data.vlanTag != null ? `${t('vlan')} ${data.vlanTag}` : t('noVlan')}
+        </Typography>
+      </Box>
+      <Divider sx={{ mb: 1.5 }} />
+      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('bridge')}
+          </Typography>
+          <Typography variant='body1' fontWeight={600}>
+            {data.bridge}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('vms')}
+          </Typography>
+          <Typography variant='body1' fontWeight={600}>
+            {data.vms.length}
+          </Typography>
+        </Box>
+      </Box>
+      <Divider sx={{ mb: 1 }} />
+      <Typography variant='caption' fontWeight={600} color='text.secondary' sx={{ mb: 0.5, display: 'block' }}>
+        {t('virtualMachines')}
+      </Typography>
+      <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+        {data.vms.map((vm) => (
+          <Box
+            key={`${vm.nodeName}-${vm.vmid}`}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              py: 0.5,
+              px: 0.25,
+              borderRadius: 1,
+            }}
+          >
+            <Box
+              sx={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                bgcolor: getVmStatusColor(vm.vmStatus),
+                flexShrink: 0,
+              }}
+            />
+            <i
+              className={vm.vmType === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
+              style={{ fontSize: 14, color: getVmStatusColor(vm.vmStatus), flexShrink: 0 }}
+            />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant='caption' fontWeight={600} noWrap sx={{ display: 'block', lineHeight: 1.3 }}>
+                {vm.name}
+              </Typography>
+              <Typography variant='caption' color='text.secondary' sx={{ fontSize: 10 }}>
+                #{vm.vmid} - {vm.nodeName}
+              </Typography>
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Tag Group details                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -842,12 +922,13 @@ export default function TopologyDetailsSidebar({ node, onClose, connections }: T
         {node.type === 'vm' && <VmDetails data={node.data as VmNodeData} />}
         {node.type === 'vmSummary' && <VmSummaryDetails data={node.data as VmSummaryNodeData} />}
         {node.type === 'vlanGroup' && <VlanGroupDetails data={node.data as VlanGroupNodeData} />}
+        {node.type === 'vlanContainer' && <VlanContainerDetails data={node.data as VlanContainerNodeData} />}
         {node.type === 'tagGroup' && <TagGroupDetails data={node.data as TagGroupNodeData} />}
         {node.type === 'proxcenter' && <ProxCenterDetails data={node.data as ProxCenterNodeData} />}
       </Box>
 
       {/* Footer */}
-      {node.type !== 'proxcenter' && node.type !== 'vlanGroup' && node.type !== 'tagGroup' && (
+      {node.type !== 'proxcenter' && node.type !== 'vlanGroup' && node.type !== 'vlanContainer' && node.type !== 'tagGroup' && (
         <>
           <Divider />
           <Box sx={{ px: 2, py: 1.5 }}>

@@ -9,6 +9,8 @@ import type {
   VmNodeData,
   VmSummaryNodeData,
   VlanGroupNodeData,
+  VlanContainerNodeData,
+  VlanContainerVm,
   TagGroupNodeData,
   ProxCenterNodeData,
   NodeStatus,
@@ -88,17 +90,18 @@ function buildNetworkView(
     ? data.clusters.filter((c) => c.id === filters.connectionId)
     : data.clusters
 
-  // Collect all VMs across all connections grouped by VLAN
-  const vlanBuckets = new Map<
-    string,
-    { vlanTag: number | null; bridge: string; vms: Array<{ conn: { id: string }; nodeName: string; guest: InventoryGuest; nicKey: string }> }
-  >()
-
   let grandTotalVms = 0
   let grandTotalNodes = 0
 
+  // Per-cluster: collect VMs into VLAN buckets
+  const clusterVlanMap = new Map<
+    string,
+    Map<string, { vlanTag: number | null; bridge: string; vms: VlanContainerVm[] }>
+  >()
+
   for (const conn of clusters) {
     grandTotalNodes += conn.nodes.length
+    const buckets = new Map<string, { vlanTag: number | null; bridge: string; vms: VlanContainerVm[] }>()
 
     for (const node of conn.nodes) {
       let guests = node.guests || []
@@ -110,36 +113,44 @@ function buildNetworkView(
       grandTotalVms += guests.length
 
       for (const guest of guests) {
-        const vmid = typeof guest.vmid === 'string' ? guest.vmid : String(guest.vmid)
+        const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
         const type = guest.type || 'qemu'
-        const netKey = `${conn.id}:${type}:${node.node}:${vmid}`
+        const netKey = `${conn.id}:${type}:${node.node}:${typeof guest.vmid === 'string' ? guest.vmid : String(guest.vmid)}`
         const nics = networkMap?.get(netKey) || []
 
+        const vmEntry: VlanContainerVm = {
+          vmid,
+          name: guest.name || `VM ${vmid}`,
+          vmType: type,
+          vmStatus: guest.status,
+          nodeName: node.node,
+        }
+
         if (nics.length === 0) {
-          // No network info — put in "No VLAN" bucket
           const groupKey = 'no-vlan'
 
-          if (!vlanBuckets.has(groupKey)) {
-            vlanBuckets.set(groupKey, { vlanTag: null, bridge: 'unknown', vms: [] })
+          if (!buckets.has(groupKey)) {
+            buckets.set(groupKey, { vlanTag: null, bridge: 'unknown', vms: [] })
           }
 
-          vlanBuckets.get(groupKey)!.vms.push({ conn, nodeName: node.node, guest, nicKey: groupKey })
+          buckets.get(groupKey)!.vms.push(vmEntry)
         } else {
-          // One entry per NIC (multi-NIC = appears in multiple VLANs)
           for (const nic of nics) {
             const vlanTag = nic.vlanTag ?? null
             const bridge = nic.bridge ?? 'unknown'
             const groupKey = vlanTag != null ? `vlan-${vlanTag}` : 'no-vlan'
 
-            if (!vlanBuckets.has(groupKey)) {
-              vlanBuckets.set(groupKey, { vlanTag, bridge, vms: [] })
+            if (!buckets.has(groupKey)) {
+              buckets.set(groupKey, { vlanTag, bridge, vms: [] })
             }
 
-            vlanBuckets.get(groupKey)!.vms.push({ conn, nodeName: node.node, guest, nicKey: groupKey })
+            buckets.get(groupKey)!.vms.push(vmEntry)
           }
         }
       }
     }
+
+    clusterVlanMap.set(conn.id, buckets)
   }
 
   // ProxCenter root
@@ -159,43 +170,104 @@ function buildNetworkView(
     data: proxcenterData,
   })
 
-  // Create VLAN group nodes and VM nodes
-  for (const [groupKey, bucket] of vlanBuckets) {
-    const vlanNodeId = `vlan-net-${groupKey}`
+  // Cluster nodes + VLAN containers per cluster
+  for (const conn of clusters) {
+    const clusterId = `cluster-${conn.id}`
+    const isOnline = conn.status === 'online' || conn.status === 'degraded'
 
-    const vlanData: VlanGroupNodeData = {
-      label: bucket.vlanTag != null ? `VLAN ${bucket.vlanTag}` : 'No VLAN',
-      connectionId: '',
-      nodeName: '',
-      vlanTag: bucket.vlanTag,
-      bridge: bucket.bridge,
-      vmCount: bucket.vms.length,
-      width: 170,
-      height: 50,
+    let cpuSum = 0
+    let ramSum = 0
+    let nodeCountOnline = 0
+    let totalVms = 0
+    let worstStatus: NodeStatus = 'ok'
+
+    for (const node of conn.nodes) {
+      const nodeIsOnline = node.status === 'online'
+      const nodeCpuUsage = node.cpu || 0
+      const nodeMem = node.mem || 0
+      const nodeMaxMem = node.maxmem || 0
+      const nodeRamUsage = nodeMaxMem > 0 ? nodeMem / nodeMaxMem : 0
+      const nodeStatus = getResourceStatus(Math.max(nodeCpuUsage, nodeRamUsage), nodeIsOnline)
+
+      if (nodeStatus === 'critical') worstStatus = 'critical'
+      else if (nodeStatus === 'warning' && worstStatus !== 'critical') worstStatus = 'warning'
+
+      if (nodeIsOnline) {
+        cpuSum += nodeCpuUsage
+        ramSum += nodeRamUsage
+        nodeCountOnline++
+      }
+
+      totalVms += (node.guests || []).length
+    }
+
+    if (!isOnline && worstStatus !== 'critical') worstStatus = 'critical'
+
+    const clusterData: ClusterNodeData = {
+      label: conn.name,
+      host: conn.name,
+      connectionId: conn.id,
+      nodeCount: conn.nodes.length,
+      vmCount: totalVms,
+      cpuUsage: nodeCountOnline > 0 ? cpuSum / nodeCountOnline : 0,
+      ramUsage: nodeCountOnline > 0 ? ramSum / nodeCountOnline : 0,
+      status: isOnline ? worstStatus : 'offline',
+      width: 220,
+      height: 115,
     }
 
     nodes.push({
-      id: vlanNodeId,
-      type: 'vlanGroup',
+      id: clusterId,
+      type: 'cluster',
       position: { x: 0, y: 0 },
-      data: vlanData,
+      data: clusterData,
     })
 
     edges.push({
-      id: `e-proxcenter-${vlanNodeId}`,
+      id: `e-proxcenter-${clusterId}`,
       source: 'proxcenter',
-      target: vlanNodeId,
+      target: clusterId,
       type: 'smoothstep',
       animated: true,
-      style: { stroke: '#1976d2', strokeWidth: 2 },
+      style: { stroke: '#F29221', strokeWidth: 2 },
     })
 
-    // VM nodes under this VLAN
-    for (const entry of bucket.vms) {
-      const { node: vmNode } = buildVmNode(entry.conn, entry.nodeName, entry.guest, groupKey)
+    // VLAN container nodes for this cluster
+    const buckets = clusterVlanMap.get(conn.id)
 
-      nodes.push(vmNode)
-      edges.push(buildVmEdge(vlanNodeId, vmNode.id, entry.guest.status))
+    if (buckets) {
+      for (const [groupKey, bucket] of buckets) {
+        const containerId = `vlanc-${conn.id}-${groupKey}`
+        const VM_ROW_HEIGHT = 18
+        const HEADER_HEIGHT = 32
+        const PADDING = 8
+        const containerHeight = HEADER_HEIGHT + PADDING + bucket.vms.length * VM_ROW_HEIGHT + PADDING
+
+        const containerData: VlanContainerNodeData = {
+          label: bucket.vlanTag != null ? `VLAN ${bucket.vlanTag}` : 'No VLAN',
+          vlanTag: bucket.vlanTag,
+          bridge: bucket.bridge,
+          vms: bucket.vms,
+          width: 240,
+          height: Math.max(containerHeight, 70),
+        }
+
+        nodes.push({
+          id: containerId,
+          type: 'vlanContainer',
+          position: { x: 0, y: 0 },
+          data: containerData,
+        })
+
+        edges.push({
+          id: `e-${clusterId}-${containerId}`,
+          source: clusterId,
+          target: containerId,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: '#1976d2', strokeWidth: 1.5 },
+        })
+      }
     }
   }
 

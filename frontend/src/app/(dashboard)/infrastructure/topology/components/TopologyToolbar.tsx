@@ -33,16 +33,31 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
   const isNetworkView = filters.viewMode === 'network'
 
   const handleExport = async () => {
-    const el = document.querySelector('.react-flow') as HTMLElement
+    const viewport = document.querySelector('.react-flow__viewport') as HTMLElement
 
-    if (!el) return
+    if (!viewport) return
 
-    const html2canvas = (await import('html2canvas')).default
-    const canvas = await html2canvas(el, { backgroundColor: null, useCORS: true })
+    const { toPng } = await import('html-to-image')
+    const dataUrl = await toPng(viewport, {
+      backgroundColor: '#1e1e2d',
+      filter: (node) => {
+        // Exclude minimap and controls if present
+        if (node instanceof HTMLElement) {
+          const cls = node.className || ''
+
+          if (typeof cls === 'string' && (cls.includes('react-flow__minimap') || cls.includes('react-flow__controls'))) {
+            return false
+          }
+        }
+
+        return true
+      },
+    })
+
     const link = document.createElement('a')
 
     link.download = 'topology-export.png'
-    link.href = canvas.toDataURL('image/png')
+    link.href = dataUrl
     link.click()
   }
 

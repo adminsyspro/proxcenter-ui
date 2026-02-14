@@ -31,6 +31,7 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
   const { fitView } = useReactFlow()
 
   const isNetworkView = filters.viewMode === 'network'
+  const isGeoView = filters.viewMode === 'geo'
 
   const handleExport = async () => {
     const viewport = document.querySelector('.react-flow__viewport') as HTMLElement
@@ -98,6 +99,11 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
             <i className='ri-router-line' style={{ fontSize: 18 }} />
           </Tooltip>
         </ToggleButton>
+        <ToggleButton value='geo'>
+          <Tooltip title={t('geoView')}>
+            <i className='ri-map-pin-line' style={{ fontSize: 18 }} />
+          </Tooltip>
+        </ToggleButton>
       </ToggleButtonGroup>
 
       {/* Connection filter */}
@@ -119,7 +125,8 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         </Select>
       </FormControl>
 
-      {/* VM Status filter */}
+      {/* VM Status filter — hidden in geo view */}
+      {!isGeoView && (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Typography variant='caption' color='text.secondary' sx={{ whiteSpace: 'nowrap' }}>
           {t('vmStatus')}:
@@ -147,9 +154,10 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
           <ToggleButton value='stopped'>{t('stopped')}</ToggleButton>
         </ToggleButtonGroup>
       </Box>
+      )}
 
-      {/* VM Threshold slider — hidden in network view */}
-      {!isNetworkView && (
+      {/* VM Threshold slider — hidden in network/geo view */}
+      {!isNetworkView && !isGeoView && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
           <Typography variant='caption' color='text.secondary' sx={{ whiteSpace: 'nowrap' }}>
             {t('vmThreshold')}:
@@ -170,8 +178,8 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         </Box>
       )}
 
-      {/* Group by VLAN toggle — hidden in network view */}
-      {!isNetworkView && (
+      {/* Group by VLAN toggle — hidden in network/geo view */}
+      {!isNetworkView && !isGeoView && (
         <FormControlLabel
           control={
             <Switch
@@ -189,8 +197,8 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         />
       )}
 
-      {/* Group by Tag toggle — hidden in network view */}
-      {!isNetworkView && (
+      {/* Group by Tag toggle — hidden in network/geo view */}
+      {!isNetworkView && !isGeoView && (
         <FormControlLabel
           control={
             <Switch
@@ -208,7 +216,8 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         />
       )}
 
-      {/* Fit view + Export buttons */}
+      {/* Fit view + Export buttons — hidden in geo view */}
+      {!isGeoView && (
       <Box sx={{ ml: 'auto', display: 'flex', gap: 0.5 }}>
         <Tooltip title={t('exportPng')}>
           <IconButton
@@ -235,6 +244,7 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
           </IconButton>
         </Tooltip>
       </Box>
+      )}
     </Box>
   )
 }

@@ -200,6 +200,10 @@ function ConnectionsTab() {
       uiUrl: formData.uiUrl.trim() || null,
       insecureTLS: !!formData.insecureTLS,
       hasCeph: addConnType === 'pve' ? !!formData.hasCeph : false,
+      // Location fields
+      latitude: formData.latitude !== '' ? parseFloat(formData.latitude) : null,
+      longitude: formData.longitude !== '' ? parseFloat(formData.longitude) : null,
+      locationLabel: formData.locationLabel?.trim() || null,
       // Only include apiToken if provided
       ...(formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),
       // SSH fields

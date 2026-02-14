@@ -14,6 +14,7 @@ import { useTopologyNetworks } from './hooks/useTopologyNetworks'
 import TopologyCanvas from './components/TopologyCanvas'
 import TopologyToolbar from './components/TopologyToolbar'
 import TopologyDetailsSidebar from './components/TopologyDetailsSidebar'
+import TopologyGeoView from './components/TopologyGeoView'
 
 export default function TopologyPage() {
   const t = useTranslations()
@@ -55,18 +56,22 @@ export default function TopologyPage() {
       <ReactFlowProvider>
         <TopologyToolbar filters={filters} onChange={setFilters} connections={connections} />
 
-        <Card sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <TopologyCanvas
-            nodes={nodes}
-            edges={edges}
-            isLoading={isLoading}
-            onNodeSelect={handleNodeSelect}
-          />
+        {filters.viewMode === 'geo' ? (
+          <TopologyGeoView connections={connections} isLoading={isLoading} />
+        ) : (
+          <Card sx={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <TopologyCanvas
+              nodes={nodes}
+              edges={edges}
+              isLoading={isLoading}
+              onNodeSelect={handleNodeSelect}
+            />
 
-          {selectedNode && (
-            <TopologyDetailsSidebar node={selectedNode} onClose={() => setSelectedNode(null)} connections={connections} />
-          )}
-        </Card>
+            {selectedNode && (
+              <TopologyDetailsSidebar node={selectedNode} onClose={() => setSelectedNode(null)} connections={connections} />
+            )}
+          </Card>
+        )}
       </ReactFlowProvider>
     </Box>
   )

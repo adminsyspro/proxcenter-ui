@@ -5,7 +5,7 @@ export interface TopologyFilters {
   vmStatus?: 'running' | 'stopped' | 'all'
   vmThreshold: number // collapse VMs above this number per node
   groupByVlan?: boolean
-  viewMode?: 'infra' | 'network'
+  viewMode?: 'infra' | 'network' | 'geo'
   groupByTag?: boolean
 }
 
@@ -40,6 +40,9 @@ export interface InventoryCluster {
   type: string
   isCluster: boolean
   status: 'online' | 'degraded' | 'offline'
+  latitude?: number | null
+  longitude?: number | null
+  locationLabel?: string | null
   nodes: InventoryNode[]
 }
 

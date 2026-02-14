@@ -73,6 +73,9 @@ type ClusterData = {
   isCluster: boolean
   status: 'online' | 'degraded' | 'offline'
   cephHealth?: string
+  latitude?: number | null
+  longitude?: number | null
+  locationLabel?: string | null
   nodes: Array<NodeData & { guests: GuestData[] }>
 }
 
@@ -120,7 +123,7 @@ async function fetchRawInventory(): Promise<{
     prisma.connection.findMany({
       where: { type: 'pve' },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, latitude: true, longitude: true, locationLabel: true },
     }),
     prisma.connection.findMany({
       where: { type: 'pbs' },
@@ -293,6 +296,9 @@ return aId - bId
         isCluster: totalNodes > 1,
         status,
         cephHealth,
+        latitude: conn.latitude,
+        longitude: conn.longitude,
+        locationLabel: conn.locationLabel,
         nodes: nodesArray.sort((a, b) => a.node.localeCompare(b.node)),
       }
     } catch (e: any) {
@@ -304,6 +310,9 @@ return aId - bId
         type: conn.type,
         isCluster: false,
         status: 'offline' as const,
+        latitude: conn.latitude,
+        longitude: conn.longitude,
+        locationLabel: conn.locationLabel,
         nodes: [],
       }
     }

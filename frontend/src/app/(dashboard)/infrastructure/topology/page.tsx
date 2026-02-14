@@ -29,13 +29,14 @@ export default function TopologyPage() {
   // First pass: get connections (without networkMap)
   const { connections, isLoading } = useTopologyData(filters)
 
-  // Fetch network/VLAN data when groupByVlan is enabled
-  const { networkMap } = useTopologyNetworks(connections, !!filters.groupByVlan)
+  // Fetch network/VLAN data when groupByVlan is enabled or in network view
+  const needsNetworkData = !!filters.groupByVlan || filters.viewMode === 'network'
+  const { networkMap } = useTopologyNetworks(connections, needsNetworkData)
 
   // Second pass: build graph with networkMap when available
   const { nodes, edges } = useTopologyData(
     filters,
-    filters.groupByVlan ? networkMap : undefined
+    needsNetworkData ? networkMap : undefined
   )
 
   // Page title

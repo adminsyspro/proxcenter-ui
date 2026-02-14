@@ -21,6 +21,7 @@ import { HostNode } from './nodes/HostNode'
 import { VmNode } from './nodes/VmNode'
 import { VmSummaryNode } from './nodes/VmSummaryNode'
 import { VlanGroupNode } from './nodes/VlanGroupNode'
+import { TagGroupNode } from './nodes/TagGroupNode'
 import { ProxCenterNode } from './nodes/ProxCenterNode'
 import type { SelectedNodeInfo } from '../types'
 
@@ -30,6 +31,7 @@ const nodeTypes = {
   vm: VmNode,
   vmSummary: VmSummaryNode,
   vlanGroup: VlanGroupNode,
+  tagGroup: TagGroupNode,
   proxcenter: ProxCenterNode,
 }
 
@@ -59,7 +61,7 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
     (_event, node) => {
       const nodeType = node.type as string
 
-      if (nodeType === 'cluster' || nodeType === 'host' || nodeType === 'vm' || nodeType === 'vmSummary' || nodeType === 'vlanGroup' || nodeType === 'proxcenter') {
+      if (nodeType === 'cluster' || nodeType === 'host' || nodeType === 'vm' || nodeType === 'vmSummary' || nodeType === 'vlanGroup' || nodeType === 'tagGroup' || nodeType === 'proxcenter') {
         onNodeSelect({ type: nodeType, data: node.data as any })
       }
     },
@@ -138,6 +140,8 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
               return '#9e9e9e'
             case 'vlanGroup':
               return '#1976d2'
+            case 'tagGroup':
+              return '#7b1fa2'
             case 'proxcenter':
               return '#F29221'
             default:

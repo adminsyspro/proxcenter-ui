@@ -82,6 +82,30 @@ function ClusterNodeComponent({ data }: NodeProps) {
         />
       </Box>
 
+      <Box sx={{ mt: 0.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
+          <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+            RAM
+          </Typography>
+          <Typography variant='caption' sx={{ fontSize: '0.65rem', ml: 'auto' }}>
+            {(d.ramUsage * 100).toFixed(0)}%
+          </Typography>
+        </Box>
+        <LinearProgress
+          variant='determinate'
+          value={Math.min(d.ramUsage * 100, 100)}
+          sx={{
+            height: 4,
+            borderRadius: 2,
+            bgcolor: 'action.hover',
+            '& .MuiLinearProgress-bar': {
+              bgcolor: '#9c27b0',
+              borderRadius: 2,
+            },
+          }}
+        />
+      </Box>
+
       <Handle type='source' position={Position.Bottom} style={{ background: '#666' }} />
     </Box>
   )

@@ -2912,6 +2912,11 @@
     "noVlan": "No VLAN",
     "bridge": "Bridge",
     "proxcenterRoot": "ProxCenter",
-    "totalClusters": "Total Clusters"
+    "totalClusters": "Total Clusters",
+    "infraView": "Infrastructure",
+    "networkView": "Network (VLAN)",
+    "exportPng": "Export PNG",
+    "groupByTag": "Group by Tag",
+    "noTag": "No Tag"
   }
 }

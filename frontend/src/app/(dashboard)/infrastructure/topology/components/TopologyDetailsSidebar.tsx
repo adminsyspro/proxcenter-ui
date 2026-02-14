@@ -15,6 +15,7 @@ import type {
   VmNodeData,
   VmSummaryNodeData,
   VlanGroupNodeData,
+  TagGroupNodeData,
   ProxCenterNodeData,
   InventoryCluster,
   InventoryGuest,
@@ -417,6 +418,11 @@ function ClusterDetails({ data }: { data: ClusterNodeData }) {
         value={data.cpuUsage}
         statusColor={getStatusColor(getResourceStatus(data.cpuUsage, data.status !== 'offline'))}
       />
+      <UsageBar
+        label={t('ramUsage')}
+        value={data.ramUsage}
+        statusColor={getStatusColor(getResourceStatus(data.ramUsage, data.status !== 'offline'))}
+      />
     </>
   )
 }
@@ -683,6 +689,44 @@ function VlanGroupDetails({ data }: { data: VlanGroupNodeData }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Tag Group details                                                  */
+/* ------------------------------------------------------------------ */
+
+function TagGroupDetails({ data }: { data: TagGroupNodeData }) {
+  const t = useTranslations('topology')
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <i className='ri-price-tag-3-line' style={{ fontSize: 20, color: '#7b1fa2' }} />
+        <Typography variant='subtitle1' fontWeight={700}>
+          {data.tag === '__none__' ? t('noTag') : data.label}
+        </Typography>
+      </Box>
+      <Divider sx={{ mb: 1.5 }} />
+      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('host')}
+          </Typography>
+          <Typography variant='body1' fontWeight={600}>
+            {data.nodeName}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('vms')}
+          </Typography>
+          <Typography variant='body1' fontWeight={600}>
+            {data.vmCount}
+          </Typography>
+        </Box>
+      </Box>
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* ProxCenter root node details                                       */
 /* ------------------------------------------------------------------ */
 
@@ -798,11 +842,12 @@ export default function TopologyDetailsSidebar({ node, onClose, connections }: T
         {node.type === 'vm' && <VmDetails data={node.data as VmNodeData} />}
         {node.type === 'vmSummary' && <VmSummaryDetails data={node.data as VmSummaryNodeData} />}
         {node.type === 'vlanGroup' && <VlanGroupDetails data={node.data as VlanGroupNodeData} />}
+        {node.type === 'tagGroup' && <TagGroupDetails data={node.data as TagGroupNodeData} />}
         {node.type === 'proxcenter' && <ProxCenterDetails data={node.data as ProxCenterNodeData} />}
       </Box>
 
       {/* Footer */}
-      {node.type !== 'proxcenter' && node.type !== 'vlanGroup' && (
+      {node.type !== 'proxcenter' && node.type !== 'vlanGroup' && node.type !== 'tagGroup' && (
         <>
           <Divider />
           <Box sx={{ px: 2, py: 1.5 }}>

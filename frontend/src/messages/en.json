@@ -2770,6 +2770,24 @@
     "updateNotification": "New version available",
     "updateNotificationBody": "ProxCenter {version} is available. Click to update."
   },
+  "snapshotsTab": {
+    "title": "Snapshots",
+    "subtitle": "All snapshots across VMs",
+    "vm": "VM",
+    "node": "Node",
+    "snapshotName": "Name",
+    "description": "Description",
+    "date": "Date",
+    "ramState": "RAM",
+    "noSnapshots": "No snapshots found",
+    "noSnapshotsDesc": "None of the VMs have snapshots.",
+    "loading": "Loading snapshots...",
+    "vmCount": "{count} VMs with snapshots",
+    "totalSnapshots": "{count} snapshots",
+    "search": "Search...",
+    "allNodes": "All nodes",
+    "refresh": "Refresh"
+  },
   "cve": {
     "title": "CVE Scanner",
     "scanNow": "Scan Now",

@@ -46,6 +46,7 @@ import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
+import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
@@ -203,6 +204,14 @@ export default function ClusterTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-calendar-schedule-line" style={{ fontSize: 16 }} />
                       Backups
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-camera-line" style={{ fontSize: 16 }} />
+                      Snapshots
                     </Box>
                   }
                 />
@@ -1228,8 +1237,15 @@ export default function ClusterTabs(props: any) {
                   <BackupJobsPanel connectionId={selection?.id?.split(':')[0] || ''} />
                 )}
 
-                {/* Onglet Notes - Index 5 */}
+                {/* Onglet Snapshots - Index 5 */}
                 {clusterTab === 5 && (
+                  <Box sx={{ overflow: 'auto' }}>
+                    <SnapshotsTab connectionId={selection?.id?.split(':')[0] || ''} />
+                  </Box>
+                )}
+
+                {/* Onglet Notes - Index 6 */}
+                {clusterTab === 6 && (
                   <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1315,8 +1331,8 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Ceph - Index 6 */}
-                {clusterTab === 6 && (
+                {/* Onglet Ceph - Index 7 */}
+                {clusterTab === 7 && (
                   <Box sx={{ p: 2 }}>
                     {clusterCephLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1844,8 +1860,8 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Storage - Index 7 */}
-                {clusterTab === 7 && (
+                {/* Onglet Storage - Index 8 */}
+                {clusterTab === 8 && (
                   <Box sx={{ p: 0 }}>
                     {clusterStorageLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1927,15 +1943,15 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Firewall - Index 8 */}
-                {clusterTab === 8 && (
+                {/* Onglet Firewall - Index 9 */}
+                {clusterTab === 9 && (
                   <ClusterFirewallTab
                     connectionId={selection?.id?.split(':')[0] || ''}
                   />
                 )}
 
-                {/* Onglet Rolling Update - Index 9 */}
-                {clusterTab === 9 && (
+                {/* Onglet Rolling Update - Index 10 */}
+                {clusterTab === 10 && (
                   <Box sx={{ p: 2 }}>
                     <Stack spacing={3}>
                       {/* Header */}
@@ -2588,15 +2604,15 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet CVE - Index 10 */}
-                {clusterTab === 10 && (
+                {/* Onglet CVE - Index 11 */}
+                {clusterTab === 11 && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Cluster - Index 11 */}
-                {clusterTab === 11 && (
+                {/* Onglet Cluster - Index 12 */}
+                {clusterTab === 12 && (
                   <Box sx={{ p: 2 }}>
                     {clusterConfigLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

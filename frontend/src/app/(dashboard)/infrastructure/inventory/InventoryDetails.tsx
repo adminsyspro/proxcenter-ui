@@ -3211,21 +3211,21 @@ return
 
   // Charger la config du cluster quand on sélectionne l'onglet Cluster
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 10 && !clusterConfigLoaded && !clusterConfigLoading) {
+    if (selection?.type === 'cluster' && clusterTab === 12 && !clusterConfigLoaded && !clusterConfigLoading) {
       loadClusterConfig(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterConfigLoaded, clusterConfigLoading, loadClusterConfig])
 
   // Charger les notes quand on sélectionne l'onglet Notes
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 5 && !clusterNotesLoaded && !clusterNotesLoading) {
+    if (selection?.type === 'cluster' && clusterTab === 6 && !clusterNotesLoaded && !clusterNotesLoading) {
       loadClusterNotes(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterNotesLoaded, clusterNotesLoading, loadClusterNotes])
 
   // Charger Ceph quand on sélectionne l'onglet Ceph
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 6 && !clusterCephLoaded && !clusterCephLoading) {
+    if (selection?.type === 'cluster' && clusterTab === 7 && !clusterCephLoaded && !clusterCephLoading) {
       loadClusterCeph(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterCephLoaded, clusterCephLoading, loadClusterCeph])
@@ -3239,7 +3239,7 @@ return
 
   // Charger la config du cluster pour les nodes standalone quand on sélectionne l'onglet Cluster
   useEffect(() => {
-    if (selection?.type === 'node' && nodeTab === 7 && !clusterConfigLoaded && !clusterConfigLoading) {
+    if (selection?.type === 'node' && nodeTab === 8 && !clusterConfigLoaded && !clusterConfigLoading) {
       loadClusterConfig(parseNodeId(selection.id).connId)
     }
   }, [selection?.type, selection?.id, nodeTab, clusterConfigLoaded, clusterConfigLoading, loadClusterConfig])
@@ -3251,14 +3251,14 @@ return
 
   // Charger Storage quand on sélectionne l'onglet Storage
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 7 && !clusterStorageLoaded && !clusterStorageLoading) {
+    if (selection?.type === 'cluster' && clusterTab === 8 && !clusterStorageLoaded && !clusterStorageLoading) {
       loadClusterStorage(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterStorageLoaded, clusterStorageLoading, loadClusterStorage])
 
   // Charger les mises à jour quand on sélectionne l'onglet Rolling Update
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 9 && data?.nodesData?.length > 0) {
+    if (selection?.type === 'cluster' && clusterTab === 10 && data?.nodesData?.length > 0) {
       const connId = selection.id?.split(':')[0] || ''
       // Charger les mises à jour et les VMs locales pour chaque nœud
       data.nodesData.forEach((node: any) => {
@@ -3326,8 +3326,8 @@ return
 
   // Load updates when node "Updates" tab is selected
   useEffect(() => {
-    // Updates tab index: 8 for cluster node, 9 for standalone
-    const updatesTabIndex = data?.clusterName ? 8 : 9
+    // Updates tab index: 9 for cluster node, 10 for standalone
+    const updatesTabIndex = data?.clusterName ? 9 : 10
     if (selection?.type === 'node' && nodeTab === updatesTabIndex) {
       const { connId, node } = parseNodeId(selection.id)
       if (!nodeUpdates[node]?.loading && nodeUpdates[node] === undefined) {
@@ -3360,7 +3360,7 @@ return
 
   // Load local-vms when node "Updates" tab is selected (cluster nodes only)
   useEffect(() => {
-    const updatesTabIndex = data?.clusterName ? 8 : 9
+    const updatesTabIndex = data?.clusterName ? 9 : 10
     if (selection?.type === 'node' && nodeTab === updatesTabIndex && data?.clusterName) {
       const { connId, node } = parseNodeId(selection.id)
       if (!nodeLocalVms[node]?.loading && nodeLocalVms[node] === undefined) {

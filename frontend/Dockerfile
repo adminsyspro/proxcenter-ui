@@ -97,9 +97,8 @@ COPY --from=builder /app/node_modules/pure-rand ./node_modules/pure-rand
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 
-# Install concurrently for running both servers and prisma 6.x CLI for migrations
-# (Prisma 7 requires complex config file setup, v6 works with DATABASE_URL env var)
-RUN npm install -g concurrently prisma@6
+# Install concurrently for running both servers
+RUN npm install -g concurrently
 
 # Switch to non-root user
 USER nextjs
@@ -118,8 +117,9 @@ ENV DATABASE_URL="file:/app/data/proxcenter.db"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
 
-# Copy entrypoint script
+# Copy entrypoint and migration scripts
 COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=builder --chown=nextjs:nodejs /app/db-migrate.js ./db-migrate.js
 
 # Start: migrate DB then launch servers
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

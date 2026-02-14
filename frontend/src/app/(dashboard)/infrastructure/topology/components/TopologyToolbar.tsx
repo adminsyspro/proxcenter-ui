@@ -71,7 +71,8 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         px: 1,
       }}
     >
-      {/* Connection filter */}
+      {/* Connection filter — hidden in geo view */}
+      {!isGeoView && (
       <FormControl size='small' sx={{ minWidth: 180 }}>
         <InputLabel>{t('filterByConnection')}</InputLabel>
         <Select
@@ -89,6 +90,7 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
           ))}
         </Select>
       </FormControl>
+      )}
 
       {/* VM Status filter — hidden in geo view */}
       {!isGeoView && (

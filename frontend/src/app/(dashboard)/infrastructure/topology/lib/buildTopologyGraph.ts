@@ -18,15 +18,15 @@ export function buildTopologyGraph(
   const nodes: Node[] = []
   const edges: Edge[] = []
 
-  if (!data?.connections) return { nodes, edges }
+  if (!data?.clusters) return { nodes, edges }
 
-  const connections = filters.connectionId
-    ? data.connections.filter((c) => c.id === filters.connectionId)
-    : data.connections
+  const clusters = filters.connectionId
+    ? data.clusters.filter((c) => c.id === filters.connectionId)
+    : data.clusters
 
-  for (const conn of connections) {
+  for (const conn of clusters) {
     const clusterId = `cluster-${conn.id}`
-    const isOnline = conn.status === 'online' || conn.status === 'connected'
+    const isOnline = conn.status === 'online' || conn.status === 'degraded'
 
     // Compute aggregate stats for the cluster
     let totalVms = 0
@@ -36,26 +36,30 @@ export function buildTopologyGraph(
 
     for (const node of conn.nodes) {
       const nodeIsOnline = node.status === 'online'
-      const nodeCpuUsage = node.maxcpu > 0 ? node.cpu / node.maxcpu : 0
-      const nodeRamUsage = node.maxmem > 0 ? node.mem / node.maxmem : 0
+      const nodeCpu = node.cpu || 0
+      const nodeMaxCpu = node.maxcpu || 0
+      const nodeMem = node.mem || 0
+      const nodeMaxMem = node.maxmem || 0
+      const nodeCpuUsage = nodeMaxCpu > 0 ? nodeCpu / nodeMaxCpu : 0
+      const nodeRamUsage = nodeMaxMem > 0 ? nodeMem / nodeMaxMem : 0
       const nodeStatus = getResourceStatus(Math.max(nodeCpuUsage, nodeRamUsage), nodeIsOnline)
 
       if (nodeStatus === 'critical') worstStatus = 'critical'
       else if (nodeStatus === 'warning' && worstStatus !== 'critical') worstStatus = 'warning'
 
-      totalCpu += node.cpu
-      totalMaxCpu += node.maxcpu
+      totalCpu += nodeCpu
+      totalMaxCpu += nodeMaxCpu
 
-      const vms = node.vms || []
+      const guests = node.guests || []
 
-      totalVms += vms.length
+      totalVms += guests.length
     }
 
     if (!isOnline && worstStatus !== 'critical') worstStatus = 'critical'
 
     const clusterData: ClusterNodeData = {
       label: conn.name,
-      host: conn.host,
+      host: conn.name,
       connectionId: conn.id,
       nodeCount: conn.nodes.length,
       vmCount: totalVms,
@@ -76,15 +80,15 @@ export function buildTopologyGraph(
     for (const node of conn.nodes) {
       const hostId = `host-${conn.id}-${node.node}`
       const nodeIsOnline = node.status === 'online'
-      const cpuUsage = node.maxcpu > 0 ? node.cpu / node.maxcpu : 0
-      const ramUsage = node.maxmem > 0 ? node.mem / node.maxmem : 0
+      const cpuUsage = (node.maxcpu || 0) > 0 ? (node.cpu || 0) / (node.maxcpu || 1) : 0
+      const ramUsage = (node.maxmem || 0) > 0 ? (node.mem || 0) / (node.maxmem || 1) : 0
       const nodeStatus = getResourceStatus(Math.max(cpuUsage, ramUsage), nodeIsOnline)
 
-      // Filter VMs based on filters
-      let vms = node.vms || []
+      // Filter guests based on filters
+      let guests = node.guests || []
 
       if (filters.vmStatus && filters.vmStatus !== 'all') {
-        vms = vms.filter((vm) => vm.status === filters.vmStatus)
+        guests = guests.filter((g) => g.status === filters.vmStatus)
       }
 
       const hostData: HostNodeData = {
@@ -93,8 +97,8 @@ export function buildTopologyGraph(
         nodeName: node.node,
         cpuUsage,
         ramUsage,
-        vmCount: vms.length,
-        uptime: node.uptime,
+        vmCount: guests.length,
+        uptime: node.uptime || 0,
         status: nodeIsOnline ? nodeStatus : 'offline',
         width: 190,
         height: 90,
@@ -117,20 +121,25 @@ export function buildTopologyGraph(
       })
 
       // VMs: individual or summary
-      if (vms.length > 0) {
-        if (vms.length <= filters.vmThreshold) {
+      if (guests.length > 0) {
+        if (guests.length <= filters.vmThreshold) {
           // Individual VM nodes
-          for (const vm of vms) {
-            const vmId = `vm-${conn.id}-${node.node}-${vm.vmid}`
-            const vmCpuUsage = vm.maxcpu > 0 ? vm.cpu / vm.maxcpu : 0
-            const vmRamUsage = vm.maxmem > 0 ? vm.mem / vm.maxmem : 0
+          for (const guest of guests) {
+            const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
+            const vmId = `vm-${conn.id}-${node.node}-${vmid}`
+            const vmCpu = guest.cpu || 0
+            const vmMaxCpu = guest.maxcpu || 0
+            const vmMem = guest.mem || 0
+            const vmMaxMem = guest.maxmem || 0
+            const vmCpuUsage = vmMaxCpu > 0 ? vmCpu / vmMaxCpu : 0
+            const vmRamUsage = vmMaxMem > 0 ? vmMem / vmMaxMem : 0
 
             const vmData: VmNodeData = {
-              label: vm.name || `VM ${vm.vmid}`,
+              label: guest.name || `VM ${vmid}`,
               connectionId: conn.id,
-              vmid: vm.vmid,
-              vmType: vm.type,
-              vmStatus: vm.status,
+              vmid,
+              vmType: guest.type || 'qemu',
+              vmStatus: guest.status,
               cpuUsage: vmCpuUsage,
               ramUsage: vmRamUsage,
               nodeName: node.node,
@@ -157,14 +166,14 @@ export function buildTopologyGraph(
         } else {
           // Summary node
           const summaryId = `vmsummary-${conn.id}-${node.node}`
-          const running = vms.filter((v) => v.status === 'running').length
-          const stopped = vms.filter((v) => v.status === 'stopped').length
+          const running = guests.filter((v) => v.status === 'running').length
+          const stopped = guests.filter((v) => v.status === 'stopped').length
 
           const summaryData: VmSummaryNodeData = {
-            label: `${vms.length} VMs`,
+            label: `${guests.length} VMs`,
             connectionId: conn.id,
             nodeName: node.node,
-            total: vms.length,
+            total: guests.length,
             running,
             stopped,
             width: 180,

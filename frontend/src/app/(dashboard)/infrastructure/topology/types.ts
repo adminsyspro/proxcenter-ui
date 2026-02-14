@@ -6,40 +6,41 @@ export interface TopologyFilters {
   vmThreshold: number // collapse VMs above this number per node
 }
 
-// Inventory API types
-export interface InventoryVm {
-  vmid: number
-  name: string
+// Inventory API types (matches /api/v1/inventory response)
+export interface InventoryGuest {
+  vmid: string | number
+  name?: string
   status: string // 'running' | 'stopped' | 'paused'
   type: string // 'qemu' | 'lxc'
-  cpu: number
-  maxcpu: number
-  mem: number
-  maxmem: number
+  cpu?: number
+  mem?: number
+  maxmem?: number
+  maxcpu?: number
   node: string
 }
 
 export interface InventoryNode {
   node: string
   status: string
-  cpu: number // 0-1 fraction
-  maxcpu: number
-  mem: number // bytes used
-  maxmem: number // bytes total
-  uptime: number
-  vms?: InventoryVm[]
+  cpu?: number
+  maxcpu?: number
+  mem?: number // bytes used
+  maxmem?: number // bytes total
+  uptime?: number
+  guests: InventoryGuest[]
 }
 
-export interface InventoryConnection {
+export interface InventoryCluster {
   id: string
   name: string
-  host: string
-  status: string
+  type: string
+  isCluster: boolean
+  status: 'online' | 'degraded' | 'offline'
   nodes: InventoryNode[]
 }
 
 export interface InventoryData {
-  connections: InventoryConnection[]
+  clusters: InventoryCluster[]
 }
 
 // Custom node data types — index signature required by React Flow v12

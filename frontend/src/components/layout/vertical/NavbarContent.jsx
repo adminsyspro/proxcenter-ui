@@ -554,6 +554,13 @@ return () => window.removeEventListener('keydown', onKeyDown)
             </Tooltip>
           )}
 
+          {/* Search (Ctrl+K) */}
+          <Tooltip title={`${t('navbar.search')} (Ctrl+K)`}>
+            <IconButton size='small' onClick={() => setSearchOpen(true)}>
+              <i className='ri-search-line' />
+            </IconButton>
+          </Tooltip>
+
           {/* Lang */}
           <Tooltip title={t('navbar.language')}>
             <IconButton size='small' onClick={e => setLangAnchor(e.currentTarget)} disabled={isPending}>

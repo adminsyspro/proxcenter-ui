@@ -1516,6 +1516,7 @@ return (
                 placement="right"
               >
               <Box
+                data-vmkey={vmKey}
                 onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                 onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
                 sx={{
@@ -1540,8 +1541,8 @@ return (
                     e.stopPropagation()
                     toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)
                   }}
-                  sx={{ 
-                    p: 0.25, 
+                  sx={{
+                    p: 0.25,
                     opacity: isFav ? 1 : 0,
                     transition: 'opacity 0.2s',
                     color: isFav ? '#ffc107' : 'text.secondary',
@@ -1604,6 +1605,7 @@ return (
                 placement="right"
               >
               <Box
+                data-vmkey={vmKey}
                 onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                 onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
                 sx={{
@@ -1706,6 +1708,7 @@ return (
                     placement="right"
                   >
                   <Box
+                    data-vmkey={vmKey}
                     onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
                     sx={{
@@ -1820,6 +1823,7 @@ return (
                     placement="right"
                   >
                   <Box
+                    data-vmkey={vmKey}
                     onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
                     sx={{
@@ -1935,6 +1939,7 @@ return (
                     placement="right"
                   >
                   <Box
+                    data-vmkey={vmKey}
                     onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
                     sx={{
@@ -2015,6 +2020,7 @@ return (
                 placement="right"
               >
               <Box
+                data-vmkey={vmKey}
                 onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                 onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
                 sx={{

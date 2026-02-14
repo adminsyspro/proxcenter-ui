@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 
 import { Box, Card, CardContent, CircularProgress, Skeleton, Typography, IconButton, Tooltip } from '@mui/material'
+import { useSearchParams } from 'next/navigation'
 
 import { useTranslations } from 'next-intl'
 
@@ -35,6 +36,7 @@ const COLLAPSED_WIDTH = 52
 export default function InventoryPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
@@ -63,9 +65,48 @@ export default function InventoryPage() {
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
   const [enrichedData, setEnrichedData] = useState<Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }>>({})
 
+  // Deep-link: auto-select VM from URL search params (?vmid=123&connId=...&node=...&type=qemu)
+  const deepLinkHandled = useRef(false)
+
+  useEffect(() => {
+    if (deepLinkHandled.current || rawVms.length === 0) return
+
+    const vmid = searchParams.get('vmid')
+    if (!vmid) return
+
+    const connId = searchParams.get('connId')
+    const node = searchParams.get('node')
+    const vmType = searchParams.get('type')
+
+    // Find the VM — prefer exact match with all params, fallback to vmid-only
+    let found = rawVms.find(
+      vm => String(vm.vmid) === vmid && (!connId || vm.connId === connId) && (!node || vm.node === node)
+    )
+
+    if (!found) {
+      found = rawVms.find(vm => String(vm.vmid) === vmid)
+    }
+
+    if (found) {
+      deepLinkHandled.current = true
+      const selectionId = `${found.connId}:${found.node}:${found.type}:${found.vmid}`
+      setSelection({ type: 'vm', id: selectionId })
+      setViewMode('all')
+
+      // Scroll to the VM after the view switches and renders
+      setTimeout(() => {
+        const el = document.querySelector(`[data-vmkey="${CSS.escape(selectionId)}"]`)
+
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 300)
+    }
+  }, [rawVms, searchParams])
+
   // VMs en cours de migration
   const [migratingVms, setMigratingVms] = useState<MigratingVm[]>([])
-  
+
   // Référence pour détecter les migrations terminées
   const prevMigratingVmsRef = useRef<MigratingVm[]>([])
 

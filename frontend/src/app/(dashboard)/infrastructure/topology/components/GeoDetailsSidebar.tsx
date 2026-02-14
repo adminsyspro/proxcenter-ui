@@ -151,14 +151,15 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
   const cpuPct = cpuCount > 0 ? (cpuSum / cpuCount) * 100 : 0
   const ramPct = memTotal > 0 ? (memUsed / memTotal) * 100 : 0
 
-  // Top 5 VMs by CPU usage
+  // All VMs sorted: running first, then by name
   const allGuests = cluster.nodes.flatMap((n) =>
     n.guests.map((g) => ({ ...g, nodeName: n.node }))
   )
-  const topVmsByCpu = [...allGuests]
-    .filter((g) => g.status === 'running' && g.cpu != null)
-    .sort((a, b) => (b.cpu || 0) - (a.cpu || 0))
-    .slice(0, 5)
+  const sortedVms = [...allGuests].sort((a, b) => {
+    if (a.status === 'running' && b.status !== 'running') return -1
+    if (a.status !== 'running' && b.status === 'running') return 1
+    return (a.name || '').localeCompare(b.name || '')
+  })
 
   return (
     <Paper
@@ -243,32 +244,56 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
           ))}
         </Box>
 
-        {/* Top VMs by CPU */}
-        {topVmsByCpu.length > 0 && (
+        {/* All VMs */}
+        {sortedVms.length > 0 && (
           <>
             <Divider sx={{ my: 1.5 }} />
             <Typography variant='caption' fontWeight={600} color='text.secondary' sx={{ mb: 0.5, display: 'block' }}>
-              TOP VMs (CPU)
+              VIRTUAL MACHINES ({sortedVms.length})
             </Typography>
-            {topVmsByCpu.map((vm) => (
-              <Box key={`${vm.vmid}`} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
-                <i
-                  className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
-                  style={{ fontSize: 14, color: '#8b5cf6' }}
-                />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant='caption' fontWeight={600} noWrap>
-                    {vm.name || `${vm.type}/${vm.vmid}`}
-                  </Typography>
-                  <Typography variant='caption' color='text.secondary' sx={{ display: 'block', fontSize: '0.65rem' }}>
-                    {vm.nodeName} · {String(vm.vmid)}
-                  </Typography>
+            {sortedVms.map((vm) => {
+              const isRunning = vm.status === 'running'
+
+              return (
+                <Box
+                  key={`${vm.nodeName}-${vm.vmid}`}
+                  onClick={() => router.push(`/infrastructure/inventory?connectionId=${cluster.id}&vmid=${vm.vmid}&node=${vm.nodeName}`)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    py: 0.5,
+                    px: 0.5,
+                    borderRadius: 1,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <Box sx={{
+                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                    bgcolor: isRunning ? '#22c55e' : '#ef4444',
+                  }} />
+                  <i
+                    className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
+                    style={{ fontSize: 14, color: '#8b5cf6', flexShrink: 0 }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant='caption' fontWeight={600} noWrap>
+                      {vm.name || `${vm.type}/${vm.vmid}`}
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', fontSize: '0.65rem' }}>
+                      {vm.nodeName} · {String(vm.vmid)}
+                    </Typography>
+                  </Box>
+                  {isRunning && vm.cpu != null && (
+                    <Typography variant='caption' fontWeight={600} sx={{ color: getUsageColor((vm.cpu || 0) * 100), flexShrink: 0 }}>
+                      {((vm.cpu || 0) * 100).toFixed(0)}%
+                    </Typography>
+                  )}
+                  <i className='ri-arrow-right-s-line' style={{ fontSize: 14, opacity: 0.3, flexShrink: 0 }} />
                 </Box>
-                <Typography variant='caption' fontWeight={600} sx={{ color: getUsageColor((vm.cpu || 0) * 100) }}>
-                  {((vm.cpu || 0) * 100).toFixed(0)}%
-                </Typography>
-              </Box>
-            ))}
+              )
+            })}
           </>
         )}
       </Box>

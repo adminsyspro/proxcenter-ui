@@ -53,57 +53,68 @@ function computeClusterStats(conn: InventoryCluster) {
   return { totalNodes, onlineNodes, totalVms, runningVms, cpuPct, ramPct }
 }
 
+function svgGauge(pct: number, color: string, label: string, size = 36) {
+  const r = (size - 4) / 2
+  const c = Math.PI * 2 * r
+  const dash = (pct / 100) * c
+  const cx = size / 2
+  const cy = size / 2
+
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="3"
+      stroke-dasharray="${dash.toFixed(1)} ${c.toFixed(1)}"
+      stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+    <text x="${cx}" y="${cy - 3}" text-anchor="middle" dominant-baseline="central"
+      fill="#fff" font-size="8" font-weight="700">${pct}%</text>
+    <text x="${cx}" y="${cy + 7}" text-anchor="middle" dominant-baseline="central"
+      fill="rgba(255,255,255,0.5)" font-size="6">${label}</text>
+  </svg>`
+}
+
 function createEnrichedIcon(conn: InventoryCluster) {
   const color = statusColors[conn.status] || '#6b7280'
   const stats = computeClusterStats(conn)
   const label = conn.locationLabel || conn.name
-  const truncName = label.length > 16 ? label.slice(0, 15) + '…' : label
+  const truncName = label.length > 20 ? label.slice(0, 19) + '…' : label
 
   const cpuColor = getUsageColor(stats.cpuPct)
   const ramColor = getUsageColor(stats.ramPct)
 
   const html = `<div style="
-    display:flex;align-items:center;gap:6px;
-    background:rgba(30,30,45,0.92);
+    display:flex;align-items:center;gap:8px;
+    background:rgba(30,30,45,0.94);
     border:2px solid ${color};
-    border-radius:10px;
-    padding:6px 10px;
-    box-shadow:0 2px 12px rgba(0,0,0,0.4);
+    border-radius:12px;
+    padding:8px 12px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.5);
     white-space:nowrap;
     cursor:pointer;
-    min-width:120px;
+    min-width:180px;
   ">
     <div style="
       width:10px;height:10px;flex-shrink:0;
       background:${color};
       border-radius:50%;
-      box-shadow:0 0 6px ${color};
+      box-shadow:0 0 8px ${color};
     "></div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;">${truncName}</div>
-      <div style="display:flex;gap:8px;font-size:9px;color:rgba(255,255,255,0.7);margin-top:1px;">
-        <span>${stats.totalNodes}N</span>
+      <div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;">${truncName}</div>
+      <div style="display:flex;gap:10px;font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px;">
+        <span>${stats.totalNodes} PVE</span>
         <span>${stats.runningVms}/${stats.totalVms} VM</span>
       </div>
-      <div style="display:flex;gap:4px;margin-top:3px;">
-        <div style="flex:1;height:3px;background:rgba(255,255,255,0.15);border-radius:2px;overflow:hidden;">
-          <div style="width:${stats.cpuPct}%;height:100%;background:${cpuColor};border-radius:2px;"></div>
-        </div>
-        <div style="flex:1;height:3px;background:rgba(255,255,255,0.15);border-radius:2px;overflow:hidden;">
-          <div style="width:${stats.ramPct}%;height:100%;background:${ramColor};border-radius:2px;"></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:4px;font-size:7px;color:rgba(255,255,255,0.5);margin-top:1px;">
-        <span style="flex:1;">CPU ${stats.cpuPct}%</span>
-        <span style="flex:1;">RAM ${stats.ramPct}%</span>
-      </div>
+    </div>
+    <div style="display:flex;gap:4px;flex-shrink:0;">
+      ${svgGauge(stats.cpuPct, cpuColor, 'CPU')}
+      ${svgGauge(stats.ramPct, ramColor, 'RAM')}
     </div>
   </div>`
 
   return L.divIcon({
     className: '',
-    iconSize: [140, 56],
-    iconAnchor: [70, 28],
+    iconSize: [260, 64],
+    iconAnchor: [130, 32],
     html,
   })
 }
@@ -131,6 +142,36 @@ interface GeoMapInnerProps {
   onSelectCluster: (cluster: InventoryCluster | null) => void
 }
 
+// Spread overlapping markers in a circle around their shared position
+function computeOffsets(connections: InventoryCluster[]): Map<string, [number, number]> {
+  const offsets = new Map<string, [number, number]>()
+  const groups = new Map<string, string[]>()
+
+  for (const conn of connections) {
+    if (conn.latitude == null || conn.longitude == null) continue
+    const key = `${conn.latitude.toFixed(5)},${conn.longitude.toFixed(5)}`
+
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(conn.id)
+  }
+
+  for (const ids of groups.values()) {
+    if (ids.length <= 1) continue
+    const spread = 0.005 // ~500m offset radius
+    const angleStep = (2 * Math.PI) / ids.length
+
+    ids.forEach((id, i) => {
+      const angle = angleStep * i - Math.PI / 2
+      offsets.set(id, [
+        Math.sin(angle) * spread,
+        Math.cos(angle) * spread,
+      ])
+    })
+  }
+
+  return offsets
+}
+
 export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInnerProps) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -147,6 +188,8 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
     .filter((c) => c.latitude != null && c.longitude != null)
     .map((c) => [c.latitude!, c.longitude!])
 
+  const offsets = computeOffsets(connections)
+
   return (
     <MapContainer
       center={positions[0] || [48.8566, 2.3522]}
@@ -159,11 +202,14 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
 
       {connections.map((conn) => {
         if (conn.latitude == null || conn.longitude == null) return null
+        const offset = offsets.get(conn.id)
+        const lat = conn.latitude + (offset ? offset[0] : 0)
+        const lng = conn.longitude + (offset ? offset[1] : 0)
 
         return (
           <Marker
             key={conn.id}
-            position={[conn.latitude, conn.longitude]}
+            position={[lat, lng]}
             icon={createEnrichedIcon(conn)}
             eventHandlers={{
               click: () => onSelectCluster(conn),

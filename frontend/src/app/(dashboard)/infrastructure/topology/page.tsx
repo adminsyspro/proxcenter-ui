@@ -52,7 +52,7 @@ export default function TopologyPage() {
   }, [])
 
   return (
-    <Box sx={{ height: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ height: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column', gap: 2 }}>
       <ReactFlowProvider>
         <TopologyToolbar filters={filters} onChange={setFilters} connections={connections} />
 

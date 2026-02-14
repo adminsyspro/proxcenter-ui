@@ -487,7 +487,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
           )}
         </Box>
 
-        {/* Search bar (Ctrl+K) - Centered absolutely */}
+        {/* Search bar - Centered absolutely */}
         <Box sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
           <Box
             onClick={() => setSearchOpen(true)}
@@ -501,7 +501,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
               border: '1px solid',
               borderColor: 'divider',
               cursor: 'pointer',
-              width: 280,
+              width: 360,
               transition: 'all 0.2s',
               '&:hover': {
                 borderColor: 'primary.main',
@@ -513,7 +513,6 @@ return () => window.removeEventListener('keydown', onKeyDown)
             <Typography variant='body2' sx={{ opacity: 0.5, flex: 1, fontSize: '0.8rem', userSelect: 'none' }}>
               {t('navbar.search')}...
             </Typography>
-            <Chip size='small' label='Ctrl+K' variant='outlined' sx={{ height: 20, fontSize: '0.65rem', '& .MuiChip-label': { px: 0.75 } }} />
           </Box>
         </Box>
 

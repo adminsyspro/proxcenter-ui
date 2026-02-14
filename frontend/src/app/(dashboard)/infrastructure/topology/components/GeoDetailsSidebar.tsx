@@ -171,7 +171,7 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 10,
+        zIndex: 1000,
         borderLeft: '1px solid',
         borderColor: 'divider',
       }}

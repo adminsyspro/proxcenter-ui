@@ -20,6 +20,9 @@ model Connection {
   uiUrl       String?
   insecureTLS Boolean @default(false)
   hasCeph     Boolean @default(false)
+  latitude      Float?
+  longitude     Float?
+  locationLabel String?
   apiTokenEnc String
 
   // SSH fields

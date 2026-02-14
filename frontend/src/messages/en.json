@@ -886,6 +886,11 @@
     },
     "generalInfo": "General Information",
     "apiAuthentication": "API Authentication",
+    "location": "Location",
+    "locationInfo": "Set coordinates for the topology map.",
+    "locationLabel": "Location name",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
     "sshAccess": "SSH Access",
     "enableSshAccess": "Enable SSH access",
     "sshInfo": "SSH access enables advanced features that are not available through the Proxmox API.",
@@ -2917,6 +2922,9 @@
     "networkView": "Network (VLAN)",
     "exportPng": "Export PNG",
     "groupByTag": "Group by Tag",
-    "noTag": "No Tag"
+    "noTag": "No Tag",
+    "geoView": "Geographic",
+    "geoNoData": "No location data",
+    "geoNoDataDesc": "Set coordinates on your connections in Settings."
   }
 }

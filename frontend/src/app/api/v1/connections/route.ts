@@ -38,6 +38,9 @@ export async function GET(req: Request) {
         uiUrl: true,
         insecureTLS: true,
         hasCeph: true,
+        latitude: true,
+        longitude: true,
+        locationLabel: true,
         // SSH fields (sans les secrets)
         sshEnabled: true,
         sshPort: true,
@@ -90,6 +93,7 @@ export async function POST(req: Request) {
 
     const {
       name, type, baseUrl, uiUrl, insecureTLS, hasCeph, apiToken,
+      latitude, longitude, locationLabel,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
       sshKey, sshPassphrase, sshPassword,
     } = parseResult.data
@@ -102,6 +106,9 @@ export async function POST(req: Request) {
       uiUrl,
       insecureTLS,
       hasCeph: type === 'pve' ? hasCeph : false, // Ceph uniquement pour PVE
+      latitude: latitude ?? null,
+      longitude: longitude ?? null,
+      locationLabel: locationLabel ?? null,
       apiTokenEnc: encryptSecret(apiToken),
       sshEnabled,
       sshPort,
@@ -130,6 +137,9 @@ export async function POST(req: Request) {
         uiUrl: true,
         insecureTLS: true,
         hasCeph: true,
+        latitude: true,
+        longitude: true,
+        locationLabel: true,
         sshEnabled: true,
         sshPort: true,
         sshUser: true,

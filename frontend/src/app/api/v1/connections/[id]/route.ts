@@ -31,6 +31,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         uiUrl: true,
         insecureTLS: true,
         hasCeph: true,
+        latitude: true,
+        longitude: true,
+        locationLabel: true,
         // SSH fields (sans les secrets)
         sshEnabled: true,
         sshPort: true,
@@ -99,6 +102,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.uiUrl !== undefined) data.uiUrl = body.uiUrl || null
     if (body.insecureTLS !== undefined) data.insecureTLS = body.insecureTLS
     if (body.hasCeph !== undefined) data.hasCeph = body.hasCeph
+    if (body.latitude !== undefined) data.latitude = body.latitude
+    if (body.longitude !== undefined) data.longitude = body.longitude
+    if (body.locationLabel !== undefined) data.locationLabel = body.locationLabel || null
 
     if (body.apiToken !== undefined && body.apiToken) {
       data.apiTokenEnc = encryptSecret(body.apiToken)
@@ -151,6 +157,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         uiUrl: true,
         insecureTLS: true,
         hasCeph: true,
+        latitude: true,
+        longitude: true,
+        locationLabel: true,
         sshEnabled: true,
         sshPort: true,
         sshUser: true,

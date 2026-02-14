@@ -37,6 +37,10 @@ export type ConnectionFormData = {
   insecureTLS: boolean
   hasCeph: boolean
   apiToken: string
+  // Location fields
+  latitude: string
+  longitude: string
+  locationLabel: string
   // SSH fields
   sshEnabled: boolean
   sshPort: number
@@ -67,6 +71,9 @@ const defaultFormData: ConnectionFormData = {
   insecureTLS: true,
   hasCeph: false,
   apiToken: '',
+  latitude: '',
+  longitude: '',
+  locationLabel: '',
   sshEnabled: false,
   sshPort: 22,
   sshUser: 'root',
@@ -112,6 +119,10 @@ export default function ConnectionDialog({
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
+          // Location: convert numbers to strings for text fields
+          latitude: initialData.latitude != null ? String(initialData.latitude) : '',
+          longitude: initialData.longitude != null ? String(initialData.longitude) : '',
+          locationLabel: initialData.locationLabel || '',
         })
       } else {
         setForm(defaultFormData)
@@ -327,6 +338,51 @@ export default function ConnectionDialog({
           sx={{ mt: 1 }}
           required={!isEdit}
         />
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* Section: Location (optionnelle) */}
+        <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className="ri-map-pin-line" />
+          {t('settings.location')}
+          <Chip label={t('common.optional')} size="small" variant="outlined" sx={{ ml: 1 }} />
+        </Typography>
+
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Typography variant="body2">
+            {t('settings.locationInfo')}
+          </Typography>
+        </Alert>
+
+        <TextField
+          fullWidth
+          label={t('settings.locationLabel')}
+          value={form.locationLabel}
+          onChange={e => handleChange('locationLabel', e.target.value)}
+          placeholder="Paris DC1, Frankfurt, ..."
+          sx={{ mt: 1 }}
+        />
+
+        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+          <TextField
+            label={t('settings.latitude')}
+            value={form.latitude}
+            onChange={e => handleChange('latitude', e.target.value)}
+            placeholder="48.8566"
+            sx={{ flex: 1 }}
+            type="number"
+            InputProps={{ inputProps: { min: -90, max: 90, step: 'any' } }}
+          />
+          <TextField
+            label={t('settings.longitude')}
+            value={form.longitude}
+            onChange={e => handleChange('longitude', e.target.value)}
+            placeholder="2.3522"
+            sx={{ flex: 1 }}
+            type="number"
+            InputProps={{ inputProps: { min: -180, max: 180, step: 'any' } }}
+          />
+        </Box>
 
         <Divider sx={{ my: 3 }} />
 

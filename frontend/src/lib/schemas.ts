@@ -13,6 +13,9 @@ export const createConnectionSchema = z.object({
   uiUrl: z.string().transform(s => s.trim()).nullable().optional(),
   insecureTLS: z.boolean().default(false),
   hasCeph: z.boolean().default(false),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  locationLabel: z.string().nullable().optional(),
   apiToken: z.string().min(1, 'apiToken is required').transform(s => s.trim()),
 
   // SSH fields
@@ -57,6 +60,9 @@ export const updateConnectionSchema = z.object({
   uiUrl: z.string().transform(s => s.trim()).nullable().optional(),
   insecureTLS: z.boolean().optional(),
   hasCeph: z.boolean().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  locationLabel: z.string().nullable().optional(),
   apiToken: z.string().transform(s => s.trim()).optional(),
 
   // SSH fields

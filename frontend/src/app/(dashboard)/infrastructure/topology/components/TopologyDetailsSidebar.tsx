@@ -2,9 +2,11 @@
 
 import { useState, useMemo, useEffect } from 'react'
 
-import { Box, Typography, IconButton, Divider, LinearProgress, Button, Paper, CircularProgress } from '@mui/material'
+import { Box, Typography, IconButton, Divider, LinearProgress, Button, Paper, CircularProgress, Collapse } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
+
+import { useTheme } from '@mui/material/styles'
 
 import type {
   SelectedNodeInfo,
@@ -12,12 +14,16 @@ import type {
   HostNodeData,
   VmNodeData,
   VmSummaryNodeData,
+  VlanGroupNodeData,
+  ProxCenterNodeData,
   InventoryCluster,
   InventoryGuest,
 } from '../types'
 import { getStatusColor, getVmStatusColor, getResourceStatus } from '../lib/topologyColors'
-import { fetchRrd, buildSeriesFromRrd } from '../../inventory/helpers'
-import { AreaPctChart } from '../../inventory/components/RrdCharts'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
+import { fetchRrd, buildSeriesFromRrd, formatTime } from '../../inventory/helpers'
+import { AreaPctChart, AreaBpsChart2 } from '../../inventory/components/RrdCharts'
 import type { SeriesPoint } from '../../inventory/types'
 
 interface TopologyDetailsSidebarProps {
@@ -103,7 +109,7 @@ function VmRrdCharts({ connectionId, nodeName, vmType, vmid }: {
     setLoading(true)
 
     const type = vmType === 'lxc' ? 'lxc' : 'qemu'
-    const path = `nodes/${nodeName}/${type}/${vmid}`
+    const path = `/nodes/${nodeName}/${type}/${vmid}`
 
     fetchRrd(connectionId, path, 'hour')
       .then(raw => {
@@ -140,6 +146,147 @@ function VmRrdCharts({ connectionId, nodeName, vmType, vmid }: {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
       <AreaPctChart title={t('cpuUsage')} data={series} dataKey='cpuPct' color='#2196f3' height={140} />
       <AreaPctChart title={t('ramUsage')} data={series} dataKey='ramPct' color='#9c27b0' height={140} />
+    </Box>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* RRD Charts for a Host node                                         */
+/* ------------------------------------------------------------------ */
+
+function HostRrdCharts({ connectionId, nodeName }: {
+  connectionId: string
+  nodeName: string
+}) {
+  const t = useTranslations('topology')
+  const theme = useTheme()
+  const [series, setSeries] = useState<SeriesPoint[]>([])
+  const [loading, setLoading] = useState(true)
+  const isDark = theme.palette.mode === 'dark'
+  const tooltipStyle = { backgroundColor: isDark ? '#1e1e2d' : '#fff', border: `1px solid ${isDark ? '#444' : '#ccc'}`, color: isDark ? '#e7e3fc' : '#333', borderRadius: 8 }
+  const tooltipLabelStyle = { color: isDark ? '#e7e3fc' : '#333' }
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    fetchRrd(connectionId, `/nodes/${nodeName}`, 'hour')
+      .then(raw => {
+        if (cancelled) return
+        setSeries(buildSeriesFromRrd(raw))
+      })
+      .catch(() => {
+        if (!cancelled) setSeries([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [connectionId, nodeName])
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+        <CircularProgress size={20} />
+      </Box>
+    )
+  }
+
+  if (series.length === 0) {
+    return (
+      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', textAlign: 'center', py: 1 }}>
+        {t('noRrdData')}
+      </Typography>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
+      <AreaPctChart title={t('cpuUsage')} data={series} dataKey='cpuPct' color='#2196f3' height={130} />
+      <AreaPctChart title={t('ramUsage')} data={series} dataKey='ramPct' color='#9c27b0' height={130} />
+      <AreaBpsChart2
+        title={t('networkTraffic')}
+        data={series}
+        keyA='netInBps'
+        keyB='netOutBps'
+        labelA='In'
+        labelB='Out'
+        height={130}
+      />
+      {/* Server Load chart (not percentage, auto domain) */}
+      <Box>
+        <Typography fontWeight={700} fontSize={13} sx={{ mb: 0.5 }}>
+          {t('serverLoad')}
+        </Typography>
+        <Box sx={{ width: '100%', height: 130 }}>
+          <ResponsiveContainer width='100%' height='100%'>
+            <AreaChart data={series}>
+              <XAxis dataKey='t' tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} width={35} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelStyle={tooltipLabelStyle}
+                itemStyle={tooltipLabelStyle}
+                labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                formatter={(v: any) => {
+                  const n = Number(v)
+                  return [Number.isFinite(n) ? n.toFixed(2) : '—', '']
+                }}
+              />
+              <Area
+                type='monotone'
+                dataKey='loadAvg'
+                dot={false}
+                stroke='#ff9800'
+                fill='#ff9800'
+                fillOpacity={0.18}
+                strokeWidth={2}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Collapsible section header                                         */
+/* ------------------------------------------------------------------ */
+
+function CollapsibleSection({ title, defaultExpanded = true, children }: {
+  title: string
+  defaultExpanded?: boolean
+  children: React.ReactNode
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+
+  return (
+    <Box>
+      <Box
+        onClick={() => setExpanded(!expanded)}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          cursor: 'pointer',
+          py: 0.5,
+          '&:hover': { opacity: 0.8 },
+        }}
+      >
+        <i
+          className={expanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
+          style={{ fontSize: 16, color: 'inherit' }}
+        />
+        <Typography variant='caption' fontWeight={600} color='text.secondary'>
+          {title}
+        </Typography>
+      </Box>
+      <Collapse in={expanded}>
+        {children}
+      </Collapse>
     </Box>
   )
 }
@@ -316,17 +463,9 @@ function HostDetails({ data, connections }: { data: HostNodeData; connections: I
         </Typography>
       </Box>
       <Divider sx={{ mb: 1.5 }} />
-      <UsageBar
-        label={t('cpuUsage')}
-        value={data.cpuUsage}
-        statusColor={getStatusColor(getResourceStatus(data.cpuUsage, data.status !== 'offline'))}
-      />
-      <UsageBar
-        label={t('ramUsage')}
-        value={data.ramUsage}
-        statusColor={getStatusColor(getResourceStatus(data.ramUsage, data.status !== 'offline'))}
-      />
-      <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>
+
+      {/* Stats row */}
+      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
         <Box>
           <Typography variant='caption' color='text.secondary'>
             {t('vms')}
@@ -345,79 +484,83 @@ function HostDetails({ data, connections }: { data: HostNodeData; connections: I
         </Box>
       </Box>
 
-      {/* VM list */}
+      {/* Performance section (collapsible) */}
+      <CollapsibleSection title={t('performance')}>
+        <HostRrdCharts connectionId={data.connectionId} nodeName={data.nodeName} />
+      </CollapsibleSection>
+
+      {/* VM list section (collapsible) */}
       {guests.length > 0 && (
         <>
           <Divider sx={{ my: 1.5 }} />
-          <Typography variant='caption' fontWeight={600} color='text.secondary' sx={{ mb: 1, display: 'block' }}>
-            {t('virtualMachines')} ({guests.length})
-          </Typography>
-          <Box sx={{ maxHeight: 300, overflow: 'auto', mx: -0.5 }}>
-            {guests.map(guest => {
-              const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
-              const isRunning = guest.status === 'running'
-              const cpuUsage = (guest.maxcpu || 0) > 0 ? (guest.cpu || 0) / (guest.maxcpu || 1) : 0
-              const ramUsage = (guest.maxmem || 0) > 0 ? (guest.mem || 0) / (guest.maxmem || 1) : 0
+          <CollapsibleSection title={`${t('virtualMachines')} (${guests.length})`}>
+            <Box sx={{ maxHeight: 300, overflow: 'auto', mx: -0.5 }}>
+              {guests.map(guest => {
+                const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
+                const isRunning = guest.status === 'running'
+                const cpuUsage = (guest.maxcpu || 0) > 0 ? (guest.cpu || 0) / (guest.maxcpu || 1) : 0
+                const ramUsage = (guest.maxmem || 0) > 0 ? (guest.mem || 0) / (guest.maxmem || 1) : 0
 
-              return (
-                <Box
-                  key={`${guest.type}-${vmid}`}
-                  onClick={() => setSelectedGuest(guest)}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    py: 0.75,
-                    px: 0.5,
-                    borderRadius: 1,
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  {/* Status dot */}
+                return (
                   <Box
+                    key={`${guest.type}-${vmid}`}
+                    onClick={() => setSelectedGuest(guest)}
                     sx={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      bgcolor: getVmStatusColor(guest.status),
-                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      py: 0.75,
+                      px: 0.5,
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: 'action.hover' },
                     }}
-                  />
+                  >
+                    {/* Status dot */}
+                    <Box
+                      sx={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        bgcolor: getVmStatusColor(guest.status),
+                        flexShrink: 0,
+                      }}
+                    />
 
-                  {/* Type icon */}
-                  <i
-                    className={guest.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
-                    style={{ fontSize: 14, color: getVmStatusColor(guest.status), flexShrink: 0 }}
-                  />
+                    {/* Type icon */}
+                    <i
+                      className={guest.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
+                      style={{ fontSize: 14, color: getVmStatusColor(guest.status), flexShrink: 0 }}
+                    />
 
-                  {/* Name + VMID */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant='caption' fontWeight={600} noWrap sx={{ display: 'block', lineHeight: 1.3 }}>
-                      {guest.name || `VM ${vmid}`}
-                    </Typography>
-                    <Typography variant='caption' color='text.secondary' sx={{ fontSize: 10 }}>
-                      #{vmid}
-                    </Typography>
-                  </Box>
-
-                  {/* Mini CPU/RAM bars */}
-                  {isRunning && (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3, width: 50, flexShrink: 0 }}>
-                      <MiniUsageBar
-                        value={cpuUsage}
-                        color={getStatusColor(getResourceStatus(cpuUsage, true))}
-                      />
-                      <MiniUsageBar
-                        value={ramUsage}
-                        color={getStatusColor(getResourceStatus(ramUsage, true))}
-                      />
+                    {/* Name + VMID */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant='caption' fontWeight={600} noWrap sx={{ display: 'block', lineHeight: 1.3 }}>
+                        {guest.name || `VM ${vmid}`}
+                      </Typography>
+                      <Typography variant='caption' color='text.secondary' sx={{ fontSize: 10 }}>
+                        #{vmid}
+                      </Typography>
                     </Box>
-                  )}
-                </Box>
-              )
-            })}
-          </Box>
+
+                    {/* Mini CPU/RAM bars */}
+                    {isRunning && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3, width: 50, flexShrink: 0 }}>
+                        <MiniUsageBar
+                          value={cpuUsage}
+                          color={getStatusColor(getResourceStatus(cpuUsage, true))}
+                        />
+                        <MiniUsageBar
+                          value={ramUsage}
+                          color={getStatusColor(getResourceStatus(ramUsage, true))}
+                        />
+                      </Box>
+                    )}
+                  </Box>
+                )
+              })}
+            </Box>
+          </CollapsibleSection>
         </>
       )}
     </>
@@ -510,6 +653,90 @@ function VmSummaryDetails({ data }: { data: VmSummaryNodeData }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* VLAN Group details                                                 */
+/* ------------------------------------------------------------------ */
+
+function VlanGroupDetails({ data }: { data: VlanGroupNodeData }) {
+  const t = useTranslations('topology')
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <i className='ri-router-line' style={{ fontSize: 20, color: '#1976d2' }} />
+        <Typography variant='subtitle1' fontWeight={700}>
+          {data.vlanTag != null ? `${t('vlan')} ${data.vlanTag}` : t('noVlan')}
+        </Typography>
+      </Box>
+      <Divider sx={{ mb: 1.5 }} />
+      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('bridge')}
+          </Typography>
+          <Typography variant='body1' fontWeight={600}>
+            {data.bridge}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('vms')}
+          </Typography>
+          <Typography variant='body1' fontWeight={600}>
+            {data.vmCount}
+          </Typography>
+        </Box>
+      </Box>
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* ProxCenter root node details                                       */
+/* ------------------------------------------------------------------ */
+
+function ProxCenterDetails({ data }: { data: ProxCenterNodeData }) {
+  const t = useTranslations('topology')
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <i className='ri-dashboard-3-line' style={{ fontSize: 20, color: '#F29221' }} />
+        <Typography variant='subtitle1' fontWeight={700}>
+          {data.label}
+        </Typography>
+      </Box>
+      <Divider sx={{ mb: 1.5 }} />
+      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('totalClusters')}
+          </Typography>
+          <Typography variant='h6' fontWeight={700}>
+            {data.clusterCount}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('nodes')}
+          </Typography>
+          <Typography variant='h6' fontWeight={700}>
+            {data.totalNodes}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant='caption' color='text.secondary'>
+            {t('vms')}
+          </Typography>
+          <Typography variant='h6' fontWeight={700}>
+            {data.totalVms}
+          </Typography>
+        </Box>
+      </Box>
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Deep-link URL builder                                              */
 /* ------------------------------------------------------------------ */
 
@@ -578,21 +805,27 @@ export default function TopologyDetailsSidebar({ node, onClose, connections }: T
         {node.type === 'host' && <HostDetails data={node.data as HostNodeData} connections={connections} />}
         {node.type === 'vm' && <VmDetails data={node.data as VmNodeData} />}
         {node.type === 'vmSummary' && <VmSummaryDetails data={node.data as VmSummaryNodeData} />}
+        {node.type === 'vlanGroup' && <VlanGroupDetails data={node.data as VlanGroupNodeData} />}
+        {node.type === 'proxcenter' && <ProxCenterDetails data={node.data as ProxCenterNodeData} />}
       </Box>
 
       {/* Footer */}
-      <Divider />
-      <Box sx={{ px: 2, py: 1.5 }}>
-        <Button
-          size='small'
-          variant='outlined'
-          fullWidth
-          startIcon={<i className='ri-arrow-right-line' style={{ fontSize: 16 }} />}
-          onClick={() => router.push(getInventoryUrl(node))}
-        >
-          {t('viewInInventory')}
-        </Button>
-      </Box>
+      {node.type !== 'proxcenter' && node.type !== 'vlanGroup' && (
+        <>
+          <Divider />
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Button
+              size='small'
+              variant='outlined'
+              fullWidth
+              startIcon={<i className='ri-arrow-right-line' style={{ fontSize: 16 }} />}
+              onClick={() => router.push(getInventoryUrl(node))}
+            >
+              {t('viewInInventory')}
+            </Button>
+          </Box>
+        </>
+      )}
     </Paper>
   )
 }

@@ -4,6 +4,7 @@ export interface TopologyFilters {
   connectionId?: string
   vmStatus?: 'running' | 'stopped' | 'all'
   vmThreshold: number // collapse VMs above this number per node
+  groupByVlan?: boolean
 }
 
 // Inventory API types (matches /api/v1/inventory response)
@@ -97,9 +98,33 @@ export interface VmSummaryNodeData {
   height: number
 }
 
+export interface VlanGroupNodeData {
+  [key: string]: unknown
+  label: string
+  connectionId: string
+  nodeName: string
+  vlanTag: number | null
+  bridge: string
+  vmCount: number
+  width: number
+  height: number
+}
+
+export interface ProxCenterNodeData {
+  [key: string]: unknown
+  label: string
+  clusterCount: number
+  totalNodes: number
+  totalVms: number
+  width: number
+  height: number
+}
+
 // Selected node info for sidebar
 export type SelectedNodeInfo =
   | { type: 'cluster'; data: ClusterNodeData }
   | { type: 'host'; data: HostNodeData }
   | { type: 'vm'; data: VmNodeData }
   | { type: 'vmSummary'; data: VmSummaryNodeData }
+  | { type: 'vlanGroup'; data: VlanGroupNodeData }
+  | { type: 'proxcenter'; data: ProxCenterNodeData }

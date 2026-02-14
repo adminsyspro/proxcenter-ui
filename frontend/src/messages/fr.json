@@ -2875,6 +2875,15 @@
     "vm": "VM",
     "virtualMachines": "Machines virtuelles",
     "backToHost": "Retour à l'hôte",
-    "noRrdData": "Aucune donnée de performance disponible"
+    "noRrdData": "Aucune donnée de performance disponible",
+    "performance": "Performance",
+    "networkTraffic": "Trafic réseau",
+    "serverLoad": "Charge serveur",
+    "groupByVlan": "Grouper par VLAN",
+    "vlan": "VLAN",
+    "noVlan": "Sans VLAN",
+    "bridge": "Bridge",
+    "proxcenterRoot": "ProxCenter",
+    "totalClusters": "Clusters totaux"
   }
 }

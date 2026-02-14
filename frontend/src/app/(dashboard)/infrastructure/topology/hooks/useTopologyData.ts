@@ -5,10 +5,11 @@ import { useMemo } from 'react'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import type { TopologyFilters, InventoryData, InventoryCluster } from '../types'
+import type { NetworkMap } from './useTopologyNetworks'
 import { buildTopologyGraph } from '../lib/buildTopologyGraph'
 import { layoutGraph } from '../lib/layoutGraph'
 
-export function useTopologyData(filters: TopologyFilters) {
+export function useTopologyData(filters: TopologyFilters, networkMap?: NetworkMap) {
   const { data, isLoading, error } = useSWRFetch<{ data: InventoryData }>('/api/v1/inventory', {
     refreshInterval: 30000,
   })
@@ -24,14 +25,14 @@ export function useTopologyData(filters: TopologyFilters) {
       return { nodes: [], edges: [] }
     }
 
-    const graph = buildTopologyGraph(inventoryData, filters)
+    const graph = buildTopologyGraph(inventoryData, filters, networkMap)
 
     if (graph.nodes.length === 0) {
       return { nodes: [], edges: [] }
     }
 
     return layoutGraph(graph.nodes, graph.edges)
-  }, [inventoryData, filters])
+  }, [inventoryData, filters, networkMap])
 
   return {
     nodes,

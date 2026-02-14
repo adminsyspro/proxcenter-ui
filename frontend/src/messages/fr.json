@@ -2872,6 +2872,9 @@
     "ramUsage": "Utilisation RAM",
     "cluster": "Cluster",
     "host": "Hôte",
-    "vm": "VM"
+    "vm": "VM",
+    "virtualMachines": "Machines virtuelles",
+    "backToHost": "Retour à l'hôte",
+    "noRrdData": "Aucune donnée de performance disponible"
   }
 }

@@ -69,7 +69,6 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
   const defaultEdgeOptions = useMemo(
     () => ({
       type: 'smoothstep',
-      animated: false,
     }),
     []
   )

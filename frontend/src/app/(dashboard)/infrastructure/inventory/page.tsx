@@ -92,6 +92,14 @@ export default function InventoryPage() {
       return
     }
 
+    if (selectType === 'cluster' && selectId) {
+      deepLinkHandled.current = true
+      setSelection({ type: 'cluster', id: selectId })
+      setViewMode('tree')
+
+      return
+    }
+
     // VM deep-link — needs rawVms loaded
     if (rawVms.length === 0) return
 

@@ -2900,6 +2900,9 @@
     "ramUsage": "RAM Usage",
     "cluster": "Cluster",
     "host": "Host",
-    "vm": "VM"
+    "vm": "VM",
+    "virtualMachines": "Virtual Machines",
+    "backToHost": "Back to host",
+    "noRrdData": "No performance data available"
   }
 }

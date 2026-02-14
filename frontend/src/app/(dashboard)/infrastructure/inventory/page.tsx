@@ -91,7 +91,7 @@ export default function InventoryPage() {
       deepLinkHandled.current = true
       const selectionId = `${found.connId}:${found.node}:${found.type}:${found.vmid}`
       setSelection({ type: 'vm', id: selectionId })
-      setViewMode('all')
+      setViewMode('vms')
 
       // Scroll to the VM after the view switches and renders
       setTimeout(() => {

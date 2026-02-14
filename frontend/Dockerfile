@@ -118,5 +118,8 @@ ENV DATABASE_URL="file:/app/data/proxcenter.db"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
 
-# Start both Next.js server and WebSocket proxy
-CMD ["concurrently", "--names", "next,ws", "--prefix", "[{name}]", "node server.js", "node ws-proxy.js"]
+# Copy entrypoint script
+COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
+
+# Start: migrate DB then launch servers
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

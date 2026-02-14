@@ -113,9 +113,10 @@ function VlanContainerNodeComponent({ data }: NodeProps) {
               <Typography
                 variant='caption'
                 color='text.secondary'
-                sx={{ fontSize: '0.55rem', flexShrink: 0 }}
+                noWrap
+                sx={{ fontSize: '0.55rem', flexShrink: 0, fontFamily: vm.ip ? 'JetBrains Mono, monospace' : undefined }}
               >
-                {vm.vmid}
+                {vm.ip || vm.vmid}
               </Typography>
             </Box>
           )

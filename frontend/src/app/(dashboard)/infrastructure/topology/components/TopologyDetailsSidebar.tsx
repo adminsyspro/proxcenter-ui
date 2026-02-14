@@ -593,16 +593,6 @@ function VmDetails({ data }: { data: VmNodeData }) {
         </Typography>
       </Box>
       <Divider sx={{ mb: 1.5 }} />
-      <UsageBar
-        label={t('cpuUsage')}
-        value={data.cpuUsage}
-        statusColor={getStatusColor(getResourceStatus(data.cpuUsage, data.vmStatus === 'running'))}
-      />
-      <UsageBar
-        label={t('ramUsage')}
-        value={data.ramUsage}
-        statusColor={getStatusColor(getResourceStatus(data.ramUsage, data.vmStatus === 'running'))}
-      />
 
       {/* RRD Charts */}
       {data.vmStatus === 'running' && (
@@ -697,7 +687,7 @@ function VlanContainerDetails({ data }: { data: VlanContainerNodeData }) {
   const t = useTranslations('topology')
 
   return (
-    <>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <i className='ri-router-line' style={{ fontSize: 20, color: '#1976d2' }} />
         <Typography variant='subtitle1' fontWeight={700}>
@@ -723,11 +713,21 @@ function VlanContainerDetails({ data }: { data: VlanContainerNodeData }) {
           </Typography>
         </Box>
       </Box>
+      {data.subnet && (
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant='caption' color='text.secondary'>
+            Subnet
+          </Typography>
+          <Typography variant='body2' fontWeight={600} fontFamily='JetBrains Mono, monospace'>
+            {data.subnet}
+          </Typography>
+        </Box>
+      )}
       <Divider sx={{ mb: 1 }} />
       <Typography variant='caption' fontWeight={600} color='text.secondary' sx={{ mb: 0.5, display: 'block' }}>
         {t('virtualMachines')}
       </Typography>
-      <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
         {data.vms.map((vm) => (
           <Box
             key={`${vm.nodeName}-${vm.vmid}`}
@@ -757,14 +757,21 @@ function VlanContainerDetails({ data }: { data: VlanContainerNodeData }) {
               <Typography variant='caption' fontWeight={600} noWrap sx={{ display: 'block', lineHeight: 1.3 }}>
                 {vm.name}
               </Typography>
-              <Typography variant='caption' color='text.secondary' sx={{ fontSize: 10 }}>
-                #{vm.vmid} - {vm.nodeName}
-              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                <Typography variant='caption' color='text.secondary' sx={{ fontSize: 10 }}>
+                  #{vm.vmid}
+                </Typography>
+                {vm.ip && (
+                  <Typography variant='caption' fontFamily='JetBrains Mono, monospace' sx={{ fontSize: 10, color: 'primary.main' }}>
+                    {vm.ip}
+                  </Typography>
+                )}
+              </Box>
             </Box>
           </Box>
         ))}
       </Box>
-    </>
+    </Box>
   )
 }
 

@@ -131,6 +131,7 @@ export interface VlanContainerVm {
   vmType: string
   vmStatus: string
   nodeName: string
+  ip: string | null
 }
 
 export interface VlanContainerNodeData {
@@ -138,6 +139,7 @@ export interface VlanContainerNodeData {
   label: string
   vlanTag: number | null
   bridge: string
+  subnet: string | null
   vms: VlanContainerVm[]
   width: number
   height: number

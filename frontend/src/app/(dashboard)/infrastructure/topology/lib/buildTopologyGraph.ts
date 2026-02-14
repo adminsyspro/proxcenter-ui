@@ -96,12 +96,12 @@ function buildNetworkView(
   // Per-cluster: collect VMs into VLAN buckets
   const clusterVlanMap = new Map<
     string,
-    Map<string, { vlanTag: number | null; bridge: string; vms: VlanContainerVm[] }>
+    Map<string, { vlanTag: number | null; bridge: string; cidrs: number[]; vms: VlanContainerVm[] }>
   >()
 
   for (const conn of clusters) {
     grandTotalNodes += conn.nodes.length
-    const buckets = new Map<string, { vlanTag: number | null; bridge: string; vms: VlanContainerVm[] }>()
+    const buckets = new Map<string, { vlanTag: number | null; bridge: string; cidrs: number[]; vms: VlanContainerVm[] }>()
 
     for (const node of conn.nodes) {
       let guests = node.guests || []
@@ -118,22 +118,21 @@ function buildNetworkView(
         const netKey = `${conn.id}:${type}:${node.node}:${typeof guest.vmid === 'string' ? guest.vmid : String(guest.vmid)}`
         const nics = networkMap?.get(netKey) || []
 
-        const vmEntry: VlanContainerVm = {
-          vmid,
-          name: guest.name || `VM ${vmid}`,
-          vmType: type,
-          vmStatus: guest.status,
-          nodeName: node.node,
-        }
-
         if (nics.length === 0) {
           const groupKey = 'no-vlan'
 
           if (!buckets.has(groupKey)) {
-            buckets.set(groupKey, { vlanTag: null, bridge: 'unknown', vms: [] })
+            buckets.set(groupKey, { vlanTag: null, bridge: 'unknown', cidrs: [], vms: [] })
           }
 
-          buckets.get(groupKey)!.vms.push(vmEntry)
+          buckets.get(groupKey)!.vms.push({
+            vmid,
+            name: guest.name || `VM ${vmid}`,
+            vmType: type,
+            vmStatus: guest.status,
+            nodeName: node.node,
+            ip: null,
+          })
         } else {
           for (const nic of nics) {
             const vlanTag = nic.vlanTag ?? null
@@ -141,10 +140,23 @@ function buildNetworkView(
             const groupKey = vlanTag != null ? `vlan-${vlanTag}` : 'no-vlan'
 
             if (!buckets.has(groupKey)) {
-              buckets.set(groupKey, { vlanTag, bridge, vms: [] })
+              buckets.set(groupKey, { vlanTag, bridge, cidrs: [], vms: [] })
             }
 
-            buckets.get(groupKey)!.vms.push(vmEntry)
+            const bucket = buckets.get(groupKey)!
+
+            if (nic.cidr != null && !bucket.cidrs.includes(nic.cidr)) {
+              bucket.cidrs.push(nic.cidr)
+            }
+
+            bucket.vms.push({
+              vmid,
+              name: guest.name || `VM ${vmid}`,
+              vmType: type,
+              vmStatus: guest.status,
+              nodeName: node.node,
+              ip: nic.ip || null,
+            })
           }
         }
       }
@@ -243,10 +255,27 @@ function buildNetworkView(
         const PADDING = 8
         const containerHeight = HEADER_HEIGHT + PADDING + bucket.vms.length * VM_ROW_HEIGHT + PADDING
 
+        // Compute subnet from first IP with CIDR
+        let subnet: string | null = null
+        const cidr = bucket.cidrs[0]
+
+        if (cidr != null) {
+          const firstVmWithIp = bucket.vms.find(v => v.ip)
+
+          if (firstVmWithIp?.ip) {
+            const octets = firstVmWithIp.ip.split('.').map(Number)
+            const mask = cidr === 0 ? 0 : (~0 << (32 - cidr)) >>> 0
+            const netAddr = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) & mask
+
+            subnet = `${(netAddr >>> 24) & 0xff}.${(netAddr >>> 16) & 0xff}.${(netAddr >>> 8) & 0xff}.${netAddr & 0xff}/${cidr}`
+          }
+        }
+
         const containerData: VlanContainerNodeData = {
           label: bucket.vlanTag != null ? `VLAN ${bucket.vlanTag}` : 'No VLAN',
           vlanTag: bucket.vlanTag,
           bridge: bucket.bridge,
+          subnet,
           vms: bucket.vms,
           width: 240,
           height: Math.max(containerHeight, 70),

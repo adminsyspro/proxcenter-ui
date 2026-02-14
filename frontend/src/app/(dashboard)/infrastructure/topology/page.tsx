@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 
-import { Box, Card, Typography } from '@mui/material'
+import { Box, Card } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { ReactFlowProvider } from '@xyflow/react'
 
@@ -51,12 +51,6 @@ export default function TopologyPage() {
 
   return (
     <Box sx={{ height: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant='h5' fontWeight={700}>
-          {t('topology.title')}
-        </Typography>
-      </Box>
-
       <ReactFlowProvider>
         <TopologyToolbar filters={filters} onChange={setFilters} connections={connections} />
 

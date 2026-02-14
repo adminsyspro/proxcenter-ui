@@ -122,7 +122,7 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
       maxZoom={2}
       proOptions={{ hideAttribution: true }}
     >
-      <Background gap={20} size={1} />
+      <Background gap={20} size={0} />
       <Controls position='bottom-left' />
       <MiniMap
         position='bottom-right'

@@ -89,24 +89,26 @@ export function buildTopologyGraph(
     // Compute aggregate stats for the cluster
     let totalVms = 0
     let worstStatus: NodeStatus = 'ok'
-    let totalCpu = 0
-    let totalMaxCpu = 0
+    let cpuSum = 0
+    let nodeCountOnline = 0
 
     for (const node of conn.nodes) {
       const nodeIsOnline = node.status === 'online'
-      const nodeCpu = node.cpu || 0
-      const nodeMaxCpu = node.maxcpu || 0
+
+      // PVE returns node.cpu as a 0-1 ratio already (not raw cycles)
+      const nodeCpuUsage = node.cpu || 0
       const nodeMem = node.mem || 0
       const nodeMaxMem = node.maxmem || 0
-      const nodeCpuUsage = nodeMaxCpu > 0 ? nodeCpu / nodeMaxCpu : 0
       const nodeRamUsage = nodeMaxMem > 0 ? nodeMem / nodeMaxMem : 0
       const nodeStatus = getResourceStatus(Math.max(nodeCpuUsage, nodeRamUsage), nodeIsOnline)
 
       if (nodeStatus === 'critical') worstStatus = 'critical'
       else if (nodeStatus === 'warning' && worstStatus !== 'critical') worstStatus = 'warning'
 
-      totalCpu += nodeCpu
-      totalMaxCpu += nodeMaxCpu
+      if (nodeIsOnline) {
+        cpuSum += nodeCpuUsage
+        nodeCountOnline++
+      }
 
       const guests = node.guests || []
 
@@ -124,7 +126,7 @@ export function buildTopologyGraph(
       connectionId: conn.id,
       nodeCount: conn.nodes.length,
       vmCount: totalVms,
-      cpuUsage: totalMaxCpu > 0 ? totalCpu / totalMaxCpu : 0,
+      cpuUsage: nodeCountOnline > 0 ? cpuSum / nodeCountOnline : 0,
       status: isOnline ? worstStatus : 'offline',
       width: 220,
       height: 100,
@@ -141,7 +143,9 @@ export function buildTopologyGraph(
     for (const node of conn.nodes) {
       const hostId = `host-${conn.id}-${node.node}`
       const nodeIsOnline = node.status === 'online'
-      const cpuUsage = (node.maxcpu || 0) > 0 ? (node.cpu || 0) / (node.maxcpu || 1) : 0
+
+      // PVE returns node.cpu as a 0-1 ratio already
+      const cpuUsage = node.cpu || 0
       const ramUsage = (node.maxmem || 0) > 0 ? (node.mem || 0) / (node.maxmem || 1) : 0
       const nodeStatus = getResourceStatus(Math.max(cpuUsage, ramUsage), nodeIsOnline)
 
@@ -296,14 +300,14 @@ export function buildTopologyGraph(
     }
   }
 
-  // ProxCenter root node — always at top, connecting to all clusters
+  // ProxCenter root node — always at top, connecting to all clusters/standalone nodes
   const proxcenterData: ProxCenterNodeData = {
     label: 'ProxCenter',
     clusterCount: clusters.length,
     totalNodes: grandTotalNodes,
     totalVms: grandTotalVms,
-    width: 240,
-    height: 80,
+    width: 300,
+    height: 90,
   }
 
   nodes.push({

@@ -42,7 +42,6 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
     const dataUrl = await toPng(viewport, {
       backgroundColor: '#1e1e2d',
       filter: (node) => {
-        // Exclude minimap and controls if present
         if (node instanceof HTMLElement) {
           const cls = node.className || ''
 
@@ -72,40 +71,6 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         px: 1,
       }}
     >
-      {/* View mode toggle */}
-      <ToggleButtonGroup
-        value={filters.viewMode || 'infra'}
-        exclusive
-        size='small'
-        onChange={(_e, value) => {
-          if (value !== null) {
-            onChange({ ...filters, viewMode: value, groupByVlan: false, groupByTag: false })
-          }
-        }}
-        sx={{
-          '& .MuiToggleButton-root': {
-            px: 1.25,
-            py: 0.5,
-          },
-        }}
-      >
-        <ToggleButton value='infra'>
-          <Tooltip title={t('infraView')}>
-            <i className='ri-organization-chart' style={{ fontSize: 18 }} />
-          </Tooltip>
-        </ToggleButton>
-        <ToggleButton value='network'>
-          <Tooltip title={t('networkView')}>
-            <i className='ri-router-line' style={{ fontSize: 18 }} />
-          </Tooltip>
-        </ToggleButton>
-        <ToggleButton value='geo'>
-          <Tooltip title={t('geoView')}>
-            <i className='ri-map-pin-line' style={{ fontSize: 18 }} />
-          </Tooltip>
-        </ToggleButton>
-      </ToggleButtonGroup>
-
       {/* Connection filter */}
       <FormControl size='small' sx={{ minWidth: 180 }}>
         <InputLabel>{t('filterByConnection')}</InputLabel>
@@ -216,35 +181,72 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
         />
       )}
 
-      {/* Fit view + Export buttons — hidden in geo view */}
-      {!isGeoView && (
-      <Box sx={{ ml: 'auto', display: 'flex', gap: 0.5 }}>
-        <Tooltip title={t('exportPng')}>
-          <IconButton
-            size='small'
-            onClick={handleExport}
-            sx={{
-              bgcolor: 'action.hover',
-              '&:hover': { bgcolor: 'action.selected' },
-            }}
-          >
-            <i className='ri-download-2-line' style={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={t('fitView')}>
-          <IconButton
-            size='small'
-            onClick={() => fitView({ padding: 0.2, duration: 300 })}
-            sx={{
-              bgcolor: 'action.hover',
-              '&:hover': { bgcolor: 'action.selected' },
-            }}
-          >
-            <i className='ri-fullscreen-line' style={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
+      {/* Right side: action buttons + view mode toggle */}
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* Fit view + Export buttons — hidden in geo view */}
+        {!isGeoView && (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title={t('exportPng')}>
+              <IconButton
+                size='small'
+                onClick={handleExport}
+                sx={{
+                  bgcolor: 'action.hover',
+                  '&:hover': { bgcolor: 'action.selected' },
+                }}
+              >
+                <i className='ri-download-2-line' style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('fitView')}>
+              <IconButton
+                size='small'
+                onClick={() => fitView({ padding: 0.2, duration: 300 })}
+                sx={{
+                  bgcolor: 'action.hover',
+                  '&:hover': { bgcolor: 'action.selected' },
+                }}
+              >
+                <i className='ri-fullscreen-line' style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
+
+        {/* View mode toggle */}
+        <ToggleButtonGroup
+          value={filters.viewMode || 'infra'}
+          exclusive
+          size='small'
+          onChange={(_e, value) => {
+            if (value !== null) {
+              onChange({ ...filters, viewMode: value, groupByVlan: false, groupByTag: false })
+            }
+          }}
+          sx={{
+            '& .MuiToggleButton-root': {
+              px: 1.25,
+              py: 0.5,
+            },
+          }}
+        >
+          <ToggleButton value='infra'>
+            <Tooltip title={t('infraView')}>
+              <i className='ri-organization-chart' style={{ fontSize: 18 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value='network'>
+            <Tooltip title={t('networkView')}>
+              <i className='ri-router-line' style={{ fontSize: 18 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value='geo'>
+            <Tooltip title={t('geoView')}>
+              <i className='ri-map-pin-line' style={{ fontSize: 18 }} />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Box>
-      )}
     </Box>
   )
 }

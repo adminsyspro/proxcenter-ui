@@ -40,7 +40,7 @@ const navigationCustomStyles = (verticalNavOptions, theme) => {
       }
     },
     [`& .${menuClasses.root}`]: {
-      paddingBlockEnd: theme.spacing(2),
+      paddingBlockEnd: theme.spacing(10),
       ...(collapsedNotHovered
         ? {
             paddingInlineEnd: theme.spacing(1.25)

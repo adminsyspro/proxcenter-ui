@@ -1,5 +1,7 @@
 'use client'
 
+import { useState, useEffect, useCallback } from 'react'
+
 import { useRouter } from 'next/navigation'
 
 import {
@@ -8,11 +10,12 @@ import {
   Chip,
   Divider,
   IconButton,
-  LinearProgress,
   Paper,
+  Skeleton,
   Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
 
 import type { InventoryCluster, InventoryNode } from '../types'
 
@@ -48,28 +51,60 @@ function formatUptime(seconds: number): string {
   return `${hours}h ${minutes}m`
 }
 
-function UsageBar({ label, value, color }: { label: string; value: number; color: string }) {
+type TrendPoint = { t: string; cpu: number; ram: number }
+
+// Mini sparkline tooltip
+function SparkTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+
   return (
-    <Box sx={{ mb: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-        <Typography variant='caption' color='text.secondary'>{label}</Typography>
-        <Typography variant='caption' fontWeight={600}>{value.toFixed(1)}%</Typography>
-      </Box>
-      <LinearProgress
-        variant='determinate'
-        value={Math.min(value, 100)}
-        sx={{
-          height: 5,
-          borderRadius: 2.5,
-          bgcolor: 'action.hover',
-          '& .MuiLinearProgress-bar': { bgcolor: color, borderRadius: 2.5 },
-        }}
-      />
+    <Box sx={{
+      bgcolor: 'background.paper',
+      border: '1px solid',
+      borderColor: 'divider',
+      borderRadius: 1,
+      px: 1,
+      py: 0.5,
+      fontSize: '0.65rem',
+    }}>
+      <Box sx={{ color: '#e57000', fontWeight: 600 }}>CPU: {payload[0]?.value ?? 0}%</Box>
+      {payload[1] && <Box sx={{ color: '#b35500', fontWeight: 600 }}>RAM: {payload[1]?.value ?? 0}%</Box>}
     </Box>
   )
 }
 
-function NodeRow({ node }: { node: InventoryNode }) {
+// Sparkline chart component
+function MiniSparkline({ data, id }: { data: TrendPoint[]; id: string }) {
+  if (!data || data.length === 0) return null
+
+  const cpuColor = '#e57000'
+  const ramColor = '#b35500'
+  const allValues = data.flatMap(d => [d.cpu || 0, d.ram || 0])
+  const yMax = Math.min(100, Math.max(...allValues, 10) + 10)
+  const yMin = Math.max(0, Math.min(...allValues, 0) - 5)
+
+  return (
+    <Box sx={{ height: 32, width: '100%' }}>
+      <ResponsiveContainer width='100%' height='100%'>
+        <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+          <defs>
+            <linearGradient id={`cpuG-${id}`} x1='0' y1='0' x2='0' y2='1'>
+              <stop offset='0%' stopColor={cpuColor} stopOpacity={0.25} />
+              <stop offset='100%' stopColor={cpuColor} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <XAxis dataKey='t' hide />
+          <YAxis hide domain={[yMin, yMax]} />
+          <RTooltip content={<SparkTooltip />} cursor={{ stroke: cpuColor, strokeWidth: 1, strokeDasharray: '3 3' }} />
+          <Area type='monotone' dataKey='cpu' stroke={cpuColor} strokeWidth={1.5} fill={`url(#cpuG-${id})`} dot={false} isAnimationActive={false} />
+          <Area type='monotone' dataKey='ram' stroke={ramColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </Box>
+  )
+}
+
+function NodeRow({ node, trends }: { node: InventoryNode; trends?: TrendPoint[] }) {
   const cpuPct = node.cpu != null ? node.cpu * 100 : 0
   const ramPct = node.maxmem ? ((node.mem || 0) / node.maxmem) * 100 : 0
   const isOnline = node.status === 'online'
@@ -89,33 +124,24 @@ function NodeRow({ node }: { node: InventoryNode }) {
         </Typography>
       </Box>
       {isOnline && (
-        <Box sx={{ display: 'flex', gap: 1.5, pl: 2 }}>
-          <Box sx={{ flex: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>CPU</Typography>
-              <Typography variant='caption' sx={{ fontSize: '0.65rem' }}>{cpuPct.toFixed(0)}%</Typography>
-            </Box>
-            <LinearProgress variant='determinate' value={Math.min(cpuPct, 100)} sx={{
-              height: 3, borderRadius: 1.5, bgcolor: 'action.hover',
-              '& .MuiLinearProgress-bar': { bgcolor: getUsageColor(cpuPct), borderRadius: 1.5 },
-            }} />
+        <Box sx={{ pl: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 0.25 }}>
+            <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+              CPU <Box component='span' sx={{ fontWeight: 600, color: getUsageColor(cpuPct) }}>{cpuPct.toFixed(0)}%</Box>
+            </Typography>
+            <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+              RAM <Box component='span' sx={{ fontWeight: 600, color: getUsageColor(ramPct) }}>{ramPct.toFixed(0)}%</Box>
+            </Typography>
+            {node.uptime != null && (
+              <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+                Up {formatUptime(node.uptime)}
+              </Typography>
+            )}
           </Box>
-          <Box sx={{ flex: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>RAM</Typography>
-              <Typography variant='caption' sx={{ fontSize: '0.65rem' }}>{ramPct.toFixed(0)}%</Typography>
-            </Box>
-            <LinearProgress variant='determinate' value={Math.min(ramPct, 100)} sx={{
-              height: 3, borderRadius: 1.5, bgcolor: 'action.hover',
-              '& .MuiLinearProgress-bar': { bgcolor: getUsageColor(ramPct), borderRadius: 1.5 },
-            }} />
-          </Box>
+          {trends && trends.length > 0 && (
+            <MiniSparkline data={trends} id={`node-${node.node}`} />
+          )}
         </Box>
-      )}
-      {isOnline && node.uptime != null && (
-        <Typography variant='caption' color='text.secondary' sx={{ pl: 2, fontSize: '0.65rem' }}>
-          Uptime: {formatUptime(node.uptime)}
-        </Typography>
       )}
     </Box>
   )
@@ -129,6 +155,10 @@ interface GeoDetailsSidebarProps {
 export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSidebarProps) {
   const t = useTranslations('topology')
   const router = useRouter()
+
+  const [nodeTrends, setNodeTrends] = useState<Record<string, TrendPoint[]>>({})
+  const [vmTrends, setVmTrends] = useState<Record<string, TrendPoint[]>>({})
+  const [trendsLoading, setTrendsLoading] = useState(false)
 
   const totalNodes = cluster.nodes.length
   const onlineNodes = cluster.nodes.filter((n) => n.status === 'online').length
@@ -160,6 +190,116 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
     if (a.status !== 'running' && b.status === 'running') return 1
     return (a.name || '').localeCompare(b.name || '')
   })
+
+  // Fetch trends for nodes and VMs
+  const fetchTrends = useCallback(async () => {
+    setTrendsLoading(true)
+
+    try {
+      // Fetch node trends via RRD
+      const nodePromises = cluster.nodes
+        .filter(n => n.status === 'online')
+        .map(async (node) => {
+          try {
+            const res = await fetch(
+              `/api/v1/connections/${encodeURIComponent(cluster.id)}/rrd?path=${encodeURIComponent(`/nodes/${node.node}`)}&timeframe=hour`,
+              { cache: 'no-store' }
+            )
+            const json = await res.json()
+            const raw = Array.isArray(json) ? json : []
+            const points: TrendPoint[] = raw
+              .filter((p: any) => p && typeof p.time === 'number')
+              .slice(-36)
+              .map((p: any) => {
+                const cpuVal = Math.round(Math.max(0, Math.min(100, Number(p.cpu || 0) * 100)))
+                const mem = Number(p.memused ?? p.mem ?? 0)
+                const maxmem = Number(p.memtotal ?? p.maxmem ?? 0)
+                const ramVal = maxmem > 0 ? Math.round(Math.max(0, Math.min(100, (mem / maxmem) * 100))) : 0
+                const d = new Date(Number(p.time) * 1000)
+
+                return { t: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, cpu: cpuVal, ram: ramVal }
+              })
+
+            return { key: node.node, data: points }
+          } catch {
+            return { key: node.node, data: [] }
+          }
+        })
+
+      const nodeResults = await Promise.all(nodePromises)
+      const nTrends: Record<string, TrendPoint[]> = {}
+
+      for (const r of nodeResults) nTrends[r.key] = r.data
+      setNodeTrends(nTrends)
+
+      // Fetch VM trends via batch endpoint
+      const runningGuests = allGuests.filter(g => g.status === 'running')
+
+      if (runningGuests.length > 0) {
+        try {
+          const res = await fetch(
+            `/api/v1/connections/${encodeURIComponent(cluster.id)}/guests/trends`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                items: runningGuests.map(g => ({ type: g.type, node: g.nodeName, vmid: String(g.vmid) })),
+                timeframe: 'hour',
+              }),
+            }
+          )
+          const json = await res.json()
+          const data = json?.data || {}
+          const vTrends: Record<string, TrendPoint[]> = {}
+
+          for (const g of runningGuests) {
+            const key = `${g.type}:${g.nodeName}:${g.vmid}`
+            const vmKey = `${g.nodeName}-${g.vmid}`
+
+            if (data[key]) vTrends[vmKey] = data[key].slice(-36)
+          }
+
+          setVmTrends(vTrends)
+        } catch {
+          // ignore
+        }
+      }
+    } finally {
+      setTrendsLoading(false)
+    }
+  }, [cluster.id, cluster.nodes, allGuests])
+
+  useEffect(() => {
+    fetchTrends()
+  }, [cluster.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aggregate cluster sparkline from node trends
+  const clusterTrend: TrendPoint[] = (() => {
+    const onlineNodeKeys = cluster.nodes.filter(n => n.status === 'online').map(n => n.node)
+    const nodeDataArrays = onlineNodeKeys.map(k => nodeTrends[k]).filter(Boolean)
+
+    if (nodeDataArrays.length === 0) return []
+
+    const maxLen = Math.max(...nodeDataArrays.map(a => a.length))
+    const result: TrendPoint[] = []
+
+    for (let i = 0; i < maxLen; i++) {
+      let cpuS = 0; let cpuC = 0; let ramS = 0; let ramC = 0; let time = ''
+
+      for (const arr of nodeDataArrays) {
+        const pt = arr[i]
+
+        if (!pt) continue
+        if (!time) time = pt.t
+        cpuS += pt.cpu; cpuC++
+        ramS += pt.ram; ramC++
+      }
+
+      if (cpuC > 0) result.push({ t: time, cpu: Math.round(cpuS / cpuC), ram: Math.round(ramS / ramC) })
+    }
+
+    return result
+  })()
 
   return (
     <Paper
@@ -223,14 +363,27 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
           <Chip size='small' variant='outlined' label={`${runningVms}/${totalVms} VMs`} />
         </Box>
 
-        {/* Usage bars */}
-        <UsageBar label={t('cpuUsage')} value={cpuPct} color={getUsageColor(cpuPct)} />
-        <UsageBar label={t('ramUsage')} value={ramPct} color={getUsageColor(ramPct)} />
-        {memTotal > 0 && (
-          <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: -0.5, mb: 1.5 }}>
-            {formatBytes(memUsed)} / {formatBytes(memTotal)}
-          </Typography>
-        )}
+        {/* Cluster sparkline */}
+        <Box sx={{ mb: 1 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 0.5 }}>
+            <Typography variant='caption' color='text.secondary'>
+              CPU <Box component='span' sx={{ fontWeight: 600, color: getUsageColor(cpuPct) }}>{cpuPct.toFixed(1)}%</Box>
+            </Typography>
+            <Typography variant='caption' color='text.secondary'>
+              RAM <Box component='span' sx={{ fontWeight: 600, color: getUsageColor(ramPct) }}>{ramPct.toFixed(1)}%</Box>
+            </Typography>
+            {memTotal > 0 && (
+              <Typography variant='caption' color='text.secondary' sx={{ fontSize: '0.65rem' }}>
+                {formatBytes(memUsed)} / {formatBytes(memTotal)}
+              </Typography>
+            )}
+          </Box>
+          {trendsLoading ? (
+            <Skeleton variant='rounded' width='100%' height={32} />
+          ) : (
+            <MiniSparkline data={clusterTrend} id='cluster' />
+          )}
+        </Box>
 
         <Divider sx={{ my: 1.5 }} />
 
@@ -240,7 +393,7 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
         </Typography>
         <Box sx={{ mb: 1.5 }}>
           {cluster.nodes.map((node) => (
-            <NodeRow key={node.node} node={node} />
+            <NodeRow key={node.node} node={node} trends={nodeTrends[node.node]} />
           ))}
         </Box>
 
@@ -253,15 +406,14 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
             </Typography>
             {sortedVms.map((vm) => {
               const isRunning = vm.status === 'running'
+              const vmKey = `${vm.nodeName}-${vm.vmid}`
+              const vmTrend = vmTrends[vmKey]
 
               return (
                 <Box
-                  key={`${vm.nodeName}-${vm.vmid}`}
+                  key={vmKey}
                   onClick={() => router.push(`/infrastructure/inventory?connectionId=${cluster.id}&vmid=${vm.vmid}&node=${vm.nodeName}`)}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
                     py: 0.5,
                     px: 0.5,
                     borderRadius: 1,
@@ -269,28 +421,35 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
-                  <Box sx={{
-                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    bgcolor: isRunning ? '#22c55e' : '#ef4444',
-                  }} />
-                  <i
-                    className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
-                    style={{ fontSize: 14, color: '#8b5cf6', flexShrink: 0 }}
-                  />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant='caption' fontWeight={600} noWrap>
-                      {vm.name || `${vm.type}/${vm.vmid}`}
-                    </Typography>
-                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', fontSize: '0.65rem' }}>
-                      {vm.nodeName} · {String(vm.vmid)}
-                    </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      bgcolor: isRunning ? '#22c55e' : '#ef4444',
+                    }} />
+                    <i
+                      className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
+                      style={{ fontSize: 14, color: '#8b5cf6', flexShrink: 0 }}
+                    />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant='caption' fontWeight={600} noWrap>
+                        {vm.name || `${vm.type}/${vm.vmid}`}
+                      </Typography>
+                      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', fontSize: '0.65rem' }}>
+                        {vm.nodeName} · {String(vm.vmid)}
+                      </Typography>
+                    </Box>
+                    {isRunning && vm.cpu != null && (
+                      <Typography variant='caption' fontWeight={600} sx={{ color: getUsageColor((vm.cpu || 0) * 100), flexShrink: 0 }}>
+                        {((vm.cpu || 0) * 100).toFixed(0)}%
+                      </Typography>
+                    )}
+                    <i className='ri-arrow-right-s-line' style={{ fontSize: 14, opacity: 0.3, flexShrink: 0 }} />
                   </Box>
-                  {isRunning && vm.cpu != null && (
-                    <Typography variant='caption' fontWeight={600} sx={{ color: getUsageColor((vm.cpu || 0) * 100), flexShrink: 0 }}>
-                      {((vm.cpu || 0) * 100).toFixed(0)}%
-                    </Typography>
+                  {isRunning && vmTrend && vmTrend.length > 0 && (
+                    <Box sx={{ pl: 3.5, mt: 0.25 }}>
+                      <MiniSparkline data={vmTrend} id={`vm-${vmKey}`} />
+                    </Box>
                   )}
-                  <i className='ri-arrow-right-s-line' style={{ fontSize: 14, opacity: 0.3, flexShrink: 0 }} />
                 </Box>
               )
             })}

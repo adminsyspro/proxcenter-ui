@@ -7,6 +7,8 @@ import type { InventoryCluster } from '../types'
 export interface VmNetworkInfo {
   bridge: string
   vlanTag: number | null
+  ip: string | null
+  cidr: number | null
 }
 
 export type NetworkMap = Map<string, VmNetworkInfo[]>
@@ -64,7 +66,7 @@ export function useTopologyNetworks(connections: InventoryCluster[], enabled: bo
         for (const [key, value] of Object.entries(data)) {
           const networks = (value as any)?.networks || []
 
-          map.set(key, networks.map((n: any) => ({ bridge: n.bridge, vlanTag: n.vlanTag })))
+          map.set(key, networks.map((n: any) => ({ bridge: n.bridge, vlanTag: n.vlanTag, ip: n.ip || null, cidr: n.cidr ?? null })))
         }
 
         setNetworkMap(map)

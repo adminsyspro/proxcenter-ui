@@ -2392,7 +2392,11 @@
     "createIpSetTitle": "Create IP Set",
     "addToTitle": "Add to {name}",
     "createSgTitle": "Create Security Group",
-    "addRuleToTitle": "Add rule to {name}"
+    "addRuleToTitle": "Add rule to {name}",
+    "tabRules": "Rules",
+    "tabObjects": "Objects",
+    "deleteRule": "Delete rule",
+    "deleteRuleQuestion": "Are you sure you want to delete this rule?"
   },
   "themes": {
     "categories": {

@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
-import type { TopologyFilters, InventoryData, InventoryConnection } from '../types'
+import type { TopologyFilters, InventoryData, InventoryCluster } from '../types'
 import { buildTopologyGraph } from '../lib/buildTopologyGraph'
 import { layoutGraph } from '../lib/layoutGraph'
 
@@ -15,12 +15,12 @@ export function useTopologyData(filters: TopologyFilters) {
 
   const inventoryData = data?.data
 
-  const connections: InventoryConnection[] = useMemo(() => {
-    return inventoryData?.connections ?? []
+  const connections: InventoryCluster[] = useMemo(() => {
+    return inventoryData?.clusters ?? []
   }, [inventoryData])
 
   const { nodes, edges } = useMemo(() => {
-    if (!inventoryData || !inventoryData.connections?.length) {
+    if (!inventoryData || !inventoryData.clusters?.length) {
       return { nodes: [], edges: [] }
     }
 

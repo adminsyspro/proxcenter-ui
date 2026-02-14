@@ -16,12 +16,12 @@ import {
 import { useTranslations } from 'next-intl'
 import { useReactFlow } from '@xyflow/react'
 
-import type { TopologyFilters, InventoryConnection } from '../types'
+import type { TopologyFilters, InventoryCluster } from '../types'
 
 interface TopologyToolbarProps {
   filters: TopologyFilters
   onChange: (filters: TopologyFilters) => void
-  connections: InventoryConnection[]
+  connections: InventoryCluster[]
 }
 
 export default function TopologyToolbar({ filters, onChange, connections }: TopologyToolbarProps) {

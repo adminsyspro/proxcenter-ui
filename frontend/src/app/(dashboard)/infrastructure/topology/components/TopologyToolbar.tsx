@@ -3,10 +3,12 @@
 import {
   Box,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
   Slider,
+  Switch,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -105,6 +107,23 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
           {filters.vmThreshold}
         </Typography>
       </Box>
+
+      {/* Group by VLAN toggle */}
+      <FormControlLabel
+        control={
+          <Switch
+            size='small'
+            checked={filters.groupByVlan || false}
+            onChange={(e) => onChange({ ...filters, groupByVlan: e.target.checked })}
+          />
+        }
+        label={
+          <Typography variant='caption' color='text.secondary' sx={{ whiteSpace: 'nowrap' }}>
+            {t('groupByVlan')}
+          </Typography>
+        }
+        sx={{ ml: 0 }}
+      />
 
       {/* Fit view button */}
       <Box sx={{ ml: 'auto' }}>

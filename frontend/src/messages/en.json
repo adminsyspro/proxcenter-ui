@@ -2903,6 +2903,15 @@
     "vm": "VM",
     "virtualMachines": "Virtual Machines",
     "backToHost": "Back to host",
-    "noRrdData": "No performance data available"
+    "noRrdData": "No performance data available",
+    "performance": "Performance",
+    "networkTraffic": "Network Traffic",
+    "serverLoad": "Server Load",
+    "groupByVlan": "Group by VLAN",
+    "vlan": "VLAN",
+    "noVlan": "No VLAN",
+    "bridge": "Bridge",
+    "proxcenterRoot": "ProxCenter",
+    "totalClusters": "Total Clusters"
   }
 }

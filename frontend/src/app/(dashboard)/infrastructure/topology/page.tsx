@@ -10,6 +10,7 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 
 import type { TopologyFilters, SelectedNodeInfo } from './types'
 import { useTopologyData } from './hooks/useTopologyData'
+import { useTopologyNetworks } from './hooks/useTopologyNetworks'
 import TopologyCanvas from './components/TopologyCanvas'
 import TopologyToolbar from './components/TopologyToolbar'
 import TopologyDetailsSidebar from './components/TopologyDetailsSidebar'
@@ -24,7 +25,18 @@ export default function TopologyPage() {
   })
 
   const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null)
-  const { nodes, edges, isLoading, connections } = useTopologyData(filters)
+
+  // First pass: get connections (without networkMap)
+  const { connections, isLoading } = useTopologyData(filters)
+
+  // Fetch network/VLAN data when groupByVlan is enabled
+  const { networkMap } = useTopologyNetworks(connections, !!filters.groupByVlan)
+
+  // Second pass: build graph with networkMap when available
+  const { nodes, edges } = useTopologyData(
+    filters,
+    filters.groupByVlan ? networkMap : undefined
+  )
 
   // Page title
   useEffect(() => {
@@ -36,14 +48,6 @@ export default function TopologyPage() {
   const handleNodeSelect = useCallback((node: SelectedNodeInfo | null) => {
     setSelectedNode(node)
   }, [])
-
-  const handleVmSummaryExpand = useCallback(
-    (nodeName: string) => {
-      // Increase threshold to show individual VMs
-      setFilters((prev) => ({ ...prev, vmThreshold: 999 }))
-    },
-    []
-  )
 
   return (
     <Box sx={{ height: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column', gap: 2 }}>

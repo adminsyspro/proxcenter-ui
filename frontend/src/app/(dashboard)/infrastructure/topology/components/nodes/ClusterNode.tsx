@@ -34,10 +34,19 @@ function ClusterNodeComponent({ data }: NodeProps) {
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <i className='ri-server-line' style={{ fontSize: 16, color: getStatusColor(d.status) }} />
+        <img src='/images/proxcenter-logo.svg' alt='' width={18} height={18} style={{ flexShrink: 0 }} />
         <Typography variant='body2' fontWeight={700} noWrap sx={{ flex: 1 }}>
           {d.label}
         </Typography>
+        <Box
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            bgcolor: getStatusColor(d.status),
+            flexShrink: 0,
+          }}
+        />
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>

@@ -39,6 +39,7 @@ function VmNodeComponent({ data }: NodeProps) {
       <Handle type='target' position={Position.Top} style={{ background: '#999' }} />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <img src='/images/proxcenter-logo.svg' alt='' width={12} height={12} style={{ flexShrink: 0, opacity: 0.7 }} />
         <i
           className={d.vmType === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'}
           style={{ fontSize: 13, color: statusColor }}

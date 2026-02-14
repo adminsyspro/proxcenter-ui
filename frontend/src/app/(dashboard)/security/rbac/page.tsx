@@ -17,6 +17,7 @@ import { DataGrid } from '@mui/x-data-grid'
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features } from '@/contexts/LicenseContext'
+import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -1350,7 +1351,7 @@ return () => setPageInfo('', '', '')
             <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className='ri-key-line' />{t('rbacPage.permissionsTab')}<Chip label={permissions.length} size='small' sx={{ height: 18 }} /></Box>} />
           </Tabs>
         <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}><Typography>{t('common.loading')}</Typography></Box> : (
+          {loading ? <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, p: 2 }}><CardsSkeleton count={3} columns={3} /><TableSkeleton rows={4} columns={5} /></Box> : (
             <>
               {tab === 0 && <RolesTab roles={roles} categories={categories} onRefresh={loadData} t={t} />}
               {tab === 1 && <AssignmentsTab assignments={assignments} roles={roles} users={users} onRefresh={loadData} t={t} />}

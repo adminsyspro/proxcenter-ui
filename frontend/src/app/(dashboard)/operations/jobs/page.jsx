@@ -45,6 +45,8 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useJobs } from '@/hooks/useJobs'
+import EmptyState from '@/components/EmptyState'
+import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* --------------------------------
    Helpers
@@ -688,8 +690,8 @@ export default function JobsPage() {
 
         <Box sx={{ flex: 1, minHeight: 400 }}>
           {loading && jobs.length === 0 ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-              <CircularProgress />
+            <Box sx={{ p: 2 }}>
+              <TableSkeleton rows={5} columns={6} />
             </Box>
           ) : error ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: 2 }}>
@@ -698,6 +700,13 @@ export default function JobsPage() {
                 Réessayer
               </Button>
             </Box>
+          ) : !loading && filtered.length === 0 ? (
+            <EmptyState
+              icon="ri-play-list-2-line"
+              title={t('emptyState.noJobs')}
+              description={t('emptyState.noJobsDesc')}
+              size="large"
+            />
           ) : (
             <DataGrid
               rows={filtered}

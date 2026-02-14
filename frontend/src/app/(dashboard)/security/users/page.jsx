@@ -39,6 +39,8 @@ import { DataGrid } from '@mui/x-data-grid'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useUsers, useRbacRoles, useRbacAssignments } from '@/hooks/useUsers'
+import EmptyState from '@/components/EmptyState'
+import { TableSkeleton } from '@/components/skeletons'
 
 /* --------------------------------
    Helpers
@@ -609,21 +611,31 @@ return () => setPageInfo('', '', '')
               {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
 
               <Box sx={{ flex: 1, minHeight: 400 }}>
-                <DataGrid
-                  rows={users}
-                  columns={columns}
-                  loading={loading}
-                  pageSizeOptions={[10, 25, 50]}
-                  disableRowSelectionOnClick
-                  rowHeight={56}
-                  sx={{
-                    border: 'none',
-                    '& .MuiDataGrid-cell': {
-                      display: 'flex',
-                      alignItems: 'center',
-                    },
-                  }}
-                />
+                {!loading && users.length === 0 && !error ? (
+                  <EmptyState
+                    icon="ri-user-line"
+                    title={t('emptyState.noUsers')}
+                    description={t('emptyState.noUsersDesc')}
+                    action={{ label: t('common.add'), onClick: handleAdd, icon: 'ri-add-line' }}
+                    size="large"
+                  />
+                ) : (
+                  <DataGrid
+                    rows={users}
+                    columns={columns}
+                    loading={loading}
+                    pageSizeOptions={[10, 25, 50]}
+                    disableRowSelectionOnClick
+                    rowHeight={56}
+                    sx={{
+                      border: 'none',
+                      '& .MuiDataGrid-cell': {
+                        display: 'flex',
+                        alignItems: 'center',
+                      },
+                    }}
+                  />
+                )}
               </Box>
             </>
           )}

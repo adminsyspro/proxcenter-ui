@@ -25,7 +25,6 @@ import {
   MenuItem,
   Select,
   Slider,
-  Snackbar,
   Stack,
   Switch,
   Tab,
@@ -39,7 +38,10 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
+import { useToast } from '@/contexts/ToastContext'
 import { useOrchestratorAlerts, useAlertsSummary, useAlertRules, useAlertThresholds } from '@/hooks/useAlerts'
+import EmptyState from '@/components/EmptyState'
+import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* --------------------------------
    Types
@@ -187,7 +189,7 @@ export default function AlertsPage() {
   })
 
   const [savingThresholds, setSavingThresholds] = useState(false)
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
+  const { showToast } = useToast()
 
   // Dialog pour créer/éditer une règle
   const [ruleDialog, setRuleDialog] = useState(false)
@@ -304,10 +306,10 @@ return true
         try {
           // DELETE /api/v1/orchestrator/alerts résout toutes les alertes
           await fetch('/api/v1/orchestrator/alerts', { method: 'DELETE' })
-          setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+          showToast(t('common.success'), 'success')
           revalidateAll()
         } catch (e) {
-          setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+          showToast(t('common.error'), 'error')
         }
 
         setConfirmDialog(d => ({ ...d, open: false }))
@@ -325,9 +327,9 @@ return true
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(thresholds)
       })
-      setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+      showToast(t('common.success'), 'success')
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     } finally {
       setSavingThresholds(false)
     }
@@ -365,11 +367,11 @@ return true
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ruleForm)
       })
-      setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+      showToast(t('common.success'), 'success')
       setRuleDialog(false)
       revalidateAll()
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     } finally {
       setSavingRule(false)
     }
@@ -385,10 +387,10 @@ return true
       onConfirm: async () => {
         try {
           await fetch(`/api/v1/orchestrator/alerts/rules/${id}`, { method: 'DELETE' })
-          setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+          showToast(t('common.success'), 'success')
           revalidateAll()
         } catch (e) {
-          setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+          showToast(t('common.error'), 'error')
         }
 
         setConfirmDialog(d => ({ ...d, open: false }))
@@ -403,7 +405,7 @@ return true
       await fetch(`/api/v1/orchestrator/alerts/rules/${id}/toggle`, { method: 'POST' })
       revalidateAll()
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -418,10 +420,10 @@ return true
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acknowledged_by: userId })
       })
-      setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+      showToast(t('common.success'), 'success')
       revalidateAll()
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -430,10 +432,10 @@ return true
 
     try {
       await fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' })
-      setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+      showToast(t('common.success'), 'success')
       revalidateAll()
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -508,8 +510,9 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
   // Attendre le montage côté client pour éviter les erreurs d'hydratation
   if (!mounted) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <CircularProgress />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+        <CardsSkeleton count={4} columns={4} />
+        <TableSkeleton rows={5} columns={6} />
       </Box>
     )
   }
@@ -566,6 +569,14 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               </Button>
             </Stack>
             <Box sx={{ flex: 1, minHeight: 0 }}>
+              {!loading && filteredAlerts.length === 0 ? (
+                <EmptyState
+                  icon="ri-checkbox-circle-line"
+                  title={t('emptyState.noAlerts')}
+                  description={t('emptyState.noAlertsDesc')}
+                  size="large"
+                />
+              ) : (
               <DataGrid
                 rows={filteredAlerts}
                 columns={alertColumns}
@@ -584,6 +595,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   }
                 }}
               />
+              )}
             </Box>
           </Box>
         )}
@@ -720,9 +732,6 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
-      </Snackbar>
     </Box>
     </EnterpriseGuard>
   )

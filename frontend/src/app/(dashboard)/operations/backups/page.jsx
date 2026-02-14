@@ -40,6 +40,8 @@ import { DataGrid } from '@mui/x-data-grid'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import BackupJobsTabs from './BackupJobsTabs'
+import EmptyState from '@/components/EmptyState'
+import { TableSkeleton } from '@/components/skeletons'
 
 /* -----------------------------
   Helpers
@@ -708,6 +710,14 @@ return () => clearTimeout(timer)
             )}
 
             <Box sx={{ height: 'calc(100vh - 340px)', minHeight: 400 }}>
+              {!loading && backups.length === 0 && !error ? (
+                <EmptyState
+                  icon="ri-file-copy-line"
+                  title={t('emptyState.noBackups')}
+                  description={t('emptyState.noBackupsDesc')}
+                  size="large"
+                />
+              ) : (
               <DataGrid
                 rows={backups}
                 columns={columns}
@@ -740,6 +750,7 @@ return () => clearTimeout(timer)
                   setDrawerOpen(true)
                 }}
               />
+              )}
             </Box>
           </CardContent>
         </Card>

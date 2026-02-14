@@ -11,11 +11,8 @@ import {
   Box,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogContent,
   Divider,
   IconButton,
-  InputBase,
   ListItemIcon,
   Menu,
   MenuItem,
@@ -42,6 +39,9 @@ import TasksDropdown from '@components/layout/shared/TasksDropdown'
 
 // About Dialog
 import AboutDialog from '@components/dialogs/AboutDialog'
+
+// Command Palette
+import CommandPalette from '@components/layout/shared/CommandPalette'
 
 // Page Title Context
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -638,36 +638,8 @@ return () => window.removeEventListener('keydown', onKeyDown)
         </Box>
       </Box>
 
-      {/* SEARCH DIALOG */}
-      <Dialog open={searchOpen} onClose={() => setSearchOpen(false)} fullWidth maxWidth='sm'>
-        <DialogContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <i className='ri-search-line' style={{ opacity: 0.7 }} />
-            <Typography variant='h6' sx={{ fontWeight: 700 }}>
-              {t('navbar.search')}
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 2,
-              py: 1,
-              borderRadius: 2,
-              backgroundColor: theme => theme.palette.action.hover
-            }}
-          >
-            <InputBase autoFocus placeholder={t('navbar.searchPlaceholder')} sx={{ flex: 1 }} />
-            <Chip size='small' label='ESC' variant='outlined' />
-          </Box>
-
-          <Typography variant='body2' sx={{ mt: 2, opacity: 0.7 }}>
-            {t('navbar.searchTip')}
-          </Typography>
-        </DialogContent>
-      </Dialog>
+      {/* COMMAND PALETTE (Ctrl+K) */}
+      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* LANGUAGE MENU */}
       <Menu anchorEl={langAnchor} open={openLang} onClose={() => setLangAnchor(null)}>

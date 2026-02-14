@@ -48,6 +48,8 @@ import {
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
+import EmptyState from '@/components/EmptyState'
+import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* -----------------------------
   Components
@@ -628,16 +630,8 @@ return updated.slice(-30)
   if (scanning) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Box>
-          <Typography variant='h5' sx={{ fontWeight: 900 }}>{t('storage.ceph')}</Typography>
-          <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('storage.distributed')}</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2 }}>
-          <CircularProgress />
-          <Typography variant='body2' sx={{ opacity: 0.6 }}>
-            {t('common.loading')}
-          </Typography>
-        </Box>
+        <CardsSkeleton count={4} columns={4} />
+        <TableSkeleton rows={5} columns={6} />
       </Box>
     )
   }
@@ -655,14 +649,12 @@ return updated.slice(-30)
             {t('storage.storages')}
           </Button>
         </Box>
-        <Alert severity='info' sx={{ mt: 2 }}>
-          <Typography variant='body2' sx={{ fontWeight: 600, mb: 1 }}>
-            {t('common.noData')}
-          </Typography>
-          <Typography variant='body2'>
-            {t('common.notAvailable')}
-          </Typography>
-        </Alert>
+        <EmptyState
+          icon="ri-stack-line"
+          title={t('emptyState.noCeph')}
+          description={t('emptyState.noCephDesc')}
+          size="large"
+        />
 
         {connections.length > 0 && (
           <Card variant='outlined'>
@@ -734,8 +726,9 @@ return updated.slice(-30)
 
       {/* Loading / Error */}
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <CardsSkeleton count={4} columns={4} />
+          <TableSkeleton rows={4} columns={6} />
         </Box>
       )}
 

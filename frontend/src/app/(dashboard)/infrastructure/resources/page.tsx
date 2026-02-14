@@ -14,6 +14,8 @@ import {
   Stack,
 } from '@mui/material'
 
+import { PageSkeleton } from '@/components/skeletons'
+
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useResourceData } from './hooks/useResourceData'
 import { calculateImprovedPredictions } from './algorithms/improvedPrediction'
@@ -130,6 +132,10 @@ export default function ResourcesPage() {
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
+        {loading && !kpis ? (
+          <PageSkeleton />
+        ) : (
+        <>
         <Box sx={{ mb: 3 }}>
           <GlobalHealthScore score={healthScore} kpis={kpis} alerts={alerts} breakdown={healthBreakdown} loading={loading} />
         </Box>
@@ -164,6 +170,8 @@ export default function ResourcesPage() {
             <AiInsightsCard analysis={aiAnalysis} onAnalyze={runAiAnalysis} loading={loading} />
           </Grid>
         </Grid>
+        </>
+        )}
       </Box>
     </EnterpriseGuard>
   )

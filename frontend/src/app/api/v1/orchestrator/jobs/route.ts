@@ -77,11 +77,155 @@ export async function GET(req: Request) {
       console.error("Failed to fetch rolling updates:", e)
     }
 
-    // TODO: In the future, fetch other job types here:
-    // - DRS jobs
-    // - Migration jobs
-    // - Backup jobs (from PBS)
-    // - Replication jobs
+    // Fetch DRS migrations
+    try {
+      const drsRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations`, {
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (drsRes.ok) {
+        const drsData = await drsRes.json()
+        const migrations: any[] = Array.isArray(drsData) ? drsData : (drsData?.data || [])
+
+        for (const m of migrations) {
+          let jobStatus = m.status
+          if (m.status === "completed") jobStatus = "success"
+
+          jobs.push({
+            id: m.id,
+            name: `DRS Migration - ${m.vm_name || `VM ${m.vmid}`}`,
+            type: "drs",
+            status: jobStatus,
+            progress: jobStatus === "success" ? 100 : jobStatus === "running" ? 50 : 0,
+            startedAt: m.started_at,
+            endedAt: m.completed_at,
+            createdAt: m.started_at,
+            detail: `${m.vm_name || `VM ${m.vmid}`}: ${m.source_node} → ${m.target_node}`,
+            target: m.connection_id,
+            metadata: {
+              connectionId: m.connection_id,
+              vmid: m.vmid,
+              vmName: m.vm_name,
+              sourceNode: m.source_node,
+              targetNode: m.target_node,
+              taskId: m.task_id,
+              error: m.error,
+            },
+          })
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch DRS migrations:", e)
+    }
+
+    // Fetch Site Recovery replication jobs
+    try {
+      const replRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/jobs`, {
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (replRes.ok) {
+        const replData = await replRes.json()
+        const replJobs: any[] = Array.isArray(replData) ? replData : (replData?.data || [])
+
+        for (const rj of replJobs) {
+          // Map replication status → unified job status
+          let jobStatus = rj.status
+          if (rj.status === "synced") jobStatus = "success"
+          else if (rj.status === "syncing") jobStatus = "running"
+          else if (rj.status === "error") jobStatus = "failed"
+          // paused and pending stay as-is
+
+          const vmLabel = (rj.vm_names || []).length > 0
+            ? rj.vm_names.slice(0, 3).join(", ") + (rj.vm_names.length > 3 ? ` +${rj.vm_names.length - 3}` : "")
+            : `${(rj.vm_ids || []).length} VM(s)`
+
+          jobs.push({
+            id: rj.id,
+            name: `Replication - ${vmLabel}`,
+            type: "replication",
+            status: jobStatus,
+            progress: rj.progress_percent ?? (jobStatus === "success" ? 100 : 0),
+            startedAt: rj.last_sync || rj.created_at,
+            endedAt: rj.status === "synced" ? rj.last_sync : undefined,
+            createdAt: rj.created_at,
+            detail: `${rj.source_cluster} → ${rj.target_cluster}${rj.schedule ? ` (${rj.schedule})` : ""}`,
+            target: rj.source_cluster,
+            metadata: {
+              sourceCluster: rj.source_cluster,
+              targetCluster: rj.target_cluster,
+              vmIds: rj.vm_ids,
+              vmNames: rj.vm_names,
+              schedule: rj.schedule,
+              rpoTarget: rj.rpo_target,
+              lastSync: rj.last_sync,
+              nextSync: rj.next_sync,
+              error: rj.error_message,
+            },
+          })
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch replication jobs:", e)
+    }
+
+    // Fetch Site Recovery plan executions (failover/failback/test)
+    try {
+      const plansRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans`, {
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (plansRes.ok) {
+        const plansData = await plansRes.json()
+        const plans: any[] = Array.isArray(plansData) ? plansData : (plansData?.data || [])
+
+        // Fetch history for plans that have been executed
+        for (const plan of plans) {
+          if (!plan.last_failover && !plan.last_test) continue
+          try {
+            const histRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans/${plan.id}/history`, {
+              headers: { "Content-Type": "application/json" },
+            })
+            if (!histRes.ok) continue
+            const histData = await histRes.json()
+            const executions: any[] = Array.isArray(histData) ? histData : (histData?.data || [])
+
+            for (const exec of executions) {
+              let jobStatus = exec.status
+              if (exec.status === "completed") jobStatus = "success"
+              else if (exec.status === "cancelled") jobStatus = "failed"
+
+              const typeLabel = exec.type === "failover" ? "Failover" : exec.type === "failback" ? "Failback" : "Test Failover"
+
+              jobs.push({
+                id: exec.id,
+                name: `${typeLabel} - ${plan.name}`,
+                type: "maintenance",
+                status: jobStatus,
+                progress: jobStatus === "success" ? 100 : jobStatus === "running" ? 50 : 0,
+                startedAt: exec.started_at,
+                endedAt: exec.completed_at,
+                createdAt: exec.started_at,
+                detail: `${plan.source_cluster} → ${plan.target_cluster} (${(exec.vm_results || []).length} VMs)`,
+                target: plan.source_cluster,
+                metadata: {
+                  planId: plan.id,
+                  planName: plan.name,
+                  executionType: exec.type,
+                  sourceCluster: plan.source_cluster,
+                  targetCluster: plan.target_cluster,
+                  vmResults: exec.vm_results,
+                },
+              })
+            }
+          } catch {
+            // Skip plan if history fetch fails
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch recovery executions:", e)
+    }
 
     // Apply filters
     let filtered = jobs

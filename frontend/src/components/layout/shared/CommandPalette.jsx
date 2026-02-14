@@ -165,7 +165,7 @@ const CommandPalette = ({ open, onClose }) => {
     const q = query.trim()
 
     let fPages = pages
-    let fVms = vms
+    let fVms = []
     let fActions = actions
 
     if (q) {
@@ -191,9 +191,9 @@ const CommandPalette = ({ open, onClose }) => {
         .sort((a, b) => b.score - a.score)
     }
 
-    // Cap each section at 10
+    // Cap sections for performance
     fPages = fPages.slice(0, 10)
-    fVms = fVms.slice(0, 10)
+    fVms = fVms.slice(0, 20)
     fActions = fActions.slice(0, 10)
 
     // Flat array for keyboard nav

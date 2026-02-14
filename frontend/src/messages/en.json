@@ -157,11 +157,8 @@
     "users": "Users",
     "rbacRoles": "RBAC / Roles",
     "auditLogs": "Audit & Logs",
-    "sso": "SSO",
     "settings": "Settings",
     "license": "License",
-    "integrations": "Integrations",
-    "billing": "Billing",
     "about": "About",
     "templates": "Templates",
     "reports": "Reports",
@@ -767,9 +764,7 @@
     "changesAutoSaved": "Changes are saved automatically.",
     "notifications": "Notifications",
     "security": "Security",
-    "integrations": "Integrations",
     "ai": "Artificial Intelligence",
-    "billing": "Billing",
     "license": "License",
     "deleteConnectionConfirm": "Delete this {type} connection?",
     "addPbsServer": "Add a PBS server",
@@ -1035,7 +1030,6 @@
     "users": "Users",
     "rbac": "RBAC / Roles",
     "audit": "Audit & Logs",
-    "sso": "SSO",
     "zeroTrust": "Zero Trust",
     "firewall": "Firewall",
     "securityGroups": "Security Groups"
@@ -2522,31 +2516,6 @@
     "subtitle": "ProxCenter - Centralized Proxmox management",
     "description": "Centralized management solution for multi-cluster Proxmox VE environments.",
     "copyright": "© 2025 - All rights reserved"
-  },
-  "billingPage": {
-    "title": "Billing",
-    "subtitle": "Subscription management",
-    "pageTitle": "Licenses & billing",
-    "pageSubtitle": "Plans, usage, billing (if SaaS).",
-    "displayPlan": "Display plan",
-    "usageMetrics": "Usage metrics",
-    "downloadInvoices": "Download invoices"
-  },
-  "integrationsPage": {
-    "title": "Integrations",
-    "subtitle": "External connections",
-    "pageSubtitle": "Connectors: Prometheus, Grafana, PBS, PowerDNS, Slack, etc.",
-    "listIntegrations": "List integrations",
-    "setupWizard": "Setup wizard",
-    "connectivityTests": "Connectivity tests"
-  },
-  "ssoPage": {
-    "title": "SSO",
-    "subtitle": "Single sign-on",
-    "pageSubtitle": "SSO (OIDC/SAML) + provisioning (SCIM) if needed.",
-    "configureOidc": "Configure OIDC",
-    "mapClaimsToRoles": "Map claims -> roles",
-    "testLogin": "Test login"
   },
   "updates": {
     "rollingUpdate": "Rolling Update",

@@ -2,10 +2,9 @@
 
 import { useEffect } from 'react'
 
-import { Box, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
 import 'leaflet/dist/leaflet.css'
@@ -19,26 +18,93 @@ const statusColors: Record<string, string> = {
   offline: '#ef4444',
 }
 
-function createClusterIcon(status: string) {
-  const color = statusColors[status] || '#6b7280'
+function getUsageColor(pct: number): string {
+  if (pct >= 90) return '#ef4444'
+  if (pct >= 70) return '#f59e0b'
+  return '#22c55e'
+}
+
+function computeClusterStats(conn: InventoryCluster) {
+  const totalNodes = conn.nodes.length
+  const onlineNodes = conn.nodes.filter((n) => n.status === 'online').length
+  const totalVms = conn.nodes.reduce((sum, n) => sum + n.guests.length, 0)
+  const runningVms = conn.nodes.reduce(
+    (sum, n) => sum + n.guests.filter((g) => g.status === 'running').length,
+    0
+  )
+
+  let cpuSum = 0
+  let cpuCount = 0
+  let memUsed = 0
+  let memTotal = 0
+
+  for (const node of conn.nodes) {
+    if (node.cpu != null) {
+      cpuSum += node.cpu
+      cpuCount++
+    }
+    if (node.mem != null) memUsed += node.mem
+    if (node.maxmem != null) memTotal += node.maxmem
+  }
+
+  const cpuPct = cpuCount > 0 ? Math.round((cpuSum / cpuCount) * 100) : 0
+  const ramPct = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0
+
+  return { totalNodes, onlineNodes, totalVms, runningVms, cpuPct, ramPct }
+}
+
+function createEnrichedIcon(conn: InventoryCluster) {
+  const color = statusColors[conn.status] || '#6b7280'
+  const stats = computeClusterStats(conn)
+  const label = conn.locationLabel || conn.name
+  const truncName = label.length > 16 ? label.slice(0, 15) + '…' : label
+
+  const cpuColor = getUsageColor(stats.cpuPct)
+  const ramColor = getUsageColor(stats.ramPct)
+
+  const html = `<div style="
+    display:flex;align-items:center;gap:6px;
+    background:rgba(30,30,45,0.92);
+    border:2px solid ${color};
+    border-radius:10px;
+    padding:6px 10px;
+    box-shadow:0 2px 12px rgba(0,0,0,0.4);
+    white-space:nowrap;
+    cursor:pointer;
+    min-width:120px;
+  ">
+    <div style="
+      width:10px;height:10px;flex-shrink:0;
+      background:${color};
+      border-radius:50%;
+      box-shadow:0 0 6px ${color};
+    "></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;">${truncName}</div>
+      <div style="display:flex;gap:8px;font-size:9px;color:rgba(255,255,255,0.7);margin-top:1px;">
+        <span>${stats.totalNodes}N</span>
+        <span>${stats.runningVms}/${stats.totalVms} VM</span>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:3px;">
+        <div style="flex:1;height:3px;background:rgba(255,255,255,0.15);border-radius:2px;overflow:hidden;">
+          <div style="width:${stats.cpuPct}%;height:100%;background:${cpuColor};border-radius:2px;"></div>
+        </div>
+        <div style="flex:1;height:3px;background:rgba(255,255,255,0.15);border-radius:2px;overflow:hidden;">
+          <div style="width:${stats.ramPct}%;height:100%;background:${ramColor};border-radius:2px;"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;font-size:7px;color:rgba(255,255,255,0.5);margin-top:1px;">
+        <span style="flex:1;">CPU ${stats.cpuPct}%</span>
+        <span style="flex:1;">RAM ${stats.ramPct}%</span>
+      </div>
+    </div>
+  </div>`
 
   return L.divIcon({
     className: '',
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-    html: `<div style="
-      width:32px;height:32px;
-      display:flex;align-items:center;justify-content:center;
-      background:${color};
-      border:3px solid rgba(255,255,255,0.9);
-      border-radius:50%;
-      box-shadow:0 2px 8px rgba(0,0,0,0.3);
-    ">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-        <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
-      </svg>
-    </div>`,
+    iconSize: [140, 56],
+    iconAnchor: [70, 28],
+    html,
   })
 }
 
@@ -53,7 +119,7 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
       map.setView(positions[0], 10)
     } else {
       const bounds = L.latLngBounds(positions.map(([lat, lng]) => [lat, lng]))
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 })
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 12 })
     }
   }, [map, positions])
 
@@ -62,11 +128,11 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
 
 interface GeoMapInnerProps {
   connections: InventoryCluster[]
+  onSelectCluster: (cluster: InventoryCluster | null) => void
 }
 
-export default function GeoMapInner({ connections }: GeoMapInnerProps) {
+export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInnerProps) {
   const theme = useTheme()
-  const t = useTranslations('topology')
   const isDark = theme.palette.mode === 'dark'
 
   const tileUrl = isDark
@@ -81,10 +147,6 @@ export default function GeoMapInner({ connections }: GeoMapInnerProps) {
     .filter((c) => c.latitude != null && c.longitude != null)
     .map((c) => [c.latitude!, c.longitude!])
 
-  // Force popup text colors — Leaflet popups have white bg, MUI inherits dark mode colors
-  const popupTextColor = isDark ? '#1e1e2d' : '#1e1e2d'
-  const popupSecondaryColor = isDark ? '#666' : '#666'
-
   return (
     <MapContainer
       center={positions[0] || [48.8566, 2.3522]}
@@ -98,80 +160,15 @@ export default function GeoMapInner({ connections }: GeoMapInnerProps) {
       {connections.map((conn) => {
         if (conn.latitude == null || conn.longitude == null) return null
 
-        const totalNodes = conn.nodes.length
-        const totalVms = conn.nodes.reduce((sum, n) => sum + n.guests.length, 0)
-        const runningVms = conn.nodes.reduce(
-          (sum, n) => sum + n.guests.filter((g) => g.status === 'running').length,
-          0
-        )
-
-        // Compute average CPU/RAM usage
-        let cpuSum = 0
-        let cpuCount = 0
-        let memUsed = 0
-        let memTotal = 0
-
-        for (const node of conn.nodes) {
-          if (node.cpu != null) {
-            cpuSum += node.cpu
-            cpuCount++
-          }
-          if (node.mem != null) memUsed += node.mem
-          if (node.maxmem != null) memTotal += node.maxmem
-        }
-
-        const cpuPct = cpuCount > 0 ? Math.round((cpuSum / cpuCount) * 100) : 0
-        const ramPct = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0
-
         return (
           <Marker
             key={conn.id}
             position={[conn.latitude, conn.longitude]}
-            icon={createClusterIcon(conn.status)}
-          >
-            <Popup>
-              <Box sx={{ minWidth: 200, p: 0.5, color: popupTextColor }}>
-                <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 0.5, color: popupTextColor }}>
-                  {conn.name}
-                </Typography>
-                {conn.locationLabel && (
-                  <Typography variant='caption' sx={{ display: 'block', mb: 1, color: popupSecondaryColor }}>
-                    <i className='ri-map-pin-2-fill' style={{ fontSize: 12, marginRight: 4 }} />
-                    {conn.locationLabel}
-                  </Typography>
-                )}
-                <Box
-                  sx={{
-                    display: 'inline-block',
-                    px: 1,
-                    py: 0.25,
-                    borderRadius: 1,
-                    fontSize: '0.7rem',
-                    fontWeight: 600,
-                    color: '#fff',
-                    bgcolor: statusColors[conn.status] || '#6b7280',
-                    mb: 1,
-                  }}
-                >
-                  {conn.status.toUpperCase()}
-                </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5, mt: 0.5 }}>
-                  <Typography variant='caption' sx={{ color: popupTextColor }}>
-                    {t('nodes')}: <strong>{totalNodes}</strong>
-                  </Typography>
-                  <Typography variant='caption' sx={{ color: popupTextColor }}>
-                    {t('vms')}: <strong>{runningVms}/{totalVms}</strong>
-                  </Typography>
-                  <Typography variant='caption' sx={{ color: popupTextColor }}>
-                    CPU: <strong>{cpuPct}%</strong>
-                  </Typography>
-                  <Typography variant='caption' sx={{ color: popupTextColor }}>
-                    RAM: <strong>{ramPct}%</strong>
-                  </Typography>
-                </Box>
-              </Box>
-            </Popup>
-          </Marker>
+            icon={createEnrichedIcon(conn)}
+            eventHandlers={{
+              click: () => onSelectCluster(conn),
+            }}
+          />
         )
       })}
     </MapContainer>

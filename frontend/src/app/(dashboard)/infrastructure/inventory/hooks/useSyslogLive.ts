@@ -15,7 +15,7 @@ export function useSyslogLive(
   setNodeSyslogData: (data: string[]) => void,
 ) {
   useEffect(() => {
-    if (!nodeSyslogLive || selectionType !== 'node' || nodeTab !== 5 || nodeSystemSubTab !== 6) return
+    if (!nodeSyslogLive || selectionType !== 'node' || nodeTab !== 6 || nodeSystemSubTab !== 6) return
 
     const { connId, node: nodeName } = parseNodeId(selectionId || '')
 

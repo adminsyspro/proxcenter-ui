@@ -132,9 +132,9 @@ export function useNodeData(
       .finally(() => { setNodeNotesLoading(false); setNodeNotesLoaded(true) })
   }, [isNode, selectionId, nodeTab, nodeNotesLoaded, nodeNotesLoading])
 
-  // Load Disks (nodeTab === 4)
+  // Load Disks (nodeTab === 5)
   useEffect(() => {
-    if (!isNode || nodeDisksLoaded || nodeDisksLoading || nodeTab !== 4) return
+    if (!isNode || nodeDisksLoaded || nodeDisksLoading || nodeTab !== 5) return
 
     setNodeDisksLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
@@ -146,11 +146,11 @@ export function useNodeData(
       .finally(() => { setNodeDisksLoading(false); setNodeDisksLoaded(true) })
   }, [isNode, selectionId, nodeTab, nodeDisksLoaded, nodeDisksLoading])
 
-  // Load Subscription (cluster: tab 8, standalone: tab 9)
+  // Load Subscription (cluster: tab 11, standalone: tab 12)
   useEffect(() => {
     if (!isNode || nodeSubscriptionLoaded || nodeSubscriptionLoading) return
     const isInCluster = !!clusterName
-    const subscriptionTabIndex = isInCluster ? 8 : 9
+    const subscriptionTabIndex = isInCluster ? 11 : 12
     if (nodeTab !== subscriptionTabIndex) return
 
     setNodeSubscriptionLoading(true)
@@ -163,11 +163,11 @@ export function useNodeData(
       .finally(() => { setNodeSubscriptionLoading(false); setNodeSubscriptionLoaded(true) })
   }, [isNode, selectionId, nodeTab, nodeSubscriptionLoaded, nodeSubscriptionLoading, clusterName])
 
-  // Load Replication (cluster: tab 7, standalone: tab 8)
+  // Load Replication (cluster: tab 8, standalone: tab 9)
   useEffect(() => {
     if (!isNode || nodeReplicationLoaded || nodeReplicationLoading) return
     const isInCluster = !!clusterName
-    const replicationTabIndex = isInCluster ? 7 : 8
+    const replicationTabIndex = isInCluster ? 8 : 9
     if (nodeTab !== replicationTabIndex) return
 
     setNodeReplicationLoading(true)
@@ -180,9 +180,9 @@ export function useNodeData(
       .finally(() => { setNodeReplicationLoading(false); setNodeReplicationLoaded(true) })
   }, [isNode, selectionId, nodeTab, nodeReplicationLoaded, nodeReplicationLoading, clusterName])
 
-  // Load System (nodeTab === 5)
+  // Load System (nodeTab === 6)
   useEffect(() => {
-    if (!isNode || nodeSystemLoaded || nodeSystemLoading || nodeTab !== 5) return
+    if (!isNode || nodeSystemLoaded || nodeSystemLoading || nodeTab !== 6) return
 
     setNodeSystemLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
@@ -194,9 +194,9 @@ export function useNodeData(
       .finally(() => { setNodeSystemLoading(false); setNodeSystemLoaded(true) })
   }, [isNode, selectionId, nodeTab, nodeSystemLoaded, nodeSystemLoading])
 
-  // Load Syslog (nodeTab === 5, nodeSystemSubTab === 6)
+  // Load Syslog (nodeTab === 6, nodeSystemSubTab === 6)
   useEffect(() => {
-    if (!isNode || nodeTab !== 5 || nodeSystemSubTab !== 6) return
+    if (!isNode || nodeTab !== 6 || nodeSystemSubTab !== 6) return
 
     setNodeSyslogLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
@@ -208,13 +208,13 @@ export function useNodeData(
       .finally(() => setNodeSyslogLoading(false))
   }, [isNode, selectionId, nodeTab, nodeSystemSubTab])
 
-  // Load Ceph (cluster nodes only, tab 6)
+  // Load Ceph (cluster nodes only, tab 7)
   useEffect(() => {
     if (!isNode || nodeCephLoaded || nodeCephLoading) return
     const isInCluster = !!clusterName
     if (!isInCluster) return
-    const cephTabIndex = 6
-    const updatesTabIndex = 8
+    const cephTabIndex = 7
+    const updatesTabIndex = 9
     if (nodeTab !== cephTabIndex && nodeTab !== updatesTabIndex) return
 
     setNodeCephLoading(true)

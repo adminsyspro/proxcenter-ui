@@ -35,7 +35,7 @@ export function useCephPerf(
   const [clusterCephPerf, setClusterCephPerf] = useState<any>(null)
   const [clusterCephPerfHistory, setClusterCephPerfHistory] = useState<CephPerfPoint[]>([])
 
-  const active = selectionType === 'cluster' && clusterTab === 6 && !!clusterCephData
+  const active = selectionType === 'cluster' && clusterTab === 7 && !!clusterCephData
 
   // Reset history when selection changes or becomes inactive
   useEffect(() => {

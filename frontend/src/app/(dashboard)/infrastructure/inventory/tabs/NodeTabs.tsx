@@ -46,6 +46,7 @@ import { formatBytes } from '@/utils/format'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
+import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 
@@ -249,6 +250,15 @@ export default function NodeTabs(props: any) {
                       <i className="ri-computer-line" style={{ fontSize: 16 }} />
                       {t('inventory.vms')}
                       <Chip size="small" label={data.vmsData.length} sx={{ height: 18, fontSize: 11 }} />
+                    </Box>
+                  }
+                />
+                {/* Onglet Snapshots */}
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-camera-line" style={{ fontSize: 16 }} />
+                      Snapshots
                     </Box>
                   }
                 />
@@ -738,8 +748,18 @@ export default function NodeTabs(props: any) {
                   </>
                 )}
 
-                {/* Onglet Disks - Index 4 */}
+                {/* Onglet Snapshots - Index 4 */}
                 {nodeTab === 4 && (
+                  <Box sx={{ overflow: 'auto' }}>
+                    <SnapshotsTab
+                      connectionId={selection?.id?.split(':')[0] || ''}
+                      node={data.nodeName || selection?.id?.split(':').pop() || ''}
+                    />
+                  </Box>
+                )}
+
+                {/* Onglet Disks - Index 5 */}
+                {nodeTab === 5 && (
                   <Box sx={{ p: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {nodeDisksLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1102,8 +1122,8 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet System - Index 5 pour tous les nodes */}
-                {nodeTab === 5 && (
+                {/* Onglet System - Index 6 pour tous les nodes */}
+                {nodeTab === 6 && (
                   <Box sx={{ p: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {nodeSystemLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -1682,8 +1702,8 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Ceph (cluster nodes only) - Index 6 */}
-                {nodeTab === 6 && data.clusterName && (
+                {/* Onglet Ceph (cluster nodes only) - Index 7 */}
+                {nodeTab === 7 && data.clusterName && (
                   <Box sx={{ p: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {nodeCephLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2279,13 +2299,13 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Backups (standalone only) - Index 6 */}
-                {nodeTab === 6 && !data.clusterName && (
+                {/* Onglet Backups (standalone only) - Index 7 */}
+                {nodeTab === 7 && !data.clusterName && (
                   <BackupJobsPanel connectionId={parseNodeId(selection.id).connId} />
                 )}
 
-                {/* Onglet Cluster (standalone only) - Index 7 */}
-                {nodeTab === 7 && !data.clusterName && (
+                {/* Onglet Cluster (standalone only) - Index 8 */}
+                {nodeTab === 8 && !data.clusterName && (
                   <Box sx={{ p: 2 }}>
                     {clusterConfigLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2357,8 +2377,8 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Replication - Index 7 pour cluster, Index 8 pour standalone */}
-                {((nodeTab === 7 && data.clusterName) || (nodeTab === 8 && !data.clusterName)) && (
+                {/* Onglet Replication - Index 8 pour cluster, Index 9 pour standalone */}
+                {((nodeTab === 8 && data.clusterName) || (nodeTab === 9 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeReplicationLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2792,7 +2812,7 @@ export default function NodeTabs(props: any) {
                 )}
 
                 {/* Onglet Updates - Index 8 pour cluster, Index 9 pour standalone */}
-                {((nodeTab === 8 && data.clusterName) || (nodeTab === 9 && !data.clusterName)) && (() => {
+                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (() => {
                   const nodeName = data.nodeName || selection?.id?.split(':').pop() || ''
                   const nodeUpdate = nodeUpdates?.[nodeName]
                   const pkgCount = nodeUpdate?.count || 0
@@ -3124,15 +3144,15 @@ export default function NodeTabs(props: any) {
                   )
                 })()}
 
-                {/* Onglet CVE - Index 9 pour cluster, Index 10 pour standalone */}
-                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (
+                {/* Onglet CVE - Index 10 pour cluster, Index 11 pour standalone */}
+                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Subscription - Index 10 pour cluster, Index 11 pour standalone */}
-                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
+                {/* Onglet Subscription - Index 11 pour cluster, Index 12 pour standalone */}
+                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

@@ -313,7 +313,7 @@ function ConnectionsTab() {
         minWidth: 240,
         renderCell: params => (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-            <Typography variant='body2' sx={{ fontFamily: 'monospace', opacity: 0.8 }}>
+            <Typography variant='body2' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem', opacity: 0.8 }}>
               {params.value}
             </Typography>
           </Box>
@@ -337,6 +337,37 @@ function ConnectionsTab() {
               <Chip size='small' label={t('common.yes')} color='info' variant='outlined' />
             ) : (
               <Typography variant='caption' sx={{ opacity: 0.4 }}>{t('common.no')}</Typography>
+            )}
+          </Box>
+        )
+      },
+      {
+        field: 'sshEnabled',
+        headerName: 'SSH',
+        width: 80,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            {params.value ? (
+              <Chip size='small' label={t('common.yes')} color='success' variant='outlined' icon={<i className='ri-terminal-line' style={{ fontSize: 14 }} />} />
+            ) : (
+              <Typography variant='caption' sx={{ opacity: 0.4 }}>{t('common.no')}</Typography>
+            )}
+          </Box>
+        )
+      },
+      {
+        field: 'locationLabel',
+        headerName: t('settings.location'),
+        width: 140,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
+            {params.value ? (
+              <>
+                <i className='ri-map-pin-2-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                <Typography variant='body2' noWrap>{params.value}</Typography>
+              </>
+            ) : (
+              <Typography variant='caption' sx={{ opacity: 0.3 }}>—</Typography>
             )}
           </Box>
         )
@@ -387,7 +418,7 @@ function ConnectionsTab() {
         minWidth: 240,
         renderCell: params => (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-            <Typography variant='body2' sx={{ fontFamily: 'monospace', opacity: 0.8 }}>
+            <Typography variant='body2' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem', opacity: 0.8 }}>
               {params.value}
             </Typography>
           </Box>
@@ -399,6 +430,23 @@ function ConnectionsTab() {
         width: 160,
         renderCell: params => (
           <ConnectionStatus connection={params.row} autoTest={true} />
+        )
+      },
+      {
+        field: 'locationLabel',
+        headerName: t('settings.location'),
+        width: 140,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
+            {params.value ? (
+              <>
+                <i className='ri-map-pin-2-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                <Typography variant='body2' noWrap>{params.value}</Typography>
+              </>
+            ) : (
+              <Typography variant='caption' sx={{ opacity: 0.3 }}>—</Typography>
+            )}
+          </Box>
         )
       },
       {

@@ -538,6 +538,66 @@ function ConnectionsTab() {
 
 /* ==================== LicenseTab Component ==================== */
 
+// Feature categories for organized display
+const FEATURE_CATEGORIES = [
+  {
+    key: 'infrastructure',
+    icon: 'ri-server-line',
+    features: ['dashboard', 'inventory', 'backups', 'storage'],
+  },
+  {
+    key: 'automation',
+    icon: 'ri-robot-line',
+    features: ['drs', 'rolling_updates', 'cross_cluster_migration', 'jobs'],
+  },
+  {
+    key: 'security',
+    icon: 'ri-shield-check-line',
+    features: ['firewall', 'microsegmentation', 'cve_scanner', 'rbac', 'ldap'],
+  },
+  {
+    key: 'monitoring',
+    icon: 'ri-line-chart-line',
+    features: ['ai_insights', 'predictive_alerts', 'alerts', 'notifications', 'reports', 'green_metrics'],
+  },
+  {
+    key: 'disaster_recovery',
+    icon: 'ri-shield-star-line',
+    features: ['ceph_replication'],
+  },
+]
+
+const FEATURE_LABELS = {
+  dashboard: 'Dashboard',
+  inventory: 'Inventory',
+  backups: 'Backups',
+  storage: 'Storage',
+  drs: 'DRS (Dynamic Resource Scheduler)',
+  rolling_updates: 'Rolling Updates',
+  cross_cluster_migration: 'Cross-Cluster Migration',
+  jobs: 'Job Orchestration',
+  firewall: 'Firewall Management',
+  microsegmentation: 'Microsegmentation',
+  cve_scanner: 'CVE Scanner',
+  rbac: 'RBAC (Role-Based Access Control)',
+  ldap: 'LDAP / Active Directory',
+  ai_insights: 'AI Insights',
+  predictive_alerts: 'Predictive Alerts',
+  alerts: 'Alerting',
+  notifications: 'Notifications',
+  reports: 'Reports',
+  green_metrics: 'Green Metrics / RSE',
+  ceph_replication: 'Site Recovery (Ceph Replication)',
+}
+
+const CATEGORY_LABELS = {
+  infrastructure: 'Infrastructure',
+  automation: 'Automation & Orchestration',
+  security: 'Security & Access Control',
+  monitoring: 'Monitoring & Intelligence',
+  disaster_recovery: 'Disaster Recovery',
+}
+
 function LicenseTab() {
   const t = useTranslations()
   const [licenseKey, setLicenseKey] = useState('')
@@ -581,6 +641,22 @@ function LicenseTab() {
   const isEnterprise = licenseStatus?.edition === 'enterprise'
   const isLicensed = licenseStatus?.licensed && !licenseStatus?.expired
 
+  // Build feature lookup from features array
+  const featureMap = useMemo(() => {
+    const map = {}
+    for (const f of features) map[f.id] = f
+    return map
+  }, [features])
+
+  const enabledCount = features.filter(f => f.enabled).length
+  const totalCount = features.length || Object.keys(FEATURE_LABELS).length
+
+  // Node usage
+  const nodeStatus = licenseStatus?.node_status
+  const maxNodes = licenseStatus?.limits?.max_nodes || 0
+  const currentNodes = nodeStatus?.current_nodes || 0
+  const nodeUsagePct = maxNodes > 0 ? Math.min(100, Math.round((currentNodes / maxNodes) * 100)) : 0
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -591,49 +667,44 @@ function LicenseTab() {
 
   return (
     <Box>
-      <Typography variant='body2' sx={{ opacity: 0.7, mb: 3 }}>
-        {t('settings.licenseManagement')}
-      </Typography>
-
       {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity='success' sx={{ mb: 2 }}>{success}</Alert>}
 
-      {/* Current License Status */}
-      <Card variant='outlined' sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+      {/* ── License Header Card ── */}
+      <Card variant='outlined' sx={{ mb: 3, overflow: 'visible' }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
             <Box sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 2,
-              bgcolor: isEnterprise ? 'primary.main' : 'warning.main',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              width: 52, height: 52, borderRadius: 2,
+              background: isEnterprise
+                ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
+                : 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: isEnterprise ? '0 4px 14px rgba(99,102,241,0.3)' : '0 4px 14px rgba(245,158,11,0.3)',
             }}>
-              <i className={isEnterprise ? 'ri-vip-crown-2-line' : 'ri-key-2-line'} style={{ fontSize: 24, color: 'white' }} />
+              <i className={isEnterprise ? 'ri-vip-crown-2-fill' : 'ri-key-2-line'} style={{ fontSize: 26, color: 'white' }} />
             </Box>
-            <Box>
+            <Box sx={{ flex: 1 }}>
               <Typography variant='h6' fontWeight={700}>
                 {isEnterprise ? t('settings.enterpriseEdition') : t('settings.communityEdition')}
               </Typography>
               <Typography variant='body2' sx={{ opacity: 0.7 }}>
                 {isLicensed ? (
-                  <>{t('settings.licensedTo')}: {licenseStatus.customer?.name || 'Unknown'}</>
+                  <>{t('settings.licensedTo')}: <strong>{licenseStatus.customer?.name || 'Unknown'}</strong></>
                 ) : (
                   t('settings.communityLicenseDesc')
                 )}
               </Typography>
             </Box>
-            <Box sx={{ ml: 'auto', textAlign: 'right' }}>
+            <Box sx={{ textAlign: 'right' }}>
               {isLicensed ? (
                 <>
                   {licenseStatus.expired ? (
-                    <Chip label={t('settings.expired')} color='error' size='small' />
+                    <Chip label={t('settings.expired')} color='error' size='small' icon={<i className='ri-close-circle-line' />} />
                   ) : licenseStatus.expiration_warn ? (
-                    <Chip label={`${licenseStatus.days_remaining} ${t('settings.daysLeft')}`} color='warning' size='small' />
+                    <Chip label={`${licenseStatus.days_remaining} ${t('settings.daysLeft')}`} color='warning' size='small' icon={<i className='ri-timer-line' />} />
                   ) : (
-                    <Chip label={t('settings.activeLicense')} color='success' size='small' />
+                    <Chip label={t('settings.activeLicense')} color='success' size='small' icon={<i className='ri-checkbox-circle-line' />} />
                   )}
                   {licenseStatus.expires_at && (
                     <Typography variant='caption' display='block' sx={{ opacity: 0.6, mt: 0.5 }}>
@@ -642,80 +713,218 @@ function LicenseTab() {
                   )}
                 </>
               ) : (
-                <Chip label={t('settings.activeLicense')} color='success' size='small' />
+                <Chip label='Community' color='default' size='small' variant='outlined' />
               )}
             </Box>
           </Box>
 
           {isLicensed && licenseStatus.license_id && (
-            <Typography variant='caption' sx={{ display: 'block', mb: 2, opacity: 0.5, fontFamily: 'monospace' }}>
-              License ID: {licenseStatus.license_id}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, px: 1.5, py: 0.75, borderRadius: 1, bgcolor: 'action.hover' }}>
+              <i className='ri-fingerprint-line' style={{ fontSize: 16, opacity: 0.5 }} />
+              <Typography variant='caption' sx={{ opacity: 0.5, fontFamily: 'JetBrains Mono, monospace', letterSpacing: 0.5 }}>
+                {licenseStatus.license_id}
+              </Typography>
+            </Box>
           )}
 
-          {/* Node Quota */}
-          {isLicensed && licenseStatus.limits && (
-            <Box sx={{
-              mt: 2, p: 2, borderRadius: 2,
-              bgcolor: 'action.hover',
-              border: 1, borderColor: 'divider',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              flexWrap: 'wrap', gap: 1
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <i className='ri-server-line' style={{ fontSize: 20, opacity: 0.7 }} />
-                <Box>
-                  <Typography variant='subtitle2' fontWeight={700}>
+          {/* ── KPI Row ── */}
+          {isLicensed && (
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              {/* Node Quota Card */}
+              <Box sx={{
+                flex: 1, minWidth: 200, p: 2, borderRadius: 2,
+                border: 1, borderColor: nodeStatus?.exceeded ? 'error.main' : 'divider',
+                bgcolor: nodeStatus?.exceeded ? 'error.50' : 'transparent',
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <i className='ri-server-line' style={{ fontSize: 18, opacity: 0.6 }} />
+                  <Typography variant='caption' fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
                     {t('settings.nodeQuota')}
                   </Typography>
-                  <Typography variant='body2' sx={{ opacity: 0.7 }}>
-                    {licenseStatus.limits.max_nodes > 0
-                      ? `${licenseStatus.limits.max_nodes} node${licenseStatus.limits.max_nodes > 1 ? 's' : ''} ${t('settings.nodesIncluded')}`
-                      : t('settings.unlimitedNodes')
-                    }
+                </Box>
+                {maxNodes > 0 ? (
+                  <>
+                    <Typography variant='h5' fontWeight={700} sx={{ mb: 0.5 }}>
+                      {currentNodes} <Typography component='span' variant='body2' sx={{ opacity: 0.5, fontWeight: 400 }}>/ {maxNodes}</Typography>
+                    </Typography>
+                    <LinearProgress
+                      variant='determinate'
+                      value={nodeUsagePct}
+                      sx={{
+                        height: 6, borderRadius: 3, mb: 0.5,
+                        bgcolor: 'action.hover',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 3,
+                          bgcolor: nodeUsagePct >= 90 ? 'error.main' : nodeUsagePct >= 70 ? 'warning.main' : 'primary.main',
+                        },
+                      }}
+                    />
+                    <Typography variant='caption' sx={{ opacity: 0.5 }}>
+                      {nodeUsagePct}% used
+                    </Typography>
+                  </>
+                ) : (
+                  <Typography variant='h5' fontWeight={700}>
+                    <i className='ri-infinity-line' style={{ fontSize: 20, marginRight: 6 }} />
+                    {t('settings.unlimitedNodes')}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Features Summary */}
+              <Box sx={{ flex: 1, minWidth: 200, p: 2, borderRadius: 2, border: 1, borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <i className='ri-apps-line' style={{ fontSize: 18, opacity: 0.6 }} />
+                  <Typography variant='caption' fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
+                    {t('settings.includedFeatures')}
                   </Typography>
                 </Box>
+                <Typography variant='h5' fontWeight={700} sx={{ mb: 0.5 }}>
+                  {enabledCount} <Typography component='span' variant='body2' sx={{ opacity: 0.5, fontWeight: 400 }}>/ {totalCount}</Typography>
+                </Typography>
+                <LinearProgress
+                  variant='determinate'
+                  value={totalCount > 0 ? Math.round((enabledCount / totalCount) * 100) : 0}
+                  sx={{
+                    height: 6, borderRadius: 3, mb: 0.5,
+                    bgcolor: 'action.hover',
+                    '& .MuiLinearProgress-bar': { borderRadius: 3, bgcolor: 'success.main' },
+                  }}
+                />
+                <Typography variant='caption' sx={{ opacity: 0.5 }}>
+                  {enabledCount === totalCount ? 'All features enabled' : `${totalCount - enabledCount} features available with upgrade`}
+                </Typography>
               </Box>
-              {licenseStatus.limits.max_nodes > 0 && (
-                <Button
-                  variant='outlined'
-                  size='small'
-                  href='https://proxcenter.io/account/subscribe'
-                  target='_blank'
-                  startIcon={<i className='ri-shopping-cart-line' />}
-                >
-                  {t('settings.upgradeNodes')}
-                </Button>
+
+              {/* Days Remaining */}
+              {licenseStatus.expires_at && (
+                <Box sx={{ flex: 1, minWidth: 200, p: 2, borderRadius: 2, border: 1, borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <i className='ri-calendar-check-line' style={{ fontSize: 18, opacity: 0.6 }} />
+                    <Typography variant='caption' fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
+                      License Validity
+                    </Typography>
+                  </Box>
+                  <Typography variant='h5' fontWeight={700} color={
+                    licenseStatus.expired ? 'error.main' : licenseStatus.expiration_warn ? 'warning.main' : 'text.primary'
+                  }>
+                    {licenseStatus.expired ? 'Expired' : `${licenseStatus.days_remaining ?? '—'} days`}
+                  </Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.5 }}>
+                    {licenseStatus.expired ? 'Please renew your license' : `Until ${new Date(licenseStatus.expires_at).toLocaleDateString()}`}
+                  </Typography>
+                </Box>
               )}
             </Box>
           )}
 
-          <Divider sx={{ my: 2 }} />
+          {/* Node upgrade CTA */}
+          {isLicensed && maxNodes > 0 && nodeStatus?.exceeded && (
+            <Alert severity='warning' sx={{ mt: 2 }}
+              action={
+                <Button size='small' color='warning' href='https://proxcenter.io/account/subscribe' target='_blank' startIcon={<i className='ri-shopping-cart-line' />}>
+                  {t('settings.upgradeNodes')}
+                </Button>
+              }
+            >
+              Node quota exceeded ({currentNodes}/{maxNodes}). Some features may be restricted.
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
-          <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 1 }}>{t('settings.includedFeatures')}</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {features.length > 0 ? (
-              features.map(f => (
-                <Chip
-                  key={f.id}
-                  size='small'
-                  label={`${f.enabled ? '✓' : '✗'} ${f.name}`}
-                  variant='outlined'
-                  color={f.enabled ? 'success' : 'default'}
-                  sx={{ opacity: f.enabled ? 1 : 0.5 }}
-                />
-              ))
-            ) : (
-              <>
-                <Chip size='small' label={`✓ ${t('settings.features.dashboard')}`} variant='outlined' />
-                <Chip size='small' label={`✓ ${t('settings.features.inventory')}`} variant='outlined' />
-                <Chip size='small' label={`✓ ${t('settings.features.maxPveConnections')}`} variant='outlined' />
-              </>
-            )}
+      {/* ── Features by Category ── */}
+      <Card variant='outlined' sx={{ mb: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant='subtitle1' fontWeight={700} sx={{ mb: 2 }}>
+            <i className='ri-apps-2-line' style={{ marginRight: 8, opacity: 0.6 }} />
+            {t('settings.includedFeatures')}
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {FEATURE_CATEGORIES.map(cat => {
+              const catFeatures = cat.features.map(fId => ({
+                id: fId,
+                label: FEATURE_LABELS[fId] || fId,
+                enabled: featureMap[fId]?.enabled ?? false,
+              }))
+              const catEnabled = catFeatures.filter(f => f.enabled).length
+
+              return (
+                <Box key={cat.key} sx={{ p: 2, borderRadius: 2, border: 1, borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                    <Box sx={{
+                      width: 32, height: 32, borderRadius: 1.5,
+                      bgcolor: catEnabled > 0 ? 'primary.main' : 'action.hover',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <i className={cat.icon} style={{ fontSize: 16, color: catEnabled > 0 ? 'white' : 'inherit', opacity: catEnabled > 0 ? 1 : 0.5 }} />
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant='subtitle2' fontWeight={600}>
+                        {CATEGORY_LABELS[cat.key] || cat.key}
+                      </Typography>
+                      <Typography variant='caption' sx={{ opacity: 0.5 }}>
+                        {catEnabled}/{catFeatures.length} enabled
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {catFeatures.map(f => (
+                      <Chip
+                        key={f.id}
+                        size='small'
+                        label={f.label}
+                        variant={f.enabled ? 'filled' : 'outlined'}
+                        color={f.enabled ? 'success' : 'default'}
+                        icon={<i className={f.enabled ? 'ri-checkbox-circle-fill' : 'ri-lock-line'} style={{ fontSize: 14 }} />}
+                        sx={{ opacity: f.enabled ? 1 : 0.45 }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              )
+            })}
           </Box>
 
-          {isLicensed && (
-            <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          {!isEnterprise && (
+            <Box sx={{ mt: 2, p: 2, borderRadius: 2, bgcolor: 'action.hover', textAlign: 'center' }}>
+              <Typography variant='body2' sx={{ mb: 1, opacity: 0.7 }}>
+                Unlock all features with an Enterprise license
+              </Typography>
+              <Button
+                variant='contained'
+                size='small'
+                href='https://proxcenter.io/pricing'
+                target='_blank'
+                startIcon={<i className='ri-external-link-line' />}
+              >
+                View pricing
+              </Button>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── License Actions ── */}
+      {isLicensed && (
+        <Card variant='outlined' sx={{ mb: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant='subtitle1' fontWeight={700} sx={{ mb: 2 }}>
+              <i className='ri-settings-3-line' style={{ marginRight: 8, opacity: 0.6 }} />
+              License Management
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button
+                variant='outlined'
+                size='small'
+                href='https://proxcenter.io/account/subscribe'
+                target='_blank'
+                startIcon={<i className='ri-shopping-cart-line' />}
+              >
+                Manage subscription
+              </Button>
+              <Box sx={{ flex: 1 }} />
               <Button
                 variant='outlined'
                 color='error'
@@ -727,9 +936,9 @@ function LicenseTab() {
                 {t('settings.deactivateLicense')}
               </Button>
             </Box>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Deactivate Confirmation Dialog */}
       <Dialog
@@ -768,7 +977,7 @@ function LicenseTab() {
       {/* Activate License (only show if not licensed) */}
       {!isLicensed && (
         <Card variant='outlined'>
-          <CardContent>
+          <CardContent sx={{ p: 3 }}>
             <Typography variant='subtitle1' fontWeight={700} sx={{ mb: 2 }}>
               <i className='ri-vip-crown-line' style={{ marginRight: 8, color: '#e57000' }} />
               {t('settings.activateProLicense')}
@@ -784,7 +993,7 @@ function LicenseTab() {
               onChange={e => setLicenseKey(e.target.value)}
               sx={{ mb: 2 }}
               InputProps={{
-                sx: { fontFamily: 'monospace', fontSize: '0.85rem' }
+                sx: { fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }
               }}
             />
 

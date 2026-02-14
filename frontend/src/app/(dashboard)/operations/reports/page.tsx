@@ -5,11 +5,9 @@ import { useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert,
   Box,
   Card,
   CircularProgress,
-  Snackbar,
   Tab,
   Tabs,
 } from '@mui/material'
@@ -17,6 +15,7 @@ import {
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { useToast } from '@/contexts/ToastContext'
 import { useReportsData } from '@/hooks/useReports'
 
 import ReportGenerator from './components/ReportGenerator'
@@ -75,7 +74,7 @@ export default function ReportsPage() {
   const { hasFeature, isLicensed, isEnterprise } = useLicense()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
+  const { showToast } = useToast()
 
   // Data
   const { data: reportsData, mutate: mutateReports, isLoading: loading } = useReportsData(isEnterprise, 30000)
@@ -106,16 +105,16 @@ export default function ReportsPage() {
       })
 
       if (res.ok) {
-        setSnackbar({ open: true, message: t('reports.reportStarted'), severity: 'success' })
+        showToast(t('reports.reportStarted'), 'success')
         mutateReports()
         setTab(1) // Switch to history tab
       } else {
         const error = await res.json()
 
-        setSnackbar({ open: true, message: error.error || t('common.error'), severity: 'error' })
+        showToast(error.error || t('common.error'), 'error')
       }
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -128,13 +127,13 @@ export default function ReportsPage() {
       })
 
       if (res.ok) {
-        setSnackbar({ open: true, message: t('common.success'), severity: 'success' })
+        showToast(t('common.success'), 'success')
         mutateReports()
       } else {
-        setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+        showToast(t('common.error'), 'error')
       }
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -149,15 +148,15 @@ export default function ReportsPage() {
       })
 
       if (res.ok) {
-        setSnackbar({ open: true, message: t('reports.scheduleCreated'), severity: 'success' })
+        showToast(t('reports.scheduleCreated'), 'success')
         mutateReports()
       } else {
         const error = await res.json()
 
-        setSnackbar({ open: true, message: error.error || t('common.error'), severity: 'error' })
+        showToast(error.error || t('common.error'), 'error')
       }
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -172,15 +171,15 @@ export default function ReportsPage() {
       })
 
       if (res.ok) {
-        setSnackbar({ open: true, message: t('reports.scheduleUpdated'), severity: 'success' })
+        showToast(t('reports.scheduleUpdated'), 'success')
         mutateReports()
       } else {
         const error = await res.json()
 
-        setSnackbar({ open: true, message: error.error || t('common.error'), severity: 'error' })
+        showToast(error.error || t('common.error'), 'error')
       }
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -193,13 +192,13 @@ export default function ReportsPage() {
       })
 
       if (res.ok) {
-        setSnackbar({ open: true, message: t('reports.scheduleDeleted'), severity: 'success' })
+        showToast(t('reports.scheduleDeleted'), 'success')
         mutateReports()
       } else {
-        setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+        showToast(t('common.error'), 'error')
       }
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -212,16 +211,16 @@ export default function ReportsPage() {
       })
 
       if (res.ok) {
-        setSnackbar({ open: true, message: t('reports.scheduleRunStarted'), severity: 'success' })
+        showToast(t('reports.scheduleRunStarted'), 'success')
         mutateReports()
         setTab(1) // Switch to history tab
       } else {
         const error = await res.json()
 
-        setSnackbar({ open: true, message: error.error || t('common.error'), severity: 'error' })
+        showToast(error.error || t('common.error'), 'error')
       }
     } catch (e) {
-      setSnackbar({ open: true, message: t('common.error'), severity: 'error' })
+      showToast(t('common.error'), 'error')
     }
   }
 
@@ -278,16 +277,6 @@ export default function ReportsPage() {
         )}
       </Card>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
       </Box>
     </EnterpriseGuard>
   )

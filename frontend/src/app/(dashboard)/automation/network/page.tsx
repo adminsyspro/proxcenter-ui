@@ -10,7 +10,7 @@ import {
   useTheme, alpha, Avatar, Divider, Paper,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Switch, Dialog, DialogTitle, DialogContent, DialogActions,
-  FormControl, InputLabel, Select, MenuItem, Alert, Snackbar,
+  FormControl, InputLabel, Select, MenuItem, Alert,
   Skeleton, Collapse, Tooltip, LinearProgress, CircularProgress
 } from '@mui/material'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip } from 'recharts'
@@ -18,6 +18,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip } from 'r
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
+import { useToast } from '@/contexts/ToastContext'
 import * as firewallAPI from '@/lib/api/firewall'
 import MicrosegmentationTab from '@/components/MicrosegmentationTab'
 import { usePVEConnections } from '@/hooks/useConnections'
@@ -136,7 +137,7 @@ export default function NetworkAutomationPage() {
 
   // State
   const [activeTab, setActiveTab] = useState(0)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
+  const { showToast } = useToast()
 
   // Connection selection
   const [selectedConnection, setSelectedConnection] = useState<string>('')
@@ -333,17 +334,17 @@ return next
     try {
       if (isNew) {
         await firewallAPI.addVMRule(selectedConnection, vm.node, vm.type, vm.vmid, newVMRule)
-        setSnackbar({ open: true, message: t('network.ruleCreatedSuccess'), severity: 'success' })
+        showToast(t('network.ruleCreatedSuccess'), 'success')
       } else if (rule) {
         await firewallAPI.updateVMRule(selectedConnection, vm.node, vm.type, vm.vmid, rule.pos, newVMRule)
-        setSnackbar({ open: true, message: t('network.ruleUpdated'), severity: 'success' })
+        showToast(t('network.ruleUpdated'), 'success')
       }
 
       setVmRuleDialogOpen(false)
       setEditingVMRule(null)
       reloadVMFirewallRules(vm)
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -354,11 +355,11 @@ return next
     
     try {
       await firewallAPI.deleteVMRule(selectedConnection, vm.node, vm.type, vm.vmid, pos)
-      setSnackbar({ open: true, message: t('network.ruleDeleted'), severity: 'success' })
+      showToast(t('network.ruleDeleted'), 'success')
       setDeleteVMRuleConfirm(null)
       reloadVMFirewallRules(vm)
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -368,10 +369,10 @@ return next
         ...rule,
         enable: rule.enable === 1 ? 0 : 1
       })
-      setSnackbar({ open: true, message: rule.enable === 1 ? t('network.ruleDisabled') : t('network.ruleEnabled'), severity: 'success' })
+      showToast(rule.enable === 1 ? t('network.ruleDisabled') : t('network.ruleEnabled'), 'success')
       reloadVMFirewallRules(vm)
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -398,12 +399,12 @@ return next
   const handleCreateAlias = async () => {
     try {
       await firewallAPI.createAlias(selectedConnection, newAlias)
-      setSnackbar({ open: true, message: t('networkPage.aliasCreated'), severity: 'success' })
+      showToast(t('networkPage.aliasCreated'), 'success')
       setAliasDialogOpen(false)
       setNewAlias({ name: '', cidr: '', comment: '' })
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.creationError'), severity: 'error' })
+      showToast(err.message || t('networkPage.creationError'), 'error')
     }
   }
   
@@ -415,11 +416,11 @@ return next
         cidr: editingAlias.cidr,
         comment: editingAlias.comment || ''
       })
-      setSnackbar({ open: true, message: t('networkPage.aliasUpdated'), severity: 'success' })
+      showToast(t('networkPage.aliasUpdated'), 'success')
       setEditingAlias(null)
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -428,10 +429,10 @@ return next
 
     try {
       await firewallAPI.deleteAlias(selectedConnection, name)
-      setSnackbar({ open: true, message: t('networkPage.aliasDeleted'), severity: 'success' })
+      showToast(t('networkPage.aliasDeleted'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -442,12 +443,12 @@ return next
   const handleCreateIPSet = async () => {
     try {
       await firewallAPI.createIPSet(selectedConnection, newIPSet)
-      setSnackbar({ open: true, message: t('networkPage.ipSetCreated'), severity: 'success' })
+      showToast(t('networkPage.ipSetCreated'), 'success')
       setIPSetDialogOpen(false)
       setNewIPSet({ name: '', comment: '' })
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -457,11 +458,11 @@ return next
     try {
       // Proxmox ne permet pas de modifier un IPSet, on le recrée
       // Pour l'instant on ne modifie que le commentaire via l'API si disponible
-      setSnackbar({ open: true, message: t('networkPage.ipSetUpdated'), severity: 'success' })
+      showToast(t('networkPage.ipSetUpdated'), 'success')
       setEditingIPSet(null)
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -470,10 +471,10 @@ return next
 
     try {
       await firewallAPI.deleteIPSet(selectedConnection, name)
-      setSnackbar({ open: true, message: t('networkPage.ipSetDeleted'), severity: 'success' })
+      showToast(t('networkPage.ipSetDeleted'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -482,22 +483,22 @@ return next
 
     try {
       await firewallAPI.addIPSetEntry(selectedConnection, ipsetEntryDialog.ipsetName, newIPSetEntry)
-      setSnackbar({ open: true, message: t('networkPage.entryAdded'), severity: 'success' })
+      showToast(t('networkPage.entryAdded'), 'success')
       setIPSetEntryDialog({ open: false, ipsetName: '' })
       setNewIPSetEntry({ cidr: '', comment: '' })
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
   const handleDeleteIPSetEntry = async (ipsetName: string, cidr: string) => {
     try {
       await firewallAPI.deleteIPSetEntry(selectedConnection, ipsetName, cidr)
-      setSnackbar({ open: true, message: t('networkPage.entryDeleted'), severity: 'success' })
+      showToast(t('networkPage.entryDeleted'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -508,12 +509,12 @@ return next
   const handleCreateGroup = async () => {
     try {
       await firewallAPI.createSecurityGroup(selectedConnection, newGroup)
-      setSnackbar({ open: true, message: t('networkPage.securityGroupCreated'), severity: 'success' })
+      showToast(t('networkPage.securityGroupCreated'), 'success')
       setGroupDialogOpen(false)
       setNewGroup({ group: '', comment: '' })
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -522,10 +523,10 @@ return next
 
     try {
       await firewallAPI.deleteSecurityGroup(selectedConnection, name)
-      setSnackbar({ open: true, message: t('networkPage.securityGroupDeleted'), severity: 'success' })
+      showToast(t('networkPage.securityGroupDeleted'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -538,12 +539,12 @@ return next
 
     try {
       await firewallAPI.addSecurityGroupRule(selectedConnection, selectedGroup.group, newRule)
-      setSnackbar({ open: true, message: t('network.ruleAdded'), severity: 'success' })
+      showToast(t('network.ruleAdded'), 'success')
       setRuleDialogOpen(false)
       setNewRule({ type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', source: '', dest: '', comment: '' })
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -567,11 +568,11 @@ return next
           comment: editingRule.rule.comment || '',
         }
       )
-      setSnackbar({ open: true, message: t('network.ruleUpdated'), severity: 'success' })
+      showToast(t('network.ruleUpdated'), 'success')
       setEditingRule(null)
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -581,10 +582,10 @@ return next
         ...rule,
         enable: rule.enable === 1 ? 0 : 1
       })
-      setSnackbar({ open: true, message: rule.enable === 1 ? t('network.ruleDisabled') : t('network.ruleEnabled'), severity: 'success' })
+      showToast(rule.enable === 1 ? t('network.ruleDisabled') : t('network.ruleEnabled'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -593,10 +594,10 @@ return next
 
     try {
       await firewallAPI.deleteSecurityGroupRule(selectedConnection, groupName, pos)
-      setSnackbar({ open: true, message: t('network.ruleDeleted'), severity: 'success' })
+      showToast(t('network.ruleDeleted'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -640,10 +641,10 @@ return next
     if (fromPos !== null && fromPos !== toPos && sgDragState.groupName === groupName) {
       try {
         await firewallAPI.updateSecurityGroupRule(selectedConnection, groupName, fromPos, { moveto: toPos })
-        setSnackbar({ open: true, message: t('network.ruleMoved'), severity: 'success' })
+        showToast(t('network.ruleMoved'), 'success')
         loadFirewallData()
       } catch (err: any) {
-        setSnackbar({ open: true, message: err.message || t('networkPage.moveError'), severity: 'error' })
+        showToast(err.message || t('networkPage.moveError'), 'error')
       }
     }
   }
@@ -692,12 +693,12 @@ return next
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ moveto: toPos })
         })
-        setSnackbar({ open: true, message: t('network.ruleMoved'), severity: 'success' })
+        showToast(t('network.ruleMoved'), 'success')
 
         // Reload only this VM's rules
         reloadVMFirewallRules(vm)
       } catch (err: any) {
-        setSnackbar({ open: true, message: err.message || t('networkPage.moveError'), severity: 'error' })
+        showToast(err.message || t('networkPage.moveError'), 'error')
       }
     }
   }
@@ -746,12 +747,12 @@ return next
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ moveto: toPos })
         })
-        setSnackbar({ open: true, message: t('network.ruleMoved'), severity: 'success' })
+        showToast(t('network.ruleMoved'), 'success')
 
         // Reload host rules
         loadHostRules()
       } catch (err: any) {
-        setSnackbar({ open: true, message: err.message || t('networkPage.moveError'), severity: 'error' })
+        showToast(err.message || t('networkPage.moveError'), 'error')
       }
     }
   }
@@ -800,10 +801,10 @@ return next
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ moveto: toPos })
         })
-        setSnackbar({ open: true, message: t('network.ruleMoved'), severity: 'success' })
+        showToast(t('network.ruleMoved'), 'success')
         loadFirewallData()
       } catch (err: any) {
-        setSnackbar({ open: true, message: err.message || t('networkPage.moveError'), severity: 'error' })
+        showToast(err.message || t('networkPage.moveError'), 'error')
       }
     }
   }
@@ -817,13 +818,13 @@ return next
     
     try {
       await firewallAPI.addNodeRule(selectedConnection, editingHostRule.node, newHostRule)
-      setSnackbar({ open: true, message: t('network.ruleAdded'), severity: 'success' })
+      showToast(t('network.ruleAdded'), 'success')
       setHostRuleDialogOpen(false)
       setEditingHostRule(null)
       setNewHostRule({ type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '', source: '', dest: '', macro: '', iface: '', log: 'nolog', comment: '' })
       reloadHostRulesForNode(editingHostRule.node)
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -836,12 +837,12 @@ return next
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newHostRule)
       })
-      setSnackbar({ open: true, message: t('network.ruleModified'), severity: 'success' })
+      showToast(t('network.ruleModified'), 'success')
       setHostRuleDialogOpen(false)
       setEditingHostRule(null)
       reloadHostRulesForNode(editingHostRule.node)
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -851,11 +852,11 @@ return next
     
     try {
       await firewallAPI.deleteNodeRule(selectedConnection, node, pos)
-      setSnackbar({ open: true, message: t('network.ruleDeleted'), severity: 'success' })
+      showToast(t('network.ruleDeleted'), 'success')
       setDeleteHostRuleConfirm(null)
       reloadHostRulesForNode(node)
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -880,13 +881,13 @@ return next
     
     try {
       await firewallAPI.addClusterRule(selectedConnection, newClusterRule)
-      setSnackbar({ open: true, message: t('network.ruleAdded'), severity: 'success' })
+      showToast(t('network.ruleAdded'), 'success')
       setClusterRuleDialogOpen(false)
       setEditingClusterRule(null)
       setNewClusterRule({ type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '', source: '', dest: '', macro: '', iface: '', log: 'nolog', comment: '' })
       reloadClusterRules()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -899,12 +900,12 @@ return next
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newClusterRule)
       })
-      setSnackbar({ open: true, message: t('network.ruleModified'), severity: 'success' })
+      showToast(t('network.ruleModified'), 'success')
       setClusterRuleDialogOpen(false)
       setEditingClusterRule(null)
       reloadClusterRules()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
 
@@ -914,11 +915,11 @@ return next
     
     try {
       await firewallAPI.deleteClusterRule(selectedConnection, pos)
-      setSnackbar({ open: true, message: t('network.ruleDeleted'), severity: 'success' })
+      showToast(t('network.ruleDeleted'), 'success')
       setDeleteClusterRuleConfirm(null)
       reloadClusterRules()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -927,10 +928,10 @@ return next
       const newEnable = clusterOptions?.enable === 1 ? 0 : 1
 
       await firewallAPI.updateClusterOptions(selectedConnection, { enable: newEnable })
-      setSnackbar({ open: true, message: newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), severity: 'success' })
+      showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
       loadFirewallData()
     } catch (err: any) {
-      setSnackbar({ open: true, message: err.message || t('networkPage.error'), severity: 'error' })
+      showToast(err.message || t('networkPage.error'), 'error')
     }
   }
   
@@ -3293,11 +3294,6 @@ return newSet
           </Button>
         </DialogActions>
       </Dialog>
-      
-      {/* Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
-      </Snackbar>
       </Box>
     </EnterpriseGuard>
   )

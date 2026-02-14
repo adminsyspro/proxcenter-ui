@@ -27,6 +27,8 @@ import { useLicense } from '@/contexts/LicenseContext'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import TaskDetailDialog from '@/components/TaskDetailDialog'
+import EmptyState from '@/components/EmptyState'
+import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* --------------------------------
    Helpers
@@ -450,6 +452,13 @@ return { total, errors, warnings, running }
             <Box sx={{ p: 2 }}>
               <Alert severity='error'>{t('common.error')}: {error.message}</Alert>
             </Box>
+          ) : !loading && filtered.length === 0 ? (
+            <EmptyState
+              icon="ri-calendar-event-line"
+              title={t('emptyState.noEvents')}
+              description={t('emptyState.noEventsDesc')}
+              size="large"
+            />
           ) : (
             <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
               <DataGrid

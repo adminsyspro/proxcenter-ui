@@ -7,12 +7,13 @@ import { ResponsiveGridLayout } from 'react-grid-layout'
 
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
-  Tooltip, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
+  Skeleton, Tooltip, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Chip, Tabs, Tab, Snackbar, Alert
 } from '@mui/material'
 
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory } from './widgetRegistry'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
+import { CardsSkeleton } from '@/components/skeletons'
 
 const GRID_COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const ROW_HEIGHT = 60
@@ -95,8 +96,8 @@ function WidgetContainer({
       {/* Content */}
       <CardContent sx={{ flex: 1, p: 1, overflow: 'hidden', '&:last-child': { pb: 1 } }}>
         {loading ? (
-          <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <CircularProgress size={24} />
+          <Box sx={{ height: '100%', p: 0.5 }}>
+            <Skeleton variant="rounded" width="100%" height="100%" sx={{ borderRadius: 0.5 }} />
           </Box>
         ) : (
           <WidgetComponent config={config} data={data} loading={loading} />
@@ -393,8 +394,8 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
 
   if (!layoutLoaded) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
-        <CircularProgress />
+      <Box sx={{ pt: 2 }}>
+        <CardsSkeleton count={6} columns={3} />
       </Box>
     )
   }

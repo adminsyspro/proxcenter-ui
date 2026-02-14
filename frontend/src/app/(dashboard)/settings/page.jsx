@@ -39,6 +39,7 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import EmptyState from '@/components/EmptyState'
 
 import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
 import { useLicenseManagement } from '@/hooks/useLicenseManagement'
@@ -469,16 +470,26 @@ function ConnectionsTab() {
         </Box>
 
         <Box sx={{ height: 'calc(100vh - 380px)', minHeight: 300 }}>
-          <DataGrid
-            rows={pveConnections}
-            columns={pveColumns}
-            loading={pveLoading}
-            getRowId={r => r.id}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-            disableRowSelectionOnClick
-            sx={{ '& .MuiDataGrid-row:hover': { backgroundColor: 'action.hover' } }}
-          />
+          {!pveLoading && pveConnections.length === 0 ? (
+            <EmptyState
+              icon="ri-server-line"
+              title={t('emptyState.noConnections')}
+              description={t('emptyState.noConnectionsDesc')}
+              action={{ label: `${t('common.add')} PVE`, onClick: () => openAddDialog('pve'), icon: 'ri-add-line' }}
+              size="large"
+            />
+          ) : (
+            <DataGrid
+              rows={pveConnections}
+              columns={pveColumns}
+              loading={pveLoading}
+              getRowId={r => r.id}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              disableRowSelectionOnClick
+              sx={{ '& .MuiDataGrid-row:hover': { backgroundColor: 'action.hover' } }}
+            />
+          )}
         </Box>
       </SubTabPanel>
 
@@ -500,23 +511,27 @@ function ConnectionsTab() {
           </Box>
         </Box>
 
-        {pbsConnections.length === 0 && !pbsLoading && (
-          <Alert severity='info' sx={{ mb: 2 }}>
-            {t('common.noData')}
-          </Alert>
-        )}
-
         <Box sx={{ height: 'calc(100vh - 380px)', minHeight: 300 }}>
-          <DataGrid
-            rows={pbsConnections}
-            columns={pbsColumns}
-            loading={pbsLoading}
-            getRowId={r => r.id}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-            disableRowSelectionOnClick
-            sx={{ '& .MuiDataGrid-row:hover': { backgroundColor: 'action.hover' } }}
-          />
+          {!pbsLoading && pbsConnections.length === 0 ? (
+            <EmptyState
+              icon="ri-hard-drive-2-line"
+              title={t('emptyState.noConnections')}
+              description={t('emptyState.noConnectionsDesc')}
+              action={{ label: `${t('common.add')} PBS`, onClick: () => openAddDialog('pbs'), icon: 'ri-add-line' }}
+              size="large"
+            />
+          ) : (
+            <DataGrid
+              rows={pbsConnections}
+              columns={pbsColumns}
+              loading={pbsLoading}
+              getRowId={r => r.id}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              disableRowSelectionOnClick
+              sx={{ '& .MuiDataGrid-row:hover': { backgroundColor: 'action.hover' } }}
+            />
+          )}
         </Box>
       </SubTabPanel>
 

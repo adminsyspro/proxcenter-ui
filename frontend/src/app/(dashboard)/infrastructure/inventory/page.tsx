@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 
-import { Box, Card, CardContent, CircularProgress, Typography, IconButton, Tooltip } from '@mui/material'
+import { Box, Card, CardContent, CircularProgress, Skeleton, Typography, IconButton, Tooltip } from '@mui/material'
 
 import { useTranslations } from 'next-intl'
 
@@ -411,8 +411,12 @@ return () => setPageInfo('', '', '')
         {!isTreeCollapsed && (
           <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', px: 2, pb: 2 }}>
           {loading ? (
-            <Box sx={{ p: 1 }}>
-              <CircularProgress size={22} />
+            <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Skeleton variant="rounded" height={32} />
+              <Skeleton variant="rounded" height={24} width="80%" />
+              <Skeleton variant="rounded" height={24} width="60%" />
+              <Skeleton variant="rounded" height={24} width="90%" />
+              <Skeleton variant="rounded" height={24} width="70%" />
             </Box>
           ) : err ? (
             <Typography color='error'>{err}</Typography>

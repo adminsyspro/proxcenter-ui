@@ -13,7 +13,6 @@ import {
   Card,
   CardContent,
   Chip,
-  CircularProgress,
   Divider,
   Drawer,
   FormControl,
@@ -33,6 +32,8 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
+import EmptyState from '@/components/EmptyState'
+import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 // Icône pour les types de storage
 const StorageIcon = ({ type, size = 20 }) => {
@@ -588,13 +589,20 @@ return (
       <Card variant='outlined'>
         <Box sx={{ height: 600 }}>
           {loading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <CircularProgress />
+            <Box sx={{ p: 2 }}>
+              <TableSkeleton rows={6} columns={7} />
             </Box>
           ) : error ? (
             <Box sx={{ p: 3 }}>
               <Alert severity='error'>{error}</Alert>
             </Box>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="ri-hard-drive-2-line"
+              title={t('emptyState.noStorage')}
+              description={t('emptyState.noStorageDesc')}
+              size="large"
+            />
           ) : (
             <DataGrid
               rows={filtered}

@@ -64,6 +64,8 @@ const AccessTimeIcon = (props: any) => <i className="ri-time-line" style={{ font
 const HardwareIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import EmptyState from '@/components/EmptyState'
+import { CardsSkeleton } from '@/components/skeletons'
 
 // Import des nouveaux composants DRS
 import DRSSettingsPanel, { 
@@ -1850,7 +1852,12 @@ return next
       {tab === 0 && (
         <Stack spacing={2}>
           {clusters.length === 0 ? (
-            <Alert severity="info">{t('drsPage.noClusterConnected')}</Alert>
+            <EmptyState
+              icon="ri-loop-left-line"
+              title={t('emptyState.noDrs')}
+              description={t('emptyState.noDrsDesc')}
+              size="large"
+            />
           ) : (
             clusters.map(cluster => (
               <ClusterCard

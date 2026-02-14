@@ -21,6 +21,12 @@ export const menuData = (t = (key) => key) => [
         permissions: ['vm.view', 'node.view'] // Au moins une de ces permissions
       },
       {
+        label: t('navigation.topology'),
+        icon: 'ri-mind-map-line',
+        href: '/infrastructure/topology',
+        permissions: ['vm.view', 'node.view']
+      },
+      {
         label: t('navigation.storage'),
         icon: 'ri-database-2-fill',
         href: '/storage/overview',

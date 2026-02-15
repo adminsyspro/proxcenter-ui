@@ -607,10 +607,11 @@ export default function ClusterTabs(props: any) {
                                               sx={{
                                                 height: 14,
                                                 borderRadius: 0,
-                                                bgcolor: 'action.hover',
+                                                bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
                                                 '& .MuiLinearProgress-bar': {
                                                   borderRadius: 0,
-                                                  bgcolor: cpuPercent > 90 ? 'error.main' : 'primary.main'
+                                                  background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                                                  backgroundSize: cpuPercent > 0 ? `${(100 / cpuPercent) * 100}% 100%` : '100% 100%',
                                                 }
                                               }}
                                             />
@@ -625,10 +626,11 @@ export default function ClusterTabs(props: any) {
                                               sx={{
                                                 height: 14,
                                                 borderRadius: 0,
-                                                bgcolor: 'action.hover',
+                                                bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
                                                 '& .MuiLinearProgress-bar': {
                                                   borderRadius: 0,
-                                                  bgcolor: memPercent > 90 ? 'error.main' : 'primary.main'
+                                                  background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                                                  backgroundSize: memPercent > 0 ? `${(100 / memPercent) * 100}% 100%` : '100% 100%',
                                                 }
                                               }}
                                             />

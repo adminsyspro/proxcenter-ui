@@ -33,6 +33,12 @@ const VmStatusWaffleWidget = dynamic(() => import('./widgets/VmStatusWaffleWidge
 // Resource Trends Chart
 const ResourceTrendsWidget = dynamic(() => import('./widgets/ResourceTrendsWidget'), { ssr: false })
 
+// Infrastructure Global Chart (per-node CPU/RAM)
+const InfraGlobalChartWidget = dynamic(() => import('./widgets/InfraGlobalChartWidget'), { ssr: false })
+
+// VM Heatmap (CPU/RAM utilization grid)
+const VmHeatmapWidget = dynamic(() => import('./widgets/VmHeatmapWidget'), { ssr: false })
+
 export const WIDGET_REGISTRY = {
   'kpi-clusters': {
     type: 'kpi-clusters',
@@ -272,6 +278,28 @@ export const WIDGET_REGISTRY = {
     minSize: { w: 4, h: 3 },
     maxSize: { w: 12, h: 6 },
     component: ResourceTrendsWidget,
+  },
+  'infra-global-chart': {
+    type: 'infra-global-chart',
+    name: 'Infra CPU/RAM',
+    description: 'CPU/RAM par nœud sur l\'ensemble de l\'infrastructure',
+    icon: 'ri-line-chart-fill',
+    category: 'resources',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 3 },
+    maxSize: { w: 12, h: 8 },
+    component: InfraGlobalChartWidget,
+  },
+  'vm-heatmap': {
+    type: 'vm-heatmap',
+    name: 'VM Heatmap',
+    description: 'Heatmap CPU/RAM de toutes les VMs',
+    icon: 'ri-fire-fill',
+    category: 'resources',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 12, h: 8 },
+    component: VmHeatmapWidget,
   },
 }
 

@@ -259,7 +259,9 @@
       "zerotrustScore": "Zero Trust Overview",
       "zerotrustSecuritygroups": "Security Groups",
       "vmStatusWaffle": "VM Status (Waffle)",
-      "resourceTrends": "Resource Trends"
+      "resourceTrends": "Resource Trends",
+      "infraGlobalChart": "Infra CPU/RAM",
+      "vmHeatmap": "VM Heatmap"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number of clusters and nodes",
@@ -282,7 +284,9 @@
       "zerotrustScore": "Security score by cluster (firewall + policies)",
       "zerotrustSecuritygroups": "Security Groups list by cluster",
       "vmStatusWaffle": "Waffle view of VMs by cluster and status",
-      "resourceTrends": "CPU/RAM evolution over 1h, 24h or 7d"
+      "resourceTrends": "CPU/RAM evolution over 1h, 24h or 7d",
+      "infraGlobalChart": "Per-node CPU/RAM across all infrastructure",
+      "vmHeatmap": "CPU/RAM heatmap of all VMs"
     }
   },
   "alerts": {

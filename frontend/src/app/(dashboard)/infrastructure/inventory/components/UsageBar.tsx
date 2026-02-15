@@ -54,7 +54,7 @@ function UsageBar({
         <Box
           sx={{
             height: 14,
-            borderRadius: '7px',
+            borderRadius: 0,
             bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
             overflow: 'hidden',
           }}
@@ -64,14 +64,14 @@ function UsageBar({
               height: '100%',
               width: `${u}%`,
               ...gradientSx(u),
-              borderRadius: '7px',
+              borderRadius: 0,
               transition: 'all 300ms ease',
               position: 'relative',
               '&::after': {
                 content: '""',
                 position: 'absolute',
                 inset: 0,
-                borderRadius: '7px',
+                borderRadius: 0,
                 background: GRADIENT_GLASS,
                 pointerEvents: 'none',
               },
@@ -113,7 +113,7 @@ function UsageBar({
       <Box
         sx={{
           height: 14,
-          borderRadius: '7px',
+          borderRadius: 0,
           bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
           overflow: 'hidden',
         }}
@@ -123,14 +123,14 @@ function UsageBar({
             height: '100%',
             width: `${pctVal}%`,
             ...gradientSx(pctVal),
-            borderRadius: '7px',
+            borderRadius: 0,
             transition: 'all 300ms ease',
             position: 'relative',
             '&::after': {
               content: '""',
               position: 'absolute',
               inset: 0,
-              borderRadius: '7px',
+              borderRadius: 0,
               background: GRADIENT_GLASS,
               pointerEvents: 'none',
             },

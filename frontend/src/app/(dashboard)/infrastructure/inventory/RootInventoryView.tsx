@@ -246,7 +246,7 @@ function RootInventoryView({
             width: 60,
             height: 14,
             bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-            borderRadius: '7px',
+            borderRadius: 0,
             overflow: 'hidden',
             position: 'relative'
           }}>
@@ -255,14 +255,14 @@ function RootInventoryView({
               height: '100%',
               background: MINI_GRADIENT,
               backgroundSize: v > 0 ? `${(100 / v) * 100}% 100%` : '100% 100%',
-              borderRadius: '7px',
+              borderRadius: 0,
               transition: 'width 0.3s ease',
               position: 'relative',
               '&::after': {
                 content: '""',
                 position: 'absolute',
                 inset: 0,
-                borderRadius: '7px',
+                borderRadius: 0,
                 background: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 50%)',
                 pointerEvents: 'none',
               },

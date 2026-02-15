@@ -154,10 +154,10 @@ const MetricBar = ({ value }: { value: number }) => {
           value={v}
           sx={{
             height: 14,
-            borderRadius: '7px',
+            borderRadius: 0,
             bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
             '& .MuiLinearProgress-bar': {
-              borderRadius: '7px',
+              borderRadius: 0,
               background: METRIC_GRADIENT,
               backgroundSize: v > 0 ? `${(100 / v) * 100}% 100%` : '100% 100%',
             },

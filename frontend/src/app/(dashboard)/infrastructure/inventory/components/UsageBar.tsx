@@ -6,6 +6,16 @@ import { formatBytes } from '@/utils/format'
 
 import { getMetricIcon } from '../helpers'
 
+const GRADIENT_BAR = 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)'
+const GRADIENT_GLASS = 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 45%, transparent 50%)'
+
+function gradientSx(pct: number) {
+  return {
+    background: GRADIENT_BAR,
+    backgroundSize: pct > 0 ? `${(100 / pct) * 100}% 100%` : '100% 100%',
+  }
+}
+
 function UsageBar({
   label,
   used,
@@ -44,7 +54,7 @@ function UsageBar({
         <Box
           sx={{
             height: 14,
-            borderRadius: 0,
+            borderRadius: '7px',
             bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
             overflow: 'hidden',
           }}
@@ -53,9 +63,18 @@ function UsageBar({
             sx={{
               height: '100%',
               width: `${u}%`,
-              bgcolor: u > 90 ? 'error.main' : themeColor,
-              borderRadius: 0,
+              ...gradientSx(u),
+              borderRadius: '7px',
               transition: 'all 300ms ease',
+              position: 'relative',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '7px',
+                background: GRADIENT_GLASS,
+                pointerEvents: 'none',
+              },
             }}
           />
         </Box>
@@ -94,8 +113,8 @@ function UsageBar({
       <Box
         sx={{
           height: 14,
-          borderRadius: 0,
-          bgcolor: 'rgba(255,255,255,0.12)',
+          borderRadius: '7px',
+          bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
           overflow: 'hidden',
         }}
       >
@@ -103,9 +122,18 @@ function UsageBar({
           sx={{
             height: '100%',
             width: `${pctVal}%`,
-            bgcolor: pctVal > 90 ? 'error.main' : themeColor,
-            borderRadius: 0,
+            ...gradientSx(pctVal),
+            borderRadius: '7px',
             transition: 'all 300ms ease',
+            position: 'relative',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '7px',
+              background: GRADIENT_GLASS,
+              pointerEvents: 'none',
+            },
           }}
         />
       </Box>

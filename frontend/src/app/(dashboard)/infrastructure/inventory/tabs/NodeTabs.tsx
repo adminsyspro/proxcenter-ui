@@ -681,6 +681,7 @@ export default function NodeTabs(props: any) {
                               port={nodeShellData.port}
                               ticket={nodeShellData.ticket}
                               node={nodeShellData.node}
+                              user={nodeShellData.user}
                               pvePort={nodeShellData.nodePort}
                               apiToken={nodeShellData.apiToken}
                               onDisconnect={() => {

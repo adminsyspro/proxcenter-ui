@@ -85,13 +85,6 @@ wss.on('connection', async (clientWs, req) => {
         console.log('[WS] Using API token authentication')
       }
 
-      // For VM/LXC, add a small delay to let the termproxy daemon start
-      // (termproxy for containers needs to lxc-attach which takes longer)
-      if (vmtype && vmid) {
-        console.log('[WS] VM/LXC mode: waiting 1s for termproxy daemon to start...')
-        await new Promise(resolve => setTimeout(resolve, 1000))
-      }
-
       const connectStart = Date.now()
 
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {

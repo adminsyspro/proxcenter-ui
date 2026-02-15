@@ -47,6 +47,18 @@ export async function POST(
       return NextResponse.json({ error: "Could not determine host from connection" }, { status: 500 })
     }
 
+    // Resolve the actual IP of the target node (termproxy binds locally on that node)
+    let targetHost = host
+    try {
+      const clusterStatus = await pveFetch<any[]>(conn, '/cluster/status')
+      const targetNode = clusterStatus?.find((n: any) => n.type === 'node' && n.name === node)
+      if (targetNode?.ip) {
+        targetHost = targetNode.ip
+      }
+    } catch {
+      // Fallback to connection host if cluster status fails (single-node setup)
+    }
+
     // POST /nodes/{node}/qemu/{vmid}/termproxy  or  /nodes/{node}/lxc/{vmid}/termproxy
     const termproxy = await pveFetch<any>(
       conn,
@@ -61,7 +73,7 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
-    const wsUrl = `wss://${host}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
+    const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
 
     return NextResponse.json({
       data: {
@@ -70,7 +82,7 @@ export async function POST(
         user: termproxy.user,
         upid: termproxy.upid,
         wsUrl,
-        host,
+        host: targetHost,
         nodePort: port,
         apiToken: conn.apiToken,
         vmType,

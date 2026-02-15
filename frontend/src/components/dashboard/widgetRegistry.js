@@ -33,6 +33,13 @@ const VmStatusWaffleWidget = dynamic(() => import('./widgets/VmStatusWaffleWidge
 // Resource Trends Chart
 const ResourceTrendsWidget = dynamic(() => import('./widgets/ResourceTrendsWidget'), { ssr: false })
 
+// Community widgets v2
+const HealthScoreWidget = dynamic(() => import('./widgets/HealthScoreWidget'), { ssr: false })
+const QuickActionsWidget = dynamic(() => import('./widgets/QuickActionsWidget'), { ssr: false })
+const RecentSnapshotsWidget = dynamic(() => import('./widgets/RecentSnapshotsWidget'), { ssr: false })
+const HaStatusWidget = dynamic(() => import('./widgets/HaStatusWidget'), { ssr: false })
+const VmLifecycleWidget = dynamic(() => import('./widgets/VmLifecycleWidget'), { ssr: false })
+
 export const WIDGET_REGISTRY = {
   'kpi-clusters': {
     type: 'kpi-clusters',
@@ -272,6 +279,65 @@ export const WIDGET_REGISTRY = {
     minSize: { w: 4, h: 3 },
     maxSize: { w: 12, h: 6 },
     component: ResourceTrendsWidget,
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // COMMUNITY WIDGETS V2
+  // ═══════════════════════════════════════════════════════════════════════════
+  'health-score': {
+    type: 'health-score',
+    name: 'Health Score',
+    description: 'Score de santé global de l\'infrastructure',
+    icon: 'ri-heart-pulse-line',
+    category: 'monitoring',
+    defaultSize: { w: 3, h: 3 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 5 },
+    component: HealthScoreWidget,
+  },
+  'quick-actions': {
+    type: 'quick-actions',
+    name: 'Quick Actions',
+    description: 'Raccourcis vers les actions courantes',
+    icon: 'ri-flashlight-line',
+    category: 'infrastructure',
+    defaultSize: { w: 4, h: 3 },
+    minSize: { w: 3, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    component: QuickActionsWidget,
+  },
+  'recent-snapshots': {
+    type: 'recent-snapshots',
+    name: 'Recent Snapshots',
+    description: 'Derniers snapshots de toutes les VMs',
+    icon: 'ri-camera-line',
+    category: 'infrastructure',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 6, h: 6 },
+    component: RecentSnapshotsWidget,
+  },
+  'ha-status': {
+    type: 'ha-status',
+    name: 'HA Status',
+    description: 'Vue d\'ensemble des ressources HA',
+    icon: 'ri-shield-star-line',
+    category: 'infrastructure',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 6, h: 6 },
+    component: HaStatusWidget,
+  },
+  'vm-lifecycle': {
+    type: 'vm-lifecycle',
+    name: 'VM Lifecycle',
+    description: 'Activité VM récente et distribution d\'âge',
+    icon: 'ri-history-line',
+    category: 'infrastructure',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 6, h: 6 },
+    component: VmLifecycleWidget,
   },
 }
 

@@ -47,6 +47,25 @@ export async function POST(
       return NextResponse.json({ error: "Could not determine host from connection" }, { status: 500 })
     }
 
+    // Resolve the actual IP of the target node.
+    // Proxmox does NOT proxy vncwebsocket cross-node — the WebSocket must connect
+    // directly to the node where the VM runs (termproxy binds a local socket there).
+    let targetHost = host
+    try {
+      const clusterStatus = await pveFetch<any[]>(conn, '/cluster/status')
+      const nodes = clusterStatus?.filter((n: any) => n.type === 'node')
+      console.log(`[terminal/vm] Cluster nodes:`, nodes?.map((n: any) => `${n.name}=${n.ip}`).join(', '))
+      const targetNode = nodes?.find((n: any) => n.name === node)
+      if (targetNode?.ip) {
+        targetHost = targetNode.ip
+        console.log(`[terminal/vm] Resolved ${node} -> ${targetHost}`)
+      } else {
+        console.log(`[terminal/vm] Node ${node} not found in cluster status, using connection host ${host}`)
+      }
+    } catch (e: any) {
+      console.log(`[terminal/vm] cluster/status failed: ${e?.message}, using connection host ${host}`)
+    }
+
     // POST /nodes/{node}/qemu/{vmid}/termproxy  or  /nodes/{node}/lxc/{vmid}/termproxy
     const termproxy = await pveFetch<any>(
       conn,
@@ -61,8 +80,7 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
-    // Use the connection host — Proxmox API routes vncwebsocket to the correct node internally
-    const wsUrl = `wss://${host}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
+    const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
 
     return NextResponse.json({
       data: {
@@ -71,7 +89,7 @@ export async function POST(
         user: termproxy.user,
         upid: termproxy.upid,
         wsUrl,
-        host,
+        host: targetHost,
         nodePort: port,
         apiToken: conn.apiToken,
         vmType,

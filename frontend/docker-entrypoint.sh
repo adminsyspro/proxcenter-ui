@@ -17,20 +17,8 @@ if [ ! -w "$DB_DIR" ]; then
   exit 1
 fi
 
-# Initialize Prisma schema (creates tables if missing, idempotent)
-echo "[entrypoint] Initializing database schema..."
-if node ./node_modules/prisma/build/index.js db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1; then
-  echo "[entrypoint] Schema OK"
-else
-  echo "[entrypoint] WARN: prisma db push failed, trying direct init..."
-  # Fallback: create the DB file so better-sqlite3 can work
-  if [ ! -f "$DB_FILE" ]; then
-    touch "$DB_FILE"
-  fi
-fi
-
-# Run additive migrations (add columns, etc.)
-echo "[entrypoint] Running DB migrations..."
+# Initialize schema + run additive migrations (uses better-sqlite3 directly)
+echo "[entrypoint] Initializing database..."
 node db-migrate.js
 
 echo "[entrypoint] Starting servers..."

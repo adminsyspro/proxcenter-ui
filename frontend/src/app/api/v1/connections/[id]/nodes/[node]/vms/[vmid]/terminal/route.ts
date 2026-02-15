@@ -48,8 +48,8 @@ export async function POST(
     }
 
     // Resolve the actual IP of the target node.
-    // Proxmox does NOT proxy vncwebsocket cross-node — the WebSocket must connect
-    // directly to the node where the VM runs (termproxy binds a local socket there).
+    // Proxmox does NOT proxy vncwebsocket cross-node — both termproxy and
+    // vncwebsocket must hit the SAME node where the VM/LXC runs.
     let targetHost = host
     try {
       const clusterStatus = await pveFetch<any[]>(conn, '/cluster/status')
@@ -66,9 +66,16 @@ export async function POST(
       console.log(`[terminal/vm] cluster/status failed: ${e?.message}, using connection host ${host}`)
     }
 
+    // Build a connection object pointing directly to the target node
+    // so that termproxy runs locally on that node (not proxied through another node)
+    const targetConn = targetHost !== host
+      ? { ...conn, baseUrl: `https://${targetHost}:${port}` }
+      : conn
+
     // POST /nodes/{node}/qemu/{vmid}/termproxy  or  /nodes/{node}/lxc/{vmid}/termproxy
+    console.log(`[terminal/vm] Calling termproxy on ${targetConn.baseUrl} for ${vmType}/${vmid}`)
     const termproxy = await pveFetch<any>(
-      conn,
+      targetConn,
       `/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/termproxy`,
       {
         method: "POST",
@@ -79,6 +86,8 @@ export async function POST(
     if (!termproxy || !termproxy.ticket) {
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
+
+    console.log(`[terminal/vm] termproxy OK: port=${termproxy.port}, user=${termproxy.user}`)
 
     const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
 

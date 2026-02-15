@@ -232,33 +232,49 @@ function RootInventoryView({
     setExpandedHosts(new Set())
   }
   
-  // Composant mini barre de progression
-  const MiniProgressBar = ({ value, label }: { value: number; label: string }) => (
-    <MuiTooltip title={`${label}: ${value.toFixed(1)}%`}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 90 }}>
-        <Typography variant="caption" sx={{ fontSize: 11, opacity: 0.7, minWidth: 28 }}>{label}</Typography>
-        <Box sx={{
-          width: 60,
-          height: 14,
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-          borderRadius: 0,
-          overflow: 'hidden',
-          position: 'relative'
-        }}>
+  // Composant mini barre de progression avec gradient
+  const MINI_GRADIENT = 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)'
+
+  const MiniProgressBar = ({ value, label }: { value: number; label: string }) => {
+    const v = Math.min(100, value)
+
+    return (
+      <MuiTooltip title={`${label}: ${value.toFixed(1)}%`}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 90 }}>
+          <Typography variant="caption" sx={{ fontSize: 11, opacity: 0.7, minWidth: 28 }}>{label}</Typography>
           <Box sx={{
-            width: `${Math.min(100, value)}%`,
-            height: '100%',
-            bgcolor: value > 90 ? 'error.main' : 'primary.main',
-            borderRadius: 0,
-            transition: 'width 0.3s ease'
-          }} />
-          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-            {value.toFixed(0)}%
-          </Typography>
+            width: 60,
+            height: 14,
+            bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+            borderRadius: '7px',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <Box sx={{
+              width: `${v}%`,
+              height: '100%',
+              background: MINI_GRADIENT,
+              backgroundSize: v > 0 ? `${(100 / v) * 100}% 100%` : '100% 100%',
+              borderRadius: '7px',
+              transition: 'width 0.3s ease',
+              position: 'relative',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '7px',
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 50%)',
+                pointerEvents: 'none',
+              },
+            }} />
+            <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+              {value.toFixed(0)}%
+            </Typography>
+          </Box>
         </Box>
-      </Box>
-    </MuiTooltip>
-  )
+      </MuiTooltip>
+    )
+  }
 
   return (
     <Box sx={{ height: '100%', overflow: 'auto', p: 2.5 }}>

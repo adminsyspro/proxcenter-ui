@@ -9,12 +9,13 @@ interface XTermShellProps {
   port: number
   ticket: string
   node: string
+  user?: string
   pvePort?: number
   apiToken?: string
   onDisconnect?: () => void
 }
 
-export default function XTermShell({ wsUrl, host, port, ticket, node, pvePort = 8006, apiToken, onDisconnect }: XTermShellProps) {
+export default function XTermShell({ wsUrl, host, port, ticket, node, user, pvePort = 8006, apiToken, onDisconnect }: XTermShellProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
@@ -112,8 +113,10 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, pvePort = 
       // Connexion WebSocket via le proxy ws-proxy.js (passé par nginx en production)
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       let proxyWsUrl = `${wsProtocol}//${window.location.host}/api/internal/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
-      
-      // Ajouter le token API si disponible
+
+      if (user) {
+        proxyWsUrl += `&user=${encodeURIComponent(user)}`
+      }
       if (apiToken) {
         proxyWsUrl += `&apiToken=${encodeURIComponent(apiToken)}`
       }

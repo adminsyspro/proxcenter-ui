@@ -46,96 +46,116 @@ wss.on('connection', async (clientWs, req) => {
 
   console.log(`[WS] New connection: ${url.pathname} -> ${pathname}`)
 
-  // Route: /ws/shell?host=...&port=...&ticket=...&node=...&apiToken=...
+  // Route: /ws/shell?host=...&port=...&ticket=...&node=...&user=...&apiToken=...
   if (pathParts[1] === 'ws' && pathParts[2] === 'shell') {
     const host = url.searchParams.get('host')
     const port = url.searchParams.get('port')
     const ticket = url.searchParams.get('ticket')
     const node = url.searchParams.get('node')
+    const user = url.searchParams.get('user')
     const pvePort = url.searchParams.get('pvePort') || '8006'
     const apiToken = url.searchParams.get('apiToken')
-    
+
     if (!host || !port || !ticket) {
       console.error('[WS] Missing shell parameters')
       clientWs.close(4000, 'Missing parameters: host, port, ticket required')
       return
     }
-    
-    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port})`)
-    
+
+    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user})`)
+
     try {
-      // Construire l'URL WebSocket vers Proxmox termproxy
       const pveWsUrl = `wss://${host}:${pvePort}/api2/json/nodes/${encodeURIComponent(node || 'localhost')}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
-      
+
       console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)
-      
-      // Headers pour l'authentification
+
       const wsHeaders = {
         'Origin': `https://${host}:${pvePort}`
       }
-      
-      // Ajouter le token API pour l'authentification
+
       if (apiToken) {
         wsHeaders['Authorization'] = `PVEAPIToken=${apiToken}`
         console.log('[WS] Using API token authentication')
       }
-      
-      // Se connecter à Proxmox
+
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
-        rejectUnauthorized: false, // Pour les certificats auto-signés
+        rejectUnauthorized: false,
         headers: wsHeaders
       })
-      
+
+      // Proxmox termproxy handshake: send "user:ticket\n", wait for "OK"
+      let authenticated = false
+
       pveWs.on('open', () => {
-        console.log(`[WS] Connected to Proxmox shell`)
+        console.log('[WS] Connected to Proxmox shell, sending auth handshake...')
+        // Proxmox termproxy expects "user:ticket\n" as the first message
+        const authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
+        pveWs.send(`${authUser}:${ticket}\n`)
       })
-      
+
       pveWs.on('message', (data, isBinary) => {
+        if (!authenticated) {
+          // First message should be "OK" from Proxmox
+          const text = Buffer.isBuffer(data) ? data.toString() :
+                       data instanceof ArrayBuffer ? Buffer.from(data).toString() : String(data)
+          if (text.startsWith('OK')) {
+            authenticated = true
+            console.log('[WS] Shell auth OK, session ready')
+            return
+          } else {
+            console.error('[WS] Shell auth failed:', text)
+            clientWs.close(4003, 'Proxmox auth failed')
+            pveWs.close()
+            return
+          }
+        }
+        // After auth: relay data to client
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(data, { binary: isBinary })
         }
       })
-      
+
       pveWs.on('close', (code, reason) => {
         console.log(`[WS] Proxmox shell closed: ${code} ${reason}`)
         if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.close(code, reason?.toString())
+          const safeCode = (code === 1000 || (code >= 3000 && code <= 4999)) ? code : 1000
+          clientWs.close(safeCode, reason?.toString() || '')
         }
       })
-      
+
       pveWs.on('error', (err) => {
         console.error('[WS] Proxmox shell error:', err.message)
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(4003, 'Proxmox connection error')
         }
       })
-      
-      // Relayer les messages du client vers Proxmox
+
+      // Relay client messages to Proxmox (only after auth)
       clientWs.on('message', (data, isBinary) => {
-        if (pveWs.readyState === WebSocket.OPEN) {
+        if (pveWs.readyState === WebSocket.OPEN && authenticated) {
           pveWs.send(data, { binary: isBinary })
         }
       })
-      
+
       clientWs.on('close', () => {
-        console.log(`[WS] Shell client disconnected`)
+        console.log('[WS] Shell client disconnected')
         if (pveWs.readyState === WebSocket.OPEN) {
           pveWs.close()
         }
       })
-      
+
       clientWs.on('error', (err) => {
         console.error('[WS] Shell client error:', err.message)
         if (pveWs.readyState === WebSocket.OPEN) {
           pveWs.close()
         }
       })
-      
+
     } catch (err) {
       console.error('[WS] Shell error:', err)
       clientWs.close(4004, 'Internal error')
     }
-    
+
     return
   }
   

@@ -10,6 +10,15 @@ try {
   const Database = require('better-sqlite3')
   const db = new Database(DB_PATH)
 
+  // Check if Connection table exists (fresh install: Prisma may not have run yet)
+  const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='Connection'").get()
+
+  if (!tableExists) {
+    console.log('  Connection table not yet created, skipping column migrations.')
+    db.close()
+    process.exit(0)
+  }
+
   // Get existing columns for Connection table
   const cols = new Set(db.pragma('table_info(Connection)').map(c => c.name))
 

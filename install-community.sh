@@ -200,7 +200,7 @@ start_services() {
         -v proxcenter_data:/app/data \
         -e DATABASE_URL="file:/app/data/proxcenter.db" \
         "$FRONTEND_IMAGE" \
-        sh -c "prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate" 2>/dev/null || true
+        sh -c "npx prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1" || true
 
     log_info "Starting ProxCenter..."
     docker compose up -d

@@ -189,8 +189,8 @@ start_services() {
     log_info "Initializing database..."
     docker volume create proxcenter_data 2>/dev/null || true
 
-    # Initialize data directory
-    docker run --rm --user root \
+    # Initialize data directory (bypass entrypoint to avoid starting servers)
+    docker run --rm --user root --entrypoint "" \
         -v proxcenter_data:/app/data \
         "$FRONTEND_IMAGE" \
         sh -c "mkdir -p /app/data && chown -R 1001:1001 /app/data"

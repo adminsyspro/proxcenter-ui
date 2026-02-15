@@ -4292,91 +4292,83 @@ return vm?.isCluster ?? false
           {/* Header title + tags (VM only) + ACTIONS TOP RIGHT */}
           {selection?.type === 'vm' ? (
 
-            /* Format VM style vSphere — 3 zones: back+icon | info lines | actions */
+            /* Format VM — single row: back | icon | name · meta · status | tags | actions */
             (() => {
               const { connId, node, type, vmid } = parseVmId(selection.id)
               const isLxc = data.vmType === 'lxc'
               const iconColor = isLxc ? theme.palette.secondary.main : theme.palette.primary.main
 
               return (
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                  {/* Zone gauche : back + grande icône */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  {/* Back */}
                   {onBack && (
                     <IconButton
                       onClick={onBack}
                       size="small"
                       sx={{
-                        mt: 0.5,
                         bgcolor: 'action.hover',
-                        '&:hover': { bgcolor: 'action.selected' }
+                        '&:hover': { bgcolor: 'action.selected' },
+                        flexShrink: 0,
                       }}
                     >
                       <i className="ri-arrow-left-line" style={{ fontSize: 18 }} />
                     </IconButton>
                   )}
+
+                  {/* Icône VM/LXC */}
                   <Box sx={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 1.5,
+                    width: 28,
+                    height: 28,
+                    borderRadius: 1,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     bgcolor: alpha(iconColor, 0.1),
                     flexShrink: 0,
-                    mt: 0.25,
                   }}>
                     <i
                       className={isLxc ? 'ri-instance-fill' : 'ri-computer-fill'}
-                      style={{ fontSize: 24, color: iconColor }}
+                      style={{ fontSize: 16, color: iconColor }}
                     />
                   </Box>
 
-                  {/* Zone centre : 3 lignes d'info */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    {/* L1 : Nom + StatusChip */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="h6" fontWeight={900} noWrap sx={{ minWidth: 0 }}>
-                        {data.title}
-                      </Typography>
-                      <StatusChip status={data.status} />
-                    </Box>
-
-                    {/* L2 : #VMID · VM · running · on Node */}
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-                      #{vmid} · {data.kindLabel}{vmState ? ` · ${vmState}` : ''} · on{' '}
-                      <Typography
-                        component="span"
-                        variant="body2"
-                        sx={{
-                          color: 'primary.main',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          '&:hover': { textDecoration: 'underline' }
-                        }}
-                        onClick={() => {
-                          onViewModeChange?.('hosts')
-                          onSelect?.({ type: 'node', id: `${connId}:${node}` })
-                        }}
-                      >
-                        {node}
-                      </Typography>
+                  {/* Nom + meta inline */}
+                  <Typography variant="subtitle1" fontWeight={900} noWrap sx={{ minWidth: 0, flexShrink: 1 }}>
+                    {data.title}
+                  </Typography>
+                  <StatusChip status={data.status} />
+                  <Typography variant="body2" noWrap sx={{ color: 'text.secondary', flexShrink: 0 }}>
+                    #{vmid} · {data.kindLabel}{vmState ? ` · ${vmState}` : ''} · on{' '}
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      sx={{
+                        color: 'primary.main',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        '&:hover': { textDecoration: 'underline' }
+                      }}
+                      onClick={() => {
+                        onViewModeChange?.('hosts')
+                        onSelect?.({ type: 'node', id: `${connId}:${node}` })
+                      }}
+                    >
+                      {node}
                     </Typography>
+                  </Typography>
 
-                    {/* L3 : Tags */}
-                    <Box sx={{ mt: 0.5 }}>
-                      <TagManager
-                        tags={localTags}
-                        connId={connId}
-                        node={node}
-                        type={type}
-                        vmid={vmid}
-                        onTagsChange={setLocalTags}
-                      />
-                    </Box>
-                  </Box>
+                  {/* Tags */}
+                  <TagManager
+                    tags={localTags}
+                    connId={connId}
+                    node={node}
+                    type={type}
+                    vmid={vmid}
+                    onTagsChange={setLocalTags}
+                  />
 
-                  {/* Zone droite : Actions */}
-                  <Box sx={{ ml: 'auto', flexShrink: 0, alignSelf: 'flex-start' }}>
+                  {/* Actions — poussées à droite */}
+                  <Box sx={{ ml: 'auto', flexShrink: 0 }}>
                     <VmActions
                       disabled={actionBusy || unlocking}
                       vmStatus={vmStatus}

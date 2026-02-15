@@ -96,11 +96,8 @@ wss.on('connection', async (clientWs, req) => {
       pveWs.on('open', () => {
         console.log('[WS] Connected to Proxmox shell, sending auth handshake...')
         // Proxmox termproxy expects "user:ticket\n" as the first message
-        // Strip "!tokenname" suffix — termproxy wants just the user (e.g. "proxcenter@pve")
-        let authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
-        if (authUser.includes('!')) {
-          authUser = authUser.split('!')[0]
-        }
+        // The ticket is bound to the full API token identity (user@realm!tokenname)
+        const authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
         pveWs.send(`${authUser}:${ticket}\n`)
       })
 

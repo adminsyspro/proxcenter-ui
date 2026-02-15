@@ -7,9 +7,12 @@ export const runtime = "nodejs"
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/vms/[vmid]/terminal?type=qemu|lxc
  *
- * Creates a terminal (xterm.js) session for a VM or LXC container.
- * Proxmox API: POST /nodes/{node}/qemu/{vmid}/termproxy
- *           or POST /nodes/{node}/lxc/{vmid}/termproxy
+ * Creates a terminal session for a VM or LXC container.
+ *
+ * Strategy: Use a NODE-level termproxy (which works reliably), then the
+ * ws-proxy auto-sends `pct enter {vmid}` (LXC) or `qm terminal {vmid}` (QEMU)
+ * to attach to the guest from the node shell.
+ * This bypasses the broken VM/LXC vncwebsocket handler in PVE.
  */
 export async function POST(
   req: Request,
@@ -47,36 +50,26 @@ export async function POST(
       return NextResponse.json({ error: "Could not determine host from connection" }, { status: 500 })
     }
 
-    // Resolve the actual IP of the target node.
-    // Proxmox does NOT proxy vncwebsocket cross-node — both termproxy and
-    // vncwebsocket must hit the SAME node where the VM/LXC runs.
+    // Resolve the target node IP (termproxy binds locally)
     let targetHost = host
     try {
       const clusterStatus = await pveFetch<any[]>(conn, '/cluster/status')
-      const nodes = clusterStatus?.filter((n: any) => n.type === 'node')
-      console.log(`[terminal/vm] Cluster nodes:`, nodes?.map((n: any) => `${n.name}=${n.ip}`).join(', '))
-      const targetNode = nodes?.find((n: any) => n.name === node)
+      const targetNode = clusterStatus?.find((n: any) => n.type === 'node' && n.name === node)
       if (targetNode?.ip) {
         targetHost = targetNode.ip
-        console.log(`[terminal/vm] Resolved ${node} -> ${targetHost}`)
-      } else {
-        console.log(`[terminal/vm] Node ${node} not found in cluster status, using connection host ${host}`)
       }
-    } catch (e: any) {
-      console.log(`[terminal/vm] cluster/status failed: ${e?.message}, using connection host ${host}`)
+    } catch {
+      // Fallback to connection host
     }
 
-    // Build a connection object pointing directly to the target node
-    // so that termproxy runs locally on that node (not proxied through another node)
     const targetConn = targetHost !== host
       ? { ...conn, baseUrl: `https://${targetHost}:${port}` }
       : conn
 
-    // POST /nodes/{node}/qemu/{vmid}/termproxy  or  /nodes/{node}/lxc/{vmid}/termproxy
-    console.log(`[terminal/vm] Calling termproxy on ${targetConn.baseUrl} for ${vmType}/${vmid}`)
+    // Use NODE-level termproxy (not VM-level — VM vncwebsocket is broken cross-node)
     const termproxy = await pveFetch<any>(
       targetConn,
-      `/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/termproxy`,
+      `/nodes/${encodeURIComponent(node)}/termproxy`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -87,30 +80,12 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
-    console.log(`[terminal/vm] termproxy OK: port=${termproxy.port}, user=${termproxy.user}, upid=${termproxy.upid}`)
+    // The auto-command to attach to the VM/LXC from the node shell
+    const autoCmd = vmType === 'lxc'
+      ? `pct enter ${vmid}\n`
+      : `qm terminal ${vmid}\n`
 
-    // Wait for the termproxy daemon to initialize (lxc-attach / qm terminal is slow)
-    // then verify the task is still running before returning to the client
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    try {
-      const taskStatus = await pveFetch<any>(
-        targetConn,
-        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(termproxy.upid)}/status`
-      )
-      console.log(`[terminal/vm] Task status: ${taskStatus?.status}, exit: ${taskStatus?.exitstatus || 'n/a'}`)
-      if (taskStatus?.status === 'stopped') {
-        const exitMsg = taskStatus?.exitstatus || 'unknown'
-        console.error(`[terminal/vm] termproxy daemon exited: ${exitMsg}`)
-        return NextResponse.json({
-          error: `Terminal proxy failed to start: ${exitMsg}`,
-        }, { status: 500 })
-      }
-    } catch (e: any) {
-      console.log(`[terminal/vm] Could not check task status: ${e?.message}`)
-    }
-
-    const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
+    const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
 
     return NextResponse.json({
       data: {
@@ -124,6 +99,7 @@ export async function POST(
         apiToken: conn.apiToken,
         vmType,
         vmid,
+        autoCmd,
       },
     })
   } catch (e: any) {

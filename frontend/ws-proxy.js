@@ -57,6 +57,7 @@ wss.on('connection', async (clientWs, req) => {
     const apiToken = url.searchParams.get('apiToken')
     const vmtype = url.searchParams.get('vmtype')  // 'qemu' or 'lxc' (optional, for VM/CT shell)
     const vmid = url.searchParams.get('vmid')      // VM/CT ID (optional)
+    const autoCmd = url.searchParams.get('autoCmd') // auto-command to send after auth (e.g. "pct enter 1107")
 
     if (!host || !port || !ticket) {
       console.error('[WS] Missing shell parameters')
@@ -67,12 +68,10 @@ wss.on('connection', async (clientWs, req) => {
     console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}${vmtype ? `, ${vmtype}/${vmid}` : ''})`)
 
     try {
-      // Build path: /nodes/{node}/vncwebsocket (node shell)
-      //          or /nodes/{node}/qemu/{vmid}/vncwebsocket (VM shell)
-      //          or /nodes/{node}/lxc/{vmid}/vncwebsocket (LXC shell)
-      const basePath = `/api2/json/nodes/${encodeURIComponent(node || 'localhost')}`
-      const vmPath = vmtype && vmid ? `/${vmtype}/${encodeURIComponent(vmid)}` : ''
-      const pveWsUrl = `wss://${host}:${pvePort}${basePath}${vmPath}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
+      // Always use node-level vncwebsocket (VM/LXC vncwebsocket is broken cross-node).
+      // For VMs/LXC, the API sends an autoCmd (e.g. "pct enter 1107") that gets
+      // executed after auth to attach to the guest from the node shell.
+      const pveWsUrl = `wss://${host}:${pvePort}/api2/json/nodes/${encodeURIComponent(node || 'localhost')}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
 
       console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)
 
@@ -106,25 +105,29 @@ wss.on('connection', async (clientWs, req) => {
       let authenticated = false
 
       pveWs.on('open', () => {
-        const elapsed = Date.now() - connectStart
-        console.log(`[WS] Connected to Proxmox shell in ${elapsed}ms, sending auth handshake...`)
-        // Proxmox termproxy expects "user:ticket\n" as the first message
-        // The ticket is bound to the full API token identity (user@realm!tokenname)
+        console.log('[WS] Connected to Proxmox shell, sending auth handshake...')
         const authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
-        console.log(`[WS] Auth user: ${authUser}, ticket length: ${ticket.length}`)
         pveWs.send(`${authUser}:${ticket}\n`)
       })
 
       pveWs.on('message', (data, isBinary) => {
-        const elapsed = Date.now() - connectStart
         if (!authenticated) {
-          // First message should be "OK" from Proxmox
           const text = Buffer.isBuffer(data) ? data.toString() :
                        data instanceof ArrayBuffer ? Buffer.from(data).toString() : String(data)
-          console.log(`[WS] First message from PVE (${elapsed}ms): "${text.slice(0, 100)}" (binary: ${isBinary})`)
           if (text.startsWith('OK')) {
             authenticated = true
             console.log('[WS] Shell auth OK, session ready')
+            // If there's an auto-command (VM/LXC attach), send it after a short delay
+            if (autoCmd) {
+              setTimeout(() => {
+                if (pveWs.readyState === WebSocket.OPEN) {
+                  // Proxmox termproxy format: 0:length:data
+                  const cmd = autoCmd + '\n'
+                  pveWs.send(`0:${cmd.length}:${cmd}`)
+                  console.log(`[WS] Sent auto-command: ${autoCmd.trim()}`)
+                }
+              }, 500)
+            }
             return
           } else {
             console.error('[WS] Shell auth failed:', text)
@@ -140,8 +143,7 @@ wss.on('connection', async (clientWs, req) => {
       })
 
       pveWs.on('close', (code, reason) => {
-        const elapsed = Date.now() - connectStart
-        console.log(`[WS] Proxmox shell closed: ${code} ${reason} (after ${elapsed}ms, authenticated: ${authenticated})`)
+        console.log(`[WS] Proxmox shell closed: ${code} ${reason}`)
         if (clientWs.readyState === WebSocket.OPEN) {
           const safeCode = (code === 1000 || (code >= 3000 && code <= 4999)) ? code : 1000
           clientWs.close(safeCode, reason?.toString() || '')
@@ -149,8 +151,7 @@ wss.on('connection', async (clientWs, req) => {
       })
 
       pveWs.on('error', (err) => {
-        const elapsed = Date.now() - connectStart
-        console.error(`[WS] Proxmox shell error (${elapsed}ms):`, err.message)
+        console.error('[WS] Proxmox shell error:', err.message)
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(4003, 'Proxmox connection error')
         }

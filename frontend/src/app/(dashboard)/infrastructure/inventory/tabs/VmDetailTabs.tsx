@@ -3277,6 +3277,7 @@ return (
                             apiToken={vmShellData.apiToken}
                             vmtype={vmShellData.vmType}
                             vmid={vmShellData.vmid}
+                            autoCmd={vmShellData.autoCmd}
                             onDisconnect={() => {
                               setVmShellData(null)
                             }}

@@ -57,7 +57,6 @@ wss.on('connection', async (clientWs, req) => {
     const apiToken = url.searchParams.get('apiToken')
     const vmtype = url.searchParams.get('vmtype')  // 'qemu' or 'lxc' (optional, for VM/CT shell)
     const vmid = url.searchParams.get('vmid')      // VM/CT ID (optional)
-    const autoCmd = url.searchParams.get('autoCmd') // auto-command to send after auth (e.g. "pct enter 1107")
 
     if (!host || !port || !ticket) {
       console.error('[WS] Missing shell parameters')
@@ -68,10 +67,12 @@ wss.on('connection', async (clientWs, req) => {
     console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}${vmtype ? `, ${vmtype}/${vmid}` : ''})`)
 
     try {
-      // Always use node-level vncwebsocket (VM/LXC vncwebsocket is broken cross-node).
-      // For VMs/LXC, the API sends an autoCmd (e.g. "pct enter 1107") that gets
-      // executed after auth to attach to the guest from the node shell.
-      const pveWsUrl = `wss://${host}:${pvePort}/api2/json/nodes/${encodeURIComponent(node || 'localhost')}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
+      // Build path: /nodes/{node}/vncwebsocket (node shell)
+      //          or /nodes/{node}/qemu/{vmid}/vncwebsocket (VM shell)
+      //          or /nodes/{node}/lxc/{vmid}/vncwebsocket (LXC shell)
+      const basePath = `/api2/json/nodes/${encodeURIComponent(node || 'localhost')}`
+      const vmPath = vmtype && vmid ? `/${vmtype}/${encodeURIComponent(vmid)}` : ''
+      const pveWsUrl = `wss://${host}:${pvePort}${basePath}${vmPath}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
 
       console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)
 
@@ -84,21 +85,9 @@ wss.on('connection', async (clientWs, req) => {
         console.log('[WS] Using API token authentication')
       }
 
-      const connectStart = Date.now()
-
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
         rejectUnauthorized: false,
         headers: wsHeaders
-      })
-
-      // Catch HTTP-level rejection (before WebSocket upgrade)
-      pveWs.on('unexpected-response', (req, res) => {
-        let body = ''
-        res.on('data', chunk => body += chunk)
-        res.on('end', () => {
-          console.error(`[WS] PVE rejected WebSocket upgrade: HTTP ${res.statusCode} - ${body.slice(0, 200)}`)
-          clientWs.close(4003, `PVE HTTP ${res.statusCode}`)
-        })
       })
 
       // Proxmox termproxy handshake: send "user:ticket\n", wait for "OK"
@@ -106,28 +95,20 @@ wss.on('connection', async (clientWs, req) => {
 
       pveWs.on('open', () => {
         console.log('[WS] Connected to Proxmox shell, sending auth handshake...')
+        // Proxmox termproxy expects "user:ticket\n" as the first message
+        // The ticket is bound to the full API token identity (user@realm!tokenname)
         const authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
         pveWs.send(`${authUser}:${ticket}\n`)
       })
 
       pveWs.on('message', (data, isBinary) => {
         if (!authenticated) {
+          // First message should be "OK" from Proxmox
           const text = Buffer.isBuffer(data) ? data.toString() :
                        data instanceof ArrayBuffer ? Buffer.from(data).toString() : String(data)
           if (text.startsWith('OK')) {
             authenticated = true
             console.log('[WS] Shell auth OK, session ready')
-            // If there's an auto-command (VM/LXC attach), send it after a short delay
-            if (autoCmd) {
-              setTimeout(() => {
-                if (pveWs.readyState === WebSocket.OPEN) {
-                  // Proxmox termproxy format: 0:length:data
-                  const cmd = autoCmd + '\n'
-                  pveWs.send(`0:${cmd.length}:${cmd}`)
-                  console.log(`[WS] Sent auto-command: ${autoCmd.trim()}`)
-                }
-              }, 500)
-            }
             return
           } else {
             console.error('[WS] Shell auth failed:', text)

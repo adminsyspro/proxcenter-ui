@@ -63,7 +63,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
-import { lighten } from '@mui/material/styles'
+import { lighten, alpha } from '@mui/material/styles'
 // RemixIcon replacements for @mui/icons-material
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
@@ -4292,79 +4292,61 @@ return vm?.isCluster ?? false
           {/* Header title + tags (VM only) + ACTIONS TOP RIGHT */}
           {selection?.type === 'vm' ? (
 
-            /* Format VM: #102 VM OK AGENCE State: running on : Proxmox-3AZ-1-A */
+            /* Format VM style vSphere — 3 zones: back+icon | info lines | actions */
             (() => {
               const { connId, node, type, vmid } = parseVmId(selection.id)
+              const isLxc = data.vmType === 'lxc'
+              const iconColor = isLxc ? theme.palette.secondary.main : theme.palette.primary.main
 
-              const stateColor = vmState?.toLowerCase().includes('running') ? '#2e7d32' : 
-                               vmState?.toLowerCase().includes('stopped') ? '#6b7280' : undefined
-              
               return (
-                <>
-                  <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Bouton retour */}
-                    {onBack && (
-                      <IconButton 
-                        onClick={onBack}
-                        size="small"
-                        sx={{ 
-                          mr: 0.5,
-                          bgcolor: 'action.hover',
-                          '&:hover': { bgcolor: 'action.selected' }
-                        }}
-                      >
-                        <i className="ri-arrow-left-line" style={{ fontSize: 18 }} />
-                      </IconButton>
-                    )}
-                    
-                    {/* #VMID */}
-                    <Typography variant="body2" sx={{ fontWeight: 700, opacity: 0.6 }}>
-                      #{vmid}
-                    </Typography>
-                    
-                    {/* Type (VM/LXC) */}
-                    <Chip 
-                      size="small" 
-                      label={data.kindLabel} 
-                      variant="filled"
-                      icon={
-                        data.vmType === 'lxc' ? (
-                          <i className="ri-instance-fill" style={{ fontSize: 14, marginLeft: 8 }} />
-                        ) : (
-                          <i className="ri-computer-fill" style={{ fontSize: 14, marginLeft: 8 }} />
-                        )
-                      }
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                  {/* Zone gauche : back + grande icône */}
+                  {onBack && (
+                    <IconButton
+                      onClick={onBack}
+                      size="small"
+                      sx={{
+                        mt: 0.5,
+                        bgcolor: 'action.hover',
+                        '&:hover': { bgcolor: 'action.selected' }
+                      }}
+                    >
+                      <i className="ri-arrow-left-line" style={{ fontSize: 18 }} />
+                    </IconButton>
+                  )}
+                  <Box sx={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: alpha(iconColor, 0.1),
+                    flexShrink: 0,
+                    mt: 0.25,
+                  }}>
+                    <i
+                      className={isLxc ? 'ri-instance-fill' : 'ri-computer-fill'}
+                      style={{ fontSize: 24, color: iconColor }}
                     />
-                    
-                    {/* Status OK/WARN/etc */}
-                    <StatusChip status={data.status} />
+                  </Box>
 
-                    {/* Nom de la VM */}
-                    <Typography variant="h6" fontWeight={900}>
-                      {data.title}
-                    </Typography>
+                  {/* Zone centre : 3 lignes d'info */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* L1 : Nom + StatusChip */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="h6" fontWeight={900} noWrap sx={{ minWidth: 0 }}>
+                        {data.title}
+                      </Typography>
+                      <StatusChip status={data.status} />
+                    </Box>
 
-                    {/* State: running */}
-                    {vmState && (
-                      <Chip
-                        size="small"
-                        label={`State: ${vmState}`}
-                        variant="outlined"
-                        sx={{
-                          height: 24,
-                          borderColor: stateColor || 'divider',
-                          color: stateColor || 'text.secondary',
-                          bgcolor: stateColor ? `${stateColor}14` : 'transparent',
-                          fontWeight: 600,
-                        }}
-                      />
-                    )}
-
-                    {/* on : Node-Name (cliquable) */}
-                    <Typography variant="body2" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      on :
+                    {/* L2 : #VMID · VM · running · on Node */}
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+                      #{vmid} · {data.kindLabel}{vmState ? ` · ${vmState}` : ''} · on{' '}
                       <Typography
                         component="span"
+                        variant="body2"
                         sx={{
                           color: 'primary.main',
                           cursor: 'pointer',
@@ -4380,17 +4362,21 @@ return vm?.isCluster ?? false
                       </Typography>
                     </Typography>
 
-                    {/* Tags */}
-                    <TagManager
-                      tags={localTags}
-                      connId={connId}
-                      node={node}
-                      type={type}
-                      vmid={vmid}
-                      onTagsChange={setLocalTags}
-                    />
+                    {/* L3 : Tags */}
+                    <Box sx={{ mt: 0.5 }}>
+                      <TagManager
+                        tags={localTags}
+                        connId={connId}
+                        node={node}
+                        type={type}
+                        vmid={vmid}
+                        onTagsChange={setLocalTags}
+                      />
+                    </Box>
+                  </Box>
 
-                    {/* Actions en haut à droite */}
+                  {/* Zone droite : Actions */}
+                  <Box sx={{ ml: 'auto', flexShrink: 0, alignSelf: 'flex-start' }}>
                     <VmActions
                       disabled={actionBusy || unlocking}
                       vmStatus={vmStatus}
@@ -4408,7 +4394,7 @@ return vm?.isCluster ?? false
                       onUnlock={onUnlock}
                     />
                   </Box>
-                </>
+                </Box>
               )
             })()
           ) : (

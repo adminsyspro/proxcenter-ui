@@ -195,12 +195,7 @@ start_services() {
         "$FRONTEND_IMAGE" \
         sh -c "mkdir -p /app/data && chown -R 1001:1001 /app/data"
 
-    # Run migrations
-    docker run --rm \
-        -v proxcenter_data:/app/data \
-        -e DATABASE_URL="file:/app/data/proxcenter.db" \
-        "$FRONTEND_IMAGE" \
-        sh -c "npx prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1" || true
+    # Schema init + migrations are handled by docker-entrypoint.sh on startup
 
     log_info "Starting ProxCenter..."
     docker compose up -d

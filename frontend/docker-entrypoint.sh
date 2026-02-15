@@ -19,7 +19,7 @@ fi
 
 # Initialize Prisma schema (creates tables if missing, idempotent)
 echo "[entrypoint] Initializing database schema..."
-if npx prisma db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1; then
+if node ./node_modules/prisma/build/index.js db push --schema /app/prisma/schema.migrate.prisma --accept-data-loss --skip-generate 2>&1; then
   echo "[entrypoint] Schema OK"
 else
   echo "[entrypoint] WARN: prisma db push failed, trying direct init..."

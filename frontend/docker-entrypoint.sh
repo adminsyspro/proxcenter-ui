@@ -21,5 +21,5 @@ fi
 echo "[entrypoint] Initializing database..."
 node db-migrate.js
 
-echo "[entrypoint] Starting servers..."
-exec concurrently --names "next,ws" --prefix "[{name}]" "node server.js" "node ws-proxy.js"
+echo "[entrypoint] Starting..."
+exec "$@"

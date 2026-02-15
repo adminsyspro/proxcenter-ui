@@ -72,8 +72,8 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
               sx={{
                 height: 14,
                 borderRadius: 0,
-                bgcolor: alpha('#ef4444', 0.15),
-                '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 0 }
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: protectionRate > 0 ? `${(100 / protectionRate) * 100}% 100%` : '100% 100%' }
               }}
             />
             <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{Math.round(protectionRate)}%</Typography>
@@ -88,8 +88,8 @@ function ZeroTrustCoverageWidget({ data, loading, config }) {
               sx={{
                 height: 14,
                 borderRadius: 0,
-                bgcolor: alpha('#888', 0.15),
-                '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 0 }
+                bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: sgRate > 0 ? `${(100 / sgRate) * 100}% 100%` : '100% 100%' }
               }}
             />
             <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{Math.round(sgRate)}%</Typography>

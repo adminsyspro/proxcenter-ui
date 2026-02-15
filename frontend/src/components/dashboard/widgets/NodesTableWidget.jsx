@@ -58,8 +58,8 @@ function NodesTableWidget({ data, loading }) {
                     variant='determinate'
                     value={node.cpuPct || 0}
                     sx={{
-                      height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                      '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (node.cpuPct || 0) > 90 ? '#f44336' : 'primary.main' }
+                      height: 14, borderRadius: 0, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                      '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: (node.cpuPct || 0) > 0 ? `${(100 / (node.cpuPct || 1)) * 100}% 100%` : '100% 100%' }
                     }}
                   />
                   <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{node.cpuPct || 0}%</Typography>
@@ -71,8 +71,8 @@ function NodesTableWidget({ data, loading }) {
                     variant='determinate'
                     value={node.memPct || 0}
                     sx={{
-                      height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                      '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (node.memPct || 0) > 90 ? '#f44336' : 'primary.main' }
+                      height: 14, borderRadius: 0, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                      '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: (node.memPct || 0) > 0 ? `${(100 / (node.memPct || 1)) * 100}% 100%` : '100% 100%' }
                     }}
                   />
                   <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{node.memPct || 0}%</Typography>

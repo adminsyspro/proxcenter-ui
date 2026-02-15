@@ -28,8 +28,8 @@ function PbsOverviewWidget({ data, loading }) {
                 variant='determinate'
                 value={pbs.usagePct || 0}
                 sx={{
-                  height: 14, borderRadius: 0, bgcolor: 'action.hover',
-                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: (pbs.usagePct || 0) > 90 ? '#f44336' : 'primary.main' }
+                  height: 14, borderRadius: 0, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: (pbs.usagePct || 0) > 0 ? `${(100 / (pbs.usagePct || 1)) * 100}% 100%` : '100% 100%' }
                 }}
               />
               <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{pbs.usagePct || 0}%</Typography>

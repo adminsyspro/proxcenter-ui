@@ -38,8 +38,8 @@ function TopConsumersWidget({ data, loading }) {
                 variant='determinate'
                 value={Math.min(vm.value, 100)}
                 sx={{
-                  height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.08)',
-                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: vm.value > 90 ? 'error.main' : primaryColor }
+                  height: 14, borderRadius: 0, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: Math.min(vm.value, 100) > 0 ? `${(100 / Math.min(vm.value, 100)) * 100}% 100%` : '100% 100%' }
                 }}
               />
               <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{vm.value}%</Typography>
@@ -64,8 +64,8 @@ function TopConsumersWidget({ data, loading }) {
                 variant='determinate'
                 value={Math.min(vm.value, 100)}
                 sx={{
-                  height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.08)',
-                  '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: vm.value > 90 ? 'error.main' : primaryColor }
+                  height: 14, borderRadius: 0, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                  '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: Math.min(vm.value, 100) > 0 ? `${(100 / Math.min(vm.value, 100)) * 100}% 100%` : '100% 100%' }
                 }}
               />
               <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{vm.value}%</Typography>

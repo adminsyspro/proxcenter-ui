@@ -44,12 +44,24 @@ export async function POST(
       return NextResponse.json({ error: "Could not determine host from connection" }, { status: 500 })
     }
 
+    // Resolve the actual IP of the target node (termproxy binds locally on that node)
+    let targetHost = host
+    try {
+      const clusterStatus = await pveFetch<any[]>(conn, '/cluster/status')
+      const targetNode = clusterStatus?.find((n: any) => n.type === 'node' && n.name === node)
+      if (targetNode?.ip) {
+        targetHost = targetNode.ip
+      }
+    } catch {
+      // Fallback to connection host if cluster status fails (single-node setup)
+    }
+
     // Créer une session terminal via l'API Proxmox
     // POST /nodes/{node}/termproxy
     const termproxy = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/termproxy`,
-      { 
+      {
         method: "POST",
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       }
@@ -60,20 +72,17 @@ export async function POST(
     }
 
     // Construire l'URL WebSocket pour le terminal
-    // Format: wss://host:port/api2/json/nodes/{node}/vncwebsocket?port={port}&vncticket={ticket}
-    const wsUrl = `wss://${host}:${port}/api2/json/nodes/${encodeURIComponent(node)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
+    const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: {
         ticket: termproxy.ticket,
         port: termproxy.port,
         user: termproxy.user,
         upid: termproxy.upid,
         wsUrl,
-        // Informations de connexion pour le client
-        host,
+        host: targetHost,
         nodePort: port,
-        // Token API pour l'authentification WebSocket
         apiToken: conn.apiToken,
       }
     })

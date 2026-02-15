@@ -87,7 +87,28 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
-    console.log(`[terminal/vm] termproxy OK: port=${termproxy.port}, user=${termproxy.user}`)
+    console.log(`[terminal/vm] termproxy OK: port=${termproxy.port}, user=${termproxy.user}, upid=${termproxy.upid}`)
+
+    // Wait for the termproxy daemon to initialize (lxc-attach / qm terminal is slow)
+    // then verify the task is still running before returning to the client
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    try {
+      const taskStatus = await pveFetch<any>(
+        targetConn,
+        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(termproxy.upid)}/status`
+      )
+      console.log(`[terminal/vm] Task status: ${taskStatus?.status}, exit: ${taskStatus?.exitstatus || 'n/a'}`)
+      if (taskStatus?.status === 'stopped') {
+        const exitMsg = taskStatus?.exitstatus || 'unknown'
+        console.error(`[terminal/vm] termproxy daemon exited: ${exitMsg}`)
+        return NextResponse.json({
+          error: `Terminal proxy failed to start: ${exitMsg}`,
+        }, { status: 500 })
+      }
+    } catch (e: any) {
+      console.log(`[terminal/vm] Could not check task status: ${e?.message}`)
+    }
 
     const wsUrl = `wss://${targetHost}:${port}/api2/json/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
 

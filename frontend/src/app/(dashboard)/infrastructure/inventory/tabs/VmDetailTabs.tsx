@@ -67,6 +67,10 @@ import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 export default function VmDetailTabs(props: any) {
   const t = useTranslations()
 
+  // Shell tab state (xterm.js terminal for VM/LXC)
+  const [vmShellData, setVmShellData] = React.useState<any>(null)
+  const [vmShellLoading, setVmShellLoading] = React.useState(false)
+
   const {
     addCephReplicationDialogOpen,
     addReplicationDialogOpen,
@@ -235,6 +239,15 @@ export default function VmDetailTabs(props: any) {
     vmNotes,
   } = props
 
+  // Shell tab index (dynamic because HA tab is conditional)
+  const shellTabIndex = selectedVmIsCluster ? 10 : 9
+
+  // Reset shell state when VM selection changes
+  React.useEffect(() => {
+    setVmShellData(null)
+    setVmShellLoading(false)
+  }, [selection?.id])
+
   return (
     <>
           {/* Onglets pour VMs: Résumé / Matériel / Options / Historique / Sauvegardes / Snapshots / Notes / HA */}
@@ -335,6 +348,14 @@ export default function VmDetailTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
                       Firewall
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
+                      Shell
                     </Box>
                   }
                 />
@@ -3183,7 +3204,7 @@ return (
                 </Box>
               )}
 
-              {/* ==================== ONGLET FIREWALL (8 si cluster, 7 sinon) ==================== */}
+              {/* ==================== ONGLET FIREWALL (9 si cluster, 8 sinon) ==================== */}
               {((selectedVmIsCluster && detailTab === 9) || (!selectedVmIsCluster && detailTab === 8)) && selection?.type === 'vm' && (
                 <VmFirewallTab
                   connectionId={parseVmId(selection.id).connId}
@@ -3192,6 +3213,79 @@ return (
                   vmid={parseInt(parseVmId(selection.id).vmid)}
                   vmName={data.name}
                 />
+              )}
+
+              {/* ==================== ONGLET SHELL (xterm.js) ==================== */}
+              {detailTab === shellTabIndex && selection?.type === 'vm' && (
+                <Box sx={{ height: 480, display: 'flex', flexDirection: 'column' }}>
+                  {!vmShellData ? (
+                    <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e', borderRadius: 1 }}>
+                      <Box sx={{ textAlign: 'center' }}>
+                        <i className="ri-terminal-box-line" style={{ fontSize: 64, color: '#444' }} />
+                        <Typography sx={{ mt: 2, color: '#888' }}>
+                          {data.vmType === 'lxc' ? 'Container Shell' : 'VM Terminal'}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 1, mb: 3 }}>
+                          {data.vmType === 'lxc'
+                            ? 'Connect to the container command line'
+                            : 'Connect to the VM serial terminal (requires qemu-guest-agent or serial console)'}
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          disabled={vmShellLoading}
+                          startIcon={vmShellLoading ? <CircularProgress size={16} /> : <i className="ri-terminal-box-line" />}
+                          onClick={async () => {
+                            setVmShellLoading(true)
+                            const { connId, node, vmid } = parseVmId(selection.id)
+                            const vmType = data.vmType || 'qemu'
+                            try {
+                              const res = await fetch(
+                                `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/vms/${encodeURIComponent(vmid)}/terminal?type=${vmType}`,
+                                { method: 'POST' }
+                              )
+                              if (res.ok) {
+                                const json = await res.json()
+                                setVmShellData({ ...json.data, node })
+                              } else {
+                                const err = await res.json().catch(() => ({}))
+                                alert(err.error || 'Failed to create terminal session')
+                              }
+                            } catch (e: any) {
+                              alert(e.message || 'Failed to create terminal session')
+                            } finally {
+                              setVmShellLoading(false)
+                            }
+                          }}
+                        >
+                          {vmShellLoading ? 'Connecting...' : 'Connect to Shell'}
+                        </Button>
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      {(() => {
+                        const XTermShell = require('@/components/xterm/XTermShell').default
+                        return (
+                          <XTermShell
+                            wsUrl={vmShellData.wsUrl}
+                            host={vmShellData.host}
+                            port={vmShellData.port}
+                            ticket={vmShellData.ticket}
+                            node={vmShellData.node}
+                            user={vmShellData.user}
+                            pvePort={vmShellData.nodePort}
+                            apiToken={vmShellData.apiToken}
+                            vmtype={vmShellData.vmType}
+                            vmid={vmShellData.vmid}
+                            onDisconnect={() => {
+                              setVmShellData(null)
+                            }}
+                          />
+                        )
+                      })()}
+                    </Box>
+                  )}
+                </Box>
               )}
 
             </>

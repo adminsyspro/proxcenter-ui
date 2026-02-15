@@ -12,10 +12,12 @@ interface XTermShellProps {
   user?: string
   pvePort?: number
   apiToken?: string
+  vmtype?: string  // 'qemu' | 'lxc' for VM/CT shell
+  vmid?: string    // VM/CT ID
   onDisconnect?: () => void
 }
 
-export default function XTermShell({ wsUrl, host, port, ticket, node, user, pvePort = 8006, apiToken, onDisconnect }: XTermShellProps) {
+export default function XTermShell({ wsUrl, host, port, ticket, node, user, pvePort = 8006, apiToken, vmtype, vmid, onDisconnect }: XTermShellProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
@@ -120,6 +122,9 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       if (apiToken) {
         proxyWsUrl += `&apiToken=${encodeURIComponent(apiToken)}`
       }
+      if (vmtype && vmid) {
+        proxyWsUrl += `&vmtype=${encodeURIComponent(vmtype)}&vmid=${encodeURIComponent(vmid)}`
+      }
       
       console.log('[XTerm] Connecting to proxy:', proxyWsUrl.replace(/ticket=[^&]+/, 'ticket=***').replace(/apiToken=[^&]+/, 'apiToken=***'))
       
@@ -177,7 +182,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       setStatus('error')
       setErrorMsg(err.message || 'Failed to initialize terminal')
     }
-  }, [host, port, ticket, node, pvePort, apiToken])
+  }, [host, port, ticket, node, user, pvePort, apiToken, vmtype, vmid])
 
   // Connexion initiale
   useEffect(() => {

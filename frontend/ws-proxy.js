@@ -46,7 +46,7 @@ wss.on('connection', async (clientWs, req) => {
 
   console.log(`[WS] New connection: ${url.pathname} -> ${pathname}`)
 
-  // Route: /ws/shell?host=...&port=...&ticket=...&node=...&user=...&apiToken=...
+  // Route: /ws/shell?host=...&port=...&ticket=...&node=...&user=...&apiToken=...&vmtype=...&vmid=...
   if (pathParts[1] === 'ws' && pathParts[2] === 'shell') {
     const host = url.searchParams.get('host')
     const port = url.searchParams.get('port')
@@ -55,6 +55,8 @@ wss.on('connection', async (clientWs, req) => {
     const user = url.searchParams.get('user')
     const pvePort = url.searchParams.get('pvePort') || '8006'
     const apiToken = url.searchParams.get('apiToken')
+    const vmtype = url.searchParams.get('vmtype')  // 'qemu' or 'lxc' (optional, for VM/CT shell)
+    const vmid = url.searchParams.get('vmid')      // VM/CT ID (optional)
 
     if (!host || !port || !ticket) {
       console.error('[WS] Missing shell parameters')
@@ -62,10 +64,15 @@ wss.on('connection', async (clientWs, req) => {
       return
     }
 
-    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user})`)
+    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}${vmtype ? `, ${vmtype}/${vmid}` : ''})`)
 
     try {
-      const pveWsUrl = `wss://${host}:${pvePort}/api2/json/nodes/${encodeURIComponent(node || 'localhost')}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
+      // Build path: /nodes/{node}/vncwebsocket (node shell)
+      //          or /nodes/{node}/qemu/{vmid}/vncwebsocket (VM shell)
+      //          or /nodes/{node}/lxc/{vmid}/vncwebsocket (LXC shell)
+      const basePath = `/api2/json/nodes/${encodeURIComponent(node || 'localhost')}`
+      const vmPath = vmtype && vmid ? `/${vmtype}/${encodeURIComponent(vmid)}` : ''
+      const pveWsUrl = `wss://${host}:${pvePort}${basePath}${vmPath}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
 
       console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)
 

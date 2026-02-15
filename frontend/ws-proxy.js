@@ -85,27 +85,50 @@ wss.on('connection', async (clientWs, req) => {
         console.log('[WS] Using API token authentication')
       }
 
+      // For VM/LXC, add a small delay to let the termproxy daemon start
+      // (termproxy for containers needs to lxc-attach which takes longer)
+      if (vmtype && vmid) {
+        console.log('[WS] VM/LXC mode: waiting 1s for termproxy daemon to start...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+
+      const connectStart = Date.now()
+
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
         rejectUnauthorized: false,
         headers: wsHeaders
+      })
+
+      // Catch HTTP-level rejection (before WebSocket upgrade)
+      pveWs.on('unexpected-response', (req, res) => {
+        let body = ''
+        res.on('data', chunk => body += chunk)
+        res.on('end', () => {
+          console.error(`[WS] PVE rejected WebSocket upgrade: HTTP ${res.statusCode} - ${body.slice(0, 200)}`)
+          clientWs.close(4003, `PVE HTTP ${res.statusCode}`)
+        })
       })
 
       // Proxmox termproxy handshake: send "user:ticket\n", wait for "OK"
       let authenticated = false
 
       pveWs.on('open', () => {
-        console.log('[WS] Connected to Proxmox shell, sending auth handshake...')
+        const elapsed = Date.now() - connectStart
+        console.log(`[WS] Connected to Proxmox shell in ${elapsed}ms, sending auth handshake...`)
         // Proxmox termproxy expects "user:ticket\n" as the first message
         // The ticket is bound to the full API token identity (user@realm!tokenname)
         const authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
+        console.log(`[WS] Auth user: ${authUser}, ticket length: ${ticket.length}`)
         pveWs.send(`${authUser}:${ticket}\n`)
       })
 
       pveWs.on('message', (data, isBinary) => {
+        const elapsed = Date.now() - connectStart
         if (!authenticated) {
           // First message should be "OK" from Proxmox
           const text = Buffer.isBuffer(data) ? data.toString() :
                        data instanceof ArrayBuffer ? Buffer.from(data).toString() : String(data)
+          console.log(`[WS] First message from PVE (${elapsed}ms): "${text.slice(0, 100)}" (binary: ${isBinary})`)
           if (text.startsWith('OK')) {
             authenticated = true
             console.log('[WS] Shell auth OK, session ready')
@@ -124,7 +147,8 @@ wss.on('connection', async (clientWs, req) => {
       })
 
       pveWs.on('close', (code, reason) => {
-        console.log(`[WS] Proxmox shell closed: ${code} ${reason}`)
+        const elapsed = Date.now() - connectStart
+        console.log(`[WS] Proxmox shell closed: ${code} ${reason} (after ${elapsed}ms, authenticated: ${authenticated})`)
         if (clientWs.readyState === WebSocket.OPEN) {
           const safeCode = (code === 1000 || (code >= 3000 && code <= 4999)) ? code : 1000
           clientWs.close(safeCode, reason?.toString() || '')
@@ -132,7 +156,8 @@ wss.on('connection', async (clientWs, req) => {
       })
 
       pveWs.on('error', (err) => {
-        console.error('[WS] Proxmox shell error:', err.message)
+        const elapsed = Date.now() - connectStart
+        console.error(`[WS] Proxmox shell error (${elapsed}ms):`, err.message)
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(4003, 'Proxmox connection error')
         }

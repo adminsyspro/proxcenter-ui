@@ -47,10 +47,9 @@ function toTrendPoints(rrd: any[], timeframe: string) {
   return tail.map((p) => {
     const d = new Date(p.time * 1000)
 
+    // PVE node rrddata: cpu is already a 0-1 ratio (0.15 = 15% of all cores)
     const cpuRaw = Number(p.cpu ?? 0)
-    const maxCpu = Number(p.maxcpu ?? p.cpus ?? p.nproc ?? 1)
-    const cpuPctFloat = maxCpu > 0 ? clampPct((cpuRaw / maxCpu) * 100) : 0
-    const cpuPct = Math.round(cpuPctFloat * 10) / 10
+    const cpuPct = Math.round(clampPct(cpuRaw * 100) * 10) / 10
 
     const memUsed = Number(p.mem ?? p.memused ?? 0)
     const memTotal = Number(p.maxmem ?? p.memtotal ?? 0)

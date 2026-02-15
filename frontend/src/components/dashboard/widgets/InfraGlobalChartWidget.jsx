@@ -38,7 +38,7 @@ const NODE_COLORS = [
 function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
   const t = useTranslations()
   const theme = useTheme()
-  const [timeframe, setTimeframe] = useState('day')
+  const [timeframe, setTimeframe] = useState('week')
   const [metric, setMetric] = useState('ram')
   const [trendsData, setTrendsData] = useState(null)
   const [nodeNames, setNodeNames] = useState([])

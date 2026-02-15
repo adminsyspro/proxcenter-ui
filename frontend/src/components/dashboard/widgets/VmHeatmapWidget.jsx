@@ -198,7 +198,7 @@ function VmHeatmapWidget({ data, loading: dashboardLoading }) {
   const t = useTranslations()
   const theme = useTheme()
   const router = useRouter()
-  const [metric, setMetric] = useState('cpu')
+  const [metric, setMetric] = useState('ram')
 
   // Combine VMs + LXC, compute metrics
   const guests = useMemo(() => {

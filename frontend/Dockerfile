@@ -103,12 +103,13 @@ RUN npm install -g concurrently
 # Switch to non-root user
 USER nextjs
 
-# Expose port (unified gateway)
+# Expose ports
 EXPOSE 3000
+EXPOSE 3001
 
 # Environment variables (can be overridden)
 ENV PORT=3000
-ENV NEXT_PORT=3100
+ENV WS_PORT=3001
 ENV HOSTNAME="0.0.0.0"
 ENV DATABASE_URL="file:/app/data/proxcenter.db"
 

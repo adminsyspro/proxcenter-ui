@@ -4755,14 +4755,15 @@ return vm?.isCluster ?? false
                           </Box>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flex: 1, height: 14, bgcolor: 'divider', borderRadius: 0, overflow: 'hidden' }}>
-                            <Box 
-                              sx={{ 
-                                width: `${ds.usagePercent || 0}%`, 
-                                height: '100%', 
-                                bgcolor: (ds.usagePercent || 0) > 90 ? 'error.main' : (ds.usagePercent || 0) > 70 ? 'warning.main' : 'success.main',
+                          <Box sx={{ flex: 1, height: 14, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)', borderRadius: 0, overflow: 'hidden' }}>
+                            <Box
+                              sx={{
+                                width: `${ds.usagePercent || 0}%`,
+                                height: '100%',
+                                background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                                backgroundSize: (ds.usagePercent || 0) > 0 ? `${(100 / (ds.usagePercent || 1)) * 100}% 100%` : '100% 100%',
                                 transition: 'width 0.3s ease'
-                              }} 
+                              }}
                             />
                           </Box>
                           <Typography variant="caption" sx={{ opacity: 0.6, minWidth: 50 }}>
@@ -5023,17 +5024,18 @@ return vm?.isCluster ?? false
                         </Typography>
                         
                         {/* Progress bar large style Proxmox */}
-                        <Box sx={{ position: 'relative', height: 40, bgcolor: 'divider', borderRadius: 0, overflow: 'hidden', mb: 2 }}>
-                          <Box 
-                            sx={{ 
+                        <Box sx={{ position: 'relative', height: 40, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)', borderRadius: 0, overflow: 'hidden', mb: 2 }}>
+                          <Box
+                            sx={{
                               position: 'absolute',
                               left: 0,
                               top: 0,
                               bottom: 0,
-                              width: `${data.datastoreInfo.usagePercent || 0}%`, 
-                              bgcolor: (data.datastoreInfo.usagePercent || 0) > 90 ? 'error.main' : 'primary.main',
+                              width: `${data.datastoreInfo.usagePercent || 0}%`,
+                              background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                              backgroundSize: (data.datastoreInfo.usagePercent || 0) > 0 ? `${(100 / (data.datastoreInfo.usagePercent || 1)) * 100}% 100%` : '100% 100%',
                               transition: 'width 0.5s ease'
-                            }} 
+                            }}
                           />
                           <Box sx={{ 
                             position: 'absolute', 

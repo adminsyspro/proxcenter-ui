@@ -875,8 +875,17 @@ export default function NodeTabs(props: any) {
                                                   <LinearProgress
                                                     variant="determinate"
                                                     value={100 - (disk.wearout || 0)}
-                                                    sx={{ width: 50, height: 14, borderRadius: 0, '& .MuiLinearProgress-bar': { borderRadius: 0 } }}
-                                                    color={disk.wearout > 20 ? 'success' : disk.wearout > 5 ? 'warning' : 'error'}
+                                                    sx={{
+                                                      width: 50,
+                                                      height: 14,
+                                                      borderRadius: 0,
+                                                      bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                                                      '& .MuiLinearProgress-bar': {
+                                                        borderRadius: 0,
+                                                        background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                                                        backgroundSize: (100 - (disk.wearout || 0)) > 0 ? `${(100 / (100 - (disk.wearout || 0))) * 100}% 100%` : '100% 100%',
+                                                      }
+                                                    }}
                                                   />
                                                   <Typography variant="caption">{disk.wearout}%</Typography>
                                                 </Box>

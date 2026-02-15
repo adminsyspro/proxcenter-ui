@@ -121,5 +121,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder --chown=nextjs:nodejs /app/db-migrate.js ./db-migrate.js
 
-# Start: migrate DB then launch servers
+# Start: entrypoint inits DB, CMD starts servers
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["concurrently", "--names", "next,ws", "--prefix", "[{name}]", "node server.js", "node ws-proxy.js"]

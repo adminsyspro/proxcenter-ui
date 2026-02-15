@@ -39,7 +39,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
   const t = useTranslations()
   const theme = useTheme()
   const [timeframe, setTimeframe] = useState('day')
-  const [metric, setMetric] = useState('cpu')
+  const [metric, setMetric] = useState('ram')
   const [trendsData, setTrendsData] = useState(null)
   const [nodeNames, setNodeNames] = useState([])
   const [loading, setLoading] = useState(false)
@@ -92,9 +92,10 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
 
             if (!Array.isArray(nodePoints)) return
             nodePoints.forEach((point) => {
-              const key = point.t
+              // Use epoch (ts) as map key for correct ordering, fall back to t
+              const key = point.ts || point.t
               if (!timeMap.has(key)) {
-                timeMap.set(key, { t: key })
+                timeMap.set(key, { ts: point.ts || 0, t: point.t })
               }
               const entry = timeMap.get(key)
               entry[`${nodeName}_cpu`] = point.cpu || 0
@@ -103,25 +104,9 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
           })
         })
 
-        // Also compute global average for each timestamp
+        // Sort by epoch timestamp (ts), not by display string
         const aggregated = Array.from(timeMap.values())
-          .map((entry) => {
-            const names = [...allNodeNames]
-            let cpuSum = 0, ramSum = 0, count = 0
-
-            names.forEach((name) => {
-              if (entry[`${name}_cpu`] !== undefined) {
-                cpuSum += entry[`${name}_cpu`]
-                ramSum += entry[`${name}_ram`]
-                count++
-              }
-            })
-
-            entry.cpu_avg = count > 0 ? Math.round((cpuSum / count) * 10) / 10 : 0
-            entry.ram_avg = count > 0 ? Math.round((ramSum / count) * 10) / 10 : 0
-            return entry
-          })
-          .sort((a, b) => a.t.localeCompare(b.t))
+          .sort((a, b) => a.ts - b.ts)
 
         setNodeNames([...allNodeNames].sort())
         setTrendsData(aggregated)
@@ -188,7 +173,6 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
   }
 
   const suffix = metric === 'cpu' ? '_cpu' : '_ram'
-  const avgKey = metric === 'cpu' ? 'cpu_avg' : 'ram_avg'
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -230,7 +214,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
               {nodeNames.map((name, i) => {
                 const color = NODE_COLORS[i % NODE_COLORS.length]
                 return (
-                  <linearGradient key={name} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient key={name} id={`infra-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={color} stopOpacity={0.25} />
                     <stop offset="95%" stopColor={color} stopOpacity={0.02} />
                   </linearGradient>
@@ -263,9 +247,10 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
                   name={name}
                   stroke={color}
                   strokeWidth={1.5}
-                  fill={`url(#grad-${i})`}
+                  fill={`url(#infra-grad-${i})`}
                   dot={false}
                   activeDot={{ r: 3, strokeWidth: 0 }}
+                  connectNulls
                 />
               )
             })}

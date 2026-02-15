@@ -9,15 +9,43 @@ function clampPct(n: number) {
   return Math.max(0, Math.min(100, n))
 }
 
-function toTrendPoints(rrd: any[]) {
+// Max points per timeframe — keep enough for full period visibility
+const MAX_POINTS: Record<string, number> = {
+  hour: 70,   // ~1min resolution
+  day: 288,   // ~5min resolution
+  week: 336,  // ~30min resolution (downsampled)
+}
+
+function formatTimestamp(d: Date, timeframe: string) {
+  const hh = String(d.getHours()).padStart(2, "0")
+  const mm = String(d.getMinutes()).padStart(2, "0")
+
+  if (timeframe === "week") {
+    const dd = String(d.getDate()).padStart(2, "0")
+    const mo = String(d.getMonth() + 1).padStart(2, "0")
+    return `${dd}/${mo} ${hh}:${mm}`
+  }
+  return `${hh}:${mm}`
+}
+
+function downsample(points: any[], maxLen: number) {
+  if (points.length <= maxLen) return points
+  const step = points.length / maxLen
+  const result = []
+  for (let i = 0; i < maxLen; i++) {
+    result.push(points[Math.floor(i * step)])
+  }
+  return result
+}
+
+function toTrendPoints(rrd: any[], timeframe: string) {
   const arr = Array.isArray(rrd) ? rrd : []
   const points = arr.filter((p) => p && typeof p.time === "number")
-  const tail = points.length > 30 ? points.slice(-30) : points
+  const maxPts = MAX_POINTS[timeframe] || 70
+  const tail = downsample(points.length > maxPts ? points.slice(-maxPts * 2) : points, maxPts)
 
   return tail.map((p) => {
     const d = new Date(p.time * 1000)
-    const hh = String(d.getHours()).padStart(2, "0")
-    const mm = String(d.getMinutes()).padStart(2, "0")
 
     const cpuRaw = Number(p.cpu ?? 0)
     const maxCpu = Number(p.maxcpu ?? p.cpus ?? p.nproc ?? 1)
@@ -28,7 +56,7 @@ function toTrendPoints(rrd: any[]) {
     const memTotal = Number(p.maxmem ?? p.memtotal ?? 0)
     const ramPct = memTotal > 0 ? Math.round(clampPct((memUsed / memTotal) * 100)) : 0
 
-    return { t: `${hh}:${mm}`, cpu: cpuPct, ram: ramPct }
+    return { ts: p.time, t: formatTimestamp(d, timeframe), cpu: cpuPct, ram: ramPct }
   })
 }
 
@@ -65,7 +93,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         )
 
         
-return { key, data: toTrendPoints(rrd) }
+return { key, data: toTrendPoints(rrd, timeframe) }
       } catch {
         return { key, data: [] }
       }

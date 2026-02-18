@@ -326,11 +326,12 @@ export default function AffinityRulesManager({
                         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                           {rule.vmids?.slice(0, 3).map(vmid => {
                             const vm = vms.find(v => v.vmid === vmid)
+                            const icon = vm?.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'
 
-                            
-return (
+                            return (
                               <Chip
                                 key={vmid}
+                                icon={<i className={icon} style={{ fontSize: 14 }} />}
                                 label={vm?.name || `ID ${vmid}`}
                                 size="small"
                                 variant="outlined"
@@ -482,11 +483,18 @@ return (
                   placeholder={t('drsPage.selectAtLeastTwoGuests')}
                 />
               )}
+              renderOption={(props, vm) => (
+                <li {...props} key={vm.vmid}>
+                  <i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 16, marginRight: 8, opacity: 0.7 }} />
+                  {vm.name} ({vm.vmid})
+                </li>
+              )}
               renderTags={(value, getTagProps) =>
                 value.map((vm, index) => (
                   <Chip
                     {...getTagProps({ index })}
                     key={vm.vmid}
+                    icon={<i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 14 }} />}
                     label={`${vm.name} (${vm.vmid})`}
                     size="small"
                   />

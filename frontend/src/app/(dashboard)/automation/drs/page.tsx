@@ -1223,12 +1223,28 @@ return () => setPageInfo('', '', '')
 
   const { data: affinityRulesRaw, mutate: mutateRules } = useDRSRules(isEnterprise)
 
-  const affinityRules: any[] = ensureArray(affinityRulesRaw as any).map((r: any) => ({
-    ...r,
-    connectionId: r.connectionId || r.connection_id,
-    fromTag: r.fromTag || r.from_tag || false,
-    fromPool: r.fromPool || r.from_pool || false,
-  }))
+  const affinityRules: any[] = ensureArray(affinityRulesRaw as any).map((r: any) => {
+    // Parse vmids: could be an array, a JSON string (vm_ids_json), or undefined
+    let vmids = r.vmids || r.vm_ids || []
+    if (typeof vmids === 'string') {
+      try { vmids = JSON.parse(vmids) } catch { vmids = [] }
+    }
+
+    // Parse nodes: could be an array, a JSON string (nodes_json), or undefined
+    let nodes = r.nodes || []
+    if (typeof nodes === 'string') {
+      try { nodes = JSON.parse(nodes) } catch { nodes = [] }
+    }
+
+    return {
+      ...r,
+      connectionId: r.connectionId || r.connection_id,
+      vmids,
+      nodes,
+      fromTag: r.fromTag || r.from_tag || false,
+      fromPool: r.fromPool || r.from_pool || false,
+    }
+  })
 
   // Récupérer les connexions PVE pour avoir les noms
   const { data: connectionsData } =

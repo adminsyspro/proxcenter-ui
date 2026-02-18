@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 
 import {
   Alert,
@@ -45,6 +45,7 @@ import {
   Legend
 } from 'recharts'
 
+import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
@@ -218,6 +219,7 @@ function StatBox({ label, value, color }) {
 export default function CephPage() {
   const t = useTranslations()
   const theme = useTheme()
+  const dateLocale = getDateLocale(useLocale())
 
   const { setPageInfo } = usePageTitle()
 
@@ -367,7 +369,7 @@ return
   useEffect(() => {
     if (cephData?.performance) {
       const now = new Date()
-      const timeFormatted = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const timeFormatted = now.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       
       // Historique IOPS
       const newIopsPoint = {

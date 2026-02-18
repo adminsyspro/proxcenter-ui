@@ -331,10 +331,10 @@ export default function EmailTemplateEditor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editedTemplate)
       })
-      setMessage({ type: 'success', text: 'Template sauvegardé avec succès' })
+      setMessage({ type: 'success', text: t('emailTemplate.templateSaved') })
       loadTemplates()
     } catch (err) {
-      setMessage({ type: 'error', text: 'Erreur: ' + err.message })
+      setMessage({ type: 'error', text: t('common.error') + ': ' + err.message })
     } finally {
       setSaving(false)
     }
@@ -415,7 +415,7 @@ export default function EmailTemplateEditor() {
                   >
                     {tpl.name}
                     {tpl.is_default && (
-                      <Chip label="Défaut" size="small" sx={{ ml: 'auto', height: 18, fontSize: 10 }} />
+                      <Chip label={t('emailTemplate.defaultChip')} size="small" sx={{ ml: 'auto', height: 18, fontSize: 10 }} />
                     )}
                   </Button>
                 ))}
@@ -426,7 +426,7 @@ export default function EmailTemplateEditor() {
               {/* Macros disponibles */}
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>
                 <i className="ri-code-s-slash-line" style={{ marginRight: 8 }} />
-                Macros
+                {t('emailTemplate.macros')}
               </Typography>
 
               <FormControl fullWidth size="small" sx={{ mb: 2 }}>
@@ -471,15 +471,15 @@ export default function EmailTemplateEditor() {
               {/* Tabs Edit/Preview */}
               <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                 <Tabs value={previewTab} onChange={(e, v) => setPreviewTab(v)}>
-                  <Tab 
-                    icon={<i className="ri-edit-line" />} 
-                    iconPosition="start" 
-                    label="Éditer" 
+                  <Tab
+                    icon={<i className="ri-edit-line" />}
+                    iconPosition="start"
+                    label={t('emailTemplate.edit')}
                   />
-                  <Tab 
-                    icon={<i className="ri-eye-line" />} 
-                    iconPosition="start" 
-                    label="Prévisualiser" 
+                  <Tab
+                    icon={<i className="ri-eye-line" />}
+                    iconPosition="start"
+                    label={t('emailTemplate.preview')}
                   />
                 </Tabs>
               </Box>
@@ -489,7 +489,7 @@ export default function EmailTemplateEditor() {
                 <Box>
                   <TextField
                     fullWidth
-                    label="Nom du template"
+                    label={t('emailTemplate.templateName')}
                     value={editedTemplate?.name || ''}
                     onChange={(e) => setEditedTemplate(prev => ({ ...prev, name: e.target.value }))}
                     sx={{ mb: 2 }}
@@ -497,16 +497,16 @@ export default function EmailTemplateEditor() {
 
                   <TextField
                     fullWidth
-                    label="Sujet de l'email"
+                    label={t('emailTemplate.emailSubject')}
                     value={editedTemplate?.subject || ''}
                     onChange={(e) => setEditedTemplate(prev => ({ ...prev, subject: e.target.value }))}
                     placeholder="[{{alert.severity}}] {{event.type_label}} - {{event.entity}}"
                     sx={{ mb: 2 }}
-                    helperText="Utilisez les macros pour personnaliser le sujet"
+                    helperText={t('emailTemplate.emailSubjectHelper')}
                   />
 
                   <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    Corps du template (HTML)
+                    {t('emailTemplate.templateBody')}
                   </Typography>
                   <TextField
                     fullWidth
@@ -530,21 +530,21 @@ export default function EmailTemplateEditor() {
                       onClick={saveTemplate}
                       disabled={saving}
                     >
-                      Sauvegarder
+                      {t('common.save')}
                     </Button>
                     <Button
                       variant="outlined"
                       startIcon={<i className="ri-refresh-line" />}
                       onClick={resetToDefault}
                     >
-                      Réinitialiser
+                      {t('common.reset')}
                     </Button>
                     <Button
                       variant="outlined"
                       startIcon={<i className="ri-question-line" />}
                       onClick={() => setShowMacroDialog(true)}
                     >
-                      Aide macros
+                      {t('emailTemplate.macroHelp')}
                     </Button>
                   </Box>
                 </Box>
@@ -554,7 +554,7 @@ export default function EmailTemplateEditor() {
                   {/* Prévisualisation du sujet */}
                   <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#f8fafc', borderRadius: 2 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                      📧 Sujet de l'email:
+                      {t('emailTemplate.emailSubjectPreview')}
                     </Typography>
                     <Typography variant="body1" fontWeight={600}>
                       {previewSubject}
@@ -644,7 +644,7 @@ export default function EmailTemplateEditor() {
                       {/* Footer */}
                       <Box sx={{ p: 3, bgcolor: '#f9fafb', textAlign: 'center' }}>
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                          Cet email a été envoyé automatiquement par
+                          {t('emailTemplate.autoEmail')}
                         </Typography>
                         <Typography variant="body2" fontWeight={600} color="text.primary">
                           🖥️ ProxCenter - Proxmox Management Platform
@@ -655,7 +655,7 @@ export default function EmailTemplateEditor() {
                     {/* Sub-footer */}
                     <Box sx={{ textAlign: 'center', mt: 2 }}>
                       <Typography sx={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
-                        © 2026 ProxCenter • Gérez vos paramètres de notification dans l'application
+                        © 2026 ProxCenter • {t('emailTemplate.manageNotifications')}
                       </Typography>
                     </Box>
                   </Paper>
@@ -664,14 +664,14 @@ export default function EmailTemplateEditor() {
                   <Box sx={{ mt: 3 }}>
                     <Typography variant="subtitle2" sx={{ mb: 2 }}>
                       <i className="ri-test-tube-line" style={{ marginRight: 8 }} />
-                      Données de test
+                      {t('emailTemplate.testData')}
                     </Typography>
                     <Grid container spacing={2}>
                       <Grid item xs={6} md={3}>
                         <TextField
                           fullWidth
                           size="small"
-                          label="Entité"
+                          label={t('emailTemplate.entity')}
                           value={previewData.event.entity}
                           onChange={(e) => setPreviewData(prev => ({
                             ...prev,
@@ -683,7 +683,7 @@ export default function EmailTemplateEditor() {
                         <TextField
                           fullWidth
                           size="small"
-                          label="Statut"
+                          label={t('common.status')}
                           value={previewData.event.status}
                           onChange={(e) => setPreviewData(prev => ({
                             ...prev,
@@ -695,7 +695,7 @@ export default function EmailTemplateEditor() {
                         <TextField
                           fullWidth
                           size="small"
-                          label="Nœud"
+                          label={t('emailTemplate.node')}
                           value={previewData.node.name}
                           onChange={(e) => setPreviewData(prev => ({
                             ...prev,
@@ -705,10 +705,10 @@ export default function EmailTemplateEditor() {
                       </Grid>
                       <Grid item xs={6} md={3}>
                         <FormControl fullWidth size="small">
-                          <InputLabel>Sévérité</InputLabel>
+                          <InputLabel>{t('emailTemplate.severity')}</InputLabel>
                           <Select
                             value={previewData.alert.severity}
-                            label="Sévérité"
+                            label={t('emailTemplate.severity')}
                             onChange={(e) => {
                               const severity = e.target.value
                               const colors = {
@@ -747,7 +747,7 @@ export default function EmailTemplateEditor() {
       <Dialog open={showMacroDialog} onClose={() => setShowMacroDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <i className="ri-code-s-slash-line" style={{ marginRight: 8 }} />
-          Référence des macros
+          {t('emailTemplate.macroReference')}
         </DialogTitle>
         <DialogContent dividers>
           {Object.entries(TEMPLATE_MACROS).map(([key, category]) => (
@@ -759,9 +759,9 @@ export default function EmailTemplateEditor() {
               <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e4e4e7' }}>Macro</th>
-                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e4e4e7' }}>Description</th>
-                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e4e4e7' }}>Exemple</th>
+                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e4e4e7' }}>{t('emailTemplate.macro')}</th>
+                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e4e4e7' }}>{t('common.description')}</th>
+                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #e4e4e7' }}>{t('emailTemplate.example')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -778,7 +778,7 @@ export default function EmailTemplateEditor() {
           ))}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowMacroDialog(false)}>Fermer</Button>
+          <Button onClick={() => setShowMacroDialog(false)}>{t('common.close')}</Button>
         </DialogActions>
       </Dialog>
     </Box>

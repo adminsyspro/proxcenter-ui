@@ -14,7 +14,7 @@ import {
   useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   ResponsiveContainer,
   XAxis,
@@ -26,6 +26,7 @@ import {
   Area,
 } from 'recharts'
 
+import { getDateLocale } from '@/lib/i18n/date'
 import type { ResourceTrend } from '../types'
 import { COLORS } from '../constants'
 import { InsightsIcon } from './icons'
@@ -37,6 +38,7 @@ export default function ProjectionChart({ data, loading, period }: {
 }) {
   const theme = useTheme()
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
   const [selectedResource, setSelectedResource] = useState<'all' | 'cpu' | 'ram' | 'storage'>('all')
 
   if (loading) {
@@ -57,7 +59,7 @@ export default function ProjectionChart({ data, loading, period }: {
     const startDate = new Date(period.start)
     const endDate = new Date(period.end)
     const formatOptions: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
-    return `${startDate.toLocaleDateString('fr-FR', formatOptions)} → ${endDate.toLocaleDateString('fr-FR', formatOptions)}`
+    return `${startDate.toLocaleDateString(dateLocale, formatOptions)} → ${endDate.toLocaleDateString(dateLocale, formatOptions)}`
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Box, Button, Typography, useTheme, alpha } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 // Logo SVG ProxCenter
 const LogoIcon = ({ size = 60, accentColor = '#F29221' }) => {
@@ -27,32 +28,12 @@ const LogoIcon = ({ size = 60, accentColor = '#F29221' }) => {
   )
 }
 
-const errorConfig = {
-  404: {
-    title: 'Page introuvable',
-    description: 'La page que vous recherchez n\'existe pas ou a été déplacée.',
-    icon: 'ri-file-unknow-line',
-  },
-  500: {
-    title: 'Erreur serveur',
-    description: 'Une erreur inattendue s\'est produite. Veuillez réessayer plus tard.',
-    icon: 'ri-server-line',
-  },
-  403: {
-    title: 'Accès refusé',
-    description: 'Vous n\'avez pas les permissions nécessaires pour accéder à cette page.',
-    icon: 'ri-lock-line',
-  },
-  401: {
-    title: 'Non authentifié',
-    description: 'Vous devez être connecté pour accéder à cette page.',
-    icon: 'ri-user-unfollow-line',
-  },
-  503: {
-    title: 'Service indisponible',
-    description: 'Le service est temporairement indisponible. Veuillez réessayer plus tard.',
-    icon: 'ri-tools-line',
-  },
+const errorIcons = {
+  404: 'ri-file-unknow-line',
+  500: 'ri-server-line',
+  403: 'ri-lock-line',
+  401: 'ri-user-unfollow-line',
+  503: 'ri-tools-line',
 }
 
 export default function ErrorPage({
@@ -64,10 +45,12 @@ export default function ErrorPage({
   onRetry,
 }) {
   const theme = useTheme()
-  const config = errorConfig[code] || errorConfig[404]
+  const t = useTranslations('errorPages')
+  const icon = errorIcons[code] || errorIcons[404]
+  const codeStr = String(code)
 
-  const displayTitle = title || config.title
-  const displayDescription = description || config.description
+  const displayTitle = title || t(`${codeStr}.title`)
+  const displayDescription = description || t(`${codeStr}.description`)
 
   return (
     <Box
@@ -118,7 +101,7 @@ export default function ErrorPage({
         }}
       >
         <i
-          className={config.icon}
+          className={icon}
           style={{
             fontSize: 40,
             color: theme.palette.primary.main,
@@ -168,7 +151,7 @@ export default function ErrorPage({
               fontWeight: 600,
             }}
           >
-            Retour à l'accueil
+            {t('backToHome')}
           </Button>
         )}
         {showRetryButton && onRetry && (
@@ -185,7 +168,7 @@ export default function ErrorPage({
               fontWeight: 600,
             }}
           >
-            Réessayer
+            {t('retry')}
           </Button>
         )}
       </Box>

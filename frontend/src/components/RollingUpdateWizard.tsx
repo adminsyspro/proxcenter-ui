@@ -205,7 +205,7 @@ export default function RollingUpdateWizard({
   
   // Wizard state
   const [activeStep, setActiveStep] = useState(0)
-  const steps = ['Configuration', 'Vérifications', 'Exécution', 'Terminé']
+  const steps = [t('updates.wizardStepConfiguration'), t('updates.wizardStepVerifications'), t('updates.wizardStepExecution'), t('updates.wizardStepCompleted')]
   
   // Configuration state
   const [config, setConfig] = useState<RollingUpdateConfig>({ ...defaultConfig })
@@ -385,7 +385,7 @@ export default function RollingUpdateWizard({
   const handleClose = () => {
     if (rollingUpdate && ['running', 'paused'].includes(rollingUpdate.status)) {
       // Confirm before closing during execution
-      if (!window.confirm('Un rolling update est en cours. Êtes-vous sûr de vouloir fermer ? (Le processus continuera en arrière-plan)')) {
+      if (!window.confirm(t('updates.confirmCloseWhileRunning'))) {
         return
       }
     }
@@ -469,10 +469,10 @@ export default function RollingUpdateWizard({
               <CardContent>
                 <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                   <i className="ri-server-line" style={{ marginRight: 8 }} />
-                  Ordre des nœuds
+                  {t('updates.nodeOrder')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-                  Les nœuds seront mis à jour dans l'ordre ci-dessous. Vous pouvez les réorganiser ou les exclure.
+                  {t('updates.nodeOrderDescription')}
                 </Typography>
                 
                 <List dense>
@@ -491,9 +491,9 @@ export default function RollingUpdateWizard({
                         }}
                         secondaryAction={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Chip 
-                              size="small" 
-                              label={`${updateCount} mises à jour`}
+                            <Chip
+                              size="small"
+                              label={t('updates.updatesCount', { count: updateCount })}
                               color={updateCount > 0 ? 'warning' : 'success'}
                               sx={{ height: 20, fontSize: 11 }}
                             />
@@ -537,7 +537,7 @@ export default function RollingUpdateWizard({
               <CardContent>
                 <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                   <i className="ri-settings-3-line" style={{ marginRight: 8 }} />
-                  Options principales
+                  {t('updates.mainOptions')}
                 </Typography>
                 
                 <Stack spacing={2} sx={{ mt: 2 }}>
@@ -548,7 +548,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, migrate_non_ha_vms: e.target.checked }))}
                       />
                     }
-                    label="Migrer les VMs non-HA"
+                    label={t('updates.migrateNonHaVms')}
                   />
                   
                   <FormControlLabel
@@ -558,7 +558,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, auto_reboot: e.target.checked }))}
                       />
                     }
-                    label="Redémarrer automatiquement si nécessaire (kernel update)"
+                    label={t('updates.autoRebootIfKernel')}
                   />
                   
                   <FormControlLabel
@@ -568,7 +568,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, set_ceph_noout: e.target.checked }))}
                       />
                     }
-                    label="Définir le flag Ceph noout pendant la maintenance"
+                    label={t('updates.setCephNoout')}
                   />
                   
                   <FormControlLabel
@@ -578,7 +578,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, abort_on_failure: e.target.checked }))}
                       />
                     }
-                    label="Arrêter en cas d'erreur"
+                    label={t('updates.abortOnFailure')}
                   />
                   
                   <FormControlLabel
@@ -588,7 +588,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, require_manual_approval: e.target.checked }))}
                       />
                     }
-                    label="Approbation manuelle entre chaque nœud"
+                    label={t('updates.manualApprovalBetweenNodes')}
                   />
                 </Stack>
               </CardContent>
@@ -601,7 +601,7 @@ export default function RollingUpdateWizard({
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 size="small"
               >
-                Options avancées
+                {t('updates.advancedOptions')}
               </Button>
               
               <Collapse in={showAdvanced}>
@@ -610,7 +610,7 @@ export default function RollingUpdateWizard({
                     <Stack spacing={3}>
                       <Box>
                         <Typography variant="caption" color="text.secondary">
-                          Migrations parallèles maximum
+                          {t('updates.maxParallelMigrations')}
                         </Typography>
                         <Slider
                           value={config.max_concurrent_migrations}
@@ -623,7 +623,7 @@ export default function RollingUpdateWizard({
                       </Box>
                       
                       <TextField
-                        label="Timeout migration (secondes)"
+                        label={t('updates.migrationTimeout')}
                         type="number"
                         size="small"
                         value={config.migration_timeout}
@@ -632,7 +632,7 @@ export default function RollingUpdateWizard({
                       />
                       
                       <TextField
-                        label="Timeout reboot (secondes)"
+                        label={t('updates.rebootTimeoutSeconds')}
                         type="number"
                         size="small"
                         value={config.reboot_timeout}
@@ -641,13 +641,13 @@ export default function RollingUpdateWizard({
                       />
                       
                       <TextField
-                        label="Nœuds sains minimum"
+                        label={t('updates.minHealthyNodes')}
                         type="number"
                         size="small"
                         value={config.min_healthy_nodes}
                         onChange={(e) => setConfig(c => ({ ...c, min_healthy_nodes: parseInt(e.target.value) || 2 }))}
                         InputProps={{ inputProps: { min: 1, max: 10 } }}
-                        helperText="Nombre minimum de nœuds qui doivent rester en ligne"
+                        helperText={t('updates.minHealthyNodesHelper')}
                       />
                       
                       <FormControlLabel
@@ -657,7 +657,7 @@ export default function RollingUpdateWizard({
                             onChange={(e) => setConfig(c => ({ ...c, shutdown_local_vms: e.target.checked }))}
                           />
                         }
-                        label="Éteindre les VMs avec stockage local (si non migrables)"
+                        label={t('updates.shutdownLocalVms')}
                       />
                       
                       <FormControlLabel
@@ -667,7 +667,7 @@ export default function RollingUpdateWizard({
                             onChange={(e) => setConfig(c => ({ ...c, wait_ceph_healthy: e.target.checked }))}
                           />
                         }
-                        label="Attendre Ceph HEALTH_OK entre chaque nœud"
+                        label={t('updates.waitCephHealthy')}
                       />
                     </Stack>
                   </CardContent>
@@ -686,13 +686,13 @@ export default function RollingUpdateWizard({
               icon={preflightResult.can_proceed ? <CheckCircleIcon /> : <ErrorIcon />}
             >
               <Typography variant="body2" fontWeight={600}>
-                {preflightResult.can_proceed 
-                  ? 'Toutes les vérifications ont réussi' 
-                  : 'Des problèmes empêchent le rolling update'}
+                {preflightResult.can_proceed
+                  ? t('updates.allChecksOk')
+                  : t('updates.checksBlockingIssues')}
               </Typography>
               {preflightResult.estimated_time_minutes > 0 && (
                 <Typography variant="caption">
-                  Temps estimé: {formatTime(preflightResult.estimated_time_minutes)}
+                  {t('updates.estimatedTime', { time: formatTime(preflightResult.estimated_time_minutes) })}
                 </Typography>
               )}
             </Alert>
@@ -703,7 +703,7 @@ export default function RollingUpdateWizard({
                 <CardContent>
                   <Typography variant="subtitle2" color="error" fontWeight={700} gutterBottom>
                     <ErrorIcon sx={{ fontSize: 18, mr: 1, verticalAlign: 'text-bottom' }} />
-                    Erreurs ({preflightResult.errors.length})
+                    {t('updates.errorsCount', { count: preflightResult.errors.length })}
                   </Typography>
                   <List dense>
                     {preflightResult.errors.map((err, i) => (
@@ -722,7 +722,7 @@ export default function RollingUpdateWizard({
                 <CardContent>
                   <Typography variant="subtitle2" color="warning.main" fontWeight={700} gutterBottom>
                     <WarningIcon sx={{ fontSize: 18, mr: 1, verticalAlign: 'text-bottom' }} />
-                    Avertissements ({preflightResult.warnings.length})
+                    {t('updates.warningsCount', { count: preflightResult.warnings.length })}
                   </Typography>
                   <List dense>
                     {preflightResult.warnings.map((warn, i) => (
@@ -741,25 +741,25 @@ export default function RollingUpdateWizard({
                 <CardContent>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                     <i className="ri-heart-pulse-line" style={{ marginRight: 8 }} />
-                    Santé du cluster
+                    {t('updates.clusterHealth')}
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
                     <Chip 
                       size="small"
                       icon={preflightResult.cluster_health.quorum_ok ? <CheckCircleIcon /> : <ErrorIcon />}
-                      label={preflightResult.cluster_health.quorum_ok ? 'Quorum OK' : 'Quorum perdu'}
+                      label={preflightResult.cluster_health.quorum_ok ? t('updates.quorumOk') : t('updates.quorumLost')}
                       color={preflightResult.cluster_health.quorum_ok ? 'success' : 'error'}
                     />
                     <Chip 
                       size="small"
-                      label={`${preflightResult.cluster_health.online_nodes || 0}/${preflightResult.cluster_health.total_nodes || 0} nœuds en ligne`}
+                      label={t('updates.nodesOnline', { online: preflightResult.cluster_health.online_nodes || 0, total: preflightResult.cluster_health.total_nodes || 0 })}
                       color={preflightResult.cluster_health.online_nodes === preflightResult.cluster_health.total_nodes ? 'success' : 'warning'}
                     />
                     {preflightResult.cluster_health.ceph_healthy !== undefined && (
                       <Chip 
                         size="small"
                         icon={preflightResult.cluster_health.ceph_healthy ? <CheckCircleIcon /> : <WarningIcon />}
-                        label={preflightResult.cluster_health.ceph_healthy ? 'Ceph OK' : 'Ceph dégradé'}
+                        label={preflightResult.cluster_health.ceph_healthy ? t('updates.cephOk') : t('updates.cephDegraded')}
                         color={preflightResult.cluster_health.ceph_healthy ? 'success' : 'warning'}
                       />
                     )}
@@ -774,7 +774,7 @@ export default function RollingUpdateWizard({
                 <CardContent>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                     <i className="ri-download-cloud-line" style={{ marginRight: 8 }} />
-                    Mises à jour disponibles
+                    {t('updates.availableUpdatesTitle')}
                   </Typography>
                   <Box sx={{ mt: 1 }}>
                     {preflightResult.updates_available.map((u) => (
@@ -791,13 +791,13 @@ export default function RollingUpdateWizard({
                       >
                         <Typography variant="body2">{u.node}</Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip 
-                            size="small" 
-                            label={`${u.package_count} paquets`}
+                          <Chip
+                            size="small"
+                            label={t('updates.packagesCount', { count: u.package_count })}
                             sx={{ height: 20, fontSize: 11 }}
                           />
                           {u.kernel_update && (
-                            <Tooltip title="Redémarrage requis">
+                            <Tooltip title={t('updates.rebootRequiredTooltip')}>
                               <i className="ri-restart-line" style={{ fontSize: 16, color: '#ff9800' }} />
                             </Tooltip>
                           )}
@@ -815,12 +815,12 @@ export default function RollingUpdateWizard({
                 <CardContent>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                     <i className="ri-shuffle-line" style={{ marginRight: 8 }} />
-                    Plan de migration
+                    {t('updates.migrationPlan')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {preflightResult.migration_plan.vms_to_migrate} VMs seront migrées
-                    {preflightResult.migration_plan.vms_to_shutdown > 0 && 
-                      `, ${preflightResult.migration_plan.vms_to_shutdown} seront éteintes`}
+                    {t('updates.vmsMigrated', { count: preflightResult.migration_plan.vms_to_migrate })}
+                    {preflightResult.migration_plan.vms_to_shutdown > 0 &&
+                      t('updates.vmsShutdown', { count: preflightResult.migration_plan.vms_to_shutdown })}
                   </Typography>
                 </CardContent>
               </Card>
@@ -835,10 +835,10 @@ export default function RollingUpdateWizard({
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant="body2">
-                  Progression: {rollingUpdate.completed_nodes} / {rollingUpdate.total_nodes} nœuds
+                  {t('updates.progressNodes', { completed: rollingUpdate.completed_nodes, total: rollingUpdate.total_nodes })}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {rollingUpdate.current_node && `En cours: ${rollingUpdate.current_node}`}
+                  {rollingUpdate.current_node && t('updates.inProgressNode', { node: rollingUpdate.current_node })}
                 </Typography>
               </Box>
               <LinearProgress 
@@ -853,7 +853,7 @@ export default function RollingUpdateWizard({
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                    Statut des nœuds
+                    {t('updates.nodeStatuses')}
                   </Typography>
                   <List dense>
                     {rollingUpdate.node_statuses.map((ns) => (
@@ -868,12 +868,12 @@ export default function RollingUpdateWizard({
                             {ns.status}
                             {ns.version_before && ns.version_after && 
                               ` • ${ns.version_before} → ${ns.version_after}`}
-                            {ns.did_reboot && ' • Redémarré'}
+                            {ns.did_reboot && ` • ${t('updates.rebooted')}`}
                           </>
                         }
                       />
                       {ns.error && (
-                        <Chip size="small" label="Erreur" color="error" />
+                        <Chip size="small" label={t('updates.errorChip')} color="error" />
                       )}
                     </ListItem>
                   ))}
@@ -887,7 +887,7 @@ export default function RollingUpdateWizard({
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                    Logs
+                    {t('updates.logs')}
                   </Typography>
                   <Box 
                     sx={{ 
@@ -933,16 +933,16 @@ export default function RollingUpdateWizard({
               icon={rollingUpdate.status === 'completed' ? <CheckCircleIcon /> : <ErrorIcon />}
             >
               <Typography variant="body2" fontWeight={600}>
-                {rollingUpdate.status === 'completed' 
-                  ? `Rolling update terminé avec succès (${rollingUpdate.completed_nodes}/${rollingUpdate.total_nodes} nœuds)`
+                {rollingUpdate.status === 'completed'
+                  ? t('updates.rollingUpdateCompletedSuccess', { completed: rollingUpdate.completed_nodes, total: rollingUpdate.total_nodes })
                   : rollingUpdate.status === 'cancelled'
-                    ? 'Rolling update annulé'
-                    : `Rolling update échoué: ${rollingUpdate.error || 'Erreur inconnue'}`
+                    ? t('updates.rollingUpdateCancelled')
+                    : t('updates.rollingUpdateFailed', { error: rollingUpdate.error || t('updates.unknownErrorRolling') })
                 }
               </Typography>
               {rollingUpdate.started_at && rollingUpdate.completed_at && (
                 <Typography variant="caption">
-                  Durée: {Math.round((new Date(rollingUpdate.completed_at).getTime() - new Date(rollingUpdate.started_at).getTime()) / 60000)} minutes
+                  {t('updates.durationMinutes', { minutes: Math.round((new Date(rollingUpdate.completed_at).getTime() - new Date(rollingUpdate.started_at).getTime()) / 60000) })}
                 </Typography>
               )}
             </Alert>
@@ -952,7 +952,7 @@ export default function RollingUpdateWizard({
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                    Résumé par nœud
+                    {t('updates.nodeSummary')}
                   </Typography>
                   <List dense>
                     {rollingUpdate.node_statuses.map((ns) => (
@@ -967,7 +967,7 @@ export default function RollingUpdateWizard({
                               {ns.version_before && ns.version_after && (
                                 <>{ns.version_before} → {ns.version_after}</>
                               )}
-                              {ns.did_reboot && ' • Redémarré'}
+                              {ns.did_reboot && ` • ${t('updates.rebooted')}`}
                               {ns.error && <Typography component="span" color="error"> • {ns.error}</Typography>}
                             </>
                           }
@@ -986,7 +986,7 @@ export default function RollingUpdateWizard({
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
             <CircularProgress size={48} />
             <Typography variant="body2" sx={{ mt: 2 }}>
-              Vérification en cours...
+              {t('updates.checkingInProgress')}
             </Typography>
           </Box>
         )}
@@ -1002,21 +1002,21 @@ export default function RollingUpdateWizard({
       <DialogActions sx={{ px: 3, py: 2 }}>
         {activeStep === 0 && (
           <>
-            <Button onClick={handleClose}>Annuler</Button>
+            <Button onClick={handleClose}>{t('common.cancel')}</Button>
             <Button
               variant="contained"
               onClick={runPreflightCheck}
               disabled={preflightLoading || nodeOrder.filter(n => !excludedNodes.includes(n)).length === 0}
               startIcon={preflightLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
             >
-              Vérifier
+              {t('updates.verify')}
             </Button>
           </>
         )}
         
         {activeStep === 1 && (
           <>
-            <Button onClick={() => setActiveStep(0)}>Retour</Button>
+            <Button onClick={() => setActiveStep(0)}>{t('common.back')}</Button>
             <Button
               variant="contained"
               onClick={startRollingUpdate}
@@ -1024,7 +1024,7 @@ export default function RollingUpdateWizard({
               startIcon={<PlayArrowIcon />}
               color="warning"
             >
-              Démarrer le Rolling Update
+              {t('updates.startRollingUpdateBtn')}
             </Button>
           </>
         )}
@@ -1037,14 +1037,14 @@ export default function RollingUpdateWizard({
                   onClick={() => executeAction('pause')}
                   startIcon={<PauseIcon />}
                 >
-                  Pause
+                  {t('updates.pause')}
                 </Button>
                 <Button
                   onClick={() => executeAction('cancel')}
                   color="error"
                   startIcon={<StopIcon />}
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </Button>
               </>
             )}
@@ -1055,14 +1055,14 @@ export default function RollingUpdateWizard({
                   variant="contained"
                   startIcon={<PlayArrowIcon />}
                 >
-                  Reprendre
+                  {t('updates.resume')}
                 </Button>
                 <Button
                   onClick={() => executeAction('cancel')}
                   color="error"
                   startIcon={<StopIcon />}
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </Button>
               </>
             )}
@@ -1071,7 +1071,7 @@ export default function RollingUpdateWizard({
         
         {activeStep === 3 && (
           <Button onClick={handleClose} variant="contained">
-            Fermer
+            {t('common.close')}
           </Button>
         )}
       </DialogActions>

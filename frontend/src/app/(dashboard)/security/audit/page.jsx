@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 
 import {
   Alert,
@@ -22,6 +22,7 @@ import {
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 
+import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 
 /* --------------------------------
@@ -78,12 +79,12 @@ const ACTIONS = {
    Helpers
 -------------------------------- */
 
-function formatDate(dateStr) {
+function formatDate(dateStr, locale) {
   if (!dateStr) return '—'
   const date = new Date(dateStr)
 
-  
-return date.toLocaleString('fr-FR', {
+
+return date.toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -93,7 +94,7 @@ return date.toLocaleString('fr-FR', {
   })
 }
 
-function timeAgo(dateStr, t) {
+function timeAgo(dateStr, t, locale) {
   if (!dateStr) return '—'
   const now = new Date()
   const date = new Date(dateStr)
@@ -104,7 +105,7 @@ function timeAgo(dateStr, t) {
   if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `il y a ${Math.floor(diff / 3600)} h`
   if (diff < 604800) return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `il y a ${Math.floor(diff / 86400)} j`
 
-return formatDate(dateStr)
+return formatDate(dateStr, locale)
 }
 
 /* --------------------------------
@@ -230,6 +231,7 @@ function StatsCards({ logs, t }) {
 
 export default function AuditPage() {
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -310,7 +312,7 @@ return () => clearTimeout(timer)
     const headers = ['Date', 'Utilisateur', 'Action', 'Catégorie', 'Ressource', 'Statut', 'IP']
 
     const rows = logs.map(l => [
-      formatDate(l.timestamp),
+      formatDate(l.timestamp, dateLocale),
       l.user_email || '—',
       ACTIONS[l.action] || l.action,
       CATEGORIES[l.category]?.label || l.category,
@@ -337,9 +339,9 @@ return () => clearTimeout(timer)
         headerName: t('common.date'),
         width: 160,
         renderCell: params => (
-          <Tooltip title={formatDate(params.row.timestamp)}>
+          <Tooltip title={formatDate(params.row.timestamp, dateLocale)}>
             <Typography variant='body2' sx={{ cursor: 'help' }}>
-              {timeAgo(params.row.timestamp, t)}
+              {timeAgo(params.row.timestamp, t, dateLocale)}
             </Typography>
           </Tooltip>
         ),
@@ -423,7 +425,7 @@ return () => clearTimeout(timer)
         ),
       },
     ],
-    [t]
+    [t, dateLocale]
   )
 
   return (

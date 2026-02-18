@@ -2,10 +2,14 @@ import Providers from '@components/Providers'
 import BlankLayout from '@layouts/BlankLayout'
 import ErrorPage from '@components/ErrorPage'
 import { getSystemMode } from '@core/utils/serverHelpers'
+import { getTranslations } from 'next-intl/server'
 
-export const metadata = {
-  title: '404 - Page introuvable | ProxCenter',
-  description: 'La page que vous recherchez n\'existe pas.',
+export async function generateMetadata() {
+  const t = await getTranslations('errorPages')
+  return {
+    title: t('metaTitle'),
+    description: t('metaDescription'),
+  }
 }
 
 export default async function NotFoundPage() {

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { getDateLocale } from '@/lib/i18n/date'
 
 import {
   Box,
@@ -87,20 +88,18 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   stopped: 'tasks.status.stopped',
 }
 
-function formatTime(dateStr: string | null): string {
+function formatTime(dateStr: string | null, dateLocale: string): string {
   if (!dateStr) return '—'
 
   try {
     const date = new Date(dateStr)
-
-
-return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
     return dateStr
   }
 }
 
-function formatDate(dateStr: string | null): string {
+function formatDateStr(dateStr: string | null, dateLocale: string): string {
   if (!dateStr) return '—'
 
   try {
@@ -109,12 +108,11 @@ function formatDate(dateStr: string | null): string {
     const isToday = date.toDateString() === today.toDateString()
 
     if (isToday) {
-      return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      return date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     }
 
-
-return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' +
-           date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit' }) + ' ' +
+           date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })
   } catch {
     return dateStr
   }
@@ -135,6 +133,8 @@ export default function TasksFooter({
 }: TasksFooterProps) {
   const theme = useTheme()
   const t = useTranslations()
+  const locale = useLocale()
+  const dateLocale = getDateLocale(locale)
 
   // Helper functions that use translations
   const formatTaskType = (type: string): string => {
@@ -239,7 +239,7 @@ export default function TasksFooter({
       width: 90,
       renderCell: (params) => (
         <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-          {formatTime(params.value)}
+          {formatTime(params.value, dateLocale)}
         </Typography>
       )
     },
@@ -249,7 +249,7 @@ export default function TasksFooter({
       width: 90,
       renderCell: (params) => (
         <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-          {formatTime(params.value)}
+          {formatTime(params.value, dateLocale)}
         </Typography>
       )
     },

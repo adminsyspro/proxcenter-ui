@@ -134,7 +134,7 @@ export default function LdapConfigTab() {
         setTestResult({ success: false, message: data.error || data.message || t('ldap.testFailed') })
       }
     } catch (e) {
-      setTestResult({ success: false, message: 'Erreur de connexion au serveur' })
+      setTestResult({ success: false, message: t('ldap.connectionError') })
     } finally {
       setTesting(false)
     }

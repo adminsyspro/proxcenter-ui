@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 
 import { formatBytes } from '@/utils/format'
+import { getDateLocale } from '@/lib/i18n/date'
 
 import {
   Accordion,
@@ -153,6 +154,7 @@ export default function InventoryDetails({
   migratingVmIds?: Set<string>  // IDs des VMs en cours de migration
 }) {
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
   const theme = useTheme()
   const { hasFeature, loading: licenseLoading } = useLicense()
   const toast = useToast()
@@ -4826,7 +4828,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ height: 160 }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={rrdDataToUse}>
-                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                               <Tooltip
                                 labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -4847,7 +4849,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ height: 160 }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={rrdDataToUse}>
-                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tick={{ fontSize: 9 }} width={30} />
                               <Tooltip
                                 labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -4867,7 +4869,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ height: 160 }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={rrdDataToUse}>
-                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
                               <Tooltip
                                 labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -4888,7 +4890,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ height: 160 }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={rrdDataToUse}>
-                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
                               <Tooltip
                                 labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -4909,7 +4911,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ height: 160 }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={rrdDataToUse}>
-                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tickFormatter={v => formatBytes(v) + '/s'} tick={{ fontSize: 9 }} width={55} />
                               <Tooltip
                                 labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -4930,7 +4932,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ height: 160 }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={rrdDataToUse}>
-                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
                               <Tooltip
                                 labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -5122,7 +5124,7 @@ return vm?.isCluster ?? false
                               <Box sx={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={dsRrdData}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={50} />
                                     <Tooltip
                                       labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -5143,7 +5145,7 @@ return vm?.isCluster ?? false
                               <Box sx={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={dsRrdData}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBytes(v) + '/s'} tick={{ fontSize: 9 }} width={55} />
                                     <Tooltip
                                       labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
@@ -5164,7 +5166,7 @@ return vm?.isCluster ?? false
                               <Box sx={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={dsRrdData}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} />
                                     <Tooltip
                                       labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}

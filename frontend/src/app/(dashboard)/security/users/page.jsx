@@ -47,16 +47,16 @@ import { TableSkeleton } from '@/components/skeletons'
 -------------------------------- */
 
 function timeAgo(date, t) {
-  if (!date) return t ? t('common.notAvailable') : 'Jamais'
+  if (!date) return t ? t('common.notAvailable') : 'N/A'
   const now = new Date()
   const past = new Date(date)
   const diff = Math.floor((now - past) / 1000)
 
-  if (diff < 60) return t ? t('time.secondsAgo') : 'il y a quelques secondes'
-  if (diff < 3600) return t ? t('time.minutesAgo', { count: Math.floor(diff / 60) }) : `il y a ${Math.floor(diff / 60)} min`
-  if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `il y a ${Math.floor(diff / 3600)} h`
+  if (diff < 60) return t ? t('time.secondsAgo') : 'a few seconds ago'
+  if (diff < 3600) return t ? t('time.minutesAgo', { count: Math.floor(diff / 60) }) : `${Math.floor(diff / 60)} min ago`
+  if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `${Math.floor(diff / 3600)}h ago`
 
-return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `il y a ${Math.floor(diff / 86400)} j`
+return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `${Math.floor(diff / 86400)}d ago`
 }
 
 /* --------------------------------
@@ -65,7 +65,7 @@ return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `il y a ${Ma
 
 function RoleChips({ roles, t }) {
   if (!roles || roles.length === 0) {
-    return <Chip size='small' label={t ? t('common.none') : 'Aucun rôle'} variant='outlined' sx={{ opacity: 0.5 }} />
+    return <Chip size='small' label={t ? t('usersPage.noRole') : 'No role'} variant='outlined' sx={{ opacity: 0.5 }} />
   }
 
   return (
@@ -137,13 +137,13 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
     setError('')
 
     if (!isEdit && !email) {
-      setError(t ? t('common.error') : 'Email requis')
+      setError(t ? t('common.error') : 'Email required')
 
 return
     }
 
     if (!isEdit && !password) {
-      setError(t ? t('common.error') : 'Mot de passe requis')
+      setError(t ? t('common.error') : 'Password required')
 
 return
     }
@@ -171,7 +171,7 @@ return
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || (t ? t('common.error') : 'Erreur'))
+        setError(data.error || (t ? t('common.error') : 'Error'))
 
 return
       }
@@ -207,7 +207,7 @@ return
       onSave()
       onClose()
     } catch (e) {
-      setError(t ? t('errors.connectionError') : 'Erreur de connexion')
+      setError(t ? t('errors.connectionError') : 'Connection error')
     } finally {
       setLoading(false)
     }
@@ -215,17 +215,17 @@ return
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
-      <DialogTitle>{isEdit ? (t ? t('common.edit') : 'Modifier l\'utilisateur') : (t ? t('common.add') : 'Nouvel utilisateur')}</DialogTitle>
+      <DialogTitle>{isEdit ? (t ? t('common.edit') : 'Edit') : (t ? t('common.add') : 'Add')}</DialogTitle>
       <DialogContent>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
 
         <TextField
           fullWidth
-          label={t ? t('common.name') : 'Nom'}
+          label={t ? t('common.name') : 'Name'}
           value={name}
           onChange={e => setName(e.target.value)}
           sx={{ mt: 2, mb: 2 }}
-          placeholder='Jean Dupont'
+          placeholder='John Doe'
         />
 
         {!isEdit && (
@@ -330,14 +330,14 @@ return
                 onChange={e => setEnabled(e.target.checked)}
               />
             }
-            label={t ? t('common.active') : 'Compte actif'}
+            label={t ? t('usersPage.accountActive') : 'Account active'}
           />
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t ? t('common.cancel') : 'Annuler'}</Button>
+        <Button onClick={onClose}>{t ? t('common.cancel') : 'Cancel'}</Button>
         <Button variant='contained' onClick={handleSave} disabled={loading}>
-          {loading ? (t ? t('common.saving') : 'Enregistrement...') : (t ? t('common.save') : 'Enregistrer')}
+          {loading ? (t ? t('common.saving') : 'Saving...') : (t ? t('common.save') : 'Save')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -363,7 +363,7 @@ function DeleteDialog({ open, onClose, user, onConfirm, currentUserId, t }) {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || (t ? t('common.error') : 'Erreur'))
+        setError(data.error || (t ? t('common.error') : 'Error'))
 
 return
       }
@@ -371,7 +371,7 @@ return
       onConfirm()
       onClose()
     } catch (e) {
-      setError(t ? t('errors.connectionError') : 'Erreur de connexion')
+      setError(t ? t('errors.connectionError') : 'Connection error')
     } finally {
       setLoading(false)
     }
@@ -381,7 +381,7 @@ return
     <Dialog open={open} onClose={onClose}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className='ri-error-warning-line' style={{ color: '#ef4444' }} />
-        {t ? t('common.delete') : 'Supprimer l\'utilisateur'}
+        {t ? t('usersPage.deleteUser') : 'Delete user'}
       </DialogTitle>
       <DialogContent>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
@@ -402,7 +402,7 @@ return
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t ? t('common.cancel') : 'Annuler'}</Button>
+        <Button onClick={onClose}>{t ? t('common.cancel') : 'Cancel'}</Button>
         <Button
           variant='contained'
           color='error'
@@ -410,7 +410,7 @@ return
           disabled={loading || isSelf}
           startIcon={loading ? <CircularProgress size={16} /> : <i className='ri-delete-bin-line' />}
         >
-          {t ? t('common.delete') : 'Supprimer'}
+          {t ? t('common.delete') : 'Delete'}
         </Button>
       </DialogActions>
     </Dialog>

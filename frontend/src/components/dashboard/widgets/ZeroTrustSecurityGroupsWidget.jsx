@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import { Box, Typography, Chip, CircularProgress, alpha, Stack } from '@mui/material'
 import { useClusterSecurityGroups } from '@/hooks/useZeroTrust'
 
@@ -10,6 +11,7 @@ const GROUP_COLORS = [
 ]
 
 function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
+  const t = useTranslations()
   const { data: clustersData = [], isLoading: loadingData } = useClusterSecurityGroups(60000)
 
   if (loadingData) {
@@ -29,7 +31,7 @@ function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
           Security Groups
         </Typography>
         <Chip
-          label={`${totalGroups} groupes`}
+          label={`${totalGroups} groups`}
           size="small"
           sx={{ height: 18, fontSize: 9 }}
         />
@@ -70,7 +72,7 @@ function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
                   </Box>
                 ) : (
                   <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: 9 }}>
-                    Aucun groupe
+                    {t('dashboard.noGroup')}
                   </Typography>
                 )}
               </Box>
@@ -79,7 +81,7 @@ function ZeroTrustSecurityGroupsWidget({ data, loading, config }) {
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Aucun cluster PVE
+              {t('dashboard.noPveCluster')}
             </Typography>
           </Box>
         )}

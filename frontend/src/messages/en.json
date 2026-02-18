@@ -784,6 +784,7 @@
     "clusterUsesCeph": "This cluster uses Ceph",
     "apiToken": "API Token",
     "apiTokenHelper": "Format: user@realm!tokenid=secret",
+    "pbsApiTokenHelper": "Format: user@realm!tokenid:secret (PBS uses : not =)",
     "communityEdition": "Community Edition",
     "enterpriseEdition": "Enterprise Edition",
     "communityLicenseDesc": "Free license with limited features",

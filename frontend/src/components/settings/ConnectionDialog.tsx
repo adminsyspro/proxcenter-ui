@@ -333,8 +333,8 @@ export default function ConnectionDialog({
           label={t('settings.apiToken')}
           value={form.apiToken}
           onChange={e => handleChange('apiToken', e.target.value)}
-          placeholder="user@realm!tokenid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          helperText={isEdit ? t('settings.apiTokenHelperEdit') : t('settings.apiTokenHelper')}
+          placeholder={isPbs ? "user@realm!tokenid:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" : "user@realm!tokenid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+          helperText={isEdit ? t('settings.apiTokenHelperEdit') : t(isPbs ? 'settings.pbsApiTokenHelper' : 'settings.apiTokenHelper')}
           sx={{ mt: 1 }}
           required={!isEdit}
         />

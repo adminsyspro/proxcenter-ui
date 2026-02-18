@@ -1502,22 +1502,23 @@ return next
     try {
       setActionLoading(`${action}-${id}`)
       await apiAction(`/api/v1/orchestrator/drs/recommendations/${id}/${action}`, 'POST')
-      
-      // Rafraîchir avec validation pour avoir l'état réel des VMs
-      const res = await fetch(`/api/v1/orchestrator/drs/recommendations?validate=true`)
-      const validated = await res.json()
 
-      mutateRecs(validated, false)
-      
       if (action === 'execute') {
-        await mutateMigrations()
+        // Immediately remove the executed recommendation from the list
+        // (the backend marks it async, so we optimistically update the UI)
+        mutateRecs((current: any) => {
+          const arr = Array.isArray(current) ? current : []
+          return arr.filter((r: any) => r.id !== id)
+        }, false)
 
-        // Fermer le drawer après exécution réussie
+        await mutateMigrations()
         setDrawerOpen(false)
         setSelectedRec(null)
-      }
-
-      if (action !== 'execute') {
+      } else {
+        // For approve/reject, refresh with validation
+        const res = await fetch(`/api/v1/orchestrator/drs/recommendations?validate=true`)
+        const validated = await res.json()
+        mutateRecs(validated, false)
         setDrawerOpen(false)
       }
     } catch (e: any) {

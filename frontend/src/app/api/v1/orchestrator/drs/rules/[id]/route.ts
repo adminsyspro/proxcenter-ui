@@ -23,7 +23,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json()
-    const response = await client.updateRule(id, body)
+    // Transform camelCase to snake_case for the orchestrator
+    const rule: any = { ...body }
+    if (rule.connectionId !== undefined) {
+      rule.connection_id = rule.connectionId
+      delete rule.connectionId
+    }
+    if (rule.fromTag !== undefined) {
+      rule.from_tag = rule.fromTag
+      delete rule.fromTag
+    }
+    if (rule.fromPool !== undefined) {
+      rule.from_pool = rule.fromPool
+      delete rule.fromPool
+    }
+    const response = await client.updateRule(id, rule)
 
     
 return NextResponse.json(response.data)

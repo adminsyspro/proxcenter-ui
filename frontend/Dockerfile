@@ -97,8 +97,7 @@ COPY --from=builder /app/node_modules/pure-rand ./node_modules/pure-rand
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 
-# Install concurrently for running both servers
-RUN npm install -g concurrently
+# No extra runtime dependencies — server.js and ws-proxy.js run via shell
 
 # Switch to non-root user
 USER nextjs
@@ -123,4 +122,4 @@ COPY --from=builder --chown=nextjs:nodejs /app/db-migrate.js ./db-migrate.js
 
 # Start: entrypoint inits DB, CMD starts servers
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["concurrently", "--names", "next,ws", "--prefix", "[{name}]", "node server.js", "node ws-proxy.js"]
+CMD ["/bin/sh", "-c", "node server.js & node ws-proxy.js & wait"]

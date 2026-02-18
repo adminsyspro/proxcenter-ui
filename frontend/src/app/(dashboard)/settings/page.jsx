@@ -84,11 +84,23 @@ async function fetchJson(url, init) {
 
   try {
     json = text ? JSON.parse(text) : null
-  } catch {}
+  } catch {
+    // Response is not JSON — use raw text as error message
+  }
 
-  if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
+  if (!r.ok) {
+    // Build a useful error message from Zod validation details if present
+    let msg = json?.error || text || `HTTP ${r.status}`
+    if (json?.details?.fieldErrors) {
+      const fields = Object.entries(json.details.fieldErrors)
+        .filter(([, v]) => v?.length)
+        .map(([k, v]) => `${k}: ${v.join(', ')}`)
+      if (fields.length) msg += ' — ' + fields.join('; ')
+    }
+    throw new Error(msg)
+  }
 
-return json
+  return json
 }
 
 /* ==================== ConnectionStatus Component ==================== */
@@ -201,8 +213,8 @@ function ConnectionsTab() {
       insecureTLS: !!formData.insecureTLS,
       hasCeph: addConnType === 'pve' ? !!formData.hasCeph : false,
       // Location fields
-      latitude: formData.latitude !== '' ? parseFloat(formData.latitude) : null,
-      longitude: formData.longitude !== '' ? parseFloat(formData.longitude) : null,
+      latitude: formData.latitude !== '' && !isNaN(parseFloat(formData.latitude)) ? parseFloat(formData.latitude) : null,
+      longitude: formData.longitude !== '' && !isNaN(parseFloat(formData.longitude)) ? parseFloat(formData.longitude) : null,
       locationLabel: formData.locationLabel?.trim() || null,
       // Only include apiToken if provided
       ...(formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),

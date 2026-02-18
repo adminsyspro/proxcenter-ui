@@ -3,13 +3,24 @@ import { useState, useEffect, useCallback } from 'react'
 async function fetchJson(url: string, init?: RequestInit) {
   const r = await fetch(url, init)
   const text = await r.text()
-  let json = null
+  let json: any = null
 
   try {
     json = text ? JSON.parse(text) : null
-  } catch {}
+  } catch {
+    // Response is not JSON — use raw text as error message
+  }
 
-  if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
+  if (!r.ok) {
+    let msg = json?.error || text || `HTTP ${r.status}`
+    if (json?.details?.fieldErrors) {
+      const fields = Object.entries(json.details.fieldErrors)
+        .filter(([, v]) => (v as string[])?.length)
+        .map(([k, v]) => `${k}: ${(v as string[]).join(', ')}`)
+      if (fields.length) msg += ' — ' + fields.join('; ')
+    }
+    throw new Error(msg)
+  }
 
   return json
 }

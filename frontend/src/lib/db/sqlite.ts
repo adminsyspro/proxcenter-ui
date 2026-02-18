@@ -315,6 +315,14 @@ export function getDb() {
     { id: 'backup.job.delete', name: 'backup.job.delete', category: 'backup', description: 'Supprimer un job de sauvegarde', is_dangerous: 1 },
     { id: 'backup.job.run', name: 'backup.job.run', category: 'backup', description: 'Exécuter manuellement un job de sauvegarde' },
     
+    // Node Management
+    { id: 'node.manage', name: 'node.manage', category: 'node', description: 'Gérer les nœuds (mises à jour, redémarrage)', is_dangerous: 1 },
+
+    // Automation (DRS, Rolling Updates, etc.)
+    { id: 'automation.view', name: 'automation.view', category: 'automation', description: 'Voir les paramètres d\'automatisation et DRS' },
+    { id: 'automation.manage', name: 'automation.manage', category: 'automation', description: 'Configurer l\'automatisation et DRS', is_dangerous: 1 },
+    { id: 'automation.execute', name: 'automation.execute', category: 'automation', description: 'Exécuter des actions d\'automatisation', is_dangerous: 1 },
+
     // Admin Operations
     { id: 'admin.users', name: 'admin.users', category: 'admin', description: 'Gérer les utilisateurs', is_dangerous: 1 },
     { id: 'admin.rbac', name: 'admin.rbac', category: 'admin', description: 'Gérer les rôles et permissions', is_dangerous: 1 },
@@ -420,6 +428,18 @@ export function getDb() {
             // Permission n'existe pas, ignorer
           }
         }
+      }
+    }
+  } else {
+    // Roles already exist — ensure Super Admin has all permissions (covers newly added ones)
+    const superAdminRole = db.prepare("SELECT id FROM rbac_roles WHERE id = 'role_super_admin'").get() as any
+    if (superAdminRole) {
+      const allPerms = db.prepare('SELECT id FROM rbac_permissions').all() as any[]
+      const insertRolePerm = db.prepare(
+        'INSERT OR IGNORE INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?)'
+      )
+      for (const p of allPerms) {
+        insertRolePerm.run('role_super_admin', p.id)
       }
     }
   }

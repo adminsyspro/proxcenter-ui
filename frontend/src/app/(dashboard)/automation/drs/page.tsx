@@ -1185,6 +1185,7 @@ export default function DRSPage() {
   const [selectedRec, setSelectedRec] = useState<DRSRecommendation | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedCluster, setSelectedCluster] = useState<string>('')
+  const [executedRecIds, setExecutedRecIds] = useState<Set<string>>(new Set())
 
   const { setPageInfo } = usePageTitle()
 
@@ -1206,7 +1207,7 @@ return () => setPageInfo('', '', '')
 
   const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } = useDRSRecsHook(isEnterprise)
 
-  const recommendations: DRSRecommendation[] = ensureArray(recommendationsRaw as any)
+  const recommendations: DRSRecommendation[] = (ensureArray(recommendationsRaw as any) as DRSRecommendation[]).filter(r => !executedRecIds.has(r.id))
 
   const { data: migrationsRaw, mutate: mutateMigrations, isLoading: migrationsLoading } = useDRSMigrations(isEnterprise)
 
@@ -1520,12 +1521,8 @@ return next
       await apiAction(`/api/v1/orchestrator/drs/recommendations/${id}/${action}`, 'POST')
 
       if (action === 'execute') {
-        // Immediately remove the executed recommendation from the list
-        // (the backend marks it async, so we optimistically update the UI)
-        mutateRecs((current: any) => {
-          const arr = Array.isArray(current) ? current : []
-          return arr.filter((r: any) => r.id !== id)
-        }, false)
+        // Track executed recommendation so it stays hidden even after SWR revalidation
+        setExecutedRecIds(prev => new Set(prev).add(id))
 
         await mutateMigrations()
         setDrawerOpen(false)

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
+import { pbsFetch } from "@/lib/proxmox/pbs-client"
 
 export const runtime = "nodejs"
 
@@ -127,6 +128,18 @@ export async function POST(req: Request) {
       }
     } else if (sshEnabled && sshAuthMethod === 'password' && sshPassword) {
       data.sshPassEnc = encryptSecret(sshPassword)
+    }
+
+    // Validate PBS credentials before saving
+    if (type === 'pbs') {
+      try {
+        await pbsFetch({ baseUrl, apiToken, insecureDev: insecureTLS }, "/version")
+      } catch (e: any) {
+        return NextResponse.json(
+          { error: `PBS authentication failed: ${e?.message || 'Unable to connect'}` },
+          { status: 400 }
+        )
+      }
     }
 
     const created = await prisma.connection.create({

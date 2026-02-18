@@ -14,10 +14,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     const conn = await getPbsConnectionById(id)
 
-    // Récupérer le status du serveur PBS et la liste des datastores
-    const [status, version, datastores] = await Promise.all([
+    // First verify authentication (will throw on 401/403)
+    const version = await pbsFetch<any>(conn, "/version")
+
+    // Then fetch non-critical data (ok to swallow errors)
+    const [status, datastores] = await Promise.all([
       pbsFetch<any>(conn, "/status").catch(() => null),
-      pbsFetch<any>(conn, "/version").catch(() => null),
       pbsFetch<any[]>(conn, "/admin/datastore").catch(() => []),
     ])
 

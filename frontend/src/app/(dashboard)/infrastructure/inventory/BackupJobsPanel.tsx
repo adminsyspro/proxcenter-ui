@@ -28,7 +28,8 @@ import {
   Typography,
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { getDateLocale } from '@/lib/i18n/date'
 
 interface BackupJob {
   id: string
@@ -57,6 +58,7 @@ interface BackupJobsPanelProps {
 
 export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPanelProps) {
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
 
   // États
   const [jobs, setJobs] = useState<BackupJob[]>([])
@@ -354,7 +356,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       next.setDate(next.getDate() + 1)
     }
     
-    return next.toLocaleString('fr-FR', { 
+    return next.toLocaleString(dateLocale, {
       day: '2-digit', 
       month: '2-digit', 
       year: 'numeric',

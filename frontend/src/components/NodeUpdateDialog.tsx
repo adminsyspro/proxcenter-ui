@@ -71,7 +71,7 @@ export default function NodeUpdateDialog({
 }: NodeUpdateDialogProps) {
   const t = useTranslations()
 
-  const steps = ['Configuration', 'Mise à jour', 'Terminé']
+  const steps = [t('updates.stepConfiguration'), t('updates.stepUpdate'), t('updates.stepCompleted')]
   const [activeStep, setActiveStep] = useState(0)
 
   // Config
@@ -181,7 +181,7 @@ export default function NodeUpdateDialog({
 
   const handleClose = () => {
     if (rollingUpdate && ['running', 'paused'].includes(rollingUpdate.status)) {
-      if (!window.confirm('Une mise à jour est en cours. Êtes-vous sûr de vouloir fermer ? (Le processus continuera en arrière-plan)')) {
+      if (!window.confirm(t('updates.confirmCloseWhileRunning'))) {
         return
       }
     }
@@ -222,7 +222,7 @@ export default function NodeUpdateDialog({
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className="ri-download-cloud-line" style={{ fontSize: 22 }} />
-        Mise à jour du nœud
+        {t('updates.nodeUpdateTitle')}
         <Chip
           size="small"
           label={nodeName}
@@ -268,10 +268,10 @@ export default function NodeUpdateDialog({
                 icon={<i className="ri-computer-line" style={{ fontSize: 20 }} />}
               >
                 <Typography variant="body2" fontWeight={600}>
-                  {vmCount} VM{vmCount > 1 ? 's' : ''} en cours d'exécution sur ce nœud
+                  {t('updates.vmsRunningOnNode', { count: vmCount })}
                 </Typography>
                 <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                  Les VMs seront éteintes durant la mise à jour si l'option est activée ci-dessous.
+                  {t('updates.vmsShutdownHint')}
                 </Typography>
               </Alert>
             )}
@@ -281,7 +281,7 @@ export default function NodeUpdateDialog({
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                 <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                   <i className="ri-settings-3-line" style={{ marginRight: 8, fontSize: 16 }} />
-                  Options
+                  {t('updates.options')}
                 </Typography>
 
                 <Stack spacing={1} sx={{ mt: 1 }}>
@@ -295,9 +295,9 @@ export default function NodeUpdateDialog({
                     }
                     label={
                       <Box>
-                        <Typography variant="body2">Redémarrage automatique</Typography>
+                        <Typography variant="body2">{t('updates.autoReboot')}</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Redémarrer le nœud si une mise à jour du kernel est installée
+                          {t('updates.autoRebootDescription')}
                         </Typography>
                       </Box>
                     }
@@ -314,9 +314,9 @@ export default function NodeUpdateDialog({
                       }
                       label={
                         <Box>
-                          <Typography variant="body2">Éteindre les VMs</Typography>
+                          <Typography variant="body2">{t('updates.shutdownVms')}</Typography>
                           <Typography variant="caption" color="text.secondary">
-                            Éteindre les VMs avant la mise à jour, les redémarrer ensuite
+                            {t('updates.shutdownVmsDescription')}
                           </Typography>
                         </Box>
                       }
@@ -339,10 +339,10 @@ export default function NodeUpdateDialog({
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CircularProgress size={16} />
                   <Typography variant="body2" fontWeight={600}>
-                    {nodeStatus?.status === 'updating' ? 'Installation des paquets...' :
-                     nodeStatus?.status === 'rebooting' ? 'Redémarrage en cours...' :
-                     nodeStatus?.status === 'migrating_vms' ? 'Gestion des VMs...' :
-                     'Mise à jour en cours...'}
+                    {nodeStatus?.status === 'updating' ? t('updates.installingPackages') :
+                     nodeStatus?.status === 'rebooting' ? t('updates.rebooting') :
+                     nodeStatus?.status === 'migrating_vms' ? t('updates.managingVms') :
+                     t('updates.updateInProgress')}
                   </Typography>
                 </Box>
                 <Chip
@@ -416,15 +416,15 @@ export default function NodeUpdateDialog({
             >
               <Typography variant="body2" fontWeight={600}>
                 {rollingUpdate.status === 'completed'
-                  ? 'Mise à jour terminée avec succès'
+                  ? t('updates.updateCompletedSuccess')
                   : rollingUpdate.status === 'cancelled'
-                    ? 'Mise à jour annulée'
-                    : `Mise à jour échouée: ${rollingUpdate.error || 'Erreur inconnue'}`
+                    ? t('updates.updateCancelled')
+                    : t('updates.updateFailed', { error: rollingUpdate.error || t('updates.unknownError') })
                 }
               </Typography>
               {getDuration() && (
                 <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                  Durée: {getDuration()}
+                  {t('updates.duration', { duration: getDuration() })}
                 </Typography>
               )}
             </Alert>
@@ -435,13 +435,13 @@ export default function NodeUpdateDialog({
                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                     <i className="ri-server-line" style={{ marginRight: 8, fontSize: 16 }} />
-                    Résultat
+                    {t('updates.resultTitle')}
                   </Typography>
                   <Stack spacing={1}>
                     {/* Version transition */}
                     {nodeStatus.version_before && nodeStatus.version_after && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="caption" sx={{ opacity: 0.6 }}>Version:</Typography>
+                        <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('updates.versionLabel')}</Typography>
                         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                           {nodeStatus.version_before}
                         </Typography>
@@ -454,13 +454,13 @@ export default function NodeUpdateDialog({
 
                     {/* Reboot status */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="caption" sx={{ opacity: 0.6 }}>Redémarrage:</Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('updates.rebootLabel')}</Typography>
                       {nodeStatus.did_reboot ? (
-                        <Chip size="small" label="Redémarré" color="info" icon={<i className="ri-restart-line" style={{ fontSize: 14 }} />} sx={{ height: 22, fontSize: 11 }} />
+                        <Chip size="small" label={t('updates.rebooted')} color="info" icon={<i className="ri-restart-line" style={{ fontSize: 14 }} />} sx={{ height: 22, fontSize: 11 }} />
                       ) : nodeStatus.reboot_required ? (
-                        <Chip size="small" label="Requis (non effectué)" color="warning" sx={{ height: 22, fontSize: 11 }} />
+                        <Chip size="small" label={t('updates.rebootRequiredNotDone')} color="warning" sx={{ height: 22, fontSize: 11 }} />
                       ) : (
-                        <Chip size="small" label="Non requis" color="default" sx={{ height: 22, fontSize: 11 }} />
+                        <Chip size="small" label={t('updates.rebootNotRequired')} color="default" sx={{ height: 22, fontSize: 11 }} />
                       )}
                     </Box>
 
@@ -482,7 +482,7 @@ export default function NodeUpdateDialog({
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
             <CircularProgress size={40} />
             <Typography variant="body2" sx={{ mt: 2 }}>
-              Démarrage de la mise à jour...
+              {t('updates.startingUpdate')}
             </Typography>
           </Box>
         )}
@@ -491,7 +491,7 @@ export default function NodeUpdateDialog({
       <DialogActions sx={{ px: 3, py: 2 }}>
         {activeStep === 0 && (
           <>
-            <Button onClick={handleClose}>Annuler</Button>
+            <Button onClick={handleClose}>{t('common.cancel')}</Button>
             <Button
               variant="contained"
               color="warning"
@@ -499,7 +499,7 @@ export default function NodeUpdateDialog({
               disabled={loading || pkgCount === 0}
               startIcon={loading ? <CircularProgress size={16} /> : <i className="ri-play-circle-line" style={{ fontSize: 18 }} />}
             >
-              Démarrer la mise à jour
+              {t('updates.startUpdate')}
             </Button>
           </>
         )}
@@ -510,13 +510,13 @@ export default function NodeUpdateDialog({
             color="error"
             startIcon={<i className="ri-stop-circle-line" style={{ fontSize: 18 }} />}
           >
-            Annuler
+            {t('common.cancel')}
           </Button>
         )}
 
         {activeStep === 2 && (
           <Button onClick={handleClose} variant="contained">
-            Fermer
+            {t('common.close')}
           </Button>
         )}
       </DialogActions>

@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+
+import { getDateLocale } from '@/lib/i18n/date'
 
 import {
   Alert,
@@ -41,14 +43,14 @@ import { DataGrid } from '@mui/x-data-grid'
   Helpers
 ------------------------------ */
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr, locale) => {
   if (!dateStr) return '—'
   const date = new Date(dateStr)
 
-  
-return date.toLocaleString('fr-FR', { 
-    day: '2-digit', 
-    month: '2-digit', 
+
+return date.toLocaleString(locale, {
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
@@ -806,6 +808,7 @@ return '—'
 function PbsJobsTab({ pbsConnections = [] }) {
   const theme = useTheme()
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
 
   const [selectedPbs, setSelectedPbs] = useState('')
   const [jobs, setJobs] = useState(null)
@@ -1153,7 +1156,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
           <Typography variant="body2" sx={{ opacity: params.value ? 1 : 0.4, fontSize: '0.8rem' }}>
-            {formatDate(params.value)}
+            {formatDate(params.value, dateLocale)}
           </Typography>
         </Box>
       )
@@ -1165,7 +1168,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
           <Typography variant="body2" sx={{ opacity: params.value ? 1 : 0.4, fontSize: '0.8rem' }}>
-            {formatDate(params.value)}
+            {formatDate(params.value, dateLocale)}
           </Typography>
         </Box>
       )

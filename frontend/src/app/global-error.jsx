@@ -1,6 +1,17 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
+
+const translations = {
+  en: { title: 'Critical error', description: 'A critical error occurred. The application encountered an unexpected problem.', retry: 'Retry', home: 'Home' },
+  fr: { title: 'Erreur critique', description: "Une erreur critique s'est produite. L'application a rencontré un problème inattendu.", retry: 'Réessayer', home: 'Accueil' },
+}
+
+function getLocale() {
+  if (typeof document === 'undefined') return 'fr'
+  const match = document.cookie.match(/NEXT_LOCALE=(\w+)/)
+  return match?.[1] === 'en' ? 'en' : 'fr'
+}
 
 // Logo SVG ProxCenter (inline car on ne peut pas utiliser les composants normaux ici)
 const LogoIcon = ({ size = 60 }) => {
@@ -27,12 +38,15 @@ const LogoIcon = ({ size = 60 }) => {
 }
 
 export default function GlobalError({ error, reset }) {
+  const locale = useMemo(() => getLocale(), [])
+  const t = translations[locale]
+
   useEffect(() => {
     console.error('Global error:', error)
   }, [error])
 
   return (
-    <html lang="fr">
+    <html lang={locale}>
       <body>
         <div
           style={{
@@ -90,7 +104,7 @@ export default function GlobalError({ error, reset }) {
               color: '#ffffff',
             }}
           >
-            Erreur critique
+            {t.title}
           </h2>
 
           {/* Description */}
@@ -102,7 +116,7 @@ export default function GlobalError({ error, reset }) {
               lineHeight: 1.6,
             }}
           >
-            Une erreur critique s'est produite. L'application a rencontré un problème inattendu.
+            {t.description}
           </p>
 
           {/* Boutons */}
@@ -120,7 +134,7 @@ export default function GlobalError({ error, reset }) {
                 cursor: 'pointer',
               }}
             >
-              Réessayer
+              {t.retry}
             </button>
             <button
               onClick={() => (window.location.href = '/home')}
@@ -135,7 +149,7 @@ export default function GlobalError({ error, reset }) {
                 cursor: 'pointer',
               }}
             >
-              Accueil
+              {t.home}
             </button>
           </div>
 

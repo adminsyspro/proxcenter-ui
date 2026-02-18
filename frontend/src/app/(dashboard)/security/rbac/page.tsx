@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useSession } from 'next-auth/react'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   Alert, alpha, Autocomplete, Box, Button, Card, CardContent, Checkbox, Chip,
   Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
@@ -14,6 +14,7 @@ import {
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 
+import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features } from '@/contexts/LicenseContext'
@@ -38,15 +39,15 @@ const getScopeLabels = (t: any) => ({
   vm: t('rbac.scopes.vmct')
 })
 
-const timeAgo = (d, t?: any) => {
+const timeAgo = (d, t?: any, locale?: string) => {
   if (!d) return t ? t('common.notAvailable') : 'N/A'
   const diff = Math.floor((Date.now() - new Date(d).getTime()) / 1000)
 
-  if (diff < 60) return t ? t('time.justNow') : 'à l\'instant'
-  if (diff < 3600) return t ? t('time.minutesAgo', { count: Math.floor(diff / 60) }) : `il y a ${Math.floor(diff / 60)} min`
-  if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `il y a ${Math.floor(diff / 3600)} h`
-  
-return new Date(d).toLocaleDateString('fr-FR')
+  if (diff < 60) return t ? t('time.justNow') : 'just now'
+  if (diff < 3600) return t ? t('time.minutesAgo', { count: Math.floor(diff / 60) }) : `${Math.floor(diff / 60)} min ago`
+  if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `${Math.floor(diff / 3600)} h ago`
+
+return new Date(d).toLocaleDateString(locale)
 }
 
 // Role Dialog
@@ -95,7 +96,7 @@ return n })
   }
 
   const handleSave = async () => {
-    if (!name.trim()) { setError(t ? t('common.error') : 'Nom requis'); 
+    if (!name.trim()) { setError(t('common.error'));
 
 return }
 
@@ -110,26 +111,26 @@ return }
 
       const data = await res.json()
 
-      if (!res.ok) { setError(data.error || (t ? t('common.error') : 'Erreur')); 
+      if (!res.ok) { setError(data.error || t('common.error'));
 
 return }
 
       onSave(); onClose()
-    } catch { setError(t ? t('errors.connectionError') : 'Erreur de connexion') } finally { setLoading(false) }
+    } catch { setError(t('errors.connectionError')) } finally { setLoading(false) }
   }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth='md' fullWidth>
-      <DialogTitle><i className={isEdit ? 'ri-edit-line' : 'ri-add-line'} style={{marginRight:8}}/>{isEdit ? (t ? t('common.edit') : 'Modifier le rôle') : (t ? t('common.add') : 'Nouveau rôle')}</DialogTitle>
+      <DialogTitle><i className={isEdit ? 'ri-edit-line' : 'ri-add-line'} style={{marginRight:8}}/>{isEdit ? t('common.edit') : t('common.add')}</DialogTitle>
       <DialogContent>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
         <Box sx={{ display: 'flex', gap: 2, mt: 1, mb: 2 }}>
-          <TextField fullWidth label={t ? t('common.name') : 'Nom'} value={name} onChange={e => setName(e.target.value)} disabled={role?.is_system} required />
-          <TextField label='Couleur' type='color' value={color} onChange={e => setColor(e.target.value)} sx={{ width: 100 }} disabled={role?.is_system} />
+          <TextField fullWidth label={t('common.name')} value={name} onChange={e => setName(e.target.value)} disabled={role?.is_system} required />
+          <TextField label={t('common.color')} type='color' value={color} onChange={e => setColor(e.target.value)} sx={{ width: 100 }} disabled={role?.is_system} />
         </Box>
-        <TextField fullWidth label={t ? t('common.description') : 'Description'} value={description} onChange={e => setDescription(e.target.value)} multiline rows={2} sx={{ mb: 2 }} disabled={role?.is_system} />
+        <TextField fullWidth label={t('common.description')} value={description} onChange={e => setDescription(e.target.value)} multiline rows={2} sx={{ mb: 2 }} disabled={role?.is_system} />
         <Typography variant='subtitle2' sx={{ mb: 1, fontWeight: 600 }}>Permissions ({selectedPerms.size})</Typography>
-        {role?.is_system && <Alert severity='info' sx={{ mb: 1 }}>{t ? t('rbac.cannotModifySystem') : 'Les rôles système ne peuvent pas être modifiés.'}</Alert>}
+        {role?.is_system && <Alert severity='info' sx={{ mb: 1 }}>{t('rbac.cannotModifySystem')}</Alert>}
         <Paper variant='outlined' sx={{ maxHeight: 350, overflow: 'auto' }}>
           {categories.map(cat => {
             const ids = cat.permissions.map(p => p.id)
@@ -154,8 +155,8 @@ return n })}>
                   <List dense disablePadding>
                     {cat.permissions.map(perm => (
                       <ListItem key={perm.id} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider' }}>
-                        <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title='Sensible'><i className='ri-alert-line' style={{ color: '#f59e0b' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
-                        <ListItemText primary={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><code style={{ fontSize: '0.85rem' }}>{perm.name}</code>{perm.is_dangerous && <Chip label='Sensible' size='small' color='warning' sx={{ height: 18, fontSize: '0.7rem' }} />}</Box>} secondary={perm.description} />
+                        <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title={t('common.warning')}><i className='ri-alert-line' style={{ color: '#f59e0b' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
+                        <ListItemText primary={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><code style={{ fontSize: '0.85rem' }}>{perm.name}</code>{perm.is_dangerous && <Chip label={t('common.warning')} size='small' color='warning' sx={{ height: 18, fontSize: '0.7rem' }} />}</Box>} secondary={perm.description} />
                         {!role?.is_system && <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' /></ListItemSecondaryAction>}
                       </ListItem>
                     ))}
@@ -167,8 +168,8 @@ return n })}>
         </Paper>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t ? t('common.cancel') : 'Annuler'}</Button>
-        {!role?.is_system && <Button variant='contained' onClick={handleSave} disabled={loading}>{loading ? (t ? t('common.saving') : 'Enregistrement...') : isEdit ? (t ? t('common.update') : 'Mettre à jour') : (t ? t('common.create') : 'Créer')}</Button>}
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        {!role?.is_system && <Button variant='contained' onClick={handleSave} disabled={loading}>{loading ? t('common.saving') : isEdit ? t('common.update') : t('common.create')}</Button>}
       </DialogActions>
     </Dialog>
   )
@@ -196,7 +197,7 @@ function AssignmentDialog({ open, onClose, roles, users, onSave, t }) {
       fetch('/api/v1/inventory')
         .then(res => res.json())
         .then(data => setInventory(data.data))
-        .catch(() => setError(t ? t('errors.loadingError') : 'Erreur chargement inventaire'))
+        .catch(() => setError(t('errors.loadingError')))
         .finally(() => setLoadingInventory(false))
     }
   }, [open, inventory])
@@ -222,7 +223,7 @@ function AssignmentDialog({ open, onClose, roles, users, onSave, t }) {
         return inventory.clusters.map((c: any) => ({
           id: c.id,
           label: c.name,
-          sublabel: `${c.nodes?.length || 0} nœud(s)`,
+          sublabel: `${c.nodes?.length || 0} node(s)`,
           icon: 'ri-server-line',
           status: c.status
         }))
@@ -305,13 +306,13 @@ return scopeOptions.filter((o: any) =>
   // Sauvegarder (créer une assignation par cible sélectionnée)
   const handleSave = async () => {
     if (!user || !roleId) {
-      setError(t ? t('common.error') : 'Sélectionnez un utilisateur et un rôle')
+      setError(t('common.error'))
       
 return
     }
 
     if (scopeType !== 'global' && selectedTargets.length === 0) {
-      setError(t ? t('common.error') : 'Sélectionnez au moins une ressource')
+      setError(t('common.error'))
       
 return
     }
@@ -341,7 +342,7 @@ return
         if (res.ok) {
           successCount++
         } else {
-          errors.push(data.error || 'Erreur')
+          errors.push(data.error || t('common.error'))
         }
       }
 
@@ -351,13 +352,13 @@ return
         if (errors.length === 0) {
           onClose()
         } else {
-          setError(`${successCount} assignation(s) créée(s), ${errors.length} erreur(s)`)
+          setError(`${successCount} / ${errors.length} ${t('common.error')}`)
         }
       } else {
-        setError(errors[0] || (t ? t('common.error') : 'Erreur lors de l\'assignation'))
+        setError(errors[0] || t('common.error'))
       }
     } catch {
-      setError(t ? t('errors.connectionError') : 'Erreur de connexion')
+      setError(t('errors.connectionError'))
     } finally {
       setSaving(false)
     }
@@ -376,7 +377,7 @@ return
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className='ri-user-add-line' />
-        {t ? t('common.add') : 'Assigner un rôle'}
+        {t('common.add')}
       </DialogTitle>
       <DialogContent>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
@@ -387,7 +388,7 @@ return
           getOptionLabel={(u: any) => `${u.email}${u.name ? ` (${u.name})` : ''}`}
           value={user}
           onChange={(_, v) => setUser(v)}
-          renderInput={p => <TextField {...p} label={t ? t('navigation.users') : 'Utilisateur'} required sx={{ mt: 2 }} />}
+          renderInput={p => <TextField {...p} label={t('navigation.users')} required sx={{ mt: 2 }} />}
           renderOption={(props, option: any) => (
             <li {...props} key={option.id}>
               <Box>
@@ -400,14 +401,14 @@ return
         
         {/* Sélection rôle */}
         <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel>{t ? t('rbac.title') : 'Rôle'}</InputLabel>
-          <Select value={roleId} label={t ? t('rbac.title') : 'Rôle'} onChange={e => setRoleId(e.target.value)}>
+          <InputLabel>{t('rbac.title')}</InputLabel>
+          <Select value={roleId} label={t('rbac.title')} onChange={e => setRoleId(e.target.value)}>
             {roles.map((r: any) => (
               <MenuItem key={r.id} value={r.id}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: r.color }} />
                   {r.name}
-                  {r.is_system && <Chip label={t ? t('rbacPage.systemRole') : 'System'} size='small' sx={{ height: 18, fontSize: '0.7rem' }} />}
+                  {r.is_system && <Chip label={t('rbacPage.systemRole')} size='small' sx={{ height: 18, fontSize: '0.7rem' }} />}
                 </Box>
               </MenuItem>
             ))}
@@ -416,10 +417,10 @@ return
 
         {/* Sélection scope type */}
         <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel>{t ? t('rbacPage.scope') : 'Scope'}</InputLabel>
+          <InputLabel>{t('rbacPage.scope')}</InputLabel>
           <Select
             value={scopeType}
-            label={t ? t('rbacPage.scope') : 'Scope'}
+            label={t('rbacPage.scope')}
             onChange={e => { setScopeType(e.target.value); setSelectedTargets([]) }}
           >
             <MenuItem value='global'>
@@ -427,7 +428,7 @@ return
                 <i className='ri-global-line' style={{ color: '#6366f1' }} />
                 <Box>
                   <Typography variant='body2'>Global</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.accessAllResources') : 'Access to all resources'}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.accessAllResources')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -435,8 +436,8 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-server-line' style={{ color: '#8b5cf6' }} />
                 <Box>
-                  <Typography variant='body2'>{t ? t('rbacPage.clusterConnection') : 'Cluster / Connection'}</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.limitedToClusters') : 'Limited to one or more clusters'}</Typography>
+                  <Typography variant='body2'>{t('rbacPage.clusterConnection')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToClusters')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -444,8 +445,8 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-computer-line' style={{ color: '#f59e0b' }} />
                 <Box>
-                  <Typography variant='body2'>{t ? t('rbacPage.nodeScope') : 'Node'}</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.limitedToNodes') : 'Limited to one or more nodes'}</Typography>
+                  <Typography variant='body2'>{t('rbacPage.nodeScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToNodes')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -453,8 +454,8 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-instance-line' style={{ color: '#10b981' }} />
                 <Box>
-                  <Typography variant='body2'>{t ? t('rbacPage.vmContainer') : 'VM / Container'}</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.limitedToVmsCts') : 'Limited to one or more VMs/CTs'}</Typography>
+                  <Typography variant='body2'>{t('rbacPage.vmContainer')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToVmsCts')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -466,10 +467,10 @@ return
           <Box sx={{ mt: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant='subtitle2'>
-                {t ? t('rbacPage.selectResources') : 'Select resources'} ({selectedTargets.length}/{scopeOptions.length})
+                {t('rbacPage.selectResources')} ({selectedTargets.length}/{scopeOptions.length})
               </Typography>
               <Button size='small' onClick={toggleAll}>
-                {selectedTargets.length === scopeOptions.length ? (t ? t('rbacPage.deselectAll') : 'Deselect all') : (t ? t('rbacPage.selectAll') : 'Select all')}
+                {selectedTargets.length === scopeOptions.length ? (t('rbacPage.deselectAll')) : (t('rbacPage.selectAll'))}
               </Button>
             </Box>
 
@@ -477,7 +478,7 @@ return
             <TextField
               fullWidth
               size='small'
-              placeholder={t ? t('rbacPage.searchResource') : 'Search resource...'}
+              placeholder={t('rbacPage.searchResource')}
               value={searchFilter}
               onChange={e => setSearchFilter(e.target.value)}
               sx={{ mb: 1 }}
@@ -488,12 +489,12 @@ return
             
             {loadingInventory ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <Typography variant='body2' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.loadingInventory') : 'Loading inventory...'}</Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('rbacPage.loadingInventory')}</Typography>
               </Box>
             ) : scopeOptions.length === 0 ? (
-              <Alert severity='warning'>{t ? t('rbacPage.noResourceAvailable') : 'No resource available'}</Alert>
+              <Alert severity='warning'>{t('rbacPage.noResourceAvailable')}</Alert>
             ) : filteredOptions.length === 0 ? (
-              <Alert severity='info'>{t ? t('rbacPage.noResultsFor', { query: searchFilter }) : `No results for "${searchFilter}"`}</Alert>
+              <Alert severity='info'>{t('rbacPage.noResultsFor', { query: searchFilter })}</Alert>
             ) : (
               <Paper variant='outlined' sx={{ maxHeight: 250, overflow: 'auto' }}>
                 <List dense disablePadding>
@@ -543,18 +544,18 @@ return
 
         {scopeType === 'global' && (
           <Alert severity='info' sx={{ mt: 2 }}>
-            <span dangerouslySetInnerHTML={{ __html: t ? t('rbacPage.userHasRoleOnAll') : 'The user will have this role on <strong>all resources</strong> of the infrastructure.' }} />
+            <span dangerouslySetInnerHTML={{ __html: t('rbacPage.userHasRoleOnAll') }} />
           </Alert>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t ? t('common.cancel') : 'Annuler'}</Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button
           variant='contained'
           onClick={handleSave}
           disabled={saving || !user || !roleId || (scopeType !== 'global' && selectedTargets.length === 0)}
         >
-          {saving ? (t ? t('common.saving') : 'Assignation...') : selectedTargets.length > 1 ? `${t ? t('common.save') : 'Assigner'} (${selectedTargets.length})` : (t ? t('common.save') : 'Assigner')}
+          {saving ? t('common.saving') : selectedTargets.length > 1 ? `${t('common.save')} (${selectedTargets.length})` : t('common.save')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -568,8 +569,8 @@ function DeleteDialog({ open, onClose, title, message, onConfirm, loading, t }) 
       <DialogTitle>{title}</DialogTitle>
       <DialogContent><Typography>{message}</Typography></DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t ? t('common.cancel') : 'Cancel'}</Button>
-        <Button variant='contained' color='error' onClick={onConfirm} disabled={loading}>{loading ? (t ? t('common.deleting') : 'Deleting...') : (t ? t('common.delete') : 'Delete')}</Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant='contained' color='error' onClick={onConfirm} disabled={loading}>{loading ? (t('common.deleting')) : (t('common.delete'))}</Button>
       </DialogActions>
     </Dialog>
   )
@@ -597,15 +598,15 @@ function RolesTab({ roles, categories, onRefresh, t }) {
 return }
 
       setDeleteOpen(false); onRefresh()
-    } catch { setError('Erreur') } finally { setDeleting(false) }
+    } catch { setError(t('common.error')) } finally { setDeleting(false) }
   }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {error && <Alert severity='error' onClose={() => setError('')}>{error}</Alert>}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant='body2' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.rolesCount', { count: roles.length }) : `${roles.length} role(s)`}</Typography>
-        <Button variant='contained' size='small' startIcon={<i className='ri-add-line' />} onClick={() => { setSelected(null); setDialogOpen(true) }}>{t ? t('rbacPage.newRole') : 'New role'}</Button>
+        <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('rbacPage.rolesCount', { count: roles.length })}</Typography>
+        <Button variant='contained' size='small' startIcon={<i className='ri-add-line' />} onClick={() => { setSelected(null); setDialogOpen(true) }}>{t('rbacPage.newRole')}</Button>
       </Box>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
         {roles.map(role => (
@@ -614,19 +615,19 @@ return }
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>{role.name}</Typography>
-                  {role.is_system && <Chip label={t ? t('rbacPage.systemRole') : 'System'} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem' }} />}
+                  {role.is_system && <Chip label={t('rbacPage.systemRole')} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem' }} />}
                 </Box>
                 {role.description && <Typography variant='body2' sx={{ opacity: 0.6 }}>{role.description}</Typography>}
               </Box>
               <Box>
-                <Tooltip title={role.is_system ? 'Voir' : 'Modifier'}><IconButton size='small' onClick={() => { setSelected(role); setDialogOpen(true) }}><i className={role.is_system ? 'ri-eye-line' : 'ri-edit-line'} /></IconButton></Tooltip>
-                {!role.is_system && <Tooltip title='Supprimer'><IconButton size='small' color='error' onClick={() => { setToDelete(role); setDeleteOpen(true) }}><i className='ri-delete-bin-line' /></IconButton></Tooltip>}
+                <Tooltip title={role.is_system ? t('common.view') : t('common.edit')}><IconButton size='small' onClick={() => { setSelected(role); setDialogOpen(true) }}><i className={role.is_system ? 'ri-eye-line' : 'ri-edit-line'} /></IconButton></Tooltip>
+                {!role.is_system && <Tooltip title={t('common.delete')}><IconButton size='small' color='error' onClick={() => { setToDelete(role); setDeleteOpen(true) }}><i className='ri-delete-bin-line' /></IconButton></Tooltip>}
               </Box>
             </Box>
             <Divider sx={{ my: 1 }} />
             <Box sx={{ display: 'flex', gap: 2 }}>
-              <Typography variant='body2'><i className='ri-key-line' style={{ opacity: 0.5, marginRight: 4 }} />{role.permissions.length} {t ? t('rbacPage.permissions') : 'permissions'}</Typography>
-              <Typography variant='body2'><i className='ri-user-line' style={{ opacity: 0.5, marginRight: 4 }} />{t ? t('rbacPage.userCount', { count: role.user_count }) : `${role.user_count} user(s)`}</Typography>
+              <Typography variant='body2'><i className='ri-key-line' style={{ opacity: 0.5, marginRight: 4 }} />{role.permissions.length} {t('rbacPage.permissions')}</Typography>
+              <Typography variant='body2'><i className='ri-user-line' style={{ opacity: 0.5, marginRight: 4 }} />{t('rbacPage.userCount', { count: role.user_count })}</Typography>
             </Box>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
               {role.permissions.slice(0, 4).map(p => <Chip key={p.id} label={p.name.split('.')[1]} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem' }} />)}
@@ -636,13 +637,14 @@ return }
         ))}
       </Box>
       <RoleDialog open={dialogOpen} onClose={() => setDialogOpen(false)} role={selected} categories={categories} onSave={onRefresh} t={t} />
-      <DeleteDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t ? t('rbacPage.deleteRole') : 'Delete role'} message={t ? t('rbacPage.deleteRoleConfirm', { name: toDelete?.name }) : `Delete role "${toDelete?.name}"?`} onConfirm={handleDelete} loading={deleting} t={t} />
+      <DeleteDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t('rbacPage.deleteRole')} message={t('rbacPage.deleteRoleConfirm', { name: toDelete?.name })} onConfirm={handleDelete} loading={deleting} t={t} />
     </Box>
   )
 }
 
 // Assignments Tab avec regroupement par utilisateur/rôle/scope_type
 function AssignmentsTab({ assignments, roles, users, onRefresh, t }) {
+  const dateLocale = getDateLocale(useLocale())
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [toEdit, setToEdit] = useState<any>(null)
@@ -729,7 +731,7 @@ return users.filter((u: any) => !assignedUserIds.has(u.id))
   // Formater l'affichage des ressources
   const formatScopeTargets = (row: any) => {
     if (row.scope_type === 'global') {
-      return <Typography variant='body2' sx={{ opacity: 0.7 }}>{t ? t('common.all') : 'Toutes les ressources'}</Typography>
+      return <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('common.all')}</Typography>
     }
     
     const count = row.scope_targets.length
@@ -763,7 +765,7 @@ return (
     return (
       <Tooltip title={row.scope_targets.join('\n')}>
         <Chip 
-          label={`${count} ${row.scope_type === 'vm' ? 'VMs/CTs' : row.scope_type === 'node' ? 'nœuds' : 'clusters'}`} 
+          label={`${count} ${row.scope_type === 'vm' ? 'VMs/CTs' : row.scope_type === 'node' ? t('rbac.scopes.node') : t('rbac.scopes.connection')}`}
           size='small' 
           variant='outlined'
           sx={{ height: 22, fontSize: '0.75rem' }}
@@ -773,36 +775,36 @@ return (
   }
 
   const columns = useMemo(() => [
-    { field: 'user', headerName: t ? t('navigation.users') : 'Utilisateur', flex: 1, minWidth: 200, renderCell: (p: any) => (
+    { field: 'user', headerName: t('navigation.users'), flex: 1, minWidth: 200, renderCell: (p: any) => (
       <Typography variant='body2' sx={{ fontWeight: 500 }}>
         {p.row.user.email}
         {p.row.user.name && <Typography component='span' variant='caption' sx={{ opacity: 0.6, ml: 1 }}>({p.row.user.name})</Typography>}
       </Typography>
     )},
-    { field: 'role', headerName: t ? t('rbac.title') : 'Rôle', width: 130, renderCell: (p: any) => (
+    { field: 'role', headerName: t('rbac.title'), width: 130, renderCell: (p: any) => (
       <Chip label={p.row.role.name} size='small' sx={{ bgcolor: alpha(p.row.role.color, 0.15), color: p.row.role.color, fontWeight: 500, height: 24 }} />
     )},
-    { field: 'scope_type', headerName: t ? t('rbac.scopes.global') : 'Périmètre', width: 140, renderCell: (p: any) => (
+    { field: 'scope_type', headerName: t('rbacPage.scope'), width: 140, renderCell: (p: any) => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <i className={scopeIcons[p.row.scope_type]} style={{ opacity: 0.6, fontSize: 14 }} />
         <Typography variant='body2'>{scopeLabels[p.row.scope_type]}</Typography>
       </Box>
     )},
-    { field: 'scope_targets', headerName: t ? t('navigation.resources') : 'Ressources', flex: 1, minWidth: 150, renderCell: (p: any) => formatScopeTargets(p.row) },
-    { field: 'granted_at', headerName: t ? t('common.date') : 'Assigné', width: 150, renderCell: (p: any) => (
+    { field: 'scope_targets', headerName: t('navigation.resources'), flex: 1, minWidth: 150, renderCell: (p: any) => formatScopeTargets(p.row) },
+    { field: 'granted_at', headerName: t('common.date'), width: 150, renderCell: (p: any) => (
       <Typography variant='body2' sx={{ opacity: 0.7 }}>
-        {timeAgo(p.row.granted_at, t)}
-        {p.row.granted_by_email && ` par ${p.row.granted_by_email.split('@')[0]}`}
+        {timeAgo(p.row.granted_at, t, dateLocale)}
+        {p.row.granted_by_email && ` - ${p.row.granted_by_email.split('@')[0]}`}
       </Typography>
     )},
     { field: 'actions', headerName: '', width: 80, sortable: false, renderCell: (p: any) => (
       <Box sx={{ display: 'flex', gap: 0 }}>
-        <Tooltip title={t ? t('common.edit') : 'Modifier'}>
+        <Tooltip title={t('common.edit')}>
           <IconButton size='small' onClick={() => { setToEdit(p.row); setEditDialogOpen(true) }}>
             <i className='ri-edit-line' style={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>
-        <Tooltip title={t ? t('common.delete') : 'Révoquer'}>
+        <Tooltip title={t('common.delete')}>
           <IconButton size='small' color='error' onClick={() => { setToDelete(p.row); setDeleteOpen(true) }}>
             <i className='ri-delete-bin-line' style={{ fontSize: 16 }} />
           </IconButton>
@@ -814,13 +816,13 @@ return (
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-        <TextField size='small' placeholder={t ? t('common.search') : 'Filtrer par utilisateur...'} value={filter} onChange={e => setFilter(e.target.value)} InputProps={{ startAdornment: <i className='ri-search-line' style={{ marginRight: 8, opacity: 0.5 }} /> }} sx={{ width: 250 }} />
+        <TextField size='small' placeholder={t('common.search')} value={filter} onChange={e => setFilter(e.target.value)} InputProps={{ startAdornment: <i className='ri-search-line' style={{ marginRight: 8, opacity: 0.5 }} /> }} sx={{ width: 250 }} />
         <Button variant='contained' size='small' startIcon={<i className='ri-user-add-line' />} onClick={() => setDialogOpen(true)} disabled={availableUsers.length === 0}>
-          {availableUsers.length === 0 ? (t ? t('common.all') : 'Tous assignés') : (t ? t('common.add') : 'Assigner un rôle')}
+          {availableUsers.length === 0 ? (t('common.all')) : (t('common.add'))}
         </Button>
       </Box>
       {availableUsers.length === 0 && assignments.length > 0 && (
-        <Alert severity='info'>{t ? t('common.noData') : 'Tous les utilisateurs ont déjà un rôle. Modifiez une assignation existante ou créez un nouvel utilisateur.'}</Alert>
+        <Alert severity='info'>{t('common.noData')}</Alert>
       )}
       <Box sx={{ flex: 1, minHeight: 300 }}>
         <DataGrid 
@@ -850,8 +852,8 @@ return (
       <DeleteDialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        title={t ? t('rbacPage.revokeAssignments') : 'Revoke assignments'}
-        message={t ? t('rbacPage.revokeRoleFrom', { role: toDelete?.role?.name, user: toDelete?.user?.email }) + (toDelete?.scope_targets?.length > 1 ? ` (${t('rbacPage.resourcesCount', { count: toDelete.scope_targets.length })})` : '') : `Revoke role "${toDelete?.role?.name}" from ${toDelete?.user?.email}?${toDelete?.scope_targets?.length > 1 ? ` (${toDelete.scope_targets.length} resources)` : ''}`}
+        title={t('rbacPage.revokeAssignments')}
+        message={t('rbacPage.revokeRoleFrom', { role: toDelete?.role?.name, user: toDelete?.user?.email }) + (toDelete?.scope_targets?.length > 1 ? ` (${t('rbacPage.resourcesCount', { count: toDelete.scope_targets.length })})` : '')}
         onConfirm={handleDeleteGroup}
         loading={deleting}
         t={t}
@@ -880,7 +882,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, onSave, t
       fetch('/api/v1/inventory')
         .then(res => res.json())
         .then(data => setInventory(data.data))
-        .catch(() => setError(t ? t('errors.loadingError') : 'Erreur chargement inventaire'))
+        .catch(() => setError(t('errors.loadingError')))
         .finally(() => setLoadingInventory(false))
     }
   }, [open, inventory])
@@ -905,7 +907,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, onSave, t
         return inventory.clusters.map((c: any) => ({
           id: c.id,
           label: c.name,
-          sublabel: `${c.nodes?.length || 0} nœud(s)`,
+          sublabel: `${c.nodes?.length || 0} node(s)`,
           icon: 'ri-server-line',
           status: c.status
         }))
@@ -996,13 +998,13 @@ return scopeOptions.filter((o: any) =>
 
   const handleSave = async () => {
     if (!roleId) {
-      setError(t ? t('common.error') : 'Sélectionnez un rôle')
+      setError(t('common.error'))
 
 return
     }
 
     if (scopeType !== 'global' && selectedTargets.length === 0) {
-      setError(t ? t('common.error') : 'Sélectionnez au moins une ressource')
+      setError(t('common.error'))
 
 return
     }
@@ -1029,7 +1031,7 @@ return
           const res = await fetch(`/api/v1/rbac/assignments/${assignment.id}`, { method: 'DELETE' })
 
           if (!res.ok) {
-            errors.push(`Erreur suppression ${target}`)
+            errors.push(`${t('errors.deleteError')} ${target}`)
           }
         }
       }
@@ -1047,7 +1049,7 @@ return
             })
 
             if (!res.ok) {
-              errors.push(`Erreur mise à jour ${target}`)
+              errors.push(`${t('errors.updateError')} ${target}`)
             }
           }
         }
@@ -1069,7 +1071,7 @@ return
         if (!res.ok) {
           const data = await res.json()
 
-          errors.push(data.error || `Erreur création ${target}`)
+          errors.push(data.error || `${t('errors.addError')} ${target}`)
         }
       }
 
@@ -1094,7 +1096,7 @@ return
         if (!res.ok) {
           const data = await res.json()
 
-          errors.push(data.error || 'Erreur création assignation globale')
+          errors.push(data.error || t('errors.addError'))
         }
       }
 
@@ -1113,10 +1115,10 @@ return
       if (errors.length === 0) {
         onClose()
       } else {
-        setError(`Modifications effectuées avec ${errors.length} erreur(s)`)
+        setError(`${errors.length} ${t('common.error')}`)
       }
     } catch {
-      setError(t ? t('errors.connectionError') : 'Erreur de connexion')
+      setError(t('errors.connectionError'))
     } finally {
       setSaving(false)
     }
@@ -1128,22 +1130,22 @@ return
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className='ri-edit-line' />
-        {t ? t('common.edit') : 'Modifier l\'assignation'}
+        {t('common.edit')}
       </DialogTitle>
       <DialogContent>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
 
-        <TextField fullWidth label={t ? t('navigation.users') : 'Utilisateur'} value={assignmentGroup?.user?.email || ''} disabled sx={{ mt: 2 }} />
+        <TextField fullWidth label={t('navigation.users')} value={assignmentGroup?.user?.email || ''} disabled sx={{ mt: 2 }} />
 
         <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel>{t ? t('rbac.title') : 'Rôle'}</InputLabel>
-          <Select value={roleId} label={t ? t('rbac.title') : 'Rôle'} onChange={e => setRoleId(e.target.value)}>
+          <InputLabel>{t('rbac.title')}</InputLabel>
+          <Select value={roleId} label={t('rbac.title')} onChange={e => setRoleId(e.target.value)}>
             {roles.map((r: any) => (
               <MenuItem key={r.id} value={r.id}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: r.color }} />
                   {r.name}
-                  {r.is_system && <Chip label={t ? t('rbacPage.systemRole') : 'System'} size='small' sx={{ height: 18, fontSize: '0.7rem' }} />}
+                  {r.is_system && <Chip label={t('rbacPage.systemRole')} size='small' sx={{ height: 18, fontSize: '0.7rem' }} />}
                 </Box>
               </MenuItem>
             ))}
@@ -1151,10 +1153,10 @@ return
         </FormControl>
 
         <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel>Périmètre</InputLabel>
-          <Select 
-            value={scopeType} 
-            label='Périmètre' 
+          <InputLabel>{t('rbacPage.scope')}</InputLabel>
+          <Select
+            value={scopeType}
+            label={t('rbacPage.scope')}
             onChange={e => { 
               setScopeType(e.target.value)
               setSelectedTargets([])
@@ -1165,7 +1167,7 @@ return
                 <i className='ri-global-line' style={{ color: '#6366f1' }} />
                 <Box>
                   <Typography variant='body2'>Global</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>Accès à toutes les ressources</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.accessAllResources')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -1173,8 +1175,8 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-server-line' style={{ color: '#8b5cf6' }} />
                 <Box>
-                  <Typography variant='body2'>Cluster / Connexion</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>Limité à un ou plusieurs clusters PVE/PBS</Typography>
+                  <Typography variant='body2'>{t('rbacPage.clusterConnection')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToClusters')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -1182,8 +1184,8 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-computer-line' style={{ color: '#f59e0b' }} />
                 <Box>
-                  <Typography variant='body2'>Nœud</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>Limité à un ou plusieurs nœuds</Typography>
+                  <Typography variant='body2'>{t('rbacPage.nodeScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToNodes')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -1192,7 +1194,7 @@ return
                 <i className='ri-instance-line' style={{ color: '#10b981' }} />
                 <Box>
                   <Typography variant='body2'>VM / Container</Typography>
-                  <Typography variant='caption' sx={{ opacity: 0.6 }}>Limité à une ou plusieurs VMs/CTs</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToVmsCts')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -1204,10 +1206,10 @@ return
           <Box sx={{ mt: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant='subtitle2'>
-                {t ? t('rbacPage.selectResources') : 'Select resources'} ({selectedTargets.length}/{scopeOptions.length})
+                {t('rbacPage.selectResources')} ({selectedTargets.length}/{scopeOptions.length})
               </Typography>
               <Button size='small' onClick={toggleAll}>
-                {selectedTargets.length === scopeOptions.length ? (t ? t('rbacPage.deselectAll') : 'Deselect all') : (t ? t('rbacPage.selectAll') : 'Select all')}
+                {selectedTargets.length === scopeOptions.length ? (t('rbacPage.deselectAll')) : (t('rbacPage.selectAll'))}
               </Button>
             </Box>
 
@@ -1215,7 +1217,7 @@ return
             <TextField
               fullWidth
               size='small'
-              placeholder={t ? t('rbacPage.searchResource') : 'Search resource...'}
+              placeholder={t('rbacPage.searchResource')}
               value={searchFilter}
               onChange={e => setSearchFilter(e.target.value)}
               sx={{ mb: 1 }}
@@ -1226,12 +1228,12 @@ return
             
             {loadingInventory ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <Typography variant='body2' sx={{ opacity: 0.6 }}>{t ? t('rbacPage.loadingInventory') : 'Loading inventory...'}</Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('rbacPage.loadingInventory')}</Typography>
               </Box>
             ) : scopeOptions.length === 0 ? (
-              <Alert severity='warning'>{t ? t('rbacPage.noResourceAvailable') : 'No resource available'}</Alert>
+              <Alert severity='warning'>{t('rbacPage.noResourceAvailable')}</Alert>
             ) : filteredOptions.length === 0 ? (
-              <Alert severity='info'>{t ? t('rbacPage.noResultsFor', { query: searchFilter }) : `No results for "${searchFilter}"`}</Alert>
+              <Alert severity='info'>{t('rbacPage.noResultsFor', { query: searchFilter })}</Alert>
             ) : (
               <Paper variant='outlined' sx={{ maxHeight: 250, overflow: 'auto' }}>
                 <List dense disablePadding>
@@ -1281,18 +1283,18 @@ return
 
         {scopeType === 'global' && (
           <Alert severity='info' sx={{ mt: 2 }}>
-            <span dangerouslySetInnerHTML={{ __html: t ? t('rbacPage.userHasRoleOnAll') : 'The user will have this role on <strong>all resources</strong> of the infrastructure.' }} />
+            <span dangerouslySetInnerHTML={{ __html: t('rbacPage.userHasRoleOnAll') }} />
           </Alert>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t ? t('common.cancel') : 'Annuler'}</Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
         <Button
           variant='contained'
           onClick={handleSave}
           disabled={saving || !roleId || (scopeType !== 'global' && selectedTargets.length === 0)}
         >
-          {saving ? (t ? t('common.saving') : 'Enregistrement...') : (t ? t('common.save') : 'Enregistrer')}
+          {saving ? (t('common.saving')) : (t('common.save'))}
         </Button>
       </DialogActions>
     </Dialog>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { getDateLocale } from '@/lib/i18n/date'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features } from '@/contexts/LicenseContext'
 import {
@@ -34,6 +35,7 @@ import NetworkIoCard from './components/NetworkIoCard'
 
 export default function ResourcesPage() {
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
   const { setPageInfo } = usePageTitle()
 
   // Cluster drill-down (F4)
@@ -61,8 +63,8 @@ export default function ResourcesPage() {
   // Improved predictions with EWMA (F3)
   const { projectedTrends, alerts } = useMemo(() => {
     if (!kpis || trends.length === 0) return { projectedTrends: [], alerts: [] }
-    return calculateImprovedPredictions(kpis, trends)
-  }, [kpis, trends])
+    return calculateImprovedPredictions(kpis, trends, undefined, undefined, dateLocale)
+  }, [kpis, trends, dateLocale])
 
   const { healthScore, healthBreakdown } = useMemo(() => {
     if (!kpis) return { healthScore: 0, healthBreakdown: null }

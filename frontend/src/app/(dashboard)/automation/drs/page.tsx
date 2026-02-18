@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { formatBytes } from '@/utils/format'
+import { getDateLocale } from '@/lib/i18n/date'
 
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
@@ -265,10 +266,10 @@ return res.json()
 
 const pct = (v: number) => Math.max(0, Math.min(100, Number(v ?? 0)))
 
-const formatDate = (iso: string) => {
+const formatDate = (iso: string, locale?: string) => {
   if (!iso) return '—'
-  
-return new Date(iso).toLocaleString('fr-FR', {
+
+return new Date(iso).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -1176,6 +1177,7 @@ const StorageWarningPanel = ({
 export default function DRSPage() {
   const theme = useTheme()
   const t = useTranslations()
+  const dateLocale = getDateLocale(useLocale())
   const { isEnterprise } = useLicense()
   const [tab, setTab] = useState(0)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
@@ -2077,7 +2079,7 @@ return next
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" sx={{ opacity: 0.6 }}>{t('drsPage.createdOn')}</Typography>
-                <Typography variant="body2">{formatDate(selectedRec.created_at)}</Typography>
+                <Typography variant="body2">{formatDate(selectedRec.created_at, dateLocale)}</Typography>
               </Box>
             </Stack>
 

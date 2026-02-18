@@ -94,14 +94,14 @@ const TYPE_ICONS = {
 
 function StatusChip({ status, t }) {
   const config = {
-    running: { label: 'En cours', color: 'info' },
-    success: { label: 'Succès', color: 'success' },
-    completed: { label: 'Succès', color: 'success' },
-    failed: { label: 'Échec', color: 'error' },
-    cancelled: { label: 'Annulé', color: 'error' },
-    queued: { label: 'En attente', color: 'default' },
-    pending: { label: 'En attente', color: 'default' },
-    paused: { label: 'Pausé', color: 'warning' }
+    running: { label: t('jobsPage.statusRunning'), color: 'info' },
+    success: { label: t('jobsPage.statusSuccess'), color: 'success' },
+    completed: { label: t('jobsPage.statusSuccess'), color: 'success' },
+    failed: { label: t('jobsPage.statusFailed'), color: 'error' },
+    cancelled: { label: t('jobsPage.statusCancelled'), color: 'error' },
+    queued: { label: t('jobsPage.statusQueued'), color: 'default' },
+    pending: { label: t('jobsPage.statusQueued'), color: 'default' },
+    paused: { label: t('jobsPage.statusPaused'), color: 'warning' }
   }
 
   const cfg = config[status] || { label: status, color: 'default' }
@@ -109,8 +109,16 @@ function StatusChip({ status, t }) {
   return <Chip size='small' label={cfg.label} color={cfg.color} sx={{ minWidth: 80 }} />
 }
 
-function TypeChip({ type }) {
-  const label = TYPE_LABELS[type] || type
+function TypeChip({ type, t }) {
+  const TYPE_LABEL_KEYS = {
+    backup: 'jobsPage.typeBackup',
+    replication: 'jobsPage.typeReplication',
+    drs: 'jobsPage.typeDrs',
+    maintenance: 'jobsPage.typeMaintenance',
+    migration: 'jobsPage.typeMigration',
+    rolling_update: 'jobsPage.typeRollingUpdate'
+  }
+  const label = t && TYPE_LABEL_KEYS[type] ? t(TYPE_LABEL_KEYS[type]) : (TYPE_LABELS[type] || type)
   const icon = TYPE_ICONS[type] || 'ri-file-list-line'
 
   return (
@@ -172,7 +180,7 @@ function getNodeStatusIcon(status) {
    Job Detail Dialog
 -------------------------------- */
 
-function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
+function JobDetailDialog({ open, onClose, job, onAction, isEnterprise, t }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -226,7 +234,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <TypeChip type={job.type} />
+          <TypeChip type={job.type} t={t} />
           <Typography variant="h6">{job.name}</Typography>
           <StatusChip status={job.status} />
         </Box>
@@ -241,11 +249,11 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography variant="body2">
-                Progression: {job.metadata?.completedNodes || 0} / {job.metadata?.totalNodes || 0} nœuds
+                {t('jobsPage.progression', { completed: job.metadata?.completedNodes || 0, total: job.metadata?.totalNodes || 0 })}
               </Typography>
               {job.metadata?.currentNode && (
                 <Typography variant="body2" color="text.secondary">
-                  En cours: {job.metadata.currentNode}
+                  {t('jobsPage.currentlyRunning', { node: job.metadata.currentNode })}
                 </Typography>
               )}
             </Box>
@@ -259,18 +267,18 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
           {/* Info */}
           <Box sx={{ display: 'flex', gap: 4 }}>
             <Box>
-              <Typography variant="caption" color="text.secondary">Cible</Typography>
+              <Typography variant="caption" color="text.secondary">{t('jobsPage.target')}</Typography>
               <Typography variant="body2">{job.target || '—'}</Typography>
             </Box>
             <Box>
-              <Typography variant="caption" color="text.secondary">Démarré</Typography>
+              <Typography variant="caption" color="text.secondary">{t('jobsPage.started')}</Typography>
               <Typography variant="body2">
                 {job.startedAt ? new Date(job.startedAt).toLocaleString() : '—'}
               </Typography>
             </Box>
             {job.endedAt && (
               <Box>
-                <Typography variant="caption" color="text.secondary">Terminé</Typography>
+                <Typography variant="caption" color="text.secondary">{t('jobsPage.ended')}</Typography>
                 <Typography variant="body2">
                   {new Date(job.endedAt).toLocaleString()}
                 </Typography>
@@ -288,7 +296,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                 startIcon={<PauseIcon />}
                 onClick={() => onAction(job.id, 'pause')}
               >
-                Pause
+                {t('jobsPage.pause')}
               </Button>
               <Button
                 size="small"
@@ -297,7 +305,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                 startIcon={<StopIcon />}
                 onClick={() => onAction(job.id, 'cancel')}
               >
-                Annuler
+                {t('common.cancel')}
               </Button>
             </Box>
           )}
@@ -311,7 +319,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                 startIcon={<PlayArrowIcon />}
                 onClick={() => onAction(job.id, 'resume')}
               >
-                Reprendre
+                {t('jobsPage.resume')}
               </Button>
               <Button
                 size="small"
@@ -320,7 +328,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                 startIcon={<StopIcon />}
                 onClick={() => onAction(job.id, 'cancel')}
               >
-                Annuler
+                {t('common.cancel')}
               </Button>
             </Box>
           )}
@@ -337,7 +345,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
             <Card variant="outlined">
               <CardContent>
                 <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                  Statut des nœuds
+                  {t('jobsPage.nodeStatuses')}
                 </Typography>
                 <List dense>
                   {nodeStatuses.map((ns) => (
@@ -352,12 +360,12 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
                             {ns.status}
                             {ns.version_before && ns.version_after &&
                               ` • ${ns.version_before} → ${ns.version_after}`}
-                            {ns.did_reboot && ' • Redémarré'}
+                            {ns.did_reboot && ` • ${t('jobsPage.rebooted')}`}
                           </>
                         }
                       />
                       {ns.error && (
-                        <Chip size="small" label="Erreur" color="error" />
+                        <Chip size="small" label={t('common.error')} color="error" />
                       )}
                     </ListItem>
                   ))}
@@ -371,7 +379,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                 <Typography variant="subtitle2" fontWeight={700}>
-                  Logs
+                  {t('jobsPage.logs')}
                 </Typography>
                 {loading && <CircularProgress size={16} />}
               </Box>
@@ -388,7 +396,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise }) {
               >
                 {logs.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    Aucun log disponible
+                    {t('jobsPage.noLogs')}
                   </Typography>
                 ) : (
                   logs.slice(-100).map((log, i) => (
@@ -533,23 +541,23 @@ export default function JobsPage() {
         field: 'type',
         headerName: 'Type',
         width: 150,
-        renderCell: params => <TypeChip type={params.row.type} />
+        renderCell: params => <TypeChip type={params.row.type} t={t} />
       },
       {
         field: 'status',
-        headerName: 'État',
+        headerName: t('jobsPage.columnStatus'),
         width: 110,
-        renderCell: params => <StatusChip status={params.row.status} />
+        renderCell: params => <StatusChip status={params.row.status} t={t} />
       },
       {
         field: 'progress',
-        headerName: 'Progression',
+        headerName: t('jobsPage.columnProgress'),
         width: 150,
         renderCell: params => <ProgressCell value={params.row.progress} status={params.row.status} />
       },
       {
         field: 'startedAt',
-        headerName: 'Démarré',
+        headerName: t('jobsPage.columnStarted'),
         width: 140,
         renderCell: params => (
           <Typography variant='body2' sx={{ opacity: 0.7 }}>
@@ -559,7 +567,7 @@ export default function JobsPage() {
       },
       {
         field: 'target',
-        headerName: 'Cible',
+        headerName: t('jobsPage.columnTarget'),
         width: 180,
         renderCell: params => (
           <Typography variant='body2' sx={{ opacity: 0.7 }}>
@@ -569,7 +577,7 @@ export default function JobsPage() {
       },
       {
         field: 'detail',
-        headerName: 'Détail',
+        headerName: t('jobsPage.columnDetail'),
         flex: 1,
         minWidth: 200,
         renderCell: params => (
@@ -582,7 +590,7 @@ export default function JobsPage() {
         )
       }
     ],
-    [timeAgo]
+    [timeAgo, t]
   )
 
   return (
@@ -604,25 +612,25 @@ export default function JobsPage() {
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>Total</Typography>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.total')}</Typography>
             <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.total}</Typography>
           </CardContent>
         </Card>
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>En cours</Typography>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.running')}</Typography>
             <Typography variant='h5' sx={{ fontWeight: 700, color: 'info.main' }}>{stats.running}</Typography>
           </CardContent>
         </Card>
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>En attente</Typography>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.pending')}</Typography>
             <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.pending}</Typography>
           </CardContent>
         </Card>
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>Échoué</Typography>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.failed')}</Typography>
             <Typography variant='h5' sx={{ fontWeight: 700, color: 'error.main' }}>{stats.failed}</Typography>
           </CardContent>
         </Card>
@@ -634,7 +642,7 @@ export default function JobsPage() {
           <Stack direction='row' spacing={1.5} sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
             <TextField
               size='small'
-              placeholder="Rechercher"
+              placeholder={t('common.search')}
               value={q}
               onChange={e => setQ(e.target.value)}
               sx={{ minWidth: 220 }}
@@ -649,24 +657,24 @@ export default function JobsPage() {
 
             <FormControl size='small' sx={{ minWidth: 150 }}>
               <Select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-                <MenuItem value='all'>Tous types</MenuItem>
-                <MenuItem value='rolling_update'>Rolling Update</MenuItem>
-                <MenuItem value='backup'>Backup</MenuItem>
-                <MenuItem value='replication'>Réplication</MenuItem>
-                <MenuItem value='drs'>DRS</MenuItem>
-                <MenuItem value='migration'>Migration</MenuItem>
-                <MenuItem value='maintenance'>Maintenance</MenuItem>
+                <MenuItem value='all'>{t('jobsPage.allTypes')}</MenuItem>
+                <MenuItem value='rolling_update'>{t('jobsPage.typeRollingUpdate')}</MenuItem>
+                <MenuItem value='backup'>{t('jobsPage.typeBackup')}</MenuItem>
+                <MenuItem value='replication'>{t('jobsPage.typeReplication')}</MenuItem>
+                <MenuItem value='drs'>{t('jobsPage.typeDrs')}</MenuItem>
+                <MenuItem value='migration'>{t('jobsPage.typeMigration')}</MenuItem>
+                <MenuItem value='maintenance'>{t('jobsPage.typeMaintenance')}</MenuItem>
               </Select>
             </FormControl>
 
             <FormControl size='small' sx={{ minWidth: 130 }}>
               <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                <MenuItem value='all'>Tous états</MenuItem>
-                <MenuItem value='running'>En cours</MenuItem>
-                <MenuItem value='queued'>En attente</MenuItem>
-                <MenuItem value='success'>Succès</MenuItem>
-                <MenuItem value='failed'>Échec</MenuItem>
-                <MenuItem value='paused'>Pausé</MenuItem>
+                <MenuItem value='all'>{t('jobsPage.allStatuses')}</MenuItem>
+                <MenuItem value='running'>{t('jobsPage.statusRunning')}</MenuItem>
+                <MenuItem value='queued'>{t('jobsPage.statusQueued')}</MenuItem>
+                <MenuItem value='success'>{t('jobsPage.statusSuccess')}</MenuItem>
+                <MenuItem value='failed'>{t('jobsPage.statusFailed')}</MenuItem>
+                <MenuItem value='paused'>{t('jobsPage.statusPaused')}</MenuItem>
               </Select>
             </FormControl>
 
@@ -679,11 +687,11 @@ export default function JobsPage() {
                 setStatusFilter('all')
               }}
             >
-              Réinitialiser
+              {t('common.reset')}
             </Button>
 
             <Typography variant='body2' sx={{ ml: 'auto', opacity: 0.6 }}>
-              {filtered.length} job(s)
+              {t('jobsPage.jobsCount', { count: filtered.length })}
             </Typography>
           </Stack>
         </CardContent>
@@ -697,7 +705,7 @@ export default function JobsPage() {
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: 2 }}>
               <Typography color="error">{error.message}</Typography>
               <Button onClick={() => mutate()} variant="outlined" size="small">
-                Réessayer
+                {t('common.retry')}
               </Button>
             </Box>
           ) : !loading && filtered.length === 0 ? (
@@ -744,6 +752,7 @@ export default function JobsPage() {
         job={selectedJob}
         onAction={handleJobAction}
         isEnterprise={isEnterprise}
+        t={t}
       />
       </Box>
     </EnterpriseGuard>

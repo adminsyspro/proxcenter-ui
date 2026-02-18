@@ -1,23 +1,25 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 import ErrorPage from '@components/ErrorPage'
 
 export default function Error({ error, reset }) {
+  const t = useTranslations('errorPages')
+
   useEffect(() => {
-    // Log l'erreur pour le debugging
     console.error('Application error:', error)
   }, [error])
 
   return (
     <ErrorPage
       code={500}
-      title="Une erreur s'est produite"
+      title={t('errorOccurred')}
       description={
         process.env.NODE_ENV === 'development'
-          ? error?.message || "Une erreur inattendue s'est produite."
-          : "Une erreur inattendue s'est produite. Veuillez réessayer."
+          ? error?.message || t('unexpectedError')
+          : t('unexpectedErrorRetry')
       }
       showRetryButton
       onRetry={reset}

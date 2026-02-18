@@ -1,10 +1,12 @@
 'use client'
 
 import React from 'react'
+import { useTranslations } from 'next-intl'
 import { Box, Typography, Chip, CircularProgress, alpha, Stack, Tooltip } from '@mui/material'
 import { useFirewallScores } from '@/hooks/useZeroTrust'
 
 function ZeroTrustScoreWidget({ data, loading, config }) {
+  const t = useTranslations()
   const { data: clusters = [], isLoading: loadingData } = useFirewallScores(60000)
 
   if (loadingData) {
@@ -18,7 +20,7 @@ function ZeroTrustScoreWidget({ data, loading, config }) {
   if (clusters.length === 0) {
     return (
       <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Aucun cluster PVE</Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>{t('dashboard.noPveCluster')}</Typography>
       </Box>
     )
   }

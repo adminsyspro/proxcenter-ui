@@ -423,8 +423,8 @@ export default function SecurityGroupsPanel({ securityGroups, firewallMode, sele
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRuleDialogOpen(false)}>Annuler</Button>
-          <Button variant="contained" onClick={handleAddRule}>Ajouter</Button>
+          <Button onClick={() => setRuleDialogOpen(false)}>{t('common.cancel')}</Button>
+          <Button variant="contained" onClick={handleAddRule}>{t('common.add')}</Button>
         </DialogActions>
       </Dialog>
 
@@ -478,8 +478,8 @@ export default function SecurityGroupsPanel({ securityGroups, firewallMode, sele
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditingRule(null)}>Annuler</Button>
-          <Button variant="contained" onClick={handleUpdateRule}>Enregistrer</Button>
+          <Button onClick={() => setEditingRule(null)}>{t('common.cancel')}</Button>
+          <Button variant="contained" onClick={handleUpdateRule}>{t('common.save')}</Button>
         </DialogActions>
       </Dialog>
     </>

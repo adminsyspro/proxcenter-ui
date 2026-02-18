@@ -344,7 +344,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
               <FormControl fullWidth size="small">
                 <InputLabel>Macro</InputLabel>
                 <Select value={newVMRule.macro || ''} label="Macro" onChange={(e) => setNewVMRule(prev => ({ ...prev, macro: e.target.value, proto: e.target.value ? '' : prev.proto }))}>
-                  <MenuItem value="">Aucune</MenuItem>
+                  <MenuItem value="">{t('common.none')}</MenuItem>
                   <MenuItem value="SSH">SSH</MenuItem>
                   <MenuItem value="HTTP">HTTP</MenuItem>
                   <MenuItem value="HTTPS">HTTPS</MenuItem>
@@ -411,9 +411,9 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setVmRuleDialogOpen(false)}>Annuler</Button>
+          <Button onClick={() => setVmRuleDialogOpen(false)}>{t('common.cancel')}</Button>
           <Button variant="contained" onClick={handleSaveVMRule} startIcon={<i className="ri-check-line" />}>
-            {editingVMRule?.isNew ? 'Ajouter' : 'Enregistrer'}
+            {editingVMRule?.isNew ? t('common.add') : t('common.save')}
           </Button>
         </DialogActions>
       </Dialog>

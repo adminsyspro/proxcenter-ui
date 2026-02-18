@@ -3,8 +3,10 @@
 import React, { useEffect } from 'react'
 
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 
 export default function FullscreenConsolePage({ params }) {
+  const t = useTranslations()
   const router = useRouter()
   const resolvedParams = React.use(params)
   const { type, node, vmid } = resolvedParams || {}
@@ -35,7 +37,7 @@ export default function FullscreenConsolePage({ params }) {
     }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-        <div>Chargement de la console...</div>
+        <div>{t('console.loadingConsole')}</div>
       </div>
     </div>
   )

@@ -331,9 +331,9 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setClusterRuleDialogOpen(false)}>Annuler</Button>
+          <Button onClick={() => setClusterRuleDialogOpen(false)}>{t('common.cancel')}</Button>
           <Button variant="contained" onClick={editingClusterRule?.isNew ? handleAddClusterRule : handleUpdateClusterRule} startIcon={<i className={editingClusterRule?.isNew ? "ri-add-line" : "ri-check-line"} />}>
-            {editingClusterRule?.isNew ? 'Ajouter' : 'Enregistrer'}
+            {editingClusterRule?.isNew ? t('common.add') : t('common.save')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -373,9 +373,9 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setHostRuleDialogOpen(false)}>Annuler</Button>
+          <Button onClick={() => setHostRuleDialogOpen(false)}>{t('common.cancel')}</Button>
           <Button variant="contained" onClick={editingHostRule?.isNew ? handleAddHostRule : handleUpdateHostRule} startIcon={<i className={editingHostRule?.isNew ? "ri-add-line" : "ri-check-line"} />}>
-            {editingHostRule?.isNew ? 'Ajouter' : 'Enregistrer'}
+            {editingHostRule?.isNew ? t('common.add') : t('common.save')}
           </Button>
         </DialogActions>
       </Dialog>

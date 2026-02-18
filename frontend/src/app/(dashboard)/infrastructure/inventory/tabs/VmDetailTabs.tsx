@@ -1886,7 +1886,7 @@ return (
                               {explorerFiles.length > 5 && (
                                 <TextField
                                   size="small"
-                                  placeholder="Rechercher un fichier..."
+                                  placeholder={t('inventory.searchFile')}
                                   value={explorerSearch}
                                   onChange={(e) => setExplorerSearch(e.target.value)}
                                   InputProps={{

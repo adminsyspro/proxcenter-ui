@@ -59,6 +59,7 @@ export function calculateImprovedPredictions(
   trends: ResourceTrend[],
   thresholds: ResourceThresholds = DEFAULT_THRESHOLDS,
   projectionDays: number = 30,
+  dateLocale: string = 'en-US',
 ): {
   projectedTrends: ResourceTrend[]
   alerts: PredictiveAlert[]
@@ -147,7 +148,7 @@ export function calculateImprovedPredictions(
     const confidenceFactor = 1 + (i / projectionDays) * 1.5
 
     projectedTrends.push({
-      t: date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+      t: date.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' }),
       cpu: undefined as any,
       ram: undefined as any,
       storage: undefined as any,

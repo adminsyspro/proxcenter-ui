@@ -422,7 +422,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       
       const data = await res.json()
       
-      if (!res.ok) throw new Error(data.error || 'Erreur')
+      if (!res.ok) throw new Error(data.error || t('common.error'))
       setSnackbar({ open: true, message: `${t('network.editRule')} ${newEnable === 0 ? t('common.disabled') : t('common.enabled')}`, severity: 'success' })
       loadRulesOnly()
     } catch (err: any) {

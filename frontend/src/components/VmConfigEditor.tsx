@@ -309,7 +309,7 @@ export default function VmConfigEditor({
         `/api/v1/connections/${connId}/guests/${type}/${node}/${vmid}/config`
       )
       
-      if (!res.ok) throw new Error(`Erreur ${res.status}`)
+      if (!res.ok) throw new Error(t('errors.httpError', { status: res.status }))
       
       const json = await res.json()
       const data = json.data || json
@@ -416,7 +416,7 @@ return
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
 
-        throw new Error(errData.error || `Erreur ${res.status}`)
+        throw new Error(errData.error || t('errors.httpError', { status: res.status }))
       }
       
       setSuccess(true)

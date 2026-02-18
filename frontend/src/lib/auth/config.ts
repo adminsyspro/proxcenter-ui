@@ -37,7 +37,40 @@ declare module "next-auth/jwt" {
   }
 }
 
+// Explicitly control secure cookies based on NEXTAUTH_URL protocol
+// Prevents login failures when NEXTAUTH_URL=https but access is via HTTP
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false
+
 export const authOptions: NextAuthOptions = {
+  cookies: {
+    sessionToken: {
+      name: useSecureCookies ? '__Secure-next-auth.session-token' : 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+    callbackUrl: {
+      name: useSecureCookies ? '__Secure-next-auth.callback-url' : 'next-auth.callback-url',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+    csrfToken: {
+      name: useSecureCookies ? '__Host-next-auth.csrf-token' : 'next-auth.csrf-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+  },
   providers: [
     CredentialsProvider({
       id: "credentials",

@@ -41,7 +41,7 @@ export async function POST(
 
   // data: { port, ticket, ... }
   const sessionId = crypto.randomUUID()
-  const expiresAt = Date.now() + 8_000 // <= contrainte ~10s
+  const expiresAt = Date.now() + 30_000 // 30s to allow for network latency / reverse proxy
 
   sessions.set(sessionId, {
     conn,

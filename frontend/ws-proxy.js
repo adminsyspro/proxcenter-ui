@@ -22,7 +22,8 @@ const { WebSocketServer, WebSocket } = require('ws')
 const PORT = process.env.WS_PORT || 3001
 // Always use localhost for internal API calls (ws-proxy runs in same container as frontend)
 // APP_URL might be external HTTPS which would fail with self-signed certs
-const INTERNAL_API_URL = 'http://localhost:3000'
+const APP_PORT = process.env.PORT || 3000
+const INTERNAL_API_URL = `http://localhost:${APP_PORT}`
 
 // Créer le serveur HTTP
 const server = http.createServer((req, res) => {

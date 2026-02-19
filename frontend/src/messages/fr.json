@@ -1663,7 +1663,10 @@
       "redistributed": "Redistribuée",
       "lost": "Perdue",
       "noSimulation": "Sélectionnez un cluster et cliquez sur les nœuds pour lancer la simulation",
-      "nodesDown": "{count} nœud(s) en panne"
+      "nodesDown": "{count} nœud(s) en panne",
+      "cephEnabled": "Ceph : tolère {tolerance} perte de nœud ({osds} OSDs)",
+      "cephOk": "Réplication sûre — {failed}/{max} perte de nœud tolérée (pool : {pool})",
+      "cephDanger": "DONNÉES EN DANGER — {failed} nœuds en panne dépasse la tolérance de {max} (pool : {pool})"
     }
   },
   "templates": {

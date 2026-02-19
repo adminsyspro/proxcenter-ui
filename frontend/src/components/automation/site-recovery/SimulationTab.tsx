@@ -14,7 +14,6 @@ import {
   MenuItem,
   Paper,
   Select,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -64,6 +63,18 @@ interface InvCluster {
   id: string
   name: string
   nodes: InvNode[]
+}
+
+interface CephPool {
+  name: string
+  size: number
+  minSize: number
+  type: string
+}
+
+interface CephInfo {
+  osds: { total: number; up: number; in: number }
+  pools: { list: CephPool[] }
 }
 
 interface SimVM {
@@ -121,49 +132,56 @@ const fetcher = (url: string) => fetch(url).then(res => {
 
 // ── Sub-components ───────────────────────────────────────────────
 
-function SummaryBar({ hosts, totalHosts, avgCpu, avgMem, vms, failedCount }: {
-  hosts: number; totalHosts: number; avgCpu: number; avgMem: number; vms: number; failedCount: number
+function SummaryBar({ hosts, totalHosts, avgCpu, avgMem, vms, failedCount, cephWarning }: {
+  hosts: number; totalHosts: number; avgCpu: number; avgMem: number; vms: number; failedCount: number; cephWarning?: string | null
 }) {
   const t = useTranslations()
   const theme = useTheme()
 
   return (
-    <Paper sx={{ px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-      <StatChip
-        icon="ri-server-line"
-        label={t('siteRecovery.simulation.hosts')}
-        value={`${hosts}/${totalHosts}`}
-        color={failedCount > 0 ? theme.palette.warning.main : theme.palette.text.primary}
-      />
-      <StatChip
-        icon="ri-cpu-line"
-        label={t('siteRecovery.simulation.avgCpu')}
-        value={`${avgCpu}%`}
-        color={avgCpu > 80 ? theme.palette.error.main : avgCpu > 60 ? theme.palette.warning.main : theme.palette.success.main}
-      />
-      <StatChip
-        icon="ri-ram-line"
-        label={t('siteRecovery.simulation.avgMemory')}
-        value={`${avgMem}%`}
-        color={avgMem > 85 ? theme.palette.error.main : avgMem > 70 ? theme.palette.warning.main : theme.palette.success.main}
-      />
-      <StatChip
-        icon="ri-instance-line"
-        label={t('siteRecovery.simulation.vmsAssigned')}
-        value={String(vms)}
-        color={theme.palette.text.primary}
-      />
-      {failedCount > 0 && (
-        <Chip
-          size="small"
-          icon={<i className="ri-alert-line" style={{ fontSize: 14 }} />}
-          label={t('siteRecovery.simulation.nodesDown', { count: failedCount })}
-          color="error"
-          variant="outlined"
-          sx={{ ml: 'auto' }}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Paper sx={{ px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+        <StatChip
+          icon="ri-server-line"
+          label={t('siteRecovery.simulation.hosts')}
+          value={`${hosts}/${totalHosts}`}
+          color={failedCount > 0 ? theme.palette.warning.main : theme.palette.text.primary}
         />
+        <StatChip
+          icon="ri-cpu-line"
+          label={t('siteRecovery.simulation.avgCpu')}
+          value={`${avgCpu}%`}
+          color={avgCpu > 80 ? theme.palette.error.main : avgCpu > 60 ? theme.palette.warning.main : theme.palette.success.main}
+        />
+        <StatChip
+          icon="ri-ram-line"
+          label={t('siteRecovery.simulation.avgMemory')}
+          value={`${avgMem}%`}
+          color={avgMem > 85 ? theme.palette.error.main : avgMem > 70 ? theme.palette.warning.main : theme.palette.success.main}
+        />
+        <StatChip
+          icon="ri-instance-line"
+          label={t('siteRecovery.simulation.vmsAssigned')}
+          value={String(vms)}
+          color={theme.palette.text.primary}
+        />
+        {failedCount > 0 && (
+          <Chip
+            size="small"
+            icon={<i className="ri-alert-line" style={{ fontSize: 14 }} />}
+            label={t('siteRecovery.simulation.nodesDown', { count: failedCount })}
+            color="error"
+            variant="outlined"
+            sx={{ ml: 'auto' }}
+          />
+        )}
+      </Paper>
+      {cephWarning && (
+        <Alert severity="warning" icon={<i className="ri-database-2-line" style={{ fontSize: 20 }} />} sx={{ py: 0.5 }}>
+          <Typography variant="body2">{cephWarning}</Typography>
+        </Alert>
       )}
-    </Paper>
+    </Box>
   )
 }
 
@@ -179,10 +197,11 @@ function StatChip({ icon, label, value, color }: { icon: string; label: string; 
   )
 }
 
-function NodeCard({ node, redistributedVMs, onToggleFail }: {
+function NodeCard({ node, redistributedVMs, onToggleFail, nodeCount }: {
   node: SimNode
   redistributedVMs: SimVM[]
   onToggleFail: () => void
+  nodeCount: number
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -194,7 +213,8 @@ function NodeCard({ node, redistributedVMs, onToggleFail }: {
     <Paper
       onClick={onToggleFail}
       sx={{
-        width: 220,
+        flex: `1 1 ${nodeCount <= 3 ? '280px' : nodeCount <= 5 ? '220px' : '180px'}`,
+        maxWidth: nodeCount <= 2 ? '50%' : undefined,
         minHeight: 200,
         cursor: 'pointer',
         position: 'relative',
@@ -295,6 +315,7 @@ function NodeCard({ node, redistributedVMs, onToggleFail }: {
 
 function ResourceBar({ label, value, suffix }: { label: string; value: number; suffix: string }) {
   const theme = useTheme()
+  const clampedValue = Math.min(value, 100)
   const color = value > 85 ? theme.palette.error.main
     : value > 70 ? theme.palette.warning.main
     : theme.palette.success.main
@@ -303,7 +324,7 @@ function ResourceBar({ label, value, suffix }: { label: string; value: number; s
     <Box sx={{ mb: 0.5 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
         <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600 }}>
-          {label} {value}%
+          {label} {value}%{value > 100 && <span style={{ color: theme.palette.error.main }}> !</span>}
         </Typography>
         <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6 }}>
           {suffix}
@@ -311,7 +332,7 @@ function ResourceBar({ label, value, suffix }: { label: string; value: number; s
       </Box>
       <LinearProgress
         variant="determinate"
-        value={Math.min(value, 100)}
+        value={clampedValue}
         sx={{
           height: 4,
           borderRadius: 2,
@@ -378,7 +399,7 @@ function VMChip({ vm, isRedistributed, isLost }: { vm: SimVM; isRedistributed?: 
         </Typography>
         <Typography component="span" sx={{
           fontSize: 'inherit', fontFamily: 'inherit', opacity: 0.6,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120,
         }}>
           {vm.name}
         </Typography>
@@ -390,9 +411,10 @@ function VMChip({ vm, isRedistributed, isLost }: { vm: SimVM; isRedistributed?: 
   )
 }
 
-function VerdictBanner({ verdict, stats }: {
+function VerdictBanner({ verdict, stats, cephVerdict }: {
   verdict: { severity: 'success' | 'warning' | 'error'; key: string }
   stats: SimStats
+  cephVerdict?: { ok: boolean; message: string } | null
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -403,75 +425,88 @@ function VerdictBanner({ verdict, stats }: {
     : theme.palette.error.main
 
   return (
-    <Alert
-      severity={verdict.severity}
-      icon={
-        verdict.severity === 'success'
-          ? <i className="ri-checkbox-circle-fill" style={{ fontSize: 22 }} />
-          : verdict.severity === 'warning'
-          ? <i className="ri-alert-line" style={{ fontSize: 22 }} />
-          : <i className="ri-close-circle-fill" style={{ fontSize: 22 }} />
-      }
-      sx={{ '& .MuiAlert-message': { width: '100%' } }}
-    >
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-        {t(`siteRecovery.simulation.verdict.${verdict.key}`)}
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography variant="caption" color="text.secondary">
-            {t('siteRecovery.simulation.healthScore')}:
-          </Typography>
-          <Typography variant="caption" sx={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-            color: getHealthColor(stats.healthBefore.score),
-          }}>
-            {stats.healthBefore.score}
-          </Typography>
-          <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-          <Typography variant="caption" sx={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-            color: getHealthColor(stats.healthAfter.score),
-          }}>
-            {stats.healthAfter.score}
-          </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Alert
+        severity={verdict.severity}
+        icon={
+          verdict.severity === 'success'
+            ? <i className="ri-checkbox-circle-fill" style={{ fontSize: 22 }} />
+            : verdict.severity === 'warning'
+            ? <i className="ri-alert-line" style={{ fontSize: 22 }} />
+            : <i className="ri-close-circle-fill" style={{ fontSize: 22 }} />
+        }
+        sx={{ '& .MuiAlert-message': { width: '100%' } }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+          {t(`siteRecovery.simulation.verdict.${verdict.key}`)}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography variant="caption" color="text.secondary">
+              {t('siteRecovery.simulation.healthScore')}:
+            </Typography>
+            <Typography variant="caption" sx={{
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+              color: getHealthColor(stats.healthBefore.score),
+            }}>
+              {stats.healthBefore.score}
+            </Typography>
+            <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
+            <Typography variant="caption" sx={{
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+              color: getHealthColor(stats.healthAfter.score),
+            }}>
+              {stats.healthAfter.score}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography variant="caption" color="text.secondary">CPU:</Typography>
+            <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              {stats.avgCpuBefore}%
+            </Typography>
+            <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
+            <Typography variant="caption" sx={{
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+              color: stats.avgCpuAfter > 80 ? theme.palette.error.main : undefined,
+            }}>
+              {stats.avgCpuAfter}%
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography variant="caption" color="text.secondary">RAM:</Typography>
+            <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              {stats.avgMemBefore}%
+            </Typography>
+            <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
+            <Typography variant="caption" sx={{
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+              color: stats.avgMemAfter > 85 ? theme.palette.error.main : undefined,
+            }}>
+              {stats.avgMemAfter}%
+            </Typography>
+          </Box>
+          {stats.lostVMs > 0 && (
+            <Chip
+              size="small"
+              label={`${stats.lostVMs} ${t('siteRecovery.simulation.lost')}`}
+              color="error"
+              sx={{ height: 20, fontSize: '0.7rem' }}
+            />
+          )}
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography variant="caption" color="text.secondary">CPU:</Typography>
-          <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
-            {stats.avgCpuBefore}%
+      </Alert>
+      {cephVerdict && (
+        <Alert
+          severity={cephVerdict.ok ? 'success' : 'error'}
+          icon={<i className="ri-database-2-line" style={{ fontSize: 20 }} />}
+          sx={{ py: 0.5 }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Ceph: {cephVerdict.message}
           </Typography>
-          <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-          <Typography variant="caption" sx={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-            color: stats.avgCpuAfter > 80 ? theme.palette.error.main : undefined,
-          }}>
-            {stats.avgCpuAfter}%
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography variant="caption" color="text.secondary">RAM:</Typography>
-          <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
-            {stats.avgMemBefore}%
-          </Typography>
-          <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-          <Typography variant="caption" sx={{
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-            color: stats.avgMemAfter > 85 ? theme.palette.error.main : undefined,
-          }}>
-            {stats.avgMemAfter}%
-          </Typography>
-        </Box>
-        {stats.lostVMs > 0 && (
-          <Chip
-            size="small"
-            label={`${stats.lostVMs} ${t('siteRecovery.simulation.lost')}`}
-            color="error"
-            sx={{ height: 20, fontSize: '0.7rem' }}
-          />
-        )}
-      </Box>
-    </Alert>
+        </Alert>
+      )}
+    </Box>
   )
 }
 
@@ -560,6 +595,14 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     { refreshInterval: 30000 }
   )
 
+  // Fetch Ceph data for selected cluster (pools with size/min_size + OSD count)
+  const { data: cephData } = useSWR<{ data: CephInfo }>(
+    selectedClusterId && isEnterprise
+      ? `/api/v1/connections/${selectedClusterId}/ceph`
+      : null,
+    fetcher
+  )
+
   const clusters: InvCluster[] = useMemo(() =>
     inventoryData?.data?.clusters || [],
     [inventoryData]
@@ -570,6 +613,42 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     for (const c of connections) m[c.id] = c.name
     return m
   }, [connections])
+
+  // Check if selected cluster has Ceph enabled
+  const selectedHasCeph = useMemo(() =>
+    connections.find(c => c.id === selectedClusterId)?.hasCeph ?? false,
+    [connections, selectedClusterId]
+  )
+
+  // Ceph pool replication rules: extract worst-case tolerance
+  // Rule of 2/3: size=3, min_size=2 → can tolerate (size - min_size) = 1 OSD host loss
+  const cephTolerance = useMemo(() => {
+    if (!selectedHasCeph || !cephData?.data) return null
+    const pools = cephData.data.pools?.list || []
+    if (pools.length === 0) return null
+
+    // Find the strictest pool (lowest tolerance)
+    let minTolerance = Infinity
+    let strictestPool = ''
+    for (const pool of pools) {
+      if (pool.type !== 'replicated') continue
+      const tolerance = (pool.size || 3) - (pool.minSize || 2)
+      if (tolerance < minTolerance) {
+        minTolerance = tolerance
+        strictestPool = pool.name
+      }
+    }
+
+    const totalOsds = cephData.data.osds?.total || 0
+    const upOsds = cephData.data.osds?.up || 0
+
+    return {
+      maxNodeLoss: minTolerance === Infinity ? 1 : minTolerance,
+      strictestPool,
+      totalOsds,
+      upOsds,
+    }
+  }, [selectedHasCeph, cephData])
 
   // Build simulation nodes from inventory
   const simNodes: SimNode[] = useMemo(() => {
@@ -601,7 +680,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
       }))
   }, [clusters, selectedClusterId, failedNodes])
 
-  // ── Simulation algorithm (greedy bin-packing) ──────────────────
+  // ── Simulation algorithm (greedy bin-packing + load redistribution) ──
 
   const simulation: SimResult | null = useMemo(() => {
     if (failedNodes.size === 0 || simNodes.length === 0) return null
@@ -665,6 +744,33 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     return { redistributed, lost, nodeLoads, allDown: false }
   }, [simNodes, failedNodes])
 
+  // ── Build "after" node states with redistributed load applied ──
+
+  const simNodesAfter: SimNode[] = useMemo(() => {
+    if (!simulation) return simNodes
+
+    return simNodes.map(node => {
+      if (node.isFailed) return node
+      const extra = simulation.nodeLoads.get(node.name)
+      if (!extra || extra.totalMem === 0) return node
+
+      // Add redistributed VM memory and CPU to this node
+      const newMem = node.mem + extra.totalMem
+      const addedCpuCores = extra.totalCpu
+      // Approximate CPU increase: each added vCPU adds load proportional to current avg per-core usage
+      const currentCpuPerCore = node.maxcpu > 0 ? node.cpu / node.maxcpu : 0
+      const newCpu = node.maxcpu > 0
+        ? Math.round(((node.cpu / 100 * node.maxcpu) + addedCpuCores * (currentCpuPerCore / 100)) / node.maxcpu * 100)
+        : node.cpu
+
+      return {
+        ...node,
+        mem: newMem,
+        cpu: Math.min(newCpu, 150), // allow over 100% to show overload
+      }
+    })
+  }, [simNodes, simulation])
+
   // ── Before / After stats ───────────────────────────────────────
 
   const stats: SimStats | null = useMemo(() => {
@@ -672,6 +778,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
     const allNodes = simNodes
     const survivingNodes = simNodes.filter(n => !n.isFailed)
+    const survivingAfter = simNodesAfter.filter(n => !n.isFailed)
 
     const totalVMs = allNodes.reduce((acc, n) => acc + n.vms.length, 0)
     const activeVMs = survivingNodes.reduce((acc, n) => acc + n.vms.length, 0)
@@ -683,35 +790,22 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     let avgCpuAfter = avgCpuBefore
     let avgMemAfter = avgMemBefore
 
-    if (survivingNodes.length > 0 && failedNodes.size > 0) {
-      let totalMemUsed = 0
-      let totalMemMax = 0
-
-      for (const node of survivingNodes) {
-        totalMemUsed += node.mem + (simulation?.nodeLoads.get(node.name)?.totalMem || 0)
-        totalMemMax += node.maxmem
-      }
-
-      avgMemAfter = totalMemMax > 0 ? (totalMemUsed / totalMemMax * 100) : 0
-
-      // CPU: proportional increase (simplified)
-      const cpuIncreaseRatio = allNodes.length / survivingNodes.length
-      avgCpuAfter = avgCpuBefore * cpuIncreaseRatio
+    if (survivingAfter.length > 0 && failedNodes.size > 0) {
+      avgCpuAfter = survivingAfter.reduce((acc, n) => acc + n.cpu, 0) / survivingAfter.length
+      avgMemAfter = survivingAfter.reduce((acc, n) => acc + (n.maxmem ? n.mem / n.maxmem * 100 : 0), 0) / survivingAfter.length
     }
 
     // Compute imbalance for health score
-    const computeImbalance = (nodes: SimNode[], extraMem?: Map<string, { totalMem: number }>) => {
-      const mems = nodes.map(n => {
-        const extra = extraMem?.get(n.name)?.totalMem || 0
-        return n.maxmem ? (n.mem + extra) / n.maxmem * 100 : 0
-      })
+    const computeImbalance = (nodes: SimNode[]) => {
+      const mems = nodes.map(n => n.maxmem ? n.mem / n.maxmem * 100 : 0)
+      if (mems.length === 0) return 100
       const avg = mems.reduce((a, b) => a + b, 0) / mems.length
       return Math.sqrt(mems.reduce((sum, m) => sum + (m - avg) ** 2, 0) / mems.length)
     }
 
     const imbalanceBefore = computeImbalance(allNodes)
-    const imbalanceAfter = survivingNodes.length > 0
-      ? computeImbalance(survivingNodes, simulation?.nodeLoads as any)
+    const imbalanceAfter = survivingAfter.length > 0
+      ? computeImbalance(survivingAfter)
       : 100
 
     const healthBefore = computeDrsHealthScore({
@@ -728,18 +822,51 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
     return {
       hostsBefore: allNodes.length,
-      hostsAfter: survivingNodes.length,
+      hostsAfter: survivingAfter.length,
       totalVMs,
       activeVMs,
       lostVMs: simulation?.lost.length || 0,
       avgCpuBefore: Math.round(avgCpuBefore),
-      avgCpuAfter: Math.round(Math.min(avgCpuAfter, 100)),
+      avgCpuAfter: Math.round(Math.min(avgCpuAfter, 150)),
       avgMemBefore: Math.round(avgMemBefore),
-      avgMemAfter: Math.round(Math.min(avgMemAfter, 100)),
+      avgMemAfter: Math.round(Math.min(avgMemAfter, 150)),
       healthBefore,
       healthAfter,
     }
-  }, [simNodes, simulation, failedNodes])
+  }, [simNodes, simNodesAfter, simulation, failedNodes])
+
+  // ── Ceph verdict ───────────────────────────────────────────────
+
+  const cephVerdict = useMemo(() => {
+    if (!selectedHasCeph || !cephTolerance || failedNodes.size === 0) return null
+
+    const failedCount = failedNodes.size
+    if (failedCount <= cephTolerance.maxNodeLoss) {
+      return {
+        ok: true,
+        message: t('siteRecovery.simulation.cephOk', {
+          failed: failedCount,
+          max: cephTolerance.maxNodeLoss,
+          pool: cephTolerance.strictestPool,
+        }),
+      }
+    }
+    return {
+      ok: false,
+      message: t('siteRecovery.simulation.cephDanger', {
+        failed: failedCount,
+        max: cephTolerance.maxNodeLoss,
+        pool: cephTolerance.strictestPool,
+      }),
+    }
+  }, [selectedHasCeph, cephTolerance, failedNodes, t])
+
+  // Ceph warning shown in summary bar (before any node is failed)
+  const cephSummaryWarning = useMemo(() => {
+    if (!selectedHasCeph || !cephTolerance) return null
+    if (failedNodes.size === 0) return null
+    return null // only shown via cephVerdict in the verdict banner
+  }, [selectedHasCeph, cephTolerance, failedNodes])
 
   // ── Handlers ───────────────────────────────────────────────────
 
@@ -757,34 +884,50 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     setFailedNodes(new Set())
   }
 
-  // Verdict
+  // Verdict (combines VM load + Ceph awareness)
   const verdict = useMemo(() => {
     if (!simulation || !stats) return null
     if (simulation.allDown) return { severity: 'error' as const, key: 'allDown' }
+    // Ceph data loss = critical even if VMs fit
+    if (cephVerdict && !cephVerdict.ok) return { severity: 'error' as const, key: 'overloaded' }
     if (simulation.lost.length > 0) return { severity: 'error' as const, key: 'overloaded' }
     if (stats.healthAfter.score < 50) return { severity: 'warning' as const, key: 'stressed' }
     return { severity: 'success' as const, key: 'ok' }
-  }, [simulation, stats])
+  }, [simulation, stats, cephVerdict])
 
   // ── Render ─────────────────────────────────────────────────────
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Cluster selector */}
-      <FormControl size="small" sx={{ maxWidth: 320 }}>
-        <InputLabel>{t('siteRecovery.simulation.selectCluster')}</InputLabel>
-        <Select
-          value={selectedClusterId}
-          onChange={e => handleClusterChange(e.target.value)}
-          label={t('siteRecovery.simulation.selectCluster')}
-        >
-          {clusters.filter(c => c.nodes.length > 1).map(c => (
-            <MenuItem key={c.id} value={c.id}>
-              {connectionNames[c.id] || c.name || c.id}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <FormControl size="small" sx={{ minWidth: 280 }}>
+          <InputLabel>{t('siteRecovery.simulation.selectCluster')}</InputLabel>
+          <Select
+            value={selectedClusterId}
+            onChange={e => handleClusterChange(e.target.value)}
+            label={t('siteRecovery.simulation.selectCluster')}
+          >
+            {clusters.filter(c => c.nodes.length > 1).map(c => (
+              <MenuItem key={c.id} value={c.id}>
+                {connectionNames[c.id] || c.name || c.id}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        {selectedHasCeph && cephTolerance && (
+          <Chip
+            size="small"
+            icon={<i className="ri-database-2-line" style={{ fontSize: 14 }} />}
+            label={t('siteRecovery.simulation.cephEnabled', {
+              tolerance: cephTolerance.maxNodeLoss,
+              osds: cephTolerance.totalOsds,
+            })}
+            color="info"
+            variant="outlined"
+          />
+        )}
+      </Box>
 
       {/* Empty state */}
       {!selectedClusterId && (
@@ -807,23 +950,29 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
             avgMem={failedNodes.size > 0 ? (stats?.avgMemAfter ?? 0) : (stats?.avgMemBefore ?? 0)}
             vms={failedNodes.size > 0 ? (stats?.activeVMs ?? 0) : (stats?.totalVMs ?? 0)}
             failedCount={failedNodes.size}
+            cephWarning={cephSummaryWarning}
           />
 
-          {/* Node cards */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-            {simNodes.map(node => (
+          {/* Node cards — full width responsive grid */}
+          <Box sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 2,
+          }}>
+            {simNodesAfter.map(node => (
               <NodeCard
                 key={node.name}
                 node={node}
                 redistributedVMs={simulation?.redistributed.filter(v => v.targetNode === node.name) || []}
                 onToggleFail={() => toggleFail(node.name)}
+                nodeCount={simNodes.length}
               />
             ))}
           </Box>
 
           {/* Verdict banner */}
           {verdict && stats && (
-            <VerdictBanner verdict={verdict} stats={stats} />
+            <VerdictBanner verdict={verdict} stats={stats} cephVerdict={cephVerdict} />
           )}
 
           {/* Affected VMs table */}

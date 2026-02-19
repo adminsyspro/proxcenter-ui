@@ -64,6 +64,45 @@ const SettingsIcon = (props: any) => <i className="ri-settings-3-line" style={{ 
 const AccessTimeIcon = (props: any) => <i className="ri-time-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const HardwareIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
+// ============================================
+// DRS Health Score calculation with breakdown
+// ============================================
+type DrsHealthBreakdown = {
+  avgMem: number
+  memPenalty: number
+  avgCpu: number
+  cpuPenalty: number
+  imbalance: number
+  imbalancePenalty: number
+  score: number
+}
+
+function computeDrsHealthScore(summary: { avg_memory_usage?: number; avg_cpu_usage?: number; imbalance?: number } | null | undefined): DrsHealthBreakdown {
+  if (!summary) return { avgMem: 0, memPenalty: 0, avgCpu: 0, cpuPenalty: 0, imbalance: 0, imbalancePenalty: 0, score: 100 }
+
+  const avgMem = summary.avg_memory_usage ?? 0
+  const avgCpu = summary.avg_cpu_usage ?? 0
+  const imbalance = summary.imbalance ?? 0
+  let score = 100
+
+  let memPenalty = 0
+  if (avgMem > 85) memPenalty = -30
+  else if (avgMem > 70) memPenalty = -15
+  score += memPenalty
+
+  let cpuPenalty = 0
+  if (avgCpu > 80) cpuPenalty = -20
+  else if (avgCpu > 60) cpuPenalty = -10
+  score += cpuPenalty
+
+  let imbalancePenalty = 0
+  if (imbalance > 10) imbalancePenalty = -20
+  else if (imbalance > 5) imbalancePenalty = -10
+  score += imbalancePenalty
+
+  return { avgMem, memPenalty, avgCpu, cpuPenalty, imbalance, imbalancePenalty, score: Math.max(0, score) }
+}
+
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EmptyState from '@/components/EmptyState'
 import DRSBalancingIllustration from '@/components/illustrations/DRSBalancingIllustration'
@@ -407,26 +446,9 @@ const ClusterCard = ({
 return max - min
   }, [metrics.nodes])
 
-  // Calculer le score de santé du cluster
-  const healthScore = useMemo(() => {
-    if (!metrics?.summary) return 100
-    
-    const avgMem = metrics.summary.avg_memory_usage ?? 0
-    const avgCpu = metrics.summary.avg_cpu_usage ?? 0
-    const imbalance = metrics.summary.imbalance ?? 0
-    
-    // Score basé sur utilisation moyenne et déséquilibre
-    let score = 100
-
-    if (avgMem > 85) score -= 30
-    else if (avgMem > 70) score -= 15
-    if (avgCpu > 80) score -= 20
-    else if (avgCpu > 60) score -= 10
-    if (imbalance > 10) score -= 20
-    else if (imbalance > 5) score -= 10
-    
-    return Math.max(0, score)
-  }, [metrics])
+  // Calculer le score de santé du cluster avec breakdown
+  const healthBreakdown = useMemo(() => computeDrsHealthScore(metrics?.summary), [metrics])
+  const healthScore = healthBreakdown.score
 
   const t = useTranslations()
   const healthColor = healthScore >= 80 ? 'success' : healthScore >= 50 ? 'warning' : 'error'
@@ -511,13 +533,22 @@ return 'neutral'
           )}
 
           {/* Health badge */}
-          <Chip
-            size="small"
-            icon={healthScore >= 80 ? <CheckCircleIcon /> : <WarningAmberIcon />}
-            label={healthLabel}
-            color={healthColor}
-            variant="outlined"
-          />
+          <Tooltip title={
+            <Box sx={{ fontSize: '0.75rem' }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.healthScore')}: {healthScore}/100</Typography>
+              <Box>RAM {Math.round(healthBreakdown.avgMem)}% → {healthBreakdown.memPenalty === 0 ? 'OK' : healthBreakdown.memPenalty}</Box>
+              <Box>CPU {Math.round(healthBreakdown.avgCpu)}% → {healthBreakdown.cpuPenalty === 0 ? 'OK' : healthBreakdown.cpuPenalty}</Box>
+              <Box>{t('drsPage.imbalanceLabel')} {healthBreakdown.imbalance.toFixed(1)}% → {healthBreakdown.imbalancePenalty === 0 ? 'OK' : healthBreakdown.imbalancePenalty}</Box>
+            </Box>
+          } arrow>
+            <Chip
+              size="small"
+              icon={healthScore >= 80 ? <CheckCircleIcon /> : <WarningAmberIcon />}
+              label={healthLabel}
+              color={healthColor}
+              variant="outlined"
+            />
+          </Tooltip>
 
           {/* Spread indicator */}
           <Tooltip title={t('drsPage.memorySpreadBetweenNodes', { pct: memorySpread.toFixed(1) })}>
@@ -907,12 +938,14 @@ const RecommendationRow = ({
           color={priorityColor}
           sx={{ minWidth: 70 }}
         />
-        <Chip
-          size="small"
-          variant="outlined"
-          label={`+${rec.score.toFixed(0)}%`}
-          sx={{ minWidth: 55 }}
-        />
+        <Tooltip title={t('drsPage.scoreTooltip', { score: rec.score.toFixed(1) })} arrow>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`+${rec.score.toFixed(0)}%`}
+            sx={{ minWidth: 55, cursor: 'help' }}
+          />
+        </Tooltip>
       </Stack>
     </Box>
   )
@@ -1644,26 +1677,23 @@ return next
     const allNodesArr = clusters.flatMap(c => c.metrics.nodes || [])
     const totalVMs = clusters.reduce((acc, c) => acc + (c.metrics.summary?.running_vms || 0), 0)
 
-    // Compute weighted health score across all clusters
+    // Compute weighted health score across all clusters with breakdown
     let healthSum = 0
     let clusterCount = 0
     let maxImbalance = 0
+    let totalMemPenalty = 0, totalCpuPenalty = 0, totalImbalancePenalty = 0
+    let avgMemAll = 0, avgCpuAll = 0, avgImbalanceAll = 0
     for (const c of clusters) {
-      const s = c.metrics?.summary
-      if (!s) continue
-      let score = 100
-      const avgMem = s.avg_memory_usage ?? 0
-      const avgCpu = s.avg_cpu_usage ?? 0
-      const imb = s.imbalance ?? 0
-      if (avgMem > 85) score -= 30
-      else if (avgMem > 70) score -= 15
-      if (avgCpu > 80) score -= 20
-      else if (avgCpu > 60) score -= 10
-      if (imb > 10) score -= 20
-      else if (imb > 5) score -= 10
-      healthSum += Math.max(0, score)
+      const b = computeDrsHealthScore(c.metrics?.summary)
+      healthSum += b.score
+      totalMemPenalty += b.memPenalty
+      totalCpuPenalty += b.cpuPenalty
+      totalImbalancePenalty += b.imbalancePenalty
+      avgMemAll += b.avgMem
+      avgCpuAll += b.avgCpu
+      avgImbalanceAll += b.imbalance
       clusterCount++
-      if (imb > maxImbalance) maxImbalance = imb
+      if (b.imbalance > maxImbalance) maxImbalance = b.imbalance
     }
 
     return {
@@ -1674,6 +1704,14 @@ return next
       migrations: migrations.filter(m => m.status === 'running').length,
       healthScore: clusterCount > 0 ? Math.round(healthSum / clusterCount) : 100,
       maxImbalance,
+      breakdown: clusterCount > 0 ? {
+        avgMem: avgMemAll / clusterCount,
+        memPenalty: Math.round(totalMemPenalty / clusterCount),
+        avgCpu: avgCpuAll / clusterCount,
+        cpuPenalty: Math.round(totalCpuPenalty / clusterCount),
+        imbalance: avgImbalanceAll / clusterCount,
+        imbalancePenalty: Math.round(totalImbalancePenalty / clusterCount),
+      } : null,
     }
   }, [clusters, pendingRecs, migrations])
 
@@ -1716,45 +1754,56 @@ return next
       {/* KPI Dashboard */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 2fr 1fr' }, gap: 2, mb: 3 }}>
         {/* Column 1 — Health Overview */}
-        <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, borderRadius: 2 }} variant="outlined">
-          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-            <CircularProgress
-              variant="determinate"
-              value={100}
-              size={100}
-              thickness={5}
-              sx={{ color: alpha(
-                globalStats.healthScore >= 80 ? theme.palette.success.main
-                : globalStats.healthScore >= 50 ? theme.palette.warning.main
-                : theme.palette.error.main, 0.15
-              ) }}
-            />
-            <CircularProgress
-              variant="determinate"
-              value={pct(globalStats.healthScore)}
-              size={100}
-              thickness={5}
-              sx={{
-                color: globalStats.healthScore >= 80 ? 'success.main'
-                  : globalStats.healthScore >= 50 ? 'warning.main'
-                  : 'error.main',
-                position: 'absolute', left: 0,
-              }}
-            />
-            <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-              <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
-                {globalStats.healthScore}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>/ 100</Typography>
-            </Box>
+        <Tooltip title={globalStats.breakdown ? (
+          <Box sx={{ fontSize: '0.75rem' }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.scoreCalculation')}</Typography>
+            <Box>RAM {Math.round(globalStats.breakdown.avgMem)}% → {globalStats.breakdown.memPenalty === 0 ? 'OK' : globalStats.breakdown.memPenalty} pts</Box>
+            <Box>CPU {Math.round(globalStats.breakdown.avgCpu)}% → {globalStats.breakdown.cpuPenalty === 0 ? 'OK' : globalStats.breakdown.cpuPenalty} pts</Box>
+            <Box>{t('drsPage.imbalanceLabel')} {globalStats.breakdown.imbalance.toFixed(1)}% → {globalStats.breakdown.imbalancePenalty === 0 ? 'OK' : globalStats.breakdown.imbalancePenalty} pts</Box>
+            <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.2)' }} />
+            <Box sx={{ fontWeight: 600 }}>{t('drsPage.scoreFormula')}</Box>
           </Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 0.5 }}>
-            {t('drsPage.healthScore')}
-          </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>
-            {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()} • {globalStats.nodes} {t('drsPage.nodesLabel')}
-          </Typography>
-        </Paper>
+        ) : ''} arrow placement="right">
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, borderRadius: 2, cursor: 'help' }} variant="outlined">
+            <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+              <CircularProgress
+                variant="determinate"
+                value={100}
+                size={100}
+                thickness={5}
+                sx={{ color: alpha(
+                  globalStats.healthScore >= 80 ? theme.palette.success.main
+                  : globalStats.healthScore >= 50 ? theme.palette.warning.main
+                  : theme.palette.error.main, 0.15
+                ) }}
+              />
+              <CircularProgress
+                variant="determinate"
+                value={pct(globalStats.healthScore)}
+                size={100}
+                thickness={5}
+                sx={{
+                  color: globalStats.healthScore >= 80 ? 'success.main'
+                    : globalStats.healthScore >= 50 ? 'warning.main'
+                    : 'error.main',
+                  position: 'absolute', left: 0,
+                }}
+              />
+              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
+                  {globalStats.healthScore}
+                </Typography>
+                <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>/ 100</Typography>
+              </Box>
+            </Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 0.5 }}>
+              {t('drsPage.healthScore')}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+              {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()} • {globalStats.nodes} {t('drsPage.nodesLabel')}
+            </Typography>
+          </Paper>
+        </Tooltip>
 
         {/* Column 2 — Resource Distribution Chart */}
         <Paper sx={{ p: 2, borderRadius: 2 }} variant="outlined">

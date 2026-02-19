@@ -339,6 +339,14 @@ export default function ConnectionDialog({
           required={!isEdit}
         />
 
+        {!isPbs && (
+          <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              {t('settings.pvePrivsepHint')}
+            </Typography>
+          </Alert>
+        )}
+
         <Divider sx={{ my: 3 }} />
 
         {/* Section: Accès SSH (optionnel) */}

@@ -6,6 +6,7 @@ import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
+import { pveFetch } from "@/lib/proxmox/client"
 
 export const runtime = "nodejs"
 
@@ -128,6 +129,18 @@ export async function POST(req: Request) {
       }
     } else if (sshEnabled && sshAuthMethod === 'password' && sshPassword) {
       data.sshPassEnc = encryptSecret(sshPassword)
+    }
+
+    // Validate PVE credentials before saving
+    if (type === 'pve') {
+      try {
+        await pveFetch({ baseUrl, apiToken, insecureDev: insecureTLS }, "/version")
+      } catch (e: any) {
+        return NextResponse.json(
+          { error: `PVE authentication failed: ${e?.message || 'Unable to connect'}` },
+          { status: 400 }
+        )
+      }
     }
 
     // Validate PBS credentials before saving

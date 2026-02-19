@@ -789,6 +789,7 @@
     "apiToken": "API Token",
     "apiTokenHelper": "Format: user@realm!tokenid=secret",
     "pbsApiTokenHelper": "Format: user@realm!tokenid:secret (PBS uses : not =)",
+    "pvePrivsepHint": "Ensure your API token was created with --privsep 0, or has explicit permissions assigned to the token itself (not just the user).",
     "communityEdition": "Community Edition",
     "enterpriseEdition": "Enterprise Edition",
     "communityLicenseDesc": "Free license with limited features",

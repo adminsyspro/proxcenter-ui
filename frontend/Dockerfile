@@ -45,6 +45,9 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# Git commit SHA for version display (injected by CI)
+ARG GIT_SHA=""
+
 # Create data directory for SQLite (needed during build for page data collection)
 RUN mkdir -p /app/data
 
@@ -55,10 +58,13 @@ RUN npm run build
 # ========================================
 FROM node:22-alpine AS runner
 
+ARG GIT_SHA=""
+
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV GIT_SHA=${GIT_SHA}
 
 # Install runtime dependencies
 RUN apk add --no-cache sqlite-dev
@@ -96,6 +102,9 @@ COPY --from=builder /app/node_modules/pure-rand ./node_modules/pure-rand
 # Copy WebSocket proxy and its dependencies
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
+
+# Copy package.json for version display in startup banner
+COPY --from=builder /app/package.json ./package.json
 
 # No extra runtime dependencies — server.js and ws-proxy.js run via shell
 

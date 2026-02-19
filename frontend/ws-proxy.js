@@ -280,24 +280,42 @@ wss.on('connection', async (clientWs, req) => {
   clientWs.close(4000, 'Invalid path')
 })
 
-server.listen(PORT, () => {
-  console.log(`
-██████╗ ██╗  ██╗ ██████╗
-██╔══██╗╚██╗██╔╝██╔════╝
-██████╔╝ ╚███╔╝ ██║     
-██╔═══╝  ██╔██╗ ██║     
-██║     ██╔╝ ██╗╚██████╗
-╚═╝     ╚═╝  ╚═╝ ╚═════╝
-ProxCenter - Control Plane
+// Read version from package.json
+let appVersion = 'latest'
+try { appVersion = require('./package.json').version } catch {}
 
-╔════════════════════════════════════════════════════╗
-║  WebSocket Proxy (noVNC + xterm.js)                ║
-║  Listening on ws://localhost:${PORT.toString().padEnd(22)}║
-║  Internal API: ${INTERNAL_API_URL.padEnd(35)}║
-║                                                    ║
-║  Routes:                                           ║
-║    /ws/console/{sessionId} - VM/CT console         ║
-║    /ws/shell?host=...      - Node shell            ║
-╚════════════════════════════════════════════════════╝
+// Append git SHA for build traceability (e.g., 1.2.0-abc1234)
+const gitSha = process.env.GIT_SHA
+if (gitSha) appVersion += `-${gitSha.substring(0, 7)}`
+
+const edition = process.env.ORCHESTRATOR_URL ? 'Enterprise' : 'Community'
+
+server.listen(PORT, () => {
+  const c = {
+    orange: '\x1b[38;5;208m',
+    green: '\x1b[32m',
+    dim: '\x1b[90m',
+    bold: '\x1b[1m',
+    reset: '\x1b[0m',
+    white: '\x1b[37m',
+  }
+
+  console.log(`
+${c.orange}${c.bold} ██████╗ ██╗  ██╗ ██████╗
+ ██╔══██╗╚██╗██╔╝██╔════╝
+ ██████╔╝ ╚███╔╝ ██║
+ ██╔═══╝  ██╔██╗ ██║
+ ██║     ██╔╝ ██╗╚██████╗
+ ╚═╝     ╚═╝  ╚═╝ ╚═════╝${c.reset}
+ ${c.bold}ProxCenter${c.reset} ${c.dim}v${appVersion}${c.reset} ${c.dim}—${c.reset} ${c.white}${edition} Edition${c.reset}
+
+ ${c.dim}Services${c.reset}
+ ${c.dim}├─${c.reset} Frontend     ${c.white}http://0.0.0.0:${APP_PORT}${c.reset}   ${c.green}✓${c.reset}
+ ${c.dim}├─${c.reset} WebSocket    ${c.white}ws://0.0.0.0:${PORT}${c.reset}     ${c.green}✓${c.reset}
+ ${c.dim}└─${c.reset} Database     ${c.white}SQLite${c.reset}              ${c.green}✓${c.reset}
+
+ ${c.dim}Routes${c.reset}
+ ${c.dim}├─${c.reset} /ws/console/{sessionId}  ${c.dim}VM/CT console${c.reset}
+ ${c.dim}└─${c.reset} /ws/shell?host=...       ${c.dim}Node shell${c.reset}
 `)
 })

@@ -31,7 +31,7 @@ const defaultSettings: AISettingsState = {
   ollamaUrl: 'http://localhost:11434',
   ollamaModel: 'mistral:7b',
   openaiKey: '',
-  openaiModel: 'gpt-4o-mini',
+  openaiModel: 'gpt-4.1-nano',
 }
 
 export function useAISettings() {

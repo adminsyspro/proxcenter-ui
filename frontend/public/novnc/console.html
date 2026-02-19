@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Console VNC</title>
+  <title>VNC Console</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { 
@@ -75,35 +75,35 @@
       <div class="info">
         <span id="status-dot"></span>
         <span id="vm-info">Console</span>
-        <span id="status-text">• Initialisation...</span>
+        <span id="status-text">• Initializing...</span>
       </div>
       <div class="vm-actions">
-        <button id="btn-start" class="btn-start" title="Démarrer">▶</button>
-        <button id="btn-shutdown" class="btn-shutdown" title="Arrêter proprement">⏻</button>
-        <button id="btn-stop" class="btn-stop" title="Arrêter (forcé)">■</button>
+        <button id="btn-start" class="btn-start" title="Start">▶</button>
+        <button id="btn-shutdown" class="btn-shutdown" title="Shutdown (graceful)">⏻</button>
+        <button id="btn-stop" class="btn-stop" title="Stop (forced)">■</button>
         <button id="btn-pause" class="btn-pause" title="Pause">⏸</button>
       </div>
       <div class="buttons">
         <button id="btn-cad" disabled>Ctrl+Alt+Del</button>
-        <button id="btn-reconnect">Reconnecter</button>
-        <button id="btn-close">Fermer</button>
+        <button id="btn-reconnect">Reconnect</button>
+        <button id="btn-close">Close</button>
       </div>
     </div>
     <div id="error-bar"></div>
     <div id="screen">
       <div id="loading">
         <div class="icon">⌨️</div>
-        <div class="text" id="loading-text">Chargement...</div>
+        <div class="text" id="loading-text">Loading...</div>
         <div class="subtext" id="loading-subtext"></div>
       </div>
       <div id="novnc-instructions">
-        <h3 style="margin-bottom: 12px;">⚠️ noVNC requis</h3>
-        <p>Pour utiliser la console, créez le bundle noVNC :</p>
+        <h3 style="margin-bottom: 12px;">⚠️ noVNC required</h3>
+        <p>To use the console, build the noVNC bundle:</p>
         <code>
 npm install @novnc/novnc esbuild<br>
 node bundle-novnc.js
         </code>
-        <p style="margin-top: 12px; font-size: 12px; color: #a8a29e;">Puis rechargez cette page.</p>
+        <p style="margin-top: 12px; font-size: 12px; color: #a8a29e;">Then reload this page.</p>
       </div>
     </div>
   </div>
@@ -210,14 +210,14 @@ node bundle-novnc.js
     
     async function connect() {
       if (!type || !node || !vmid) {
-        showError('Paramètres manquants');
-        setStatus('error', 'Erreur');
+        showError('Missing parameters');
+        setStatus('error', 'Error');
         return;
       }
       
       if (!RFB) {
-        showError('noVNC non chargé');
-        setStatus('error', 'Erreur');
+        showError('noVNC not loaded');
+        setStatus('error', 'Error');
         return;
       }
       
@@ -227,9 +227,9 @@ node bundle-novnc.js
       }
       
       hideError();
-      setStatus('connecting', 'Connexion...');
+      setStatus('connecting', 'Connecting...');
       loading.style.display = 'block';
-      loadingText.textContent = 'Création de la session...';
+      loadingText.textContent = 'Creating session...';
       loadingSubtext.textContent = '';
       
       try {
@@ -248,9 +248,9 @@ node bundle-novnc.js
         console.log('API response:', json);
         
         const { wsUrl, password } = json?.data || {};
-        if (!wsUrl || !password) throw new Error('Session invalide');
-        
-        loadingText.textContent = 'Connexion VNC...';
+        if (!wsUrl || !password) throw new Error('Invalid session');
+
+        loadingText.textContent = 'Connecting to VNC...';
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // wsUrl comes from API as "/ws/console/{sessionId}"
@@ -314,7 +314,7 @@ node bundle-novnc.js
         rfb.addEventListener('connect', () => {
           console.log('VNC connected');
           loading.style.display = 'none';
-          setStatus('connected', 'Connecté');
+          setStatus('connected', 'Connected');
           btnCad.disabled = false;
           
           // Focus agressif sur le canvas
@@ -350,11 +350,11 @@ node bundle-novnc.js
         
         rfb.addEventListener('disconnect', (e) => {
           console.log('VNC disconnected:', e.detail);
-          setStatus('', 'Déconnecté');
+          setStatus('', 'Disconnected');
           btnCad.disabled = true;
           loading.style.display = 'block';
-          loadingText.textContent = 'Déconnecté';
-          loadingSubtext.textContent = 'Cliquez sur Reconnecter';
+          loadingText.textContent = 'Disconnected';
+          loadingSubtext.textContent = 'Click Reconnect';
         });
         
         rfb.addEventListener('credentialsrequired', () => {
@@ -362,14 +362,14 @@ node bundle-novnc.js
         });
         
         rfb.addEventListener('securityfailure', (e) => {
-          showError(`Sécurité: ${e.detail.reason}`);
+          showError(`Security: ${e.detail.reason}`);
         });
         
       } catch (err) {
         console.error('Error:', err);
         showError(err.message);
-        setStatus('error', 'Erreur');
-        loadingText.textContent = 'Erreur';
+        setStatus('error', 'Error');
+        loadingText.textContent = 'Error';
         loadingSubtext.textContent = err.message;
       }
     }
@@ -431,7 +431,7 @@ node bundle-novnc.js
     });
     
     function init() {
-      loadingText.textContent = 'Chargement noVNC...';
+      loadingText.textContent = 'Loading noVNC...';
       const loaded = loadNoVNC();
       
       // Charger le status de la VM
@@ -442,11 +442,11 @@ node bundle-novnc.js
       } else {
         loading.style.display = 'none';
         novncInstructions.style.display = 'block';
-        setStatus('error', 'Erreur');
+        setStatus('error', 'Error');
       }
     }
-    
-    // Démarrer quand le DOM est prêt
+
+    // Start when DOM is ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', init);
     } else {

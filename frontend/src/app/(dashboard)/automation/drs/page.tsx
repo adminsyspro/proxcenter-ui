@@ -1384,13 +1384,15 @@ return Object.entries(metricsData as any)
     { revalidateOnFocus: false }
   )
 
+  // Only warn for PVE 9+ clusters that have native affinity rules.
+  // PVE 8 HA groups are the normal HA mechanism, not a conflict.
   const haWarnings = useMemo(() => {
     if (!haDataMap) return []
     const warnings: { clusterId: string; clusterName: string; majorVersion: number; groups: number; rules: number }[] = []
     for (const c of clusters) {
       const ha = haDataMap[c.id]
       if (!ha) continue
-      if (ha.groups > 0 || ha.rules > 0) {
+      if (ha.majorVersion >= 9 && ha.rules > 0) {
         warnings.push({ clusterId: c.id, clusterName: c.name, majorVersion: ha.majorVersion, groups: ha.groups, rules: ha.rules })
       }
     }
@@ -1896,9 +1898,7 @@ return next
           {haWarnings.map(w => (
             <Typography key={w.clusterId} variant="body2">
               <strong>{w.clusterName}</strong> (PVE {w.majorVersion}){' — '}
-              {w.majorVersion >= 9 && w.rules > 0
-                ? t('drsPage.haConflictPve9', { rules: w.rules, groups: w.groups })
-                : t('drsPage.haConflictPve8', { groups: w.groups })}
+              {t('drsPage.haConflictPve9', { rules: w.rules, groups: w.groups })}
             </Typography>
           ))}
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>

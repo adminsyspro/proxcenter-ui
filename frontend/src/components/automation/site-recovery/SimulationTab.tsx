@@ -496,16 +496,72 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
         sx={{ '& .MuiAlert-message': { width: '100%' } }}
       >
         {/* Title */}
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
           {t(`siteRecovery.simulation.verdict.${verdict.key}`)}
         </Typography>
 
-        {/* Two-column layout */}
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-          {/* Left column: summary + health breakdown */}
-          <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-            {/* Summary line */}
-            <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', mb: 1 }}>
+        {/* Health score with penalty chips — top block */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            {t('siteRecovery.simulation.healthScore')}:
+          </Typography>
+          <Typography variant="caption" sx={{
+            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+            color: getHealthColor(stats.healthBefore.score),
+          }}>
+            {stats.healthBefore.score}
+          </Typography>
+          <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
+          <Typography variant="caption" sx={{
+            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+            color: getHealthColor(stats.healthAfter.score),
+          }}>
+            {stats.healthAfter.score}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
+            <Chip
+              size="small"
+              label={`RAM ${stats.healthAfter.memPenalty}`}
+              sx={{
+                height: 20, fontSize: '0.65rem', fontFamily: 'JetBrains Mono, monospace',
+                bgcolor: alpha(memPenaltyDelta < 0 ? theme.palette.error.main : theme.palette.text.disabled, 0.1),
+                color: memPenaltyDelta < 0 ? theme.palette.error.main : theme.palette.text.secondary,
+              }}
+            />
+            <Chip
+              size="small"
+              label={`CPU ${stats.healthAfter.cpuPenalty}`}
+              sx={{
+                height: 20, fontSize: '0.65rem', fontFamily: 'JetBrains Mono, monospace',
+                bgcolor: alpha(cpuPenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.disabled, 0.1),
+                color: cpuPenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.secondary,
+              }}
+            />
+            <Chip
+              size="small"
+              label={`${t('siteRecovery.simulation.penalty')}: imbalance ${stats.healthAfter.imbalancePenalty}`}
+              sx={{
+                height: 20, fontSize: '0.65rem', fontFamily: 'JetBrains Mono, monospace',
+                bgcolor: alpha(imbalancePenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.disabled, 0.1),
+                color: imbalancePenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.secondary,
+              }}
+            />
+          </Box>
+          {stats.lostVMs > 0 && (
+            <Chip
+              size="small"
+              label={`${stats.lostVMs} ${t('siteRecovery.simulation.lost')}`}
+              color="error"
+              sx={{ height: 20, fontSize: '0.65rem', ml: 0.5 }}
+            />
+          )}
+        </Box>
+
+        {/* Two-column layout: summary + chart */}
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', mt: 0.5 }}>
+          {/* Left column: summary */}
+          <Box sx={{ flex: '1 1 300px', minWidth: 0, display: 'flex', alignItems: 'center' }}>
+            <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem' }}>
               {t('siteRecovery.simulation.verdictSummary', {
                 hosts: stats.hostsAfter,
                 cpu: stats.avgCpuAfter,
@@ -514,67 +570,6 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
                 memDelta: formatDelta(memDelta),
               })}
             </Typography>
-
-            {/* Health score with breakdown */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                {t('siteRecovery.simulation.healthScore')}:
-              </Typography>
-              <Typography variant="caption" sx={{
-                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-                color: getHealthColor(stats.healthBefore.score),
-              }}>
-                {stats.healthBefore.score}
-              </Typography>
-              <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-              <Typography variant="caption" sx={{
-                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-                color: getHealthColor(stats.healthAfter.score),
-              }}>
-                {stats.healthAfter.score}
-              </Typography>
-            </Box>
-
-            {/* Penalty breakdown chips */}
-            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1 }}>
-              <Chip
-                size="small"
-                label={`RAM ${stats.healthAfter.memPenalty}`}
-                sx={{
-                  height: 22, fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace',
-                  bgcolor: alpha(memPenaltyDelta < 0 ? theme.palette.error.main : theme.palette.text.disabled, 0.1),
-                  color: memPenaltyDelta < 0 ? theme.palette.error.main : theme.palette.text.secondary,
-                }}
-              />
-              <Chip
-                size="small"
-                label={`CPU ${stats.healthAfter.cpuPenalty}`}
-                sx={{
-                  height: 22, fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace',
-                  bgcolor: alpha(cpuPenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.disabled, 0.1),
-                  color: cpuPenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.secondary,
-                }}
-              />
-              <Chip
-                size="small"
-                label={`${t('siteRecovery.simulation.penalty')}: imbalance ${stats.healthAfter.imbalancePenalty}`}
-                sx={{
-                  height: 22, fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace',
-                  bgcolor: alpha(imbalancePenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.disabled, 0.1),
-                  color: imbalancePenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.secondary,
-                }}
-              />
-            </Box>
-
-            {/* Lost VMs chip */}
-            {stats.lostVMs > 0 && (
-              <Chip
-                size="small"
-                label={`${stats.lostVMs} ${t('siteRecovery.simulation.lost')}`}
-                color="error"
-                sx={{ height: 22, fontSize: '0.7rem' }}
-              />
-            )}
           </Box>
 
           {/* Right column: per-node RAM bar chart */}

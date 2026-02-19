@@ -241,7 +241,7 @@ function NodeCard({ node, redistributedVMs, onToggleFail, nodeCount }: {
       onClick={onToggleFail}
       sx={{
         flex: `1 1 ${nodeCount <= 3 ? '280px' : nodeCount <= 5 ? '220px' : '180px'}`,
-        maxWidth: nodeCount <= 2 ? '50%' : undefined,
+        maxWidth: nodeCount === 2 ? '50%' : undefined,
         minHeight: 200,
         cursor: 'pointer',
         position: 'relative',
@@ -701,6 +701,8 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     let minTolerance = Infinity
     let strictestPool = ''
     let failureDomain = 'host'
+    let poolSize = 3
+    let poolMinSize = 2
 
     for (const pool of pools) {
       // Skip internal/system pools (e.g. .mgr, .rgw.root)
@@ -721,6 +723,8 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
         minTolerance = tolerance
         strictestPool = pool.name
         failureDomain = domain
+        poolSize = pool.size || 3
+        poolMinSize = pool.minSize || 2
       }
     }
 
@@ -735,6 +739,8 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
       upOsds,
       failureDomain,
       dcCount,
+      poolSize,
+      poolMinSize,
     }
   }, [selectedHasCeph, cephData, crushRuleMap, crushTopology])
 
@@ -944,24 +950,17 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     }
 
     const suffix = isDcDomain ? 'Dc' : ''
+    const params = {
+      failed: failedCount,
+      max: cephTolerance.maxNodeLoss,
+      pool: cephTolerance.strictestPool,
+      size: cephTolerance.poolSize,
+      minSize: cephTolerance.poolMinSize,
+    }
     if (failedCount <= cephTolerance.maxNodeLoss) {
-      return {
-        ok: true,
-        message: t(`siteRecovery.simulation.cephOk${suffix}`, {
-          failed: failedCount,
-          max: cephTolerance.maxNodeLoss,
-          pool: cephTolerance.strictestPool,
-        }),
-      }
+      return { ok: true, message: t(`siteRecovery.simulation.cephOk${suffix}`, params) }
     }
-    return {
-      ok: false,
-      message: t(`siteRecovery.simulation.cephDanger${suffix}`, {
-        failed: failedCount,
-        max: cephTolerance.maxNodeLoss,
-        pool: cephTolerance.strictestPool,
-      }),
-    }
+    return { ok: false, message: t(`siteRecovery.simulation.cephDanger${suffix}`, params) }
   }, [selectedHasCeph, cephTolerance, failedNodes, t, crushTopology])
 
   // Ceph warning shown in summary bar (before any node is failed)
@@ -1044,10 +1043,14 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
                   tolerance: cephTolerance.maxNodeLoss,
                   osds: cephTolerance.totalOsds,
                   dcs: cephTolerance.dcCount,
+                  size: cephTolerance.poolSize,
+                  minSize: cephTolerance.poolMinSize,
                 })
               : t('siteRecovery.simulation.cephEnabled', {
                   tolerance: cephTolerance.maxNodeLoss,
                   osds: cephTolerance.totalOsds,
+                  size: cephTolerance.poolSize,
+                  minSize: cephTolerance.poolMinSize,
                 })
             }
             color="info"

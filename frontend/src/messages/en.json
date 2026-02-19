@@ -1451,7 +1451,21 @@
     "status": "Status",
     "attention": "Warning",
     "rightsizingInfo": "VMs with the highest rightsizing potential based on average usage",
-    "savings": "Savings"
+    "savings": "Savings",
+    "topConsumersOverTime": "Top Consumers Over Time",
+    "topConsumersSubtitle": "Top 5 VMs by resource usage over time",
+    "metricCpu": "CPU",
+    "metricRam": "RAM",
+    "metricNetwork": "Network",
+    "vmDetail": "VM Detail",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "Memory Usage",
+    "networkIoDetail": "Network I/O",
+    "diskIoDetail": "Disk I/O",
+    "noTrendData": "No trend data available",
+    "clickVmForDetails": "Click a VM for details",
+    "timeframe1h": "1h",
+    "timeframe24h": "24h"
   },
   "siteRecovery": {
     "title": "Site Recovery",
@@ -2342,10 +2356,9 @@
     "ruleEnabled": "Rule enabled",
     "ruleRequired": "Rule required",
     "ruleRequiredDesc": "Blocks migrations if impossible to respect",
-    "haConflictTitle": "Proxmox HA conflict detected",
-    "haConflictPve9": "{rules} native affinity rule(s) and {groups} HA group(s) detected. Native PVE rules may conflict with ProxCenter DRS.",
-    "haConflictPve8": "{groups} HA group(s) detected. HA groups may constrain DRS migrations.",
-    "haConflictHint": "Consider disabling Proxmox native HA affinity/groups if you want ProxCenter DRS to fully manage placement."
+    "haConflictTitle": "PVE 9 native affinity rules detected",
+    "haConflictPve9": "{rules} native affinity rule(s) detected. Native PVE 9 affinity rules may conflict with ProxCenter DRS placement decisions.",
+    "haConflictHint": "Consider disabling Proxmox native affinity rules if you want ProxCenter DRS to fully manage placement."
   },
   "usersPage": {
     "rbacRoles": "RBAC Roles",

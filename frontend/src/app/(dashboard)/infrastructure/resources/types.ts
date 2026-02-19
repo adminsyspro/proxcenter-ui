@@ -177,3 +177,22 @@ export type ConnectionInfo = {
   id: string
   name: string
 }
+
+export type VmTrendPoint = {
+  t: string
+  cpu: number
+  ram: number
+  netin?: number
+  netout?: number
+}
+
+export type VmIdentity = {
+  id: string
+  name: string
+  node: string
+  connId: string
+  type: string
+  vmid: string | number
+}
+
+export type ConsumerMetric = 'cpu' | 'ram' | 'network'

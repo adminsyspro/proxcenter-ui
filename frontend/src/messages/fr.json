@@ -1452,7 +1452,21 @@
     "status": "Statut",
     "attention": "Attention",
     "rightsizingInfo": "VMs avec le plus grand potentiel de rightsizing basé sur l'utilisation moyenne",
-    "savings": "Économies"
+    "savings": "Économies",
+    "topConsumersOverTime": "Top Consommateurs dans le temps",
+    "topConsumersSubtitle": "Top 5 VMs par utilisation de ressources dans le temps",
+    "metricCpu": "CPU",
+    "metricRam": "RAM",
+    "metricNetwork": "Réseau",
+    "vmDetail": "Détail VM",
+    "cpuUsage": "Utilisation CPU",
+    "memoryUsage": "Utilisation Mémoire",
+    "networkIoDetail": "Réseau I/O",
+    "diskIoDetail": "Disque I/O",
+    "noTrendData": "Aucune donnée de tendance disponible",
+    "clickVmForDetails": "Cliquez sur une VM pour les détails",
+    "timeframe1h": "1h",
+    "timeframe24h": "24h"
   },
   "siteRecovery": {
     "title": "Site Recovery",
@@ -2338,10 +2352,9 @@
     "ruleEnabled": "Règle activée",
     "ruleRequired": "Règle obligatoire",
     "ruleRequiredDesc": "Bloque les migrations si impossible à respecter",
-    "haConflictTitle": "Conflit HA Proxmox détecté",
-    "haConflictPve9": "{rules} règle(s) d'affinité native(s) et {groups} groupe(s) HA détecté(s). Les règles natives PVE peuvent entrer en conflit avec le DRS ProxCenter.",
-    "haConflictPve8": "{groups} groupe(s) HA détecté(s). Les groupes HA peuvent contraindre les migrations DRS.",
-    "haConflictHint": "Envisagez de désactiver les groupes/règles d'affinité HA natifs de Proxmox si vous souhaitez que le DRS ProxCenter gère entièrement le placement."
+    "haConflictTitle": "Règles d'affinité natives PVE 9 détectées",
+    "haConflictPve9": "{rules} règle(s) d'affinité native(s) détectée(s). Les règles d'affinité natives PVE 9 peuvent entrer en conflit avec les décisions de placement du DRS ProxCenter.",
+    "haConflictHint": "Envisagez de désactiver les règles d'affinité natives de Proxmox si vous souhaitez que le DRS ProxCenter gère entièrement le placement."
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

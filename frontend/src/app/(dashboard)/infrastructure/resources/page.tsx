@@ -32,6 +32,9 @@ import OverprovisioningCard from './components/OverprovisioningCard'
 import AiInsightsCard from './components/AiInsightsCard'
 import ClusterSelector from './components/ClusterSelector'
 import NetworkIoCard from './components/NetworkIoCard'
+import TopConsumersCard from './components/TopConsumersCard'
+import VmDetailDrawer from './components/VmDetailDrawer'
+import type { VmIdentity } from './types'
 
 export default function ResourcesPage() {
   const t = useTranslations()
@@ -41,6 +44,7 @@ export default function ResourcesPage() {
   // Cluster drill-down (F4)
   const [selectedConnection, setSelectedConnection] = useState('all')
   const [exporting, setExporting] = useState(false)
+  const [drawerVm, setDrawerVm] = useState<VmIdentity | null>(null)
 
   // Data hook
   const {
@@ -48,6 +52,7 @@ export default function ResourcesPage() {
     topCpuVms, topRamVms, green, overprovisioning,
     networkMetrics, connections,
     aiAnalysis, loadData, runAiAnalysis, setAiAnalysis,
+    vmTrends, vmTrendsLoading, fetchVmTrends,
   } = useResourceData(selectedConnection === 'all' ? undefined : selectedConnection)
 
   useEffect(() => {
@@ -157,6 +162,22 @@ export default function ResourcesPage() {
             </Grid>
           )}
 
+          {/* Top Consumers Over Time */}
+          {(topCpuVms.length > 0 || topRamVms.length > 0) && (
+            <Grid size={{ xs: 12 }}>
+              <TopConsumersCard
+                topCpuVms={topCpuVms}
+                topRamVms={topRamVms}
+                networkMetrics={networkMetrics}
+                vmTrends={vmTrends}
+                vmTrendsLoading={vmTrendsLoading}
+                fetchVmTrends={fetchVmTrends}
+                onVmClick={setDrawerVm}
+                loading={loading}
+              />
+            </Grid>
+          )}
+
           {/* Green / RSE */}
           <Grid size={{ xs: 12 }}>
             <GreenMetricsCard green={green} loading={loading} />
@@ -172,6 +193,8 @@ export default function ResourcesPage() {
             <AiInsightsCard analysis={aiAnalysis} onAnalyze={runAiAnalysis} loading={loading} />
           </Grid>
         </Grid>
+
+        <VmDetailDrawer vm={drawerVm} onClose={() => setDrawerVm(null)} />
         </>
         )}
       </Box>

@@ -17,3 +17,8 @@ export function formatBytesPerSec(bytesPerSec: number): string {
   const i = Math.floor(Math.log(bytesPerSec) / Math.log(k))
   return `${parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
+
+export function parseResourceVmId(id: string): { connId: string; type: string; node: string; vmid: string } {
+  const [connId, node, type, vmid] = id.split(':')
+  return { connId, type, node, vmid }
+}

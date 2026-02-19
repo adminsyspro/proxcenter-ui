@@ -70,7 +70,15 @@ function toTrendPoints(rrd: any[]) {
 
     if (maxmem > 0) ramPct = Math.round(clampPct((mem / maxmem) * 100))
 
-    return { t: formatHHMM(Number(p.time)), cpu: cpuPct, ram: ramPct }
+    const netin = Number(p.netin ?? 0)
+    const netout = Number(p.netout ?? 0)
+
+    return {
+      t: formatHHMM(Number(p.time)),
+      cpu: cpuPct,
+      ram: ramPct,
+      ...(netin > 0 || netout > 0 ? { netin, netout } : {}),
+    }
   })
 }
 

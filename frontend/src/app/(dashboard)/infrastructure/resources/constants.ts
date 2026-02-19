@@ -17,3 +17,8 @@ export const DEFAULT_THRESHOLDS: ResourceThresholds = {
   ram: { warning: 80, critical: 90 },
   storage: { warning: 80, critical: 90 },
 }
+
+export const VM_COLORS = [
+  '#6366f1', '#f97316', '#22c55e', '#ec4899', '#06b6d4',
+  '#eab308', '#8b5cf6', '#ef4444', '#14b8a6', '#f43f5e',
+]

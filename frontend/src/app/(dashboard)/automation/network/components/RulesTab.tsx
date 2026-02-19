@@ -1,14 +1,16 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useTranslations } from 'next-intl'
+
 import { Box, ToggleButton, ToggleButtonGroup, Badge, useTheme, alpha } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 
-import ClusterRulesPanel from './rules/ClusterRulesPanel'
+import FirewallPolicyTable from './rules/FirewallPolicyTable'
 import HostRulesPanel from './rules/HostRulesPanel'
 import VMRulesPanel from './rules/VMRulesPanel'
-import SecurityGroupsPanel from './rules/SecurityGroupsPanel'
 
 interface RulesTabProps {
   activeSubTab: number
@@ -36,6 +38,19 @@ interface RulesTabProps {
   reload: () => void
 }
 
+/**
+ * Map legacy sub-tab indices (used by StatCards / DashboardTab) to new ones:
+ *   Old 0 (Cluster) / 3 (SGs) → New 0 (Distributed Firewall)
+ *   Old 1 (Nodes)              → New 1 (Host Rules)
+ *   Old 2 (VMs)                → New 2 (VM Rules)
+ */
+function mapLegacySubTab(v: number): number {
+  if (v === 0 || v === 3) return 0
+  if (v === 1) return 1
+  if (v === 2) return 2
+  return 0
+}
+
 export default function RulesTab({
   activeSubTab, onSubTabChange,
   clusterRules, setClusterRules,
@@ -45,15 +60,26 @@ export default function RulesTab({
   selectedConnection, reload
 }: RulesTabProps) {
   const theme = useTheme()
+  const t = useTranslations()
 
   const hostRulesCount = Object.values(hostRulesByNode).reduce((acc, r) => acc + r.length, 0)
   const vmRulesCount = vmFirewallData.reduce((acc, v) => acc + v.rules.length, 0)
+  const policyRulesCount = clusterRules.length + securityGroups.reduce((acc, g) => acc + (g.rules?.length || 0), 0)
+
+  // Remap legacy sub-tab values on mount / when changed from outside
+  useEffect(() => {
+    if (activeSubTab > 2) {
+      onSubTabChange(mapLegacySubTab(activeSubTab))
+    }
+  }, [activeSubTab, onSubTabChange])
+
+  const currentTab = activeSubTab > 2 ? mapLegacySubTab(activeSubTab) : activeSubTab
 
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
         <ToggleButtonGroup
-          value={activeSubTab}
+          value={currentTab}
           exclusive
           onChange={(_, v) => { if (v !== null) onSubTabChange(v) }}
           size="small"
@@ -73,38 +99,36 @@ export default function RulesTab({
             }
           }}
         >
-          <ToggleButton value={0} disabled={firewallMode === 'standalone'}>
-            <i className="ri-cloud-line" style={{ marginRight: 6, fontSize: 16 }} />
-            Cluster
-            <Badge badgeContent={clusterRules.length} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
+          <ToggleButton value={0}>
+            <i className="ri-shield-flash-line" style={{ marginRight: 6, fontSize: 16 }} />
+            {t('networkPage.distributedFirewall')}
+            <Badge badgeContent={policyRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
           </ToggleButton>
           <ToggleButton value={1}>
             <i className="ri-server-line" style={{ marginRight: 6, fontSize: 16 }} />
-            Nodes
+            {t('networkPage.hostRules')}
             <Badge badgeContent={hostRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
           </ToggleButton>
           <ToggleButton value={2}>
             <i className="ri-computer-line" style={{ marginRight: 6, fontSize: 16 }} />
-            VMs
+            {t('networkPage.vmDirectRules')}
             <Badge badgeContent={vmRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
-          </ToggleButton>
-          <ToggleButton value={3}>
-            <i className="ri-shield-line" style={{ marginRight: 6, fontSize: 16 }} />
-            Security Groups
-            <Badge badgeContent={securityGroups.length} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
-      {activeSubTab === 0 && (
-        <ClusterRulesPanel
+      {currentTab === 0 && (
+        <FirewallPolicyTable
           clusterRules={clusterRules}
           securityGroups={securityGroups}
+          vmFirewallData={vmFirewallData}
+          firewallMode={firewallMode}
           selectedConnection={selectedConnection}
           setClusterRules={setClusterRules}
+          reload={reload}
         />
       )}
-      {activeSubTab === 1 && (
+      {currentTab === 1 && (
         <HostRulesPanel
           hostRulesByNode={hostRulesByNode}
           nodesList={nodesList}
@@ -115,22 +139,13 @@ export default function RulesTab({
           reloadHostRulesForNode={reloadHostRulesForNode}
         />
       )}
-      {activeSubTab === 2 && (
+      {currentTab === 2 && (
         <VMRulesPanel
           vmFirewallData={vmFirewallData}
           loadingVMRules={loadingVMRules}
           selectedConnection={selectedConnection}
           loadVMFirewallData={loadVMFirewallData}
           reloadVMFirewallRules={reloadVMFirewallRules}
-        />
-      )}
-      {activeSubTab === 3 && (
-        <SecurityGroupsPanel
-          securityGroups={securityGroups}
-          firewallMode={firewallMode}
-          selectedConnection={selectedConnection}
-          totalRules={totalRules}
-          reload={reload}
         />
       )}
     </Box>

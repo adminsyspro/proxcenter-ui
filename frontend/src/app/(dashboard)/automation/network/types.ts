@@ -19,3 +19,26 @@ export const monoStyle = { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono",
 export const DEFAULT_RULE: firewallAPI.CreateRuleRequest = {
   type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '', source: '', dest: '', macro: '', iface: '', log: 'nolog', comment: ''
 }
+
+// ── DFW Policy types ──
+
+export type PolicyCategory = 'infrastructure' | 'application' | 'default'
+
+export interface PolicySection {
+  id: string                    // SG name or '__cluster__'
+  category: PolicyCategory
+  type: 'security-group' | 'cluster'
+  name: string
+  comment?: string
+  rules: firewallAPI.FirewallRule[]
+  appliedTo: { vmid: number; name: string; node: string }[]
+  ruleCount: number
+  activeRuleCount: number
+}
+
+export const INFRASTRUCTURE_PREFIXES = ['sg-base-', 'sg-pve-', 'sg-infra-', 'sg-mgmt-']
+
+export function classifySG(name: string): PolicyCategory {
+  const lower = name.toLowerCase()
+  return INFRASTRUCTURE_PREFIXES.some(p => lower.startsWith(p)) ? 'infrastructure' : 'application'
+}

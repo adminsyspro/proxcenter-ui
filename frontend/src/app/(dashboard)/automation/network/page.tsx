@@ -91,7 +91,7 @@ export default function NetworkAutomationPage() {
   // Load VM rules when on Dashboard (tab 0) or Rules > VMs (tab 2, subTab 2)
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 0 || (activeTab === 2 && rulesSubTab === 2)) {
+      if (activeTab === 0 || (activeTab === 2 && (rulesSubTab === 0 || rulesSubTab === 2))) {
         loadVMFirewallData()
       }
     }

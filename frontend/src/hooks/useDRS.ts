@@ -15,7 +15,7 @@ export function useDRSRecommendations(isEnterprise: boolean) {
 }
 
 export function useDRSMigrations(isEnterprise: boolean) {
-  return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations/active' : null, fetcher, { refreshInterval: 10000 })
+  return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations?active=true' : null, fetcher, { refreshInterval: 10000 })
 }
 
 export function useDRSMetrics(isEnterprise: boolean) {

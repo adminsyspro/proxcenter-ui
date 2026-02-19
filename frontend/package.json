@@ -79,7 +79,7 @@
     "eslint-plugin-import": "2.31.0",
     "postcss": "8.5.6",
     "postcss-styled-syntax": "0.7.1",
-    "prettier": "3.6.2",
+    "prettier": "3.8.1",
     "prisma": "^7.4.0",
     "stylelint": "16.25.0",
     "stylelint-use-logical-spec": "5.0.1",

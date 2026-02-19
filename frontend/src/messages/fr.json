@@ -1460,7 +1460,8 @@
       "replication": "Réplication",
       "protection": "Protection",
       "recoveryPlans": "Plans de reprise",
-      "emergencyDR": "DR d'urgence"
+      "emergencyDR": "DR d'urgence",
+      "simulation": "Simulation"
     },
     "status": {
       "all": "Tous les statuts",
@@ -1630,6 +1631,39 @@
       "emergencyFailover": "Failover d'urgence",
       "standaloneTitle": "VMs autonomes",
       "vmStarted": "{name} (VMID {vmid}) démarrée sur le site DR"
+    },
+    "simulation": {
+      "title": "Simulation de panne de nœud",
+      "subtitle": "Cliquez sur les nœuds pour simuler une panne et voir la redistribution des VMs",
+      "selectCluster": "Sélectionner un cluster",
+      "hosts": "Hôtes",
+      "avgCpu": "CPU moy.",
+      "avgMemory": "RAM moy.",
+      "vmsAssigned": "VMs",
+      "clickToFail": "Cliquer pour simuler une panne",
+      "clickToReactivate": "Cliquer pour réactiver",
+      "failed": "EN PANNE",
+      "noNodes": "Aucun nœud disponible",
+      "verdict": {
+        "ok": "Le cluster peut absorber la charge",
+        "stressed": "Le cluster peut absorber la charge mais sera sous tension",
+        "overloaded": "Le cluster NE PEUT PAS absorber la charge",
+        "allDown": "Tous les nœuds sont en panne — panne totale du cluster"
+      },
+      "healthScore": "Score de santé",
+      "before": "Avant",
+      "after": "Après (projeté)",
+      "affectedVms": "VMs affectées",
+      "vmid": "VMID",
+      "vmName": "Nom",
+      "vcpus": "vCPUs",
+      "ram": "RAM",
+      "originalNode": "Nœud d'origine",
+      "targetNode": "Nœud cible",
+      "redistributed": "Redistribuée",
+      "lost": "Perdue",
+      "noSimulation": "Sélectionnez un cluster et cliquez sur les nœuds pour lancer la simulation",
+      "nodesDown": "{count} nœud(s) en panne"
     }
   },
   "templates": {

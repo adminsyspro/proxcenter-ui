@@ -1671,7 +1671,13 @@
       "cephDangerDc": "DATA AT RISK — {failed} DC(s) down exceeds guaranteed tolerance of {max}. Some PGs may drop below min_size={minSize} replicas (pool: {pool}, size {size}/{minSize})",
       "datacenter": "Datacenter",
       "failDatacenter": "Fail entire datacenter",
-      "reactivateDatacenter": "Reactivate datacenter"
+      "reactivateDatacenter": "Reactivate datacenter",
+      "loading": "Loading clusters...",
+      "verdictSummary": "Surviving {hosts} nodes — avg CPU {cpu}% ({cpuDelta}), avg RAM {mem}% ({memDelta})",
+      "perNodeRam": "RAM usage per node (after redistribution)",
+      "cephRamWarning": "{node} at {pct}% RAM — Ceph OSDs need memory headroom, risk of OSD crash",
+      "cephDangerZone": "Ceph danger",
+      "penalty": "Penalty"
     }
   },
   "templates": {

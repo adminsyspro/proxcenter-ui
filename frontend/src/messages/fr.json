@@ -1672,7 +1672,13 @@
       "cephDangerDc": "DONNÉES EN DANGER — {failed} DC(s) en panne dépasse la tolérance garantie de {max}. Certains PGs peuvent descendre sous min_size={minSize} réplicas (pool : {pool}, size {size}/{minSize})",
       "datacenter": "Datacenter",
       "failDatacenter": "Simuler la panne du datacenter",
-      "reactivateDatacenter": "Réactiver le datacenter"
+      "reactivateDatacenter": "Réactiver le datacenter",
+      "loading": "Chargement des clusters...",
+      "verdictSummary": "{hosts} nœuds survivants — CPU moy. {cpu}% ({cpuDelta}), RAM moy. {mem}% ({memDelta})",
+      "perNodeRam": "Utilisation RAM par nœud (après redistribution)",
+      "cephRamWarning": "{node} à {pct}% RAM — Les OSDs Ceph nécessitent de la mémoire, risque de crash OSD",
+      "cephDangerZone": "Danger Ceph",
+      "penalty": "Pénalité"
     }
   },
   "templates": {

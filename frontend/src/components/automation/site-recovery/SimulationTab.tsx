@@ -9,6 +9,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   FormControl,
   InputLabel,
   LinearProgress,
@@ -26,6 +27,8 @@ import {
   alpha,
   useTheme
 } from '@mui/material'
+
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts'
 
 import { formatBytes } from '@/utils/format'
 import { computeDrsHealthScore, type DrsHealthBreakdown } from '@/lib/utils/drs-health'
@@ -272,7 +275,7 @@ function NodeCard({ node, redistributedVMs, onToggleFail, nodeCount }: {
           zIndex: 1,
           backdropFilter: 'blur(1px)',
         }}>
-          <i className="ri-skull-2-line" style={{ fontSize: 36, color: theme.palette.error.main }} />
+          <i className="ri-close-circle-line" style={{ fontSize: 36, color: theme.palette.error.main }} />
           <Typography variant="subtitle2" color="error" sx={{ fontWeight: 700, mt: 0.5 }}>
             {t('siteRecovery.simulation.failed')}
           </Typography>
@@ -438,10 +441,12 @@ function VMChip({ vm, isRedistributed, isLost }: { vm: SimVM; isRedistributed?: 
   )
 }
 
-function VerdictBanner({ verdict, stats, cephVerdict }: {
+function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHasCeph }: {
   verdict: { severity: 'success' | 'warning' | 'error'; key: string }
   stats: SimStats
   cephVerdict?: { ok: boolean; message: string } | null
+  simNodesAfter: SimNode[]
+  selectedHasCeph: boolean
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -450,6 +455,32 @@ function VerdictBanner({ verdict, stats, cephVerdict }: {
     score >= 80 ? theme.palette.success.main
     : score >= 50 ? theme.palette.warning.main
     : theme.palette.error.main
+
+  const getBarColor = (pct: number) =>
+    pct > 85 ? theme.palette.error.main
+    : pct > 70 ? theme.palette.warning.main
+    : theme.palette.success.main
+
+  const cpuDelta = stats.avgCpuAfter - stats.avgCpuBefore
+  const memDelta = stats.avgMemAfter - stats.avgMemBefore
+  const formatDelta = (d: number) => d > 0 ? `+${d}%` : d === 0 ? '±0%' : `${d}%`
+
+  // Per-node RAM chart data (surviving nodes only)
+  const survivingAfter = simNodesAfter.filter(n => !n.isFailed)
+  const chartData = survivingAfter.map(n => ({
+    name: n.name,
+    ram: n.maxmem > 0 ? Math.round(n.mem / n.maxmem * 100) : 0,
+  }))
+
+  // Ceph RAM warning: nodes above 85%
+  const cephRamDangerNodes = selectedHasCeph
+    ? chartData.filter(n => n.ram > 85)
+    : []
+
+  // Penalty breakdown
+  const memPenaltyDelta = stats.healthAfter.memPenalty - stats.healthBefore.memPenalty
+  const cpuPenaltyDelta = stats.healthAfter.cpuPenalty - stats.healthBefore.cpuPenalty
+  const imbalancePenaltyDelta = stats.healthAfter.imbalancePenalty - stats.healthBefore.imbalancePenalty
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -464,64 +495,152 @@ function VerdictBanner({ verdict, stats, cephVerdict }: {
         }
         sx={{ '& .MuiAlert-message': { width: '100%' } }}
       >
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+        {/* Title */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
           {t(`siteRecovery.simulation.verdict.${verdict.key}`)}
         </Typography>
+
+        {/* Two-column layout */}
         <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Typography variant="caption" color="text.secondary">
-              {t('siteRecovery.simulation.healthScore')}:
+          {/* Left column: summary + health breakdown */}
+          <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+            {/* Summary line */}
+            <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', mb: 1 }}>
+              {t('siteRecovery.simulation.verdictSummary', {
+                hosts: stats.hostsAfter,
+                cpu: stats.avgCpuAfter,
+                cpuDelta: formatDelta(cpuDelta),
+                mem: stats.avgMemAfter,
+                memDelta: formatDelta(memDelta),
+              })}
             </Typography>
-            <Typography variant="caption" sx={{
-              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-              color: getHealthColor(stats.healthBefore.score),
-            }}>
-              {stats.healthBefore.score}
-            </Typography>
-            <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-            <Typography variant="caption" sx={{
-              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-              color: getHealthColor(stats.healthAfter.score),
-            }}>
-              {stats.healthAfter.score}
-            </Typography>
+
+            {/* Health score with breakdown */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                {t('siteRecovery.simulation.healthScore')}:
+              </Typography>
+              <Typography variant="caption" sx={{
+                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                color: getHealthColor(stats.healthBefore.score),
+              }}>
+                {stats.healthBefore.score}
+              </Typography>
+              <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
+              <Typography variant="caption" sx={{
+                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                color: getHealthColor(stats.healthAfter.score),
+              }}>
+                {stats.healthAfter.score}
+              </Typography>
+            </Box>
+
+            {/* Penalty breakdown chips */}
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1 }}>
+              <Chip
+                size="small"
+                label={`RAM ${stats.healthAfter.memPenalty}`}
+                sx={{
+                  height: 22, fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace',
+                  bgcolor: alpha(memPenaltyDelta < 0 ? theme.palette.error.main : theme.palette.text.disabled, 0.1),
+                  color: memPenaltyDelta < 0 ? theme.palette.error.main : theme.palette.text.secondary,
+                }}
+              />
+              <Chip
+                size="small"
+                label={`CPU ${stats.healthAfter.cpuPenalty}`}
+                sx={{
+                  height: 22, fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace',
+                  bgcolor: alpha(cpuPenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.disabled, 0.1),
+                  color: cpuPenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.secondary,
+                }}
+              />
+              <Chip
+                size="small"
+                label={`${t('siteRecovery.simulation.penalty')}: imbalance ${stats.healthAfter.imbalancePenalty}`}
+                sx={{
+                  height: 22, fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace',
+                  bgcolor: alpha(imbalancePenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.disabled, 0.1),
+                  color: imbalancePenaltyDelta < 0 ? theme.palette.warning.main : theme.palette.text.secondary,
+                }}
+              />
+            </Box>
+
+            {/* Lost VMs chip */}
+            {stats.lostVMs > 0 && (
+              <Chip
+                size="small"
+                label={`${stats.lostVMs} ${t('siteRecovery.simulation.lost')}`}
+                color="error"
+                sx={{ height: 22, fontSize: '0.7rem' }}
+              />
+            )}
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Typography variant="caption" color="text.secondary">CPU:</Typography>
-            <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {stats.avgCpuBefore}%
-            </Typography>
-            <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-            <Typography variant="caption" sx={{
-              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-              color: stats.avgCpuAfter > 80 ? theme.palette.error.main : undefined,
-            }}>
-              {stats.avgCpuAfter}%
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Typography variant="caption" color="text.secondary">RAM:</Typography>
-            <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {stats.avgMemBefore}%
-            </Typography>
-            <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-            <Typography variant="caption" sx={{
-              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-              color: stats.avgMemAfter > 85 ? theme.palette.error.main : undefined,
-            }}>
-              {stats.avgMemAfter}%
-            </Typography>
-          </Box>
-          {stats.lostVMs > 0 && (
-            <Chip
-              size="small"
-              label={`${stats.lostVMs} ${t('siteRecovery.simulation.lost')}`}
-              color="error"
-              sx={{ height: 20, fontSize: '0.7rem' }}
-            />
+
+          {/* Right column: per-node RAM bar chart */}
+          {chartData.length > 0 && (
+            <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                {t('siteRecovery.simulation.perNodeRam')}
+              </Typography>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+                    interval={0}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={v => `${v}%`}
+                    width={40}
+                  />
+                  <RTooltip
+                    formatter={(value: number) => [`${value}%`, 'RAM']}
+                    contentStyle={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}
+                  />
+                  {selectedHasCeph && (
+                    <ReferenceLine
+                      y={85}
+                      stroke={theme.palette.error.main}
+                      strokeDasharray="4 3"
+                      label={{
+                        value: t('siteRecovery.simulation.cephDangerZone'),
+                        position: 'right',
+                        fontSize: 10,
+                        fill: theme.palette.error.main,
+                      }}
+                    />
+                  )}
+                  <Bar dataKey="ram" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                    {chartData.map((entry, idx) => (
+                      <Cell key={idx} fill={getBarColor(entry.ram)} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
           )}
         </Box>
       </Alert>
+
+      {/* Ceph RAM warning for nodes >85% */}
+      {cephRamDangerNodes.length > 0 && (
+        <Alert
+          severity="warning"
+          icon={<i className="ri-database-2-line" style={{ fontSize: 20 }} />}
+          sx={{ py: 0.5 }}
+        >
+          {cephRamDangerNodes.map(n => (
+            <Typography key={n.name} variant="body2">
+              {t('siteRecovery.simulation.cephRamWarning', { node: n.name, pct: n.ram })}
+            </Typography>
+          ))}
+        </Alert>
+      )}
+
+      {/* Ceph replication verdict */}
       {cephVerdict && (
         <Alert
           severity={cephVerdict.ok ? 'success' : 'error'}
@@ -616,7 +735,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
   const [failedNodes, setFailedNodes] = useState<Set<string>>(new Set())
 
   // Fetch inventory data (nodes + guests with resource info)
-  const { data: inventoryData } = useSWR(
+  const { data: inventoryData, isLoading: inventoryLoading } = useSWR(
     isEnterprise ? '/api/v1/inventory' : null,
     fetcher,
     { refreshInterval: 30000 }
@@ -1027,6 +1146,16 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
             onChange={e => handleClusterChange(e.target.value)}
             label={t('siteRecovery.simulation.selectCluster')}
           >
+            {inventoryLoading && clusters.length === 0 && (
+              <MenuItem disabled>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <CircularProgress size={18} />
+                  <Typography variant="body2" color="text.secondary">
+                    {t('siteRecovery.simulation.loading')}
+                  </Typography>
+                </Box>
+              </MenuItem>
+            )}
             {clusters.filter(c => c.nodes.length > 1).map(c => (
               <MenuItem key={c.id} value={c.id}>
                 {connectionNames[c.id] || c.name || c.id}
@@ -1115,7 +1244,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
                         size="small"
                         variant={allFailed ? 'outlined' : 'contained'}
                         color={allFailed ? 'success' : 'error'}
-                        startIcon={<i className={allFailed ? 'ri-restart-line' : 'ri-skull-2-line'} style={{ fontSize: 14 }} />}
+                        startIcon={<i className={allFailed ? 'ri-restart-line' : 'ri-shut-down-line'} style={{ fontSize: 14 }} />}
                         onClick={() => toggleDatacenter(dcName)}
                         sx={{ textTransform: 'none', fontSize: '0.75rem' }}
                       >
@@ -1175,7 +1304,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
           {/* Verdict banner */}
           {verdict && stats && (
-            <VerdictBanner verdict={verdict} stats={stats} cephVerdict={cephVerdict} />
+            <VerdictBanner verdict={verdict} stats={stats} cephVerdict={cephVerdict} simNodesAfter={simNodesAfter} selectedHasCeph={selectedHasCeph} />
           )}
 
           {/* Affected VMs table */}

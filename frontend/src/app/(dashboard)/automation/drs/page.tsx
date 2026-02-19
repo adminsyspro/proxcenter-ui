@@ -66,6 +66,7 @@ const HardwareIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSiz
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EmptyState from '@/components/EmptyState'
+import DRSBalancingIllustration from '@/components/illustrations/DRSBalancingIllustration'
 import { CardsSkeleton } from '@/components/skeletons'
 
 // Import des nouveaux composants DRS
@@ -1926,7 +1927,7 @@ return next
         <Stack spacing={2}>
           {clusters.length === 0 ? (
             <EmptyState
-              icon="ri-loop-left-line"
+              illustration={<DRSBalancingIllustration />}
               title={t('emptyState.noDrs')}
               description={t('emptyState.noDrsDesc')}
               size="large"

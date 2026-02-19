@@ -5,6 +5,7 @@ import type { SxProps, Theme } from '@mui/material'
 
 interface EmptyStateProps {
   icon?: string
+  illustration?: React.ReactNode
   title: string
   description?: string
   action?: { label: string; onClick: () => void; icon?: string }
@@ -35,6 +36,7 @@ const sizeConfig = {
 
 export default function EmptyState({
   icon = 'ri-inbox-line',
+  illustration,
   title,
   description,
   action,
@@ -56,16 +58,20 @@ export default function EmptyState({
         ...sx,
       }}
     >
-      <Box
-        sx={{
-          color: 'text.secondary',
-          opacity: 0.4,
-          mb: 1.5,
-          lineHeight: 1,
-        }}
-      >
-        <i className={icon} style={{ fontSize: config.iconSize }} />
-      </Box>
+      {illustration ? (
+        <Box sx={{ mb: 2 }}>{illustration}</Box>
+      ) : (
+        <Box
+          sx={{
+            color: 'text.secondary',
+            opacity: 0.4,
+            mb: 1.5,
+            lineHeight: 1,
+          }}
+        >
+          <i className={icon} style={{ fontSize: config.iconSize }} />
+        </Box>
+      )}
       <Typography
         variant={config.titleVariant}
         sx={{ fontWeight: 600, color: 'text.primary', mb: description ? 0.5 : 0 }}

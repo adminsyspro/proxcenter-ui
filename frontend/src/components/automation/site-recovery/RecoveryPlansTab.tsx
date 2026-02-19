@@ -8,6 +8,9 @@ import {
   IconButton, Stack, Typography, alpha, useTheme
 } from '@mui/material'
 
+import EmptyState from '@/components/EmptyState'
+import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
+
 import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -187,15 +190,12 @@ export default function RecoveryPlansTab({
     <Box>
       {/* Plan Cards Grid */}
       {(plans || []).length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 6, px: 3 }}>
-          <Box sx={{ fontSize: '2.5rem', mb: 1, opacity: 0.3 }}><i className='ri-file-shield-2-line' /></Box>
-          <Typography variant='subtitle1' sx={{ fontWeight: 600, mb: 0.5 }}>
-            {t('siteRecovery.plans.noPlans')}
-          </Typography>
-          <Typography variant='body2' sx={{ color: 'text.secondary' }}>
-            {t('siteRecovery.plans.noPlansDesc')}
-          </Typography>
-        </Box>
+        <EmptyState
+          illustration={<SiteRecoveryIllustration />}
+          title={t('siteRecovery.plans.noPlans')}
+          description={t('siteRecovery.plans.noPlansDesc')}
+          size='large'
+        />
       ) : (
         <Card variant='outlined' sx={{ borderRadius: 2 }}>
           {/* Header */}

@@ -32,7 +32,6 @@ import OverprovisioningCard from './components/OverprovisioningCard'
 import AiInsightsCard from './components/AiInsightsCard'
 import ClusterSelector from './components/ClusterSelector'
 import NetworkIoCard from './components/NetworkIoCard'
-import TopConsumersCard from './components/TopConsumersCard'
 import VmDetailDrawer from './components/VmDetailDrawer'
 import type { VmIdentity } from './types'
 
@@ -52,7 +51,6 @@ export default function ResourcesPage() {
     topCpuVms, topRamVms, green, overprovisioning,
     networkMetrics, connections,
     aiAnalysis, loadData, runAiAnalysis, setAiAnalysis,
-    vmTrends, vmTrendsLoading, fetchVmTrends,
   } = useResourceData(selectedConnection === 'all' ? undefined : selectedConnection)
 
   useEffect(() => {
@@ -159,22 +157,6 @@ export default function ResourcesPage() {
           {networkMetrics && (
             <Grid size={{ xs: 12 }}>
               <NetworkIoCard metrics={networkMetrics} loading={loading} />
-            </Grid>
-          )}
-
-          {/* Top Consumers Over Time */}
-          {(topCpuVms.length > 0 || topRamVms.length > 0) && (
-            <Grid size={{ xs: 12 }}>
-              <TopConsumersCard
-                topCpuVms={topCpuVms}
-                topRamVms={topRamVms}
-                networkMetrics={networkMetrics}
-                vmTrends={vmTrends}
-                vmTrendsLoading={vmTrendsLoading}
-                fetchVmTrends={fetchVmTrends}
-                onVmClick={setDrawerVm}
-                loading={loading}
-              />
             </Grid>
           )}
 

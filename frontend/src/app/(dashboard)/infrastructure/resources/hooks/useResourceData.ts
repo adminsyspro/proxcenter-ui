@@ -6,9 +6,7 @@ import type {
   KpiData, ResourceTrend, TopVm, GreenMetrics,
   OverprovisioningData, AiAnalysis, ResourceThresholds,
   StoragePool, NetworkMetrics, HealthScoreHistoryEntry, ConnectionInfo,
-  VmTrendPoint,
 } from '../types'
-import { parseResourceVmId } from '../helpers'
 import { DEFAULT_THRESHOLDS } from '../constants'
 
 export function useResourceData(connectionId?: string) {
@@ -27,13 +25,10 @@ export function useResourceData(connectionId?: string) {
   const [healthScoreHistory, setHealthScoreHistory] = useState<HealthScoreHistoryEntry[]>([])
   const [connections, setConnections] = useState<ConnectionInfo[]>([])
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis>({ summary: '', recommendations: [], loading: false })
-  const [vmTrends, setVmTrends] = useState<Record<string, VmTrendPoint[]>>({})
-  const [vmTrendsLoading, setVmTrendsLoading] = useState(false)
 
-  // Reset AI analysis and VM trends when connection changes so auto-run re-triggers
+  // Reset AI analysis when connection changes so auto-run re-triggers
   useEffect(() => {
     setAiAnalysis({ summary: '', recommendations: [], loading: false })
-    setVmTrends({})
   }, [connectionId])
 
   const loadData = useCallback(async () => {
@@ -90,54 +85,6 @@ export function useResourceData(connectionId?: string) {
     }
   }
 
-  const fetchVmTrends = useCallback(async (vmIds: string[], timeframe: string = 'hour') => {
-    if (vmIds.length === 0) return
-    setVmTrendsLoading(true)
-    try {
-      // Group VMs by connId
-      const byConn: Record<string, { type: string; node: string; vmid: string; origId: string }[]> = {}
-      for (const id of vmIds) {
-        const parsed = parseResourceVmId(id)
-        if (!parsed.connId) continue
-        if (!byConn[parsed.connId]) byConn[parsed.connId] = []
-        byConn[parsed.connId].push({ ...parsed, origId: id })
-      }
-
-      // Batch POST per connection in parallel
-      const results = await Promise.all(
-        Object.entries(byConn).map(async ([connId, vms]) => {
-          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/trends`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              items: vms.map(v => ({ type: v.type, node: v.node, vmid: v.vmid })),
-              timeframe,
-            }),
-          })
-          if (!res.ok) return {}
-          const json = await res.json()
-          // Map back from API keys (type:node:vmid) to our resource IDs (connId:node:type:vmid)
-          const mapped: Record<string, VmTrendPoint[]> = {}
-          for (const vm of vms) {
-            const apiKey = `${vm.type}:${vm.node}:${vm.vmid}`
-            if (json.data?.[apiKey]) {
-              mapped[vm.origId] = json.data[apiKey]
-            }
-          }
-          return mapped
-        })
-      )
-
-      const merged: Record<string, VmTrendPoint[]> = {}
-      for (const r of results) Object.assign(merged, r)
-      setVmTrends(merged)
-    } catch (e) {
-      console.error('Failed to fetch VM trends:', e)
-    } finally {
-      setVmTrendsLoading(false)
-    }
-  }, [])
-
   return {
     loading,
     error,
@@ -157,8 +104,5 @@ export function useResourceData(connectionId?: string) {
     loadData,
     runAiAnalysis,
     setAiAnalysis,
-    vmTrends,
-    vmTrendsLoading,
-    fetchVmTrends,
   }
 }

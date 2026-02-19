@@ -1,23 +1,18 @@
 // src/app/api/v1/auth/ldap/route.ts
 import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { encryptSecret } from "@/lib/crypto/secret"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/auth/ldap - Récupérer la config LDAP
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
 
-    const role = session?.user?.role
-    if (!session || (role !== "admin" && role !== "super_admin")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
-    }
+    if (denied) return denied
 
     const db = getDb()
 
@@ -66,12 +61,9 @@ return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status
 // PUT /api/v1/auth/ldap - Sauvegarder la config LDAP
 export async function PUT(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
 
-    const role = session?.user?.role
-    if (!session || (role !== "admin" && role !== "super_admin")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
-    }
+    if (denied) return denied
 
     const body = await req.json()
 

@@ -54,7 +54,7 @@ importers:
         specifier: ^7.2.0
         version: 7.4.0
       '@prisma/client':
-        specifier: ^7.2.0
+        specifier: ^7.4.0
         version: 7.4.0(prisma@7.4.0(@types/react@19.2.14)(better-sqlite3@12.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)(typescript@5.9.3))(typescript@5.9.3)
       '@types/leaflet':
         specifier: ^1.9.21

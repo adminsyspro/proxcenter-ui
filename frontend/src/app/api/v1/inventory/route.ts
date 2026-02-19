@@ -494,8 +494,6 @@ async function blockingFetch() {
         throw err
       })
     setInflightFetch(inflight)
-  } else {
-    console.log('[inventory] Reusing in-flight fetch')
   }
 
   return inflight
@@ -506,10 +504,7 @@ async function blockingFetch() {
  * Fire-and-forget — errors are logged but don't affect the current request.
  */
 function triggerBackgroundRevalidation() {
-  if (getInflightFetch()) {
-    console.log('[inventory] Background revalidation already in progress, skipping')
-    return
-  }
+  if (getInflightFetch()) return
 
   const startTime = Date.now()
   const revalidation = fetchRawInventory()
@@ -540,7 +535,6 @@ export async function GET(request: NextRequest) {
 
     if (cacheResult.status === 'fresh') {
       // Cache is fresh — serve directly, no fetch needed
-      console.log('[inventory] Serving from cache (fresh)')
       raw = cacheResult.data
     } else if (cacheResult.status === 'stale') {
       // Cache is stale — serve immediately, trigger background revalidation

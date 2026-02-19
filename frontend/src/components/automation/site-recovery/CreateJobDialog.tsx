@@ -51,6 +51,7 @@ const fetcher = (url: string) => fetch(url).then(res => {
 export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs }: CreateJobDialogProps) {
   const t = useTranslations()
 
+  const [engine, setEngine] = useState<'ceph' | 'zfs'>('ceph')
   const [sourceCluster, setSourceCluster] = useState('')
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
   const [targetCluster, setTargetCluster] = useState('')
@@ -255,6 +256,22 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       <DialogTitle sx={{ fontWeight: 700 }}>{t('siteRecovery.createJob.title')}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
+          {/* Replication Engine */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.engine')}</Typography>
+            <Select value={engine} onChange={e => setEngine(e.target.value as 'ceph' | 'zfs')} size='small' fullWidth>
+              <MenuItem value='ceph'>
+                <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-database-2-line' /></ListItemIcon>
+                {t('siteRecovery.createJob.engineCeph')}
+              </MenuItem>
+              <MenuItem value='zfs' disabled>
+                <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-hard-drive-3-line' /></ListItemIcon>
+                {t('siteRecovery.createJob.engineZfs')}
+                <Typography variant='caption' sx={{ ml: 1, color: 'text.disabled' }}>({t('siteRecovery.createJob.engineComingSoon')})</Typography>
+              </MenuItem>
+            </Select>
+          </Box>
+
           {/* Source Cluster */}
           <Box>
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.sourceCluster')}</Typography>
@@ -495,6 +512,13 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               }}
             />
           </Box>
+
+          {/* pv package note */}
+          <Alert severity='info' variant='outlined' sx={{ '& .MuiAlert-message': { fontSize: '0.8rem' } }}>
+            {t.rich('siteRecovery.createJob.pvNote', {
+              pv: () => <code style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>pv</code>
+            })}
+          </Alert>
 
         </Stack>
       </DialogContent>

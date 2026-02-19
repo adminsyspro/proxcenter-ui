@@ -1418,6 +1418,8 @@
     "filterAll": "Tout",
     "before": "avant",
     "aiIntelligence": "Intelligence IA",
+    "smartAnalysis": "Analyse intelligente",
+    "ruleBasedSubtitle": "Analyse automatique basée sur des seuils",
     "analyzeInfra": "Analysez votre infrastructure",
     "recommendations": "Recommandations",
     "environmentalImpact": "Impact Environnemental / RSE",

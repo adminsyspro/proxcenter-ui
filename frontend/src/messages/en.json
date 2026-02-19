@@ -1417,6 +1417,8 @@
     "filterAll": "All",
     "before": "before",
     "aiIntelligence": "AI Intelligence",
+    "smartAnalysis": "Smart Analysis",
+    "ruleBasedSubtitle": "Rule-based threshold analysis",
     "analyzeInfra": "Analyze your infrastructure",
     "recommendations": "Recommendations",
     "environmentalImpact": "Environmental Impact / RSE",

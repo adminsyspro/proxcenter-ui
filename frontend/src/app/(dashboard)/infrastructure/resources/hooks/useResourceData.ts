@@ -26,6 +26,11 @@ export function useResourceData(connectionId?: string) {
   const [connections, setConnections] = useState<ConnectionInfo[]>([])
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis>({ summary: '', recommendations: [], loading: false })
 
+  // Reset AI analysis when connection changes so auto-run re-triggers
+  useEffect(() => {
+    setAiAnalysis({ summary: '', recommendations: [], loading: false })
+  }, [connectionId])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)

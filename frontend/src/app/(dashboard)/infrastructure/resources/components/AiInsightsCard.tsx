@@ -27,6 +27,8 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
   const theme = useTheme()
   const t = useTranslations()
 
+  const isAi = analysis.provider === 'ollama'
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'high': return COLORS.error
@@ -61,15 +63,25 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
       <CardContent sx={{ p: 3 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
-            <Box sx={{ p: 1, borderRadius: 2, bgcolor: alpha(COLORS.primary, 0.1), color: COLORS.primary, display: 'flex' }}><PsychologyIcon /></Box>
+            <Box sx={{ p: 1, borderRadius: 2, bgcolor: alpha(COLORS.primary, 0.1), color: COLORS.primary, display: 'flex' }}>
+              {isAi ? <PsychologyIcon /> : <i className="ri-sparkling-line" style={{ fontSize: 20 }} />}
+            </Box>
             <Box>
-              <Typography variant="h6" fontWeight={700}>{t('resources.aiIntelligence')}</Typography>
-              {analysis.provider && <Typography variant="caption" color="text.secondary">{t('resources.poweredBy', { provider: analysis.provider === 'ollama' ? t('resources.ollamaLocal') : t('resources.basicAnalysis') })}</Typography>}
+              <Typography variant="h6" fontWeight={700}>
+                {isAi ? t('resources.aiIntelligence') : t('resources.smartAnalysis')}
+              </Typography>
+              {analysis.provider && (
+                <Typography variant="caption" color="text.secondary">
+                  {isAi ? t('resources.poweredBy', { provider: t('resources.ollamaLocal') }) : t('resources.ruleBasedSubtitle')}
+                </Typography>
+              )}
             </Box>
           </Stack>
-          <Button variant={analysis.summary ? 'outlined' : 'contained'} size="small" startIcon={analysis.loading ? <CircularProgress size={16} color="inherit" /> : <BoltIcon />} onClick={onAnalyze} disabled={analysis.loading || loading} sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}>
-            {analysis.loading ? t('resources.analyzing') : analysis.summary ? t('resources.refresh') : t('resources.analyze')}
-          </Button>
+          {isAi && (
+            <Button variant={analysis.summary ? 'outlined' : 'contained'} size="small" startIcon={analysis.loading ? <CircularProgress size={16} color="inherit" /> : <BoltIcon />} onClick={onAnalyze} disabled={analysis.loading || loading} sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}>
+              {analysis.loading ? t('resources.analyzing') : analysis.summary ? t('resources.refresh') : t('resources.analyze')}
+            </Button>
+          )}
         </Stack>
 
         {analysis.error && <Alert severity="error" sx={{ mb: 2 }}>{analysis.error}</Alert>}

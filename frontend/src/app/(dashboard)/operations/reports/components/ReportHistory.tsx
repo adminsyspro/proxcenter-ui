@@ -82,13 +82,11 @@ export default function ReportHistory({ reports, onDelete, onRefresh, loading }:
       flex: 1,
       minWidth: 200,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', flexDirection: 'column', py: 0.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden' }}>
+          <Typography variant="body2" sx={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {params.value}
           </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>
-            {getTypeLabel(params.row.type)}
-          </Typography>
+          <Chip label={getTypeLabel(params.row.type)} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
         </Box>
       ),
     },
@@ -175,6 +173,7 @@ export default function ReportHistory({ reports, onDelete, onRefresh, loading }:
             columns={columns}
             loading={loading}
             density="compact"
+            rowHeight={40}
             pageSizeOptions={[25, 50, 100]}
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             sx={{
@@ -182,9 +181,7 @@ export default function ReportHistory({ reports, onDelete, onRefresh, loading }:
               '& .MuiDataGrid-cell': {
                 display: 'flex',
                 alignItems: 'center',
-              },
-              '& .MuiDataGrid-row': {
-                minHeight: '52px !important',
+                overflow: 'hidden',
               },
             }}
           />

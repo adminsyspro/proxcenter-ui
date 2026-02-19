@@ -63,8 +63,8 @@ export default function GreenMetricsCard({ green, loading }: { green: GreenMetri
               </Box>
             </Box>
             <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>Score</Typography>
-              <Typography variant="caption" fontWeight={700} sx={{ color: scoreColor }}>Green</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>{t('resources.greenScoreLabel')}</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: scoreColor }}>{t('resources.greenLabel')}</Typography>
             </Box>
           </Stack>
         </Stack>

@@ -127,7 +127,7 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
                   <Box sx={{ flex: 1 }}>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                       <SpeedIcon sx={{ color: COLORS.cpu, fontSize: 20 }} />
-                      <Typography variant="subtitle1" fontWeight={700}>CPU vCPU/pCPU</Typography>
+                      <Typography variant="subtitle1" fontWeight={700}>{t('resources.cpuVcpuPcpu')}</Typography>
                       <Chip size="small" label={getRatioLabel(data.cpu.ratio, 'cpu')} sx={{ height: 20, fontSize: '0.65rem', bgcolor: alpha(cpuColor, 0.15), color: cpuColor, fontWeight: 600 }} />
                     </Stack>
                     <Stack spacing={1}>
@@ -160,7 +160,7 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
                   <Box sx={{ flex: 1 }}>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                       <MemoryIcon sx={{ color: COLORS.ram, fontSize: 20 }} />
-                      <Typography variant="subtitle1" fontWeight={700}>RAM vRAM/pRAM</Typography>
+                      <Typography variant="subtitle1" fontWeight={700}>{t('resources.ramVramPram')}</Typography>
                       <Chip size="small" label={getRatioLabel(data.ram.ratio, 'ram')} sx={{ height: 20, fontSize: '0.65rem', bgcolor: alpha(ramColor, 0.15), color: ramColor, fontWeight: 600 }} />
                     </Stack>
                     <Stack spacing={1}>

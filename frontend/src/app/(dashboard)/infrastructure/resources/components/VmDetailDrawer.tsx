@@ -156,8 +156,8 @@ export default function VmDetailDrawer({ vm, onClose }: Props) {
                   data={series}
                   keyA="netInBps"
                   keyB="netOutBps"
-                  labelA="In"
-                  labelB="Out"
+                  labelA={t('resources.netIn')}
+                  labelB={t('resources.netOut')}
                   colorA={COLORS.info}
                   colorB={COLORS.network}
                   height={200}
@@ -167,8 +167,8 @@ export default function VmDetailDrawer({ vm, onClose }: Props) {
                   data={series}
                   keyA="diskReadBps"
                   keyB="diskWriteBps"
-                  labelA="Read"
-                  labelB="Write"
+                  labelA={t('resources.diskRead')}
+                  labelB={t('resources.diskWrite')}
                   colorA={COLORS.success}
                   colorB={COLORS.warning}
                   height={200}

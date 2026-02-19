@@ -101,7 +101,7 @@ export default function ResourcesPage() {
   }, [kpis, healthScore, healthBreakdown, alerts, overprovisioning, green, networkMetrics, topCpuVms, topRamVms])
 
   return (
-    <EnterpriseGuard requiredFeature={Features.GREEN_METRICS} featureName="Green Metrics / RSE">
+    <EnterpriseGuard requiredFeature={Features.GREEN_METRICS} featureName={t('resources.greenMetricsFeature')}>
       <Box sx={{ p: 3 }}>
         {/* Toolbar */}
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }} flexWrap="wrap" useFlexGap spacing={1}>
@@ -121,7 +121,7 @@ export default function ResourcesPage() {
               disabled={exporting || loading || !kpis}
               sx={{ borderRadius: 2 }}
             >
-              Export PDF
+              {t('resources.exportPdf')}
             </Button>
             <Button
               variant="outlined"

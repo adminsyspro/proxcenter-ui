@@ -120,12 +120,12 @@ export default function PredictiveAlertsCard({ alerts, loading }: { alerts: Pred
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
                       <Typography variant="body1" color="text.secondary" sx={{ fontSize: '0.95rem' }}>
                         {formatPct(alert.currentValue)} → {formatPct(alert.predictedValue)}
-                        <Typography component="span" variant="body2" sx={{ opacity: 0.7 }}> (30j)</Typography>
+                        <Typography component="span" variant="body2" sx={{ opacity: 0.7 }}> {t('resources.forecast30d')}</Typography>
                       </Typography>
                       {alert.confidence !== undefined && (
                         <Chip
                           size="small"
-                          label={`${Math.round(alert.confidence)}% conf.`}
+                          label={t('resources.confidencePct', { value: Math.round(alert.confidence) })}
                           sx={{
                             height: 20,
                             fontSize: '0.7rem',
@@ -139,7 +139,7 @@ export default function PredictiveAlertsCard({ alerts, loading }: { alerts: Pred
                   <Box sx={{ textAlign: 'right' }}>
                     {alert.daysToThreshold ? (
                       <>
-                        <Typography variant="h5" fontWeight={700} sx={{ color: severityColor, lineHeight: 1 }}>{alert.daysToThreshold}j</Typography>
+                        <Typography variant="h5" fontWeight={700} sx={{ color: severityColor, lineHeight: 1 }}>{alert.daysToThreshold}{t('resources.daysUnit')}</Typography>
                         <Typography variant="body2" color="text.secondary">{t('resources.before')} {alert.threshold}%</Typography>
                       </>
                     ) : (

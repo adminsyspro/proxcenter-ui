@@ -106,7 +106,7 @@ export default function ProjectionChart({ data, loading, period }: {
               <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} tickLine={false} axisLine={{ stroke: theme.palette.divider }} />
               <RTooltip contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 8 }} formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name]} />
               <ReferenceLine y={90} stroke={COLORS.error} strokeDasharray="5 5" strokeOpacity={0.5} />
-              {historicalCount > 0 && <ReferenceLine x={data[historicalCount - 1]?.t} stroke={theme.palette.divider} strokeDasharray="3 3" label={{ value: 'Projection →', position: 'top', fontSize: 10, fill: theme.palette.text.secondary }} />}
+              {historicalCount > 0 && <ReferenceLine x={data[historicalCount - 1]?.t} stroke={theme.palette.divider} strokeDasharray="3 3" label={{ value: `${t('resources.projection')} →`, position: 'top', fontSize: 10, fill: theme.palette.text.secondary }} />}
 
               {(selectedResource === 'all' || selectedResource === 'cpu') && (
                 <>
@@ -134,7 +134,7 @@ export default function ProjectionChart({ data, loading, period }: {
           {(selectedResource === 'all' || selectedResource === 'cpu') && <Stack direction="row" alignItems="center" spacing={0.75}><Box sx={{ width: 12, height: 3, bgcolor: COLORS.cpu, borderRadius: 1 }} /><Typography variant="caption">CPU</Typography></Stack>}
           {(selectedResource === 'all' || selectedResource === 'ram') && <Stack direction="row" alignItems="center" spacing={0.75}><Box sx={{ width: 12, height: 3, bgcolor: COLORS.ram, borderRadius: 1 }} /><Typography variant="caption">RAM</Typography></Stack>}
           {(selectedResource === 'all' || selectedResource === 'storage') && <Stack direction="row" alignItems="center" spacing={0.75}><Box sx={{ width: 12, height: 3, bgcolor: COLORS.storage, borderRadius: 1 }} /><Typography variant="caption">{t('resources.storageLabel')}</Typography></Stack>}
-          <Stack direction="row" alignItems="center" spacing={0.75}><Box sx={{ width: 12, height: 2, borderTop: '2px dashed', borderColor: 'text.secondary' }} /><Typography variant="caption" color="text.secondary">Projection</Typography></Stack>
+          <Stack direction="row" alignItems="center" spacing={0.75}><Box sx={{ width: 12, height: 2, borderTop: '2px dashed', borderColor: 'text.secondary' }} /><Typography variant="caption" color="text.secondary">{t('resources.projection')}</Typography></Stack>
         </Stack>
       </CardContent>
     </Card>

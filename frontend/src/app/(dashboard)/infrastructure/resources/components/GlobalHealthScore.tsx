@@ -35,11 +35,11 @@ function getScoreColor(s: number) {
   return COLORS.error
 }
 
-function getScoreLabel(s: number) {
-  if (s >= 80) return 'Excellent'
-  if (s >= 60) return 'Bon'
-  if (s >= 40) return 'A surveiller'
-  return 'Critique'
+function getScoreLabelKey(s: number) {
+  if (s >= 80) return 'resources.scoreExcellent'
+  if (s >= 60) return 'resources.scoreGood'
+  if (s >= 40) return 'resources.scoreMonitoring'
+  return 'resources.critical'
 }
 
 function getScoreIcon(s: number) {
@@ -95,6 +95,18 @@ export default function GlobalHealthScore({
   const t = useTranslations()
   const [showDetails, setShowDetails] = useState(false)
 
+  // Translate keywords from healthScore algorithm reason strings
+  const tr = (reason: string) => reason
+    .replace(/\(critical\)/g, `(${t('resources.critical')})`)
+    .replace(/\(warning\)/g, `(${t('resources.attention')})`)
+    .replace(/\(underused\)/g, `(${t('resources.underused')})`)
+    .replace(/\(excellent\)/g, `(${t('resources.scoreExcellent')})`)
+    .replace(/\(good\)/g, `(${t('resources.scoreGood')})`)
+    .replace(/^No alerts$/, t('resources.noAlerts'))
+    .replace(/(\d+) critical/, `$1 ${t('resources.critical')}`)
+    .replace(/(\d+) warning/, `$1 ${t('resources.attention')}`)
+    .replace(/stopped/g, t('resources.stopped'))
+
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length
   const warningAlerts = alerts.filter(a => a.severity === 'warning').length
 
@@ -131,12 +143,12 @@ export default function GlobalHealthScore({
           <Tooltip title={breakdown ? (
             <Box sx={{ fontSize: '0.75rem' }}>
               <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('resources.scoreCalculation')}</Typography>
-              <Box>CPU: {breakdown.cpu.reason} ({breakdown.cpu.penalty === 0 ? 'OK' : breakdown.cpu.penalty > 0 ? `+${breakdown.cpu.penalty}` : breakdown.cpu.penalty})</Box>
-              <Box>RAM: {breakdown.ram.reason} ({breakdown.ram.penalty === 0 ? 'OK' : breakdown.ram.penalty > 0 ? `+${breakdown.ram.penalty}` : breakdown.ram.penalty})</Box>
-              <Box>Storage: {breakdown.storage.reason} ({breakdown.storage.penalty === 0 ? 'OK' : breakdown.storage.penalty > 0 ? `+${breakdown.storage.penalty}` : breakdown.storage.penalty})</Box>
-              <Box>Alerts: {breakdown.alerts.reason} ({breakdown.alerts.penalty === 0 ? 'OK' : breakdown.alerts.penalty})</Box>
-              <Box>Efficiency: {breakdown.efficiency.reason} ({breakdown.efficiency.penalty === 0 ? 'OK' : breakdown.efficiency.penalty > 0 ? `+${breakdown.efficiency.penalty}` : breakdown.efficiency.penalty})</Box>
-              <Box>VMs off: {breakdown.stoppedVms.reason} ({breakdown.stoppedVms.penalty === 0 ? 'OK' : breakdown.stoppedVms.penalty})</Box>
+              <Box>CPU: {tr(breakdown.cpu.reason)} ({breakdown.cpu.penalty === 0 ? 'OK' : breakdown.cpu.penalty > 0 ? `+${breakdown.cpu.penalty}` : breakdown.cpu.penalty})</Box>
+              <Box>RAM: {tr(breakdown.ram.reason)} ({breakdown.ram.penalty === 0 ? 'OK' : breakdown.ram.penalty > 0 ? `+${breakdown.ram.penalty}` : breakdown.ram.penalty})</Box>
+              <Box>{t('resources.storageLabel')}: {tr(breakdown.storage.reason)} ({breakdown.storage.penalty === 0 ? 'OK' : breakdown.storage.penalty > 0 ? `+${breakdown.storage.penalty}` : breakdown.storage.penalty})</Box>
+              <Box>{t('resources.alerts')}: {tr(breakdown.alerts.reason)} ({breakdown.alerts.penalty === 0 ? 'OK' : breakdown.alerts.penalty})</Box>
+              <Box>{t('resources.efficiency')}: {tr(breakdown.efficiency.reason)} ({breakdown.efficiency.penalty === 0 ? 'OK' : breakdown.efficiency.penalty > 0 ? `+${breakdown.efficiency.penalty}` : breakdown.efficiency.penalty})</Box>
+              <Box>{t('resources.vmsOff')}: {tr(breakdown.stoppedVms.reason)} ({breakdown.stoppedVms.penalty === 0 ? 'OK' : breakdown.stoppedVms.penalty})</Box>
             </Box>
           ) : ''} arrow placement="right">
             <Box sx={{ position: 'relative', display: 'inline-flex', cursor: 'help' }}>
@@ -154,14 +166,14 @@ export default function GlobalHealthScore({
               <Box sx={{ color }}>{getScoreIcon(score)}</Box>
               <Typography variant="h4" fontWeight={700}>{t('resources.infrastructureHealth')}</Typography>
               {breakdown && (
-                <Tooltip title={showDetails ? 'Hide details' : 'Show score breakdown'}>
+                <Tooltip title={showDetails ? t('resources.hideDetails') : t('resources.showBreakdown')}>
                   <IconButton size="small" onClick={() => setShowDetails(!showDetails)} sx={{ ml: 0.5 }}>
                     <i className={showDetails ? 'ri-arrow-up-s-line' : 'ri-information-line'} style={{ fontSize: 18 }} />
                   </IconButton>
                 </Tooltip>
               )}
             </Stack>
-            <Chip label={getScoreLabel(score)} sx={{ bgcolor: alpha(color, 0.15), color, fontWeight: 700, fontSize: '0.9rem', height: 32, mb: 2 }} />
+            <Chip label={t(getScoreLabelKey(score))} sx={{ bgcolor: alpha(color, 0.15), color, fontWeight: 700, fontSize: '0.9rem', height: 32, mb: 2 }} />
             <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
               <Box>
                 <Typography variant="caption" color="text.secondary">{t('resources.activeVms')}</Typography>
@@ -174,7 +186,7 @@ export default function GlobalHealthScore({
               </Box>
               <Divider orientation="vertical" flexItem />
               <Box>
-                <Typography variant="caption" color="text.secondary">Alertes</Typography>
+                <Typography variant="caption" color="text.secondary">{t('resources.alerts')}</Typography>
                 <Stack direction="row" spacing={1} alignItems="center">
                   {criticalAlerts > 0 && <Chip size="small" label={criticalAlerts} sx={{ bgcolor: alpha(COLORS.error, 0.15), color: COLORS.error, fontWeight: 700 }} />}
                   {warningAlerts > 0 && <Chip size="small" label={warningAlerts} sx={{ bgcolor: alpha(COLORS.warning, 0.15), color: COLORS.warning, fontWeight: 700 }} />}
@@ -206,16 +218,16 @@ export default function GlobalHealthScore({
           <Collapse in={showDetails}>
             <Divider sx={{ my: 2 }} />
             <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-              Score Breakdown
-              <Typography component="span" variant="caption" sx={{ ml: 1, opacity: 0.6 }}>Base: 100 pts</Typography>
+              {t('resources.scoreBreakdown')}
+              <Typography component="span" variant="caption" sx={{ ml: 1, opacity: 0.6 }}>{t('resources.basePoints')}</Typography>
             </Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 0.5 }}>
-              <BreakdownRow label="CPU" icon="ri-cpu-line" penalty={breakdown.cpu.penalty} reason={breakdown.cpu.reason} maxPenalty={20} />
-              <BreakdownRow label="RAM" icon="ri-database-2-line" penalty={breakdown.ram.penalty} reason={breakdown.ram.reason} maxPenalty={25} />
-              <BreakdownRow label="Storage" icon="ri-hard-drive-3-line" penalty={breakdown.storage.penalty} reason={breakdown.storage.reason} maxPenalty={25} />
-              <BreakdownRow label="Alertes" icon="ri-alarm-warning-line" penalty={breakdown.alerts.penalty} reason={breakdown.alerts.reason} maxPenalty={30} />
-              <BreakdownRow label="Efficiency" icon="ri-speed-line" penalty={breakdown.efficiency.penalty} reason={breakdown.efficiency.reason} maxPenalty={15} />
-              <BreakdownRow label="VMs off" icon="ri-shut-down-line" penalty={breakdown.stoppedVms.penalty} reason={breakdown.stoppedVms.reason} maxPenalty={10} />
+              <BreakdownRow label="CPU" icon="ri-cpu-line" penalty={breakdown.cpu.penalty} reason={tr(breakdown.cpu.reason)} maxPenalty={20} />
+              <BreakdownRow label="RAM" icon="ri-database-2-line" penalty={breakdown.ram.penalty} reason={tr(breakdown.ram.reason)} maxPenalty={25} />
+              <BreakdownRow label={t('resources.storageLabel')} icon="ri-hard-drive-3-line" penalty={breakdown.storage.penalty} reason={tr(breakdown.storage.reason)} maxPenalty={25} />
+              <BreakdownRow label={t('resources.alerts')} icon="ri-alarm-warning-line" penalty={breakdown.alerts.penalty} reason={tr(breakdown.alerts.reason)} maxPenalty={30} />
+              <BreakdownRow label={t('resources.efficiency')} icon="ri-speed-line" penalty={breakdown.efficiency.penalty} reason={tr(breakdown.efficiency.reason)} maxPenalty={15} />
+              <BreakdownRow label={t('resources.vmsOff')} icon="ri-shut-down-line" penalty={breakdown.stoppedVms.penalty} reason={tr(breakdown.stoppedVms.reason)} maxPenalty={10} />
             </Box>
           </Collapse>
         )}

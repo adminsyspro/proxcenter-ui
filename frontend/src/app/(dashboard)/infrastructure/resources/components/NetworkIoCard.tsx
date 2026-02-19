@@ -37,7 +37,7 @@ export default function NetworkIoCard({ metrics, loading }: { metrics: NetworkMe
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
           <NetworkIcon sx={{ color: COLORS.network, fontSize: 20 }} />
           <Typography variant="h6" fontWeight={700}>{t('resources.networkIo')}</Typography>
-          <Chip size="small" label={`In: ${formatBytesPerSec(metrics.totalIn)} / Out: ${formatBytesPerSec(metrics.totalOut)}`} sx={{ height: 22, fontSize: '0.65rem', bgcolor: alpha(COLORS.network, 0.1), color: COLORS.network }} />
+          <Chip size="small" label={`${t('resources.netIn')}: ${formatBytesPerSec(metrics.totalIn)} / ${t('resources.netOut')}: ${formatBytesPerSec(metrics.totalOut)}`} sx={{ height: 22, fontSize: '0.65rem', bgcolor: alpha(COLORS.network, 0.1), color: COLORS.network }} />
         </Stack>
 
         <Box sx={{ width: '100%', height: 200 }}>
@@ -59,8 +59,8 @@ export default function NetworkIoCard({ metrics, loading }: { metrics: NetworkMe
                 contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 8 }}
                 formatter={(v: any, name: string) => [formatBytesPerSec(v), name]}
               />
-              <Area type="monotone" dataKey="netin" name="In" stroke={COLORS.info} fill="url(#netInGrad)" strokeWidth={2} dot={false} />
-              <Area type="monotone" dataKey="netout" name="Out" stroke={COLORS.network} fill="url(#netOutGrad)" strokeWidth={2} dot={false} />
+              <Area type="monotone" dataKey="netin" name={t('resources.netIn')} stroke={COLORS.info} fill="url(#netInGrad)" strokeWidth={2} dot={false} />
+              <Area type="monotone" dataKey="netout" name={t('resources.netOut')} stroke={COLORS.network} fill="url(#netOutGrad)" strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </Box>

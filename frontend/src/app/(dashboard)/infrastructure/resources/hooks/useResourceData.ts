@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 
+import { useTranslations } from 'next-intl'
+
 import type {
   KpiData, ResourceTrend, TopVm, GreenMetrics,
   OverprovisioningData, AiAnalysis, ResourceThresholds,
@@ -10,6 +12,7 @@ import type {
 import { DEFAULT_THRESHOLDS } from '../constants'
 
 export function useResourceData(connectionId?: string) {
+  const t = useTranslations()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [kpis, setKpis] = useState<KpiData | null>(null)
@@ -41,7 +44,7 @@ export function useResourceData(connectionId?: string) {
       const qs = params.toString() ? `?${params.toString()}` : ''
 
       const res = await fetch(`/api/v1/resources/overview${qs}`)
-      if (!res.ok) throw new Error('Erreur lors du chargement')
+      if (!res.ok) throw new Error(t('resources.loadError'))
       const json = await res.json()
 
       setKpis(json.data.kpis)
@@ -76,7 +79,7 @@ export function useResourceData(connectionId?: string) {
         body: JSON.stringify({ kpis, topCpuVms, topRamVms }),
       })
 
-      if (!res.ok) throw new Error('Erreur d\'analyse')
+      if (!res.ok) throw new Error(t('resources.analysisError'))
       const json = await res.json()
 
       setAiAnalysis({ summary: json.data?.summary || '', recommendations: json.data?.recommendations || [], loading: false, provider: json.data?.provider })

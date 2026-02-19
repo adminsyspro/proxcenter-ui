@@ -873,14 +873,15 @@
       "multiTenant": "Multi-tenant"
     },
     "openaiModels": {
-      "gpt4oMini": "GPT-4o Mini (rapide, économique)",
-      "gpt4o": "GPT-4o (puissant)",
-      "gpt4Turbo": "GPT-4 Turbo"
+      "gpt41Nano": "GPT-4.1 Nano (rapide, économique)",
+      "gpt41Mini": "GPT-4.1 Mini (équilibré)",
+      "gpt41": "GPT-4.1 (puissant)",
+      "o3Mini": "o3-mini (raisonnement)"
     },
     "anthropicModels": {
-      "haiku": "Claude 3 Haiku (rapide)",
-      "sonnet": "Claude 3 Sonnet (équilibré)",
-      "opus": "Claude 3 Opus (puissant)"
+      "haiku": "Claude Haiku 4.5 (rapide)",
+      "sonnet": "Claude Sonnet 4.6 (équilibré)",
+      "opus": "Claude Opus 4.6 (puissant)"
     },
     "storageTypes": {
       "hdd": "HDD (6W/To)",

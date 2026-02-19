@@ -1284,9 +1284,10 @@ function AITab() {
                       label={t('settings.modelLabel')}
                       onChange={e => setSettings(s => ({ ...s, openaiModel: e.target.value }))}
                     >
-                      <MenuItem value='gpt-4o-mini'>{t('settings.openaiModels.gpt4oMini')}</MenuItem>
-                      <MenuItem value='gpt-4o'>{t('settings.openaiModels.gpt4o')}</MenuItem>
-                      <MenuItem value='gpt-4-turbo'>{t('settings.openaiModels.gpt4Turbo')}</MenuItem>
+                      <MenuItem value='gpt-4.1-nano'>{t('settings.openaiModels.gpt41Nano')}</MenuItem>
+                      <MenuItem value='gpt-4.1-mini'>{t('settings.openaiModels.gpt41Mini')}</MenuItem>
+                      <MenuItem value='gpt-4.1'>{t('settings.openaiModels.gpt41')}</MenuItem>
+                      <MenuItem value='o3-mini'>{t('settings.openaiModels.o3Mini')}</MenuItem>
                     </Select>
                   </FormControl>
                 </Box>
@@ -1314,13 +1315,13 @@ function AITab() {
                   <FormControl fullWidth>
                     <InputLabel>{t('settings.modelLabel')}</InputLabel>
                     <Select
-                      value={settings.anthropicModel || 'claude-3-haiku-20240307'}
+                      value={settings.anthropicModel || 'claude-haiku-4-5-20251001'}
                       label={t('settings.modelLabel')}
                       onChange={e => setSettings(s => ({ ...s, anthropicModel: e.target.value }))}
                     >
-                      <MenuItem value='claude-3-haiku-20240307'>{t('settings.anthropicModels.haiku')}</MenuItem>
-                      <MenuItem value='claude-3-sonnet-20240229'>{t('settings.anthropicModels.sonnet')}</MenuItem>
-                      <MenuItem value='claude-3-opus-20240229'>{t('settings.anthropicModels.opus')}</MenuItem>
+                      <MenuItem value='claude-haiku-4-5-20251001'>{t('settings.anthropicModels.haiku')}</MenuItem>
+                      <MenuItem value='claude-sonnet-4-6-20250514'>{t('settings.anthropicModels.sonnet')}</MenuItem>
+                      <MenuItem value='claude-opus-4-6-20250918'>{t('settings.anthropicModels.opus')}</MenuItem>
                     </Select>
                   </FormControl>
                 </Box>

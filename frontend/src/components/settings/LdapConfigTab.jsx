@@ -60,12 +60,20 @@ export default function LdapConfigTab() {
   const loadConfig = async () => {
     try {
       setLoading(true)
+      setError('')
       const res = await fetch('/api/v1/auth/ldap')
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        setError(errData.error || t('ldap.loadError'))
+        return
+      }
+
       const data = await res.json()
 
-      if (res.ok && data.data) {
-        setConfig(prev => ({ 
-          ...prev, 
+      if (data.data) {
+        setConfig(prev => ({
+          ...prev,
           ...data.data,
           bind_password: '' // Ne jamais pré-remplir le mot de passe
         }))

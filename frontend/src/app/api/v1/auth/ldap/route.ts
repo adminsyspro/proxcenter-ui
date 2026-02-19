@@ -22,7 +22,7 @@ export async function GET() {
 
     const config = db
       .prepare(
-        `SELECT id, enabled, url, bind_dn, base_dn, user_filter, email_attribute, name_attribute, tls_insecure, created_at, updated_at 
+        `SELECT id, enabled, url, bind_dn, bind_password_enc, base_dn, user_filter, email_attribute, name_attribute, tls_insecure, created_at, updated_at
          FROM ldap_config WHERE id = 'default'`
       )
       .get() as any

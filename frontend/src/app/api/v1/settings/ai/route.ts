@@ -37,9 +37,9 @@ export async function GET() {
         ollamaUrl: 'http://localhost:11434',
         ollamaModel: 'mistral:7b',
         openaiKey: '',
-        openaiModel: 'gpt-4o-mini',
+        openaiModel: 'gpt-4.1-nano',
         anthropicKey: '',
-        anthropicModel: 'claude-3-haiku-20240307'
+        anthropicModel: 'claude-haiku-4-5-20251001'
       }
     })
   } catch (e: any) {

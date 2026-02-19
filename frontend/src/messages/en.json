@@ -1568,7 +1568,12 @@
       "sshRequirement": "Passwordless SSH must be configured between source and target clusters. Ensure root can SSH from source to target without a password prompt.",
       "sshRetry": "Retry",
       "vmidPrefix": "VMID Prefix",
-      "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID."
+      "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID.",
+      "engine": "Replication Engine",
+      "engineCeph": "Ceph RBD",
+      "engineZfs": "ZFS",
+      "engineComingSoon": "Coming soon",
+      "pvNote": "Install the <pv>pv</pv> package on source and target nodes to display replication progress."
     },
     "createPlan": {
       "title": "Create Recovery Plan",

@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server"
 
 import { getToken } from "next-auth/jwt"
 
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production"
+
 // i18n configuration
 const locales = ['fr', 'en']
 const defaultLocale = 'fr'
@@ -92,7 +94,7 @@ export async function middleware(request: NextRequest) {
     // Vérifier le token JWT
     const token = await getToken({
       req: request,
-      secret: process.env.NEXTAUTH_SECRET
+      secret: AUTH_SECRET
     })
 
     // Si pas de token, rediriger vers login

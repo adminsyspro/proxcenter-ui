@@ -631,6 +631,8 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     let minTolerance = Infinity
     let strictestPool = ''
     for (const pool of pools) {
+      // Skip internal/system pools (e.g. .mgr, .rgw.root)
+      if (pool.name.startsWith('.')) continue
       if (pool.type !== 'replicated') continue
       const tolerance = (pool.size || 3) - (pool.minSize || 2)
       if (tolerance < minTolerance) {

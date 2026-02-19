@@ -220,8 +220,8 @@ importers:
         specifier: 4.1.17
         version: 4.1.17
       tailwindcss-logical:
-        specifier: 4.1.0
-        version: 4.1.0(tailwindcss@4.1.17)
+        specifier: 4.2.0
+        version: 4.2.0(tailwindcss@4.1.17)
       tsx:
         specifier: 4.20.6
         version: 4.20.6
@@ -4288,8 +4288,8 @@ packages:
     resolution: {integrity: sha512-9kY+CygyYM6j02t5YFHbNz2FN5QmYGv9zAjVp4lCDjlCw7amdckXlEt/bjMhUIfj4ThGRE4gCUH5+yGnNuPo5A==}
     engines: {node: '>=10.0.0'}
 
-  tailwindcss-logical@4.1.0:
-    resolution: {integrity: sha512-jko8jJ2svfBHJWHyQj7H3MBN9FeleqDUYNddJEbF1f00rz+OWlCRv2w4Ga2ZjasF8fbEl+ZPwaWQRN5suwB8Iw==}
+  tailwindcss-logical@4.2.0:
+    resolution: {integrity: sha512-G+7NFU8xiMczeaykFRvaDbfbpqvFWv05YG6RtS2klW1wvTRkUs96P/e+Zy/Qse6y0HL8tLQ+da8M7trDfu12sw==}
     peerDependencies:
       tailwindcss: '>=4.0.0'
 
@@ -8827,7 +8827,7 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
-  tailwindcss-logical@4.1.0(tailwindcss@4.1.17):
+  tailwindcss-logical@4.2.0(tailwindcss@4.1.17):
     dependencies:
       tailwindcss: 4.1.17
 

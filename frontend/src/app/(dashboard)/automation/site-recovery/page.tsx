@@ -25,6 +25,7 @@ import {
   ProtectionTab,
   RecoveryPlansTab,
   EmergencyDRTab,
+  SimulationTab,
   CreateJobDialog,
   CreatePlanDialog,
   FailoverDialog
@@ -306,6 +307,11 @@ export default function SiteRecoveryPage() {
             iconPosition='start'
             label={t('siteRecovery.tabs.emergencyDR')}
           />
+          <Tab
+            icon={<i className='ri-test-tube-line' style={{ fontSize: 18 }} />}
+            iconPosition='start'
+            label={t('siteRecovery.tabs.simulation')}
+          />
         </Tabs>
           <Box sx={{ display: 'flex', gap: 1, ml: 'auto', pl: 2 }}>
             <Button
@@ -376,6 +382,10 @@ export default function SiteRecoveryPage() {
             onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
             onExecuteFailback={(planId) => openFailoverDialog(planId, 'failback')}
           />
+        )}
+
+        {tab === 4 && (
+          <SimulationTab connections={connections} isEnterprise={isEnterprise} />
         )}
 
         {/* Dialogs */}

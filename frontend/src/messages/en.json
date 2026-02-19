@@ -1459,7 +1459,8 @@
       "replication": "Replication",
       "protection": "Protection",
       "recoveryPlans": "Recovery Plans",
-      "emergencyDR": "Emergency DR"
+      "emergencyDR": "Emergency DR",
+      "simulation": "Simulation"
     },
     "status": {
       "all": "All statuses",
@@ -1629,6 +1630,39 @@
       "emergencyFailover": "Emergency Failover",
       "standaloneTitle": "Standalone VMs",
       "vmStarted": "{name} (VMID {vmid}) started on DR site"
+    },
+    "simulation": {
+      "title": "Node Failure Simulation",
+      "subtitle": "Click on nodes to simulate failure and see how VMs redistribute",
+      "selectCluster": "Select a cluster",
+      "hosts": "Hosts",
+      "avgCpu": "Avg CPU",
+      "avgMemory": "Avg Memory",
+      "vmsAssigned": "VMs",
+      "clickToFail": "Click to simulate failure",
+      "clickToReactivate": "Click to reactivate",
+      "failed": "FAILED",
+      "noNodes": "No nodes available",
+      "verdict": {
+        "ok": "Cluster can absorb the load",
+        "stressed": "Cluster can absorb the load but will be under stress",
+        "overloaded": "Cluster CANNOT absorb the load",
+        "allDown": "All nodes are down — total cluster failure"
+      },
+      "healthScore": "Health Score",
+      "before": "Before",
+      "after": "After (projected)",
+      "affectedVms": "Affected VMs",
+      "vmid": "VMID",
+      "vmName": "Name",
+      "vcpus": "vCPUs",
+      "ram": "RAM",
+      "originalNode": "Original Node",
+      "targetNode": "Target Node",
+      "redistributed": "Redistributed",
+      "lost": "Lost",
+      "noSimulation": "Select a cluster and click on nodes to start the simulation",
+      "nodesDown": "{count} node(s) down"
     }
   },
   "templates": {

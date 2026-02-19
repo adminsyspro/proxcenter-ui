@@ -112,6 +112,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
     // Core Enterprise features — always available with any Enterprise license
     if (isEnterprise && featureId === Features.ALERTS) return true
+    if (isEnterprise && featureId === Features.TASK_CENTER) return true
 
     // Si pas de features dans le statut, vérifier dans la liste des features
     if (status?.features && Array.isArray(status.features)) {

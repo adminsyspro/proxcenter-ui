@@ -503,7 +503,7 @@ return 'neutral'
               <Box>CPU {Math.round(healthBreakdown.avgCpu)}% → {healthBreakdown.cpuPenalty === 0 ? 'OK' : healthBreakdown.cpuPenalty}</Box>
               <Box>{t('drsPage.imbalanceLabel')} {healthBreakdown.imbalance.toFixed(1)}% → {healthBreakdown.imbalancePenalty === 0 ? 'OK' : healthBreakdown.imbalancePenalty}</Box>
             </Box>
-          } arrow>
+          } arrow disableInteractive>
             <Chip
               size="small"
               icon={healthScore >= 80 ? <CheckCircleIcon /> : <WarningAmberIcon />}
@@ -514,10 +514,10 @@ return 'neutral'
           </Tooltip>
 
           {/* Spread indicator */}
-          <Tooltip title={t('drsPage.memorySpreadBetweenNodes', { pct: memorySpread.toFixed(1) })}>
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+          <Tooltip title={t('drsPage.memorySpreadBetweenNodes', { pct: memorySpread.toFixed(1) })} disableInteractive>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
               gap: 0.5,
               px: 1,
               py: 0.5,
@@ -525,10 +525,10 @@ return 'neutral'
               bgcolor: alpha(theme.palette[spreadColor].main, 0.1),
             }}>
               <SwapHorizIcon sx={{ fontSize: 16, color: `${spreadColor}.main` }} />
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  fontWeight: 600, 
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 600,
                   color: `${spreadColor}.main`,
                   fontSize: '0.7rem'
                 }}
@@ -544,7 +544,7 @@ return 'neutral'
             <ResourceGauge value={metrics?.summary?.avg_memory_usage ?? 0} label="RAM" size={44} />
           </Box>
 
-          <IconButton size="small">
+          <IconButton size="small" onClick={(e) => { e.stopPropagation(); onToggle() }}>
             {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
           </IconButton>
         </Box>

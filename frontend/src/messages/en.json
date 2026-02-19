@@ -1163,6 +1163,7 @@
     "vmIsolation": "VM Isolation",
     "clickVmToIsolate": "Click on a VM to see impact and enable isolation",
     "howItWorks": "How it works",
+    "howItWorksToggle": "How does micro-segmentation work?",
     "gatewayAliases": "Gateway Aliases",
     "gatewayAliasesDesc": "For each network net-xxx, an alias gw-xxx points to the gateway ({offset}). This allows traffic to/from the network gateway.",
     "securityGroupsBase": "Base Security Groups",
@@ -2446,7 +2447,11 @@
     "tabRules": "Rules",
     "tabObjects": "Objects",
     "deleteRule": "Delete rule",
-    "deleteRuleQuestion": "Are you sure you want to delete this rule?"
+    "deleteRuleQuestion": "Are you sure you want to delete this rule?",
+    "securityPosture": "Security Posture",
+    "protectedCount": "Protected",
+    "withSgCount": "With SG",
+    "unprotectedCount": "Unprotected"
   },
   "themes": {
     "categories": {

@@ -1347,9 +1347,11 @@ return Object.entries(metricsData as any)
     }
   }, [clusters, selectedCluster])
 
-  // Expand first cluster with recommendations by default
+  // Expand first cluster with recommendations on initial load only
+  const [initialExpandDone, setInitialExpandDone] = useState(false)
+
   useEffect(() => {
-    if (clusters.length > 0 && expandedClusters.size === 0) {
+    if (!initialExpandDone && clusters.length > 0) {
       const clusterWithRecs = clusters.find(c => c.recommendations.length > 0)
 
       if (clusterWithRecs) {
@@ -1357,8 +1359,9 @@ return Object.entries(metricsData as any)
       } else {
         setExpandedClusters(new Set([clusters[0].id]))
       }
+      setInitialExpandDone(true)
     }
-  }, [clusters])
+  }, [clusters, initialExpandDone])
 
   // Detect PVE HA groups / affinity rules that may conflict with DRS
   const clusterIds = useMemo(() => clusters.map(c => c.id).sort().join(','), [clusters])

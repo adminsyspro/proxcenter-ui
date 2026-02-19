@@ -594,7 +594,7 @@ export default function JobsPage() {
   )
 
   return (
-    <EnterpriseGuard requiredFeature={Features.JOBS} featureName="Jobs">
+    <EnterpriseGuard requiredFeature={Features.TASK_CENTER} featureName="Task Center">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button

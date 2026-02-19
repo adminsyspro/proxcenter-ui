@@ -24,7 +24,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
     { id: 'ldap', name: 'LDAP', enabled: false },
     { id: 'reports', name: 'Reports', enabled: false },
     { id: 'rbac', name: 'RBAC', enabled: false },
-    { id: 'jobs', name: 'Jobs', enabled: false },
+    { id: 'task_center', name: 'Task Center', enabled: false },
     { id: 'notifications', name: 'Notifications', enabled: false },
     { id: 'cve_scanner', name: 'CVE Scanner', enabled: false },
   ]

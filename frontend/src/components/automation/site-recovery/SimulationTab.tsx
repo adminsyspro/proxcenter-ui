@@ -708,8 +708,14 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
       if (pool.type !== 'replicated') continue
       const tolerance = (pool.size || 3) - (pool.minSize || 2)
 
-      // Determine failure domain from CRUSH rule
-      const domain = crushRuleMap.get(pool.crushRule) || 'host'
+      // Determine failure domain from CRUSH rule steps if available,
+      // otherwise infer from CRUSH tree structure: if the tree has datacenter
+      // buckets and pool.size <= number of DCs, replicas span datacenters
+      let domain = crushRuleMap.get(pool.crushRule)
+      if (!domain || domain === 'host') {
+        const dcCount = crushTopology?.datacenters.size || 0
+        domain = dcCount >= 2 && (pool.size || 3) <= dcCount ? 'datacenter' : 'host'
+      }
 
       if (tolerance < minTolerance) {
         minTolerance = tolerance

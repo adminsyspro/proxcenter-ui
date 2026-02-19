@@ -1363,6 +1363,43 @@ return Object.entries(metricsData as any)
     }
   }, [clusters])
 
+  // Detect PVE HA groups / affinity rules that may conflict with DRS
+  const clusterIds = useMemo(() => clusters.map(c => c.id).sort().join(','), [clusters])
+
+  const { data: haDataMap } = useSWR(
+    clusterIds ? `ha-check:${clusterIds}` : null,
+    async () => {
+      const results: Record<string, { groups: number; rules: number; majorVersion: number }> = {}
+      await Promise.all(clusters.map(async (c) => {
+        try {
+          const res = await fetch(`/api/v1/connections/${c.id}/ha`)
+          if (!res.ok) return
+          const { data } = await res.json()
+          results[c.id] = {
+            groups: data?.groups?.length || 0,
+            rules: data?.rules?.length || 0,
+            majorVersion: data?.majorVersion || 8,
+          }
+        } catch { /* ignore */ }
+      }))
+      return results
+    },
+    { revalidateOnFocus: false }
+  )
+
+  const haWarnings = useMemo(() => {
+    if (!haDataMap) return []
+    const warnings: { clusterId: string; clusterName: string; majorVersion: number; groups: number; rules: number }[] = []
+    for (const c of clusters) {
+      const ha = haDataMap[c.id]
+      if (!ha) continue
+      if (ha.groups > 0 || ha.rules > 0) {
+        warnings.push({ clusterId: c.id, clusterName: c.name, majorVersion: ha.majorVersion, groups: ha.groups, rules: ha.rules })
+      }
+    }
+    return warnings
+  }, [haDataMap, clusters])
+
   // Récupérer la progression des migrations actives
   const activeMigrations = useMemo(() =>
     migrations.filter(m => m.status === 'running'),
@@ -1837,6 +1874,26 @@ return next
       </Box>
 
       {/* Tabs */}
+      {/* HA conflict warnings */}
+      {haWarnings.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            {t('drsPage.haConflictTitle')}
+          </Typography>
+          {haWarnings.map(w => (
+            <Typography key={w.clusterId} variant="body2">
+              <strong>{w.clusterName}</strong> (PVE {w.majorVersion}){' — '}
+              {w.majorVersion >= 9 && w.rules > 0
+                ? t('drsPage.haConflictPve9', { rules: w.rules, groups: w.groups })
+                : t('drsPage.haConflictPve8', { groups: w.groups })}
+            </Typography>
+          ))}
+          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
+            {t('drsPage.haConflictHint')}
+          </Typography>
+        </Alert>
+      )}
+
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}

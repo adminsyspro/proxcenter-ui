@@ -1164,6 +1164,7 @@
     "vmIsolation": "Isolation par VM",
     "clickVmToIsolate": "Cliquez sur une VM pour voir l'impact et activer l'isolation",
     "howItWorks": "Comment ça fonctionne",
+    "howItWorksToggle": "Comment fonctionne la micro-segmentation ?",
     "gatewayAliases": "Aliases Gateway",
     "gatewayAliasesDesc": "Pour chaque réseau net-xxx, un alias gw-xxx pointe vers la passerelle ({offset}). Ceci permet d'autoriser le trafic vers/depuis la gateway du réseau.",
     "securityGroupsBase": "Security Groups Base",
@@ -2442,7 +2443,11 @@
     "tabRules": "Règles",
     "tabObjects": "Objets",
     "deleteRule": "Supprimer la règle",
-    "deleteRuleQuestion": "Êtes-vous sûr de vouloir supprimer cette règle ?"
+    "deleteRuleQuestion": "Êtes-vous sûr de vouloir supprimer cette règle ?",
+    "securityPosture": "Posture de sécurité",
+    "protectedCount": "Protégées",
+    "withSgCount": "Avec SG",
+    "unprotectedCount": "Non protégées"
   },
   "themes": {
     "categories": {

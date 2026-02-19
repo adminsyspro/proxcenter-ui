@@ -164,6 +164,9 @@ return {
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [newPattern, setNewPattern] = useState('')
   
+  // How it works toggle
+  const [showHowItWorks, setShowHowItWorks] = useState(false)
+
   // Dialogs
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
   const [previewResult, setPreviewResult] = useState<GenerateResult | null>(null)
@@ -636,65 +639,73 @@ return config.excludePatterns.some(pattern =>
           </CardContent>
         </Card>
         
-        {/* How it works */}
-        <Card sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="ri-question-line" style={{ fontSize: 20 }} />
-              {t('microseg.howItWorks')}
-            </Typography>
-            
-            <Grid container spacing={3}>
-              <Grid size={{ xs: 12, md: 4 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.03), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`, height: '100%' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.primary.main, fontSize: 14 }}>1</Avatar>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.gatewayAliases')}</Typography>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('microseg.gatewayAliasesDesc', { offset: gatewayOffsetLabel })}
-                  </Typography>
-                </Paper>
-              </Grid>
-              
-              <Grid size={{ xs: 12, md: 4 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.03), border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`, height: '100%' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.warning.main, fontSize: 14 }}>2</Avatar>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.securityGroupsBase')}</Typography>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('microseg.securityGroupsBaseDesc')}
-                  </Typography>
-                </Paper>
-              </Grid>
-              
-              <Grid size={{ xs: 12, md: 4 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.03), border: `1px solid ${alpha(theme.palette.success.main, 0.1)}`, height: '100%' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.success.main, fontSize: 14 }}>3</Avatar>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.vmApplication')}</Typography>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('microseg.vmApplicationDesc')}
-                  </Typography>
-                </Paper>
-              </Grid>
-            </Grid>
-            
-            <Divider sx={{ my: 2 }} />
-            
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>{t('microseg.exampleRules')}</Typography>
-            <Paper sx={{ p: 1.5, bgcolor: '#0d1117', borderRadius: 1 }}>
-              <Box component="pre" sx={{ m: 0, fontSize: 12, fontFamily: 'monospace', color: '#c9d1d9' }}>
+        {/* How it works — collapsible */}
+        <Box>
+          <Button
+            variant="text"
+            onClick={() => setShowHowItWorks(!showHowItWorks)}
+            startIcon={<i className="ri-question-line" style={{ fontSize: 18 }} />}
+            endIcon={<i className={showHowItWorks ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} style={{ fontSize: 18 }} />}
+            sx={{ color: 'text.secondary', textTransform: 'none', fontWeight: 600 }}
+          >
+            {t('microseg.howItWorksToggle')}
+          </Button>
+          <Collapse in={showHowItWorks}>
+            <Card sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mt: 1 }}>
+              <CardContent>
+                <Grid container spacing={3}>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.03), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`, height: '100%' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.primary.main, fontSize: 14 }}>1</Avatar>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.gatewayAliases')}</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('microseg.gatewayAliasesDesc', { offset: gatewayOffsetLabel })}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.03), border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`, height: '100%' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.warning.main, fontSize: 14 }}>2</Avatar>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.securityGroupsBase')}</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('microseg.securityGroupsBaseDesc')}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.03), border: `1px solid ${alpha(theme.palette.success.main, 0.1)}`, height: '100%' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.success.main, fontSize: 14 }}>3</Avatar>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.vmApplication')}</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('microseg.vmApplicationDesc')}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>{t('microseg.exampleRules')}</Typography>
+                <Paper sx={{ p: 1.5, bgcolor: '#0d1117', borderRadius: 1 }}>
+                  <Box component="pre" sx={{ m: 0, fontSize: 12, fontFamily: 'monospace', color: '#c9d1d9' }}>
 {`OUT ACCEPT -dest gw-dmz-k8s        # Autoriser passerelle
 IN  ACCEPT -source gw-dmz-k8s      # Autoriser depuis passerelle
 OUT DROP   -dest net-dmz-k8s       # Bloquer VLAN sortant
 IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
-              </Box>
-            </Paper>
-          </CardContent>
-        </Card>
+                  </Box>
+                </Paper>
+              </CardContent>
+            </Card>
+          </Collapse>
+        </Box>
       </Stack>
       
       {/* Configuration Dialog */}

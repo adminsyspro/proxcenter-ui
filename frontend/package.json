@@ -86,7 +86,7 @@
     "stylis": "4.3.6",
     "stylis-plugin-rtl": "2.1.1",
     "tailwindcss": "4.1.17",
-    "tailwindcss-logical": "4.1.0",
+    "tailwindcss-logical": "4.2.0",
     "tsx": "4.20.6"
   },
   "resolutions": {

@@ -1207,6 +1207,11 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
             cephWarning={cephSummaryWarning}
           />
 
+          {/* Verdict banner — shown at the top when simulation is active */}
+          {verdict && stats && (
+            <VerdictBanner verdict={verdict} stats={stats} cephVerdict={cephVerdict} simNodesAfter={simNodesAfter} selectedHasCeph={selectedHasCeph} />
+          )}
+
           {/* Node cards — grouped by datacenter when CRUSH topology available */}
           {crushTopology && cephTolerance?.failureDomain === 'datacenter' ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -1295,11 +1300,6 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
                 />
               ))}
             </Box>
-          )}
-
-          {/* Verdict banner */}
-          {verdict && stats && (
-            <VerdictBanner verdict={verdict} stats={stats} cephVerdict={cephVerdict} simNodesAfter={simNodesAfter} selectedHasCeph={selectedHasCeph} />
           )}
 
           {/* Affected VMs table */}

@@ -7,6 +7,7 @@ import useSWR from 'swr'
 import {
   Alert,
   Box,
+  Button,
   Chip,
   FormControl,
   InputLabel,
@@ -70,11 +71,37 @@ interface CephPool {
   size: number
   minSize: number
   type: string
+  crushRule: number
+}
+
+interface CrushBucket {
+  id: number
+  name: string
+  type: string
+  type_id?: number
+  status?: string
+  children?: CrushBucket[]
+}
+
+interface CrushRuleStep {
+  op: string
+  type: string
+  num: number
+  item?: number
+  item_name?: string
+}
+
+interface CrushRule {
+  id: number
+  name: string
+  steps: CrushRuleStep[]
 }
 
 interface CephInfo {
   osds: { total: number; up: number; in: number }
   pools: { list: CephPool[] }
+  crushTree: CrushBucket[]
+  crushRules: CrushRule[]
 }
 
 interface SimVM {
@@ -620,8 +647,51 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     [connections, selectedClusterId]
   )
 
-  // Ceph pool replication rules: extract worst-case tolerance
-  // Rule of 2/3: size=3, min_size=2 → can tolerate (size - min_size) = 1 OSD host loss
+  // Parse CRUSH topology from the OSD tree
+  const crushTopology = useMemo(() => {
+    if (!cephData?.data?.crushTree?.length) return null
+
+    const nodeToDatacenter = new Map<string, string>()
+    const datacenters = new Map<string, string[]>()
+
+    const walk = (buckets: CrushBucket[], dcName?: string) => {
+      for (const bucket of buckets) {
+        const currentDc = bucket.type === 'datacenter' ? bucket.name : dcName
+        if (bucket.type === 'datacenter') {
+          if (!datacenters.has(bucket.name)) datacenters.set(bucket.name, [])
+        }
+        if (bucket.type === 'host' && currentDc) {
+          nodeToDatacenter.set(bucket.name, currentDc)
+          const hosts = datacenters.get(currentDc) || []
+          if (!hosts.includes(bucket.name)) hosts.push(bucket.name)
+          datacenters.set(currentDc, hosts)
+        }
+        if (bucket.children) walk(bucket.children, currentDc)
+      }
+    }
+    walk(cephData.data.crushTree)
+
+    if (datacenters.size === 0) return null
+    return { nodeToDatacenter, datacenters }
+  }, [cephData])
+
+  // Map CRUSH rule ID → failure domain type
+  const crushRuleMap = useMemo(() => {
+    if (!cephData?.data?.crushRules?.length) return new Map<number, string>()
+    const map = new Map<number, string>()
+    for (const rule of cephData.data.crushRules) {
+      // Find the chooseleaf step to determine failure domain
+      const chooseleaf = rule.steps.find(s => s.op === 'chooseleaf_firstn' || s.op === 'chooseleaf_indep')
+      if (chooseleaf && chooseleaf.type) {
+        map.set(rule.id, chooseleaf.type)
+      } else {
+        map.set(rule.id, 'host')
+      }
+    }
+    return map
+  }, [cephData])
+
+  // Ceph pool replication rules: CRUSH-aware tolerance
   const cephTolerance = useMemo(() => {
     if (!selectedHasCeph || !cephData?.data) return null
     const pools = cephData.data.pools?.list || []
@@ -630,27 +700,37 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     // Find the strictest pool (lowest tolerance)
     let minTolerance = Infinity
     let strictestPool = ''
+    let failureDomain = 'host'
+
     for (const pool of pools) {
       // Skip internal/system pools (e.g. .mgr, .rgw.root)
       if (pool.name.startsWith('.')) continue
       if (pool.type !== 'replicated') continue
       const tolerance = (pool.size || 3) - (pool.minSize || 2)
+
+      // Determine failure domain from CRUSH rule
+      const domain = crushRuleMap.get(pool.crushRule) || 'host'
+
       if (tolerance < minTolerance) {
         minTolerance = tolerance
         strictestPool = pool.name
+        failureDomain = domain
       }
     }
 
     const totalOsds = cephData.data.osds?.total || 0
     const upOsds = cephData.data.osds?.up || 0
+    const dcCount = crushTopology?.datacenters.size || 0
 
     return {
       maxNodeLoss: minTolerance === Infinity ? 1 : minTolerance,
       strictestPool,
       totalOsds,
       upOsds,
+      failureDomain,
+      dcCount,
     }
-  }, [selectedHasCeph, cephData])
+  }, [selectedHasCeph, cephData, crushRuleMap, crushTopology])
 
   // Build simulation nodes from inventory
   const simNodes: SimNode[] = useMemo(() => {
@@ -842,11 +922,26 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
   const cephVerdict = useMemo(() => {
     if (!selectedHasCeph || !cephTolerance || failedNodes.size === 0) return null
 
-    const failedCount = failedNodes.size
+    const isDcDomain = cephTolerance.failureDomain === 'datacenter' && crushTopology
+
+    let failedCount: number
+    if (isDcDomain) {
+      // Count how many distinct datacenters the failed nodes belong to
+      const failedDcs = new Set<string>()
+      for (const nodeName of failedNodes) {
+        const dc = crushTopology!.nodeToDatacenter.get(nodeName)
+        if (dc) failedDcs.add(dc)
+      }
+      failedCount = failedDcs.size
+    } else {
+      failedCount = failedNodes.size
+    }
+
+    const suffix = isDcDomain ? 'Dc' : ''
     if (failedCount <= cephTolerance.maxNodeLoss) {
       return {
         ok: true,
-        message: t('siteRecovery.simulation.cephOk', {
+        message: t(`siteRecovery.simulation.cephOk${suffix}`, {
           failed: failedCount,
           max: cephTolerance.maxNodeLoss,
           pool: cephTolerance.strictestPool,
@@ -855,13 +950,13 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     }
     return {
       ok: false,
-      message: t('siteRecovery.simulation.cephDanger', {
+      message: t(`siteRecovery.simulation.cephDanger${suffix}`, {
         failed: failedCount,
         max: cephTolerance.maxNodeLoss,
         pool: cephTolerance.strictestPool,
       }),
     }
-  }, [selectedHasCeph, cephTolerance, failedNodes, t])
+  }, [selectedHasCeph, cephTolerance, failedNodes, t, crushTopology])
 
   // Ceph warning shown in summary bar (before any node is failed)
   const cephSummaryWarning = useMemo(() => {
@@ -877,6 +972,23 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
       const next = new Set(prev)
       if (next.has(nodeName)) next.delete(nodeName)
       else next.add(nodeName)
+      return next
+    })
+  }
+
+  const toggleDatacenter = (dcName: string) => {
+    if (!crushTopology) return
+    const dcNodes = crushTopology.datacenters.get(dcName) || []
+    setFailedNodes(prev => {
+      const next = new Set(prev)
+      const allFailed = dcNodes.every(n => next.has(n))
+      if (allFailed) {
+        // Reactivate all nodes in this DC
+        for (const n of dcNodes) next.delete(n)
+      } else {
+        // Fail all nodes in this DC
+        for (const n of dcNodes) next.add(n)
+      }
       return next
     })
   }
@@ -921,10 +1033,17 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
           <Chip
             size="small"
             icon={<i className="ri-database-2-line" style={{ fontSize: 14 }} />}
-            label={t('siteRecovery.simulation.cephEnabled', {
-              tolerance: cephTolerance.maxNodeLoss,
-              osds: cephTolerance.totalOsds,
-            })}
+            label={cephTolerance.failureDomain === 'datacenter' && cephTolerance.dcCount > 0
+              ? t('siteRecovery.simulation.cephEnabledDc', {
+                  tolerance: cephTolerance.maxNodeLoss,
+                  osds: cephTolerance.totalOsds,
+                  dcs: cephTolerance.dcCount,
+                })
+              : t('siteRecovery.simulation.cephEnabled', {
+                  tolerance: cephTolerance.maxNodeLoss,
+                  osds: cephTolerance.totalOsds,
+                })
+            }
             color="info"
             variant="outlined"
           />
@@ -955,22 +1074,95 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
             cephWarning={cephSummaryWarning}
           />
 
-          {/* Node cards — full width responsive grid */}
-          <Box sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 2,
-          }}>
-            {simNodesAfter.map(node => (
-              <NodeCard
-                key={node.name}
-                node={node}
-                redistributedVMs={simulation?.redistributed.filter(v => v.targetNode === node.name) || []}
-                onToggleFail={() => toggleFail(node.name)}
-                nodeCount={simNodes.length}
-              />
-            ))}
-          </Box>
+          {/* Node cards — grouped by datacenter when CRUSH topology available */}
+          {crushTopology && cephTolerance?.failureDomain === 'datacenter' ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              {Array.from(crushTopology.datacenters.entries()).map(([dcName, dcHosts]) => {
+                const dcNodes = simNodesAfter.filter(n => dcHosts.includes(n.name))
+                if (dcNodes.length === 0) return null
+                const allFailed = dcNodes.every(n => n.isFailed)
+                return (
+                  <Box key={dcName}>
+                    <Box sx={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      mb: 1.5, px: 0.5,
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-building-line" style={{ fontSize: 18, opacity: 0.6 }} />
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                          {dcName}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={`${dcNodes.length} ${t('siteRecovery.simulation.hosts').toLowerCase()}`}
+                          variant="outlined"
+                          sx={{ height: 22, fontSize: '0.7rem' }}
+                        />
+                        {allFailed && (
+                          <Chip size="small" label="DOWN" color="error" sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700 }} />
+                        )}
+                      </Box>
+                      <Button
+                        size="small"
+                        variant={allFailed ? 'outlined' : 'contained'}
+                        color={allFailed ? 'success' : 'error'}
+                        startIcon={<i className={allFailed ? 'ri-restart-line' : 'ri-skull-2-line'} style={{ fontSize: 14 }} />}
+                        onClick={() => toggleDatacenter(dcName)}
+                        sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+                      >
+                        {allFailed
+                          ? t('siteRecovery.simulation.reactivateDatacenter')
+                          : t('siteRecovery.simulation.failDatacenter')
+                        }
+                      </Button>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                      {dcNodes.map(node => (
+                        <NodeCard
+                          key={node.name}
+                          node={node}
+                          redistributedVMs={simulation?.redistributed.filter(v => v.targetNode === node.name) || []}
+                          onToggleFail={() => toggleFail(node.name)}
+                          nodeCount={dcNodes.length}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                )
+              })}
+              {/* Nodes not in any datacenter */}
+              {(() => {
+                const allDcHosts = new Set(Array.from(crushTopology.datacenters.values()).flat())
+                const orphanNodes = simNodesAfter.filter(n => !allDcHosts.has(n.name))
+                if (orphanNodes.length === 0) return null
+                return (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    {orphanNodes.map(node => (
+                      <NodeCard
+                        key={node.name}
+                        node={node}
+                        redistributedVMs={simulation?.redistributed.filter(v => v.targetNode === node.name) || []}
+                        onToggleFail={() => toggleFail(node.name)}
+                        nodeCount={orphanNodes.length}
+                      />
+                    ))}
+                  </Box>
+                )
+              })()}
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              {simNodesAfter.map(node => (
+                <NodeCard
+                  key={node.name}
+                  node={node}
+                  redistributedVMs={simulation?.redistributed.filter(v => v.targetNode === node.name) || []}
+                  onToggleFail={() => toggleFail(node.name)}
+                  nodeCount={simNodes.length}
+                />
+              ))}
+            </Box>
+          )}
 
           {/* Verdict banner */}
           {verdict && stats && (

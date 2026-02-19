@@ -1665,8 +1665,14 @@
       "noSimulation": "Sélectionnez un cluster et cliquez sur les nœuds pour lancer la simulation",
       "nodesDown": "{count} nœud(s) en panne",
       "cephEnabled": "Ceph : tolère {tolerance} perte de nœud ({osds} OSDs)",
+      "cephEnabledDc": "Ceph : tolère {tolerance} perte de datacenter ({osds} OSDs, {dcs} DCs)",
       "cephOk": "Réplication sûre — {failed}/{max} perte de nœud tolérée (pool : {pool})",
-      "cephDanger": "DONNÉES EN DANGER — {failed} nœuds en panne dépasse la tolérance de {max} (pool : {pool})"
+      "cephOkDc": "Réplication sûre — {failed}/{max} perte de datacenter tolérée (pool : {pool})",
+      "cephDanger": "DONNÉES EN DANGER — {failed} nœuds en panne dépasse la tolérance de {max} (pool : {pool})",
+      "cephDangerDc": "DONNÉES EN DANGER — {failed} datacenter(s) en panne dépasse la tolérance de {max} (pool : {pool})",
+      "datacenter": "Datacenter",
+      "failDatacenter": "Simuler la panne du datacenter",
+      "reactivateDatacenter": "Réactiver le datacenter"
     }
   },
   "templates": {

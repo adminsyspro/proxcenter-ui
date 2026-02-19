@@ -37,12 +37,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const nodeName = onlineNode.node
 
     // Récupérer les données Ceph en parallèle
-    const [statusResult, osdResult, monResult, poolsResult, mdsResult] = await Promise.allSettled([
+    const [statusResult, osdResult, monResult, poolsResult, mdsResult, rulesResult] = await Promise.allSettled([
       pveFetch<any>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/status`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/osd`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/mon`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/pool`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/mds`),
+      pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/rules`),
     ])
 
     const status = statusResult.status === 'fulfilled' ? statusResult.value : null
@@ -50,6 +51,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const monList = monResult.status === 'fulfilled' ? monResult.value : []
     const poolList = poolsResult.status === 'fulfilled' ? poolsResult.value : []
     const mdsList = mdsResult.status === 'fulfilled' ? mdsResult.value : []
+    const rulesList = rulesResult.status === 'fulfilled' ? rulesResult.value : []
 
     // Si pas de status Ceph, le cluster n'a probablement pas Ceph
     if (!status) {
@@ -127,6 +129,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 return result
     }
     
+    // Extract CRUSH tree hierarchy preserving root → datacenter → host → osd nesting
+    const extractCrushTree = (items: any[]): any[] => {
+      return items.map(item => {
+        const node: any = {
+          id: item.id,
+          name: item.name,
+          type: item.type || (typeof item.id === 'number' && item.id >= 0 ? 'osd' : 'unknown'),
+        }
+        if (item.type_id !== undefined) node.type_id = item.type_id
+        if (item.status) node.status = item.status
+        if (item.children && Array.isArray(item.children)) {
+          node.children = extractCrushTree(item.children)
+        }
+        return node
+      })
+    }
+
     // osdList peut être un tableau plat ou un objet avec root/children
     let flatOsdList: any[] = []
 
@@ -145,6 +164,33 @@ return result
       }
     }
     
+    // Extract full CRUSH tree hierarchy
+    let crushTree: any[] = []
+    if (Array.isArray(osdList)) {
+      if (osdList.length > 0 && osdList[0]?.children) {
+        crushTree = extractCrushTree(osdList)
+      } else if (osdList.length > 0 && osdList[0]?.root?.children) {
+        crushTree = extractCrushTree(osdList[0].root.children)
+      }
+    } else if (osdList && typeof osdList === 'object') {
+      if ((osdList as any).root?.children) {
+        crushTree = extractCrushTree((osdList as any).root.children)
+      }
+    }
+
+    // Parse CRUSH rules
+    const crushRules = (Array.isArray(rulesList) ? rulesList : []).map((rule: any) => ({
+      id: rule.rule_id ?? rule.ruleset ?? rule.id ?? 0,
+      name: rule.rule_name ?? rule.name ?? '',
+      steps: (rule.steps || []).map((step: any) => ({
+        op: step.op || '',
+        type: step.type || '',
+        num: step.num ?? 0,
+        item: step.item ?? -1,
+        item_name: step.item_name || '',
+      })),
+    }))
+
     const osds = flatOsdList
       .filter((osd: any) => osd.id !== undefined)
       .map((osd: any) => {
@@ -315,8 +361,9 @@ return {
         list: mdsServers,
       },
 
-      // Raw status pour debug si nécessaire
-      // rawStatus: status,
+      // CRUSH topology
+      crushTree,
+      crushRules,
     }
 
     return NextResponse.json({ data: cephData })

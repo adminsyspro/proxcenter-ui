@@ -161,7 +161,7 @@ export default function TopConsumersCard({
         name: vm.name,
         node: vm.node,
         connId: parts[0],
-        type: parts[2],
+        type: parts[1],
         vmid: parts[3],
       })
     }

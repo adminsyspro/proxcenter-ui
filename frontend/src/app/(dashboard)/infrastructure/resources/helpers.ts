@@ -19,6 +19,6 @@ export function formatBytesPerSec(bytesPerSec: number): string {
 }
 
 export function parseResourceVmId(id: string): { connId: string; type: string; node: string; vmid: string } {
-  const [connId, node, type, vmid] = id.split(':')
+  const [connId, type, node, vmid] = id.split(':')
   return { connId, type, node, vmid }
 }

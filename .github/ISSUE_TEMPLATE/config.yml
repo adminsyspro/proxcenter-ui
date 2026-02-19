@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://proxcenter.io/docs
+    about: Check our documentation before opening an issue
+  - name: Questions & Discussions
+    url: https://github.com/adminsyspro/proxcenter-ui/discussions
+    about: Ask questions and discuss with the community

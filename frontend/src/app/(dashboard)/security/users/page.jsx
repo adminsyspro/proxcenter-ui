@@ -447,14 +447,14 @@ return () => setPageInfo('', '', '')
     const assignments = assignmentsData?.data || []
 
     return rawUsers.map(user => {
-      const userAssignments = assignments.filter(a => a.user_id === user.id)
+      const userAssignments = assignments.filter(a => (a.user?.id || a.user_id) === user.id)
 
       return {
         ...user,
         roles: userAssignments.map(a => ({
-          id: a.role_id,
-          name: a.role_name,
-          color: a.role_color,
+          id: a.role?.id || a.role_id,
+          name: a.role?.name || a.role_name,
+          color: a.role?.color || a.role_color,
           assignment_id: a.id,
           scope_type: a.scope_type,
           scope_target: a.scope_target

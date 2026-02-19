@@ -8,7 +8,7 @@ import { getDb } from "@/lib/db/sqlite"
 import { verifyPassword, hashPassword } from "./password"
 import { authenticateLdap, isLdapEnabled } from "./ldap"
 
-export type UserRole = "admin" | "operator" | "viewer"
+export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
 export interface AuthUser {
   id: string

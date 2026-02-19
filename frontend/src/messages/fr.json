@@ -2273,7 +2273,11 @@
     "selectAtLeastTwoGuests": "Sélectionner au moins 2 guests",
     "ruleEnabled": "Règle activée",
     "ruleRequired": "Règle obligatoire",
-    "ruleRequiredDesc": "Bloque les migrations si impossible à respecter"
+    "ruleRequiredDesc": "Bloque les migrations si impossible à respecter",
+    "haConflictTitle": "Conflit HA Proxmox détecté",
+    "haConflictPve9": "{rules} règle(s) d'affinité native(s) et {groups} groupe(s) HA détecté(s). Les règles natives PVE peuvent entrer en conflit avec le DRS ProxCenter.",
+    "haConflictPve8": "{groups} groupe(s) HA détecté(s). Les groupes HA peuvent contraindre les migrations DRS.",
+    "haConflictHint": "Envisagez de désactiver les groupes/règles d'affinité HA natifs de Proxmox si vous souhaitez que le DRS ProxCenter gère entièrement le placement."
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

@@ -1,9 +1,7 @@
 // src/app/api/v1/auth/ldap/test/route.ts
 import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -13,18 +11,15 @@ const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 /**
  * POST /api/v1/auth/ldap/test
  * Test la connexion LDAP avec les paramètres fournis
- * 
+ *
  * Cette API délègue TOUJOURS le test à l'orchestrator Go.
  * Les credentials ne transitent jamais par le navigateur.
  */
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
 
-    const role = session?.user?.role
-    if (!session || (role !== "admin" && role !== "super_admin")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
-    }
+    if (denied) return denied
 
     const body = await req.json()
 

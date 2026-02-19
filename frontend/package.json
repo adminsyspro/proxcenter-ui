@@ -80,7 +80,7 @@
     "postcss": "8.5.6",
     "postcss-styled-syntax": "0.7.1",
     "prettier": "3.6.2",
-    "prisma": "^7.2.0",
+    "prisma": "^7.4.0",
     "stylelint": "16.25.0",
     "stylelint-use-logical-spec": "5.0.1",
     "stylis": "4.3.6",

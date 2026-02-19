@@ -495,11 +495,6 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
         }
         sx={{ '& .MuiAlert-message': { width: '100%' } }}
       >
-        {/* Title */}
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-          {t(`siteRecovery.simulation.verdict.${verdict.key}`)}
-        </Typography>
-
         {/* Health score with penalty chips — top block */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
           <Typography variant="caption" color="text.secondary">
@@ -556,6 +551,11 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
             />
           )}
         </Box>
+
+        {/* Title */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+          {t(`siteRecovery.simulation.verdict.${verdict.key}`)}
+        </Typography>
 
         {/* Two-column layout: summary + chart */}
         <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', mt: 0.5 }}>

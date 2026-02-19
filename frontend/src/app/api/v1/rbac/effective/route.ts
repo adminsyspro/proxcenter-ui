@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const resourceId = url.searchParams.get("resource_id")
 
     // Seuls les admins peuvent voir les permissions d'autres utilisateurs
-    if (targetUserId !== session.user.id && session.user.role !== "admin") {
+    if (targetUserId !== session.user.id && !["admin", "super_admin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Non autorisé à voir les permissions d'autres utilisateurs" }, { status: 403 })
     }
 

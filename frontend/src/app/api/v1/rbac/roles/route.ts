@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Vérifier les droits admin
-    if (session.user.role !== "admin") {
+    if (!["admin", "super_admin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 

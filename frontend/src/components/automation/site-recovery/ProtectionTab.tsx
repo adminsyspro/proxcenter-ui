@@ -9,6 +9,9 @@ import {
   alpha, useTheme
 } from '@mui/material'
 
+import EmptyState from '@/components/EmptyState'
+import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
+
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -331,17 +334,13 @@ export default function ProtectionTab({
 
       {/* Jobs List */}
       {filtered.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 6, px: 3 }}>
-          <Box sx={{ fontSize: '2.5rem', mb: 1, opacity: 0.3 }}><i className='ri-shield-line' /></Box>
-          <Typography variant='subtitle1' sx={{ fontWeight: 600, mb: 0.5 }}>
-            {(jobs || []).length === 0 ? t('siteRecovery.protection.noJobs') : t('siteRecovery.protection.noJobFound')}
-          </Typography>
-          <Typography variant='body2' sx={{ color: 'text.secondary' }}>
-            {(jobs || []).length === 0
-              ? t('siteRecovery.protection.noJobsDesc')
-              : t('siteRecovery.protection.noJobFoundDesc')}
-          </Typography>
-        </Box>
+        <EmptyState
+          illustration={(jobs || []).length === 0 ? <SiteRecoveryIllustration /> : undefined}
+          icon='ri-shield-line'
+          title={(jobs || []).length === 0 ? t('siteRecovery.protection.noJobs') : t('siteRecovery.protection.noJobFound')}
+          description={(jobs || []).length === 0 ? t('siteRecovery.protection.noJobsDesc') : t('siteRecovery.protection.noJobFoundDesc')}
+          size='large'
+        />
       ) : (
         <Stack spacing={0}>
           {Array.from(grouped.entries()).map(([key, groupJobs], groupIndex) => {

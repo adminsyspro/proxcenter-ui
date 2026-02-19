@@ -1368,6 +1368,7 @@
   },
   "resources": {
     "infrastructureHealth": "Infrastructure Health",
+    "scoreCalculation": "Score calculation (base 100)",
     "efficiency": "Efficiency",
     "activeVms": "Active VMs",
     "capacityForecasts": "Capacity Forecasts",

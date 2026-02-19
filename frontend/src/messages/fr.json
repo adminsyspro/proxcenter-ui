@@ -1369,6 +1369,7 @@
   },
   "resources": {
     "infrastructureHealth": "Santé Infrastructure",
+    "scoreCalculation": "Calcul du score (base 100)",
     "efficiency": "Efficacité",
     "activeVms": "VMs actives",
     "capacityForecasts": "Prévisions Capacité",

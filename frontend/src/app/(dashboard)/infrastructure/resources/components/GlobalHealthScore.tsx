@@ -128,14 +128,26 @@ export default function GlobalHealthScore({
       <Box sx={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(color, 0.1)} 0%, transparent 70%)` }} />
       <CardContent sx={{ p: 3, position: 'relative' }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center">
-          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-            <CircularProgress variant="determinate" value={100} size={160} thickness={3} sx={{ color: alpha(color, 0.15) }} />
-            <CircularProgress variant="determinate" value={score} size={160} thickness={3} sx={{ color, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(color, 0.4)})` }} />
-            <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-              <Typography variant="h2" fontWeight={800} sx={{ color, lineHeight: 1 }}>{score}</Typography>
-              <Typography variant="caption" color="text.secondary">/100</Typography>
+          <Tooltip title={breakdown ? (
+            <Box sx={{ fontSize: '0.75rem' }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('resources.scoreCalculation')}</Typography>
+              <Box>CPU: {breakdown.cpu.reason} ({breakdown.cpu.penalty === 0 ? 'OK' : breakdown.cpu.penalty > 0 ? `+${breakdown.cpu.penalty}` : breakdown.cpu.penalty})</Box>
+              <Box>RAM: {breakdown.ram.reason} ({breakdown.ram.penalty === 0 ? 'OK' : breakdown.ram.penalty > 0 ? `+${breakdown.ram.penalty}` : breakdown.ram.penalty})</Box>
+              <Box>Storage: {breakdown.storage.reason} ({breakdown.storage.penalty === 0 ? 'OK' : breakdown.storage.penalty > 0 ? `+${breakdown.storage.penalty}` : breakdown.storage.penalty})</Box>
+              <Box>Alerts: {breakdown.alerts.reason} ({breakdown.alerts.penalty === 0 ? 'OK' : breakdown.alerts.penalty})</Box>
+              <Box>Efficiency: {breakdown.efficiency.reason} ({breakdown.efficiency.penalty === 0 ? 'OK' : breakdown.efficiency.penalty > 0 ? `+${breakdown.efficiency.penalty}` : breakdown.efficiency.penalty})</Box>
+              <Box>VMs off: {breakdown.stoppedVms.reason} ({breakdown.stoppedVms.penalty === 0 ? 'OK' : breakdown.stoppedVms.penalty})</Box>
             </Box>
-          </Box>
+          ) : ''} arrow placement="right">
+            <Box sx={{ position: 'relative', display: 'inline-flex', cursor: 'help' }}>
+              <CircularProgress variant="determinate" value={100} size={160} thickness={3} sx={{ color: alpha(color, 0.15) }} />
+              <CircularProgress variant="determinate" value={score} size={160} thickness={3} sx={{ color, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(color, 0.4)})` }} />
+              <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                <Typography variant="h2" fontWeight={800} sx={{ color, lineHeight: 1 }}>{score}</Typography>
+                <Typography variant="caption" color="text.secondary">/100</Typography>
+              </Box>
+            </Box>
+          </Tooltip>
 
           <Box sx={{ flex: 1 }}>
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>

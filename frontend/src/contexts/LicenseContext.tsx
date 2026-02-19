@@ -17,7 +17,7 @@ export const Features = {
   LDAP: 'ldap',
   REPORTS: 'reports',
   RBAC: 'rbac',
-  JOBS: 'jobs',
+  TASK_CENTER: 'task_center',
   NOTIFICATIONS: 'notifications',
   CVE_SCANNER: 'cve_scanner',
 } as const

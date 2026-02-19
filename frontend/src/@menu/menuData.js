@@ -105,8 +105,8 @@ export const menuData = (t = (key) => key) => [
       {
         label: t('navigation.jobs'),
         icon: 'ri-play-list-2-line',
-        href: '/operations/jobs',
-        requiredFeature: 'jobs' // Requires Enterprise license
+        href: '/operations/task-center',
+        requiredFeature: 'task_center' // Requires Enterprise license
       },
       {
         label: t('navigation.reports'),

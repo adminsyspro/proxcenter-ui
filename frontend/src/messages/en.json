@@ -152,7 +152,7 @@
     "operations": "Operations",
     "events": "Events",
     "alerts": "Alerts",
-    "jobs": "Jobs",
+    "jobs": "Task Center",
     "monitoring": "Monitoring",
     "securityAccess": "Security & Access",
     "users": "Users",
@@ -1229,7 +1229,7 @@
     "suggestAlerts": "Are there any alerts?"
   },
   "jobs": {
-    "title": "Jobs",
+    "title": "Task Center",
     "running": "Running",
     "completed": "Completed",
     "failed": "Failed",
@@ -2995,8 +2995,8 @@
     "noEventsDesc": "No events have been recorded yet. Events will appear here when actions are performed on your infrastructure.",
     "noAlerts": "No alerts",
     "noAlertsDesc": "Everything looks good! No alerts have been triggered.",
-    "noJobs": "No jobs",
-    "noJobsDesc": "No scheduled or running jobs found. Jobs will appear here when tasks are executed.",
+    "noJobs": "No tasks",
+    "noJobsDesc": "No scheduled or running tasks found. Tasks will appear here when operations are executed.",
     "noBackups": "No backups",
     "noBackupsDesc": "No backup data found. Backups will appear here once configured and executed.",
     "noUsers": "No users",

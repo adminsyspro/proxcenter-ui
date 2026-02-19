@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (session.user.role !== "admin") {
+    if (!["admin", "super_admin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 

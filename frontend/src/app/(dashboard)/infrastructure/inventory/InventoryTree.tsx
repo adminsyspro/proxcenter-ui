@@ -2107,8 +2107,8 @@ return (
           itemId="root:root"
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <i className='ri-stack-fill' style={{ opacity: 0.8, fontSize: 16, color: '#F29221' }} />
-              <span style={{ fontSize: 14, fontWeight: 700 }}>{t('navigation.inventory')}</span>
+              <img src='/images/proxcenter.png' alt='' width={18} height={18} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 14, fontWeight: 700 }}>PROXCENTER</span>
               <span style={{ opacity: 0.5, fontSize: 12 }}>
                 ({(() => {
                   // Compter les vrais clusters connectés (isCluster === true ET au moins un node online)

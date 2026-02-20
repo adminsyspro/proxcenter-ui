@@ -285,9 +285,9 @@ function RootInventoryView({
             <Stack direction="row" alignItems="center" spacing={2}>
               <Box
                 component="img"
-                src="/images/proxcenter-logo.svg"
+                src="/images/proxcenter.png"
                 alt="ProxCenter"
-                sx={{ width: 44, height: 44 }}
+                sx={{ width: 40, height: 40 }}
               />
               <Box>
                 <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: 1 }}>PROXCENTER</Typography>

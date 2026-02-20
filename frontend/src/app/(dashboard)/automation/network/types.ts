@@ -22,11 +22,8 @@ export const DEFAULT_RULE: firewallAPI.CreateRuleRequest = {
 
 // ── DFW Policy types ──
 
-export type PolicyCategory = 'infrastructure' | 'application' | 'default'
-
 export interface PolicySection {
   id: string                    // SG name or '__cluster__'
-  category: PolicyCategory
   type: 'security-group' | 'cluster'
   name: string
   comment?: string
@@ -34,11 +31,4 @@ export interface PolicySection {
   appliedTo: { vmid: number; name: string; node: string }[]
   ruleCount: number
   activeRuleCount: number
-}
-
-export const INFRASTRUCTURE_PREFIXES = ['sg-base-', 'sg-pve-', 'sg-infra-', 'sg-mgmt-']
-
-export function classifySG(name: string): PolicyCategory {
-  const lower = name.toLowerCase()
-  return INFRASTRUCTURE_PREFIXES.some(p => lower.startsWith(p)) ? 'infrastructure' : 'application'
 }

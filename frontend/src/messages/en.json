@@ -3171,18 +3171,12 @@
     "distributedFirewall": "Distributed Firewall",
     "hostRules": "Host Rules",
     "vmDirectRules": "VM Rules",
-    "categoryInfrastructure": "Infrastructure",
-    "categoryApplication": "Application",
-    "categoryDefault": "Default Policy",
     "appliedTo": "Applied To",
     "vmCount": "{count} VMs",
     "noVmsReferencing": "No VMs reference this group",
     "newPolicy": "New Policy",
-    "policiesCount": "{count} policies",
     "activeRulesCount": "{count} active",
-    "searchPolicies": "Search policies...",
-    "defaultPolicyDesc": "Cluster-level rules applied to the entire infrastructure",
-    "serviceAny": "any"
+    "searchPolicies": "Search policies..."
   },
   "firewall": {
     "type": "Type",

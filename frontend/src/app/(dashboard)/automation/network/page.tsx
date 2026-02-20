@@ -14,7 +14,7 @@ import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import * as firewallAPI from '@/lib/api/firewall'
 import MicrosegmentationTab from '@/components/MicrosegmentationTab'
-import { usePVEConnections } from '@/hooks/useConnections'
+import { useClusterConnections } from '@/hooks/useConnections'
 import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
@@ -41,7 +41,7 @@ export default function NetworkAutomationPage() {
   const [selectedConnection, setSelectedConnection] = useState<string>('')
 
   // ── Connections ──
-  const { data: connectionsData } = usePVEConnections()
+  const { data: connectionsData } = useClusterConnections()
   const connections: Connection[] = isEnterprise ? (connectionsData?.data || []) : []
 
   // ── Data hooks ──

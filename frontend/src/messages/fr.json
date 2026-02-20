@@ -677,7 +677,6 @@
     "size": "Taille",
     "model": "Modèle",
     "serial": "N° de série",
-    "health": "Santé",
     "wearout": "Usure",
     "noDisksFound": "Aucun disque trouvé",
     "lvmVolumeGroups": "Groupes de volumes LVM",

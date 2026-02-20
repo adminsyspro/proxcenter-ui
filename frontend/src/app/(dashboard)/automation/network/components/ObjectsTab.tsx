@@ -143,8 +143,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>Aliases</Typography>
-            <Chip label={`${aliases.length} aliases`} size="small" />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.aliases')}</Typography>
+            <Chip label={t('firewall.aliasesCount', { count: aliases.length })} size="small" />
           </Box>
           <Button variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setAliasDialogOpen(true)} disabled={!selectedConnection}>
             {t('networkPage.new')}
@@ -156,8 +156,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             <TableHead>
               <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
                 <TableCell sx={{ fontWeight: 700 }}>{t('common.name')}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>CIDR</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Description</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>{t('firewall.cidr')}</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>{t('firewall.description')}</TableCell>
                 <TableCell sx={{ width: 100 }}></TableCell>
               </TableRow>
             </TableHead>
@@ -199,7 +199,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>IP Sets</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.ipSets')}</Typography>
             <Chip label={t('networkPage.setsAndEntries', { sets: ipsets.length, entries: totalIPSetEntries })} size="small" />
           </Box>
           <Button variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setIPSetDialogOpen(true)} disabled={!selectedConnection}>
@@ -268,7 +268,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField label={t('common.name')} value={newAlias.name} onChange={(e) => setNewAlias({ ...newAlias, name: e.target.value })} placeholder="net-mgmt" fullWidth size="small" InputProps={{ sx: monoStyle }} />
-            <TextField label="CIDR" value={newAlias.cidr} onChange={(e) => setNewAlias({ ...newAlias, cidr: e.target.value })} placeholder="10.99.99.0/24" fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('firewall.cidr')} value={newAlias.cidr} onChange={(e) => setNewAlias({ ...newAlias, cidr: e.target.value })} placeholder="10.99.99.0/24" fullWidth size="small" InputProps={{ sx: monoStyle }} />
             <TextField label={t('common.description')} value={newAlias.comment} onChange={(e) => setNewAlias({ ...newAlias, comment: e.target.value })} fullWidth size="small" />
           </Stack>
         </DialogContent>
@@ -284,7 +284,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField label={t('common.name')} value={editingAlias?.name || ''} disabled fullWidth size="small" InputProps={{ sx: monoStyle }} />
-            <TextField label="CIDR" value={editingAlias?.cidr || ''} onChange={(e) => setEditingAlias(prev => prev ? { ...prev, cidr: e.target.value } : null)} fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('firewall.cidr')} value={editingAlias?.cidr || ''} onChange={(e) => setEditingAlias(prev => prev ? { ...prev, cidr: e.target.value } : null)} fullWidth size="small" InputProps={{ sx: monoStyle }} />
             <TextField label={t('common.description')} value={editingAlias?.comment || ''} onChange={(e) => setEditingAlias(prev => prev ? { ...prev, comment: e.target.value } : null)} fullWidth size="small" />
           </Stack>
         </DialogContent>
@@ -329,7 +329,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogTitle>{t('networkPage.addToTitle', { name: ipsetEntryDialog.ipsetName })}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label="CIDR" value={newIPSetEntry.cidr} onChange={(e) => setNewIPSetEntry({ ...newIPSetEntry, cidr: e.target.value })} placeholder="10.0.0.0/24" fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('firewall.cidr')} value={newIPSetEntry.cidr} onChange={(e) => setNewIPSetEntry({ ...newIPSetEntry, cidr: e.target.value })} placeholder="10.0.0.0/24" fullWidth size="small" InputProps={{ sx: monoStyle }} />
             <TextField label={t('networkPage.comment')} value={newIPSetEntry.comment} onChange={(e) => setNewIPSetEntry({ ...newIPSetEntry, comment: e.target.value })} fullWidth size="small" />
           </Stack>
         </DialogContent>

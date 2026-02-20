@@ -444,7 +444,7 @@ return () => clearTimeout(timer)
     },
     {
       field: 'datastore',
-      headerName: 'Datastore',
+      headerName: t('backups.datastoreHeader'),
       flex: 1,
       minWidth: 120,
       renderCell: params => (
@@ -578,7 +578,7 @@ return () => clearTimeout(timer)
               <Typography variant='h4' sx={{ fontWeight: 800, color: 'info.main' }}>
                 {loading ? '-' : datastores.length}
               </Typography>
-              <Typography variant='body2' sx={{ opacity: 0.7 }}>Datastores</Typography>
+              <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('backups.datastoresKpi')}</Typography>
             </CardContent>
           </Card>
 

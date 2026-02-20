@@ -687,7 +687,7 @@ return next
       setMaintenanceTarget(null)
       setReloadTick(x => x + 1)
     } catch (e: any) {
-      setMaintenanceError(e?.message || 'Unknown error')
+      setMaintenanceError(e?.message || t('inventory.unknownError'))
     } finally {
       setMaintenanceBusy(false)
     }
@@ -1558,7 +1558,7 @@ return (
                     {vm.name}
                   </Typography>
                   {vm.template && (
-                    <Chip label="Template" size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
+                    <Chip label={t('inventory.template')} size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
                   )}
                   {/* Icône CPU si charge élevée */}
                   {vm.status === 'running' && getCpuPct(vm.cpu) >= CPU_WARNING_THRESHOLD && (
@@ -1643,7 +1643,7 @@ return (
                     {vm.name}
                   </Typography>
                   {vm.template && (
-                    <Chip label="Template" size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
+                    <Chip label={t('inventory.template')} size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
                   )}
                 </Box>
               </Box>
@@ -1747,7 +1747,7 @@ return (
                       {vm.name}
                     </Typography>
                     {vm.template && (
-                      <Chip label="Tpl" size="small" sx={{ height: 16, fontSize: 10 }} />
+                      <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
                     )}
                     {vm.status === 'running' && getCpuPct(vm.cpu) >= CPU_WARNING_THRESHOLD && (
                       <Tooltip title={`${t('common.warning')} CPU: ${getCpuPct(vm.cpu).toFixed(0)}%`}>
@@ -1862,7 +1862,7 @@ return (
                       {vm.name}
                     </Typography>
                     {vm.template && (
-                      <Chip label="Tpl" size="small" sx={{ height: 16, fontSize: 10 }} />
+                      <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
                     )}
                     {vm.status === 'running' && getCpuPct(vm.cpu) >= CPU_WARNING_THRESHOLD && (
                       <Tooltip title={`${t('common.warning')} CPU: ${getCpuPct(vm.cpu).toFixed(0)}%`}>
@@ -1978,7 +1978,7 @@ return (
                       {vm.name}
                     </Typography>
                     {vm.template && (
-                      <Chip label="Tpl" size="small" sx={{ height: 16, fontSize: 10 }} />
+                      <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
                     )}
                     {vm.status === 'running' && getCpuPct(vm.cpu) >= CPU_WARNING_THRESHOLD && (
                       <Tooltip title={`${t('common.warning')} CPU: ${getCpuPct(vm.cpu).toFixed(0)}%`}>
@@ -2234,7 +2234,7 @@ return (
                           {vm.name}
                         </Typography>
                         {vm.template && (
-                          <Chip label="Tpl" size="small" sx={{ height: 16, fontSize: 10 }} />
+                          <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
                         )}
                         {/* Icône CPU si charge élevée */}
                         {vm.status === 'running' && getCpuPct(vm.cpu) >= CPU_WARNING_THRESHOLD && (
@@ -2343,7 +2343,7 @@ return (
                             {vm.name}
                           </Typography>
                           {vm.template && (
-                            <Chip label="Tpl" size="small" sx={{ height: 16, fontSize: 10 }} />
+                            <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
                           )}
                           {/* Icône CPU si charge élevée */}
                           {vm.status === 'running' && getCpuPct(vm.cpu) >= CPU_WARNING_THRESHOLD && (
@@ -2540,7 +2540,7 @@ return (
             <ListItemIcon>
               <TerminalIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Console</ListItemText>
+            <ListItemText>{t('inventory.console')}</ListItemText>
           </MenuItem>,
 
           <MenuItem key="unlock" onClick={handleUnlock} disabled={actionBusy || unlocking}>
@@ -2584,7 +2584,7 @@ return (
             <ListItemText>{t('audit.actions.clone')}</ListItemText>
           </MenuItem>,
 
-          <MenuItem key="template" onClick={() => handleNotImplemented('Convert to template')} disabled={actionBusy}>
+          <MenuItem key="template" onClick={() => handleNotImplemented(t('inventory.convertToTemplate'))} disabled={actionBusy}>
             <ListItemIcon>
               <DescriptionIcon fontSize="small" />
             </ListItemIcon>
@@ -3046,7 +3046,7 @@ return
       
       onClose()
     } catch (e: any) {
-      setError(e?.message || 'Error cloning VM')
+      setError(e?.message || t('inventory.errorCloningVm'))
     } finally {
       setCloning(false)
     }

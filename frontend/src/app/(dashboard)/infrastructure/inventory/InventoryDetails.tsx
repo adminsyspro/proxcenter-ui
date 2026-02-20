@@ -4134,7 +4134,7 @@ return vm?.isCluster ?? false
           />
         ) : viewMode === 'pools' && pools.length > 0 ? (
           <GroupedVmsView
-            title="Par pool"
+            title={t('inventory.byPool')}
             icon="ri-folder-line"
             groups={pools.map(p => ({
               key: p.pool,
@@ -4153,7 +4153,7 @@ return vm?.isCluster ?? false
           />
         ) : viewMode === 'tags' && tags.length > 0 ? (
           <GroupedVmsView
-            title="Par tag"
+            title={t('inventory.byTag')}
             icon="ri-price-tag-3-line"
             groups={tags.map(t => ({
               key: t.tag,
@@ -4191,7 +4191,7 @@ return vm?.isCluster ?? false
                   <Stack direction="row" spacing={1.5} alignItems="center">
                     <i className="ri-file-copy-line" style={{ fontSize: 20, opacity: 0.7 }} />
                     <Typography variant="h6" fontWeight={700}>
-                      Templates ({allVms.filter(vm => vm.template).length})
+                      {t('inventory.templatesCount', { count: allVms.filter(vm => vm.template).length })}
                     </Typography>
                   </Stack>
                 </Box>
@@ -4797,9 +4797,9 @@ return vm?.isCluster ?? false
                         {[
                           { value: 'hour', label: '1h' },
                           { value: 'day', label: '24h' },
-                          { value: 'week', label: '7j' },
-                          { value: 'month', label: '30j' },
-                          { value: 'year', label: '1an' },
+                          { value: 'week', label: t('inventory.pbsTimeWeek') },
+                          { value: 'month', label: t('inventory.pbsTimeMonth') },
+                          { value: 'year', label: t('inventory.pbsTimeYear') },
                         ].map(opt => (
                           <Chip
                             key={opt.value}
@@ -4970,7 +4970,7 @@ return vm?.isCluster ?? false
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-pie-chart-line" style={{ fontSize: 16 }} />
-                      Summary
+                      {t('inventory.pbsSummary')}
                     </Box>
                   }
                 />
@@ -4996,25 +4996,25 @@ return vm?.isCluster ?? false
                           <Typography variant="h4" fontWeight={700} color="primary.main">
                             {data.datastoreInfo.stats?.vmCount || 0}
                           </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.7 }}>VMs</Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.pbsVms')}</Typography>
                         </Box>
                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
                           <Typography variant="h4" fontWeight={700} color="secondary.main">
                             {data.datastoreInfo.stats?.ctCount || 0}
                           </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.7 }}>Containers</Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.pbsContainers')}</Typography>
                         </Box>
                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
                           <Typography variant="h4" fontWeight={700}>
                             {data.datastoreInfo.stats?.total || 0}
                           </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.7 }}>Total Snapshots</Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.pbsTotalSnapshots')}</Typography>
                         </Box>
                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
                           <Typography variant="h4" fontWeight={700} color="success.main">
                             {data.datastoreInfo.stats?.verifiedCount || 0}
                           </Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.7 }}>Verified</Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.pbsVerified')}</Typography>
                         </Box>
                       </Box>
 
@@ -5022,7 +5022,7 @@ return vm?.isCluster ?? false
                       <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                         <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                           <i className="ri-hard-drive-2-line" style={{ fontSize: 18 }} />
-                          Storage Usage
+                          {t('inventory.pbsStorageUsage')}
                         </Typography>
                         
                         {/* Progress bar large style Proxmox */}
@@ -5061,19 +5061,19 @@ return vm?.isCluster ?? false
                             <Typography variant="body2" fontWeight={600} color="primary.main">
                               {formatBytes(data.datastoreInfo.used || 0)}
                             </Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.6 }}>Used</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('common.used')}</Typography>
                           </Box>
                           <Box>
                             <Typography variant="body2" fontWeight={600} color="success.main">
                               {formatBytes(data.datastoreInfo.available || 0)}
                             </Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.6 }}>Available</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('common.available')}</Typography>
                           </Box>
                           <Box>
                             <Typography variant="body2" fontWeight={600}>
                               {formatBytes(data.datastoreInfo.total || 0)}
                             </Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.6 }}>Total</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('common.total')}</Typography>
                           </Box>
                         </Box>
                       </Box>
@@ -5086,16 +5086,16 @@ return vm?.isCluster ?? false
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                             <Typography variant="subtitle2" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <i className="ri-line-chart-line" style={{ fontSize: 18 }} />
-                              Datastore Statistics
+                              {t('inventory.pbsDatastoreStatistics')}
                             </Typography>
                             {/* Sélecteur de timeframe */}
                             <Box sx={{ display: 'flex', gap: 0.5 }}>
                               {[
                                 { value: 'hour', label: '1h' },
                                 { value: 'day', label: '24h' },
-                                { value: 'week', label: '7j' },
-                                { value: 'month', label: '30j' },
-                                { value: 'year', label: '1an' },
+                                { value: 'week', label: t('inventory.pbsTimeWeek') },
+                                { value: 'month', label: t('inventory.pbsTimeMonth') },
+                                { value: 'year', label: t('inventory.pbsTimeYear') },
                               ].map(opt => (
                                 <Chip
                                   key={opt.value}
@@ -5119,7 +5119,7 @@ return vm?.isCluster ?? false
                             {/* 1. Storage Usage (bytes) */}
                             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                               <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                                Storage Usage (bytes)
+                                {t('inventory.pbsStorageUsageBytes')}
                               </Typography>
                               <Box sx={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
@@ -5128,7 +5128,7 @@ return vm?.isCluster ?? false
                                     <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={50} />
                                     <Tooltip
                                       labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
-                                      formatter={(v: any, name: string) => [formatBytes(Number(v)), name === 'used' ? 'Storage usage' : 'Total']}
+                                      formatter={(v: any, name: string) => [formatBytes(Number(v)), name === 'used' ? t('inventory.pbsStorageUsageLabel') : t('common.total')]}
                                     />
                                     <Area type="monotone" dataKey="total" stroke={primaryColor} fill={primaryColor} fillOpacity={0.2} strokeWidth={1} isAnimationActive={false} name="total" />
                                     <Area type="monotone" dataKey="used" stroke={primaryColor} fill={primaryColor} fillOpacity={0.5} strokeWidth={1.5} isAnimationActive={false} name="used" />
@@ -5140,7 +5140,7 @@ return vm?.isCluster ?? false
                             {/* 2. Transfer Rate (bytes/second) */}
                             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                               <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                                Transfer Rate (bytes/second)
+                                {t('inventory.pbsTransferRate')}
                               </Typography>
                               <Box sx={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
@@ -5149,7 +5149,7 @@ return vm?.isCluster ?? false
                                     <YAxis tickFormatter={v => formatBytes(v) + '/s'} tick={{ fontSize: 9 }} width={55} />
                                     <Tooltip
                                       labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
-                                      formatter={(v: any, name: string) => [formatBytes(Number(v)) + '/s', name === 'read' ? 'Read' : 'Write']}
+                                      formatter={(v: any, name: string) => [formatBytes(Number(v)) + '/s', name === 'read' ? t('inventory.pbsRead') : t('inventory.pbsWrite')]}
                                     />
                                     <Area type="monotone" dataKey="read" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="read" />
                                     <Area type="monotone" dataKey="write" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write" />
@@ -5161,7 +5161,7 @@ return vm?.isCluster ?? false
                             {/* 3. Input/Output Operations per Second (IOPS) */}
                             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                               <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                                Input/Output Operations per Second (IOPS)
+                                {t('inventory.pbsIops')}
                               </Typography>
                               <Box sx={{ height: 180 }}>
                                 <ResponsiveContainer width="100%" height="100%">
@@ -5170,7 +5170,7 @@ return vm?.isCluster ?? false
                                     <YAxis tick={{ fontSize: 9 }} width={40} />
                                     <Tooltip
                                       labelFormatter={v => new Date(Number(v) * 1000).toLocaleString()}
-                                      formatter={(v: any, name: string) => [Number(v).toFixed(0), name === 'readIops' ? 'Read' : 'Write']}
+                                      formatter={(v: any, name: string) => [Number(v).toFixed(0), name === 'readIops' ? t('inventory.pbsRead') : t('inventory.pbsWrite')]}
                                     />
                                     <Area type="monotone" dataKey="readIops" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="readIops" />
                                     <Area type="monotone" dataKey="writeIops" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="writeIops" />
@@ -5189,16 +5189,16 @@ return vm?.isCluster ?? false
                         <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <i className="ri-recycle-line" style={{ fontSize: 18 }} />
-                            Garbage Collection
+                            {t('inventory.pbsGarbageCollection')}
                           </Typography>
                           {data.datastoreInfo.gcStatus ? (
                             <Stack spacing={0.5}>
                               <Typography variant="caption">
-                                <strong>Status:</strong> {data.datastoreInfo.gcStatus?.upid ? 'Completed' : 'N/A'}
+                                <strong>{t('common.status')}:</strong> {data.datastoreInfo.gcStatus?.upid ? t('inventory.pbsCompleted') : t('inventory.pbsNotAvailable')}
                               </Typography>
                             </Stack>
                           ) : (
-                            <Typography variant="caption" sx={{ opacity: 0.5 }}>No GC data available</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('inventory.pbsNoGcData')}</Typography>
                           )}
                         </Box>
 
@@ -5206,11 +5206,11 @@ return vm?.isCluster ?? false
                         <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />
-                            Verification
+                            {t('inventory.pbsVerification')}
                           </Typography>
                           <Stack spacing={0.5}>
                             <Typography variant="caption">
-                              <strong>Verified:</strong> {data.datastoreInfo.stats?.verifiedCount || 0} / {data.datastoreInfo.stats?.total || 0}
+                              <strong>{t('inventory.pbsVerified')}:</strong> {data.datastoreInfo.stats?.verifiedCount || 0} / {data.datastoreInfo.stats?.total || 0}
                             </Typography>
                           </Stack>
                         </Box>
@@ -5221,7 +5221,7 @@ return vm?.isCluster ?? false
                         <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
                           <Typography variant="caption" sx={{ opacity: 0.6 }}>
                             <i className="ri-folder-line" style={{ marginRight: 6 }} />
-                            Path: <code style={{ opacity: 1 }}>{data.datastoreInfo.path}</code>
+                            {t('inventory.pbsPath')} <code style={{ opacity: 1 }}>{data.datastoreInfo.path}</code>
                           </Typography>
                         </Box>
                       )}
@@ -5297,7 +5297,7 @@ return vm?.isCluster ?? false
                             <Box sx={{ p: 4, textAlign: 'center' }}>
                               <i className="ri-inbox-line" style={{ fontSize: 48, opacity: 0.3 }} />
                               <Typography variant="body2" sx={{ opacity: 0.5, mt: 1 }}>
-                                {pbsBackupSearch ? t('common.noResults') : 'No backups found'}
+                                {pbsBackupSearch ? t('common.noResults') : t('inventory.pbsNoBackupsFound')}
                               </Typography>
                             </Box>
                           )
@@ -5376,15 +5376,15 @@ return vm?.isCluster ?? false
                                     }}
                                   />
                                   {verifiedCount === groupBackups.length ? (
-                                    <MuiTooltip title="All verified">
+                                    <MuiTooltip title={t('inventory.pbsAllVerified')}>
                                       <i className="ri-checkbox-circle-fill" style={{ fontSize: 18, color: '#4caf50' }} />
                                     </MuiTooltip>
                                   ) : verifiedCount > 0 ? (
-                                    <MuiTooltip title={`${verifiedCount}/${groupBackups.length} verified`}>
+                                    <MuiTooltip title={t('inventory.pbsPartiallyVerified', { count: verifiedCount, total: groupBackups.length })}>
                                       <i className="ri-checkbox-circle-line" style={{ fontSize: 18, color: '#ff9800' }} />
                                     </MuiTooltip>
                                   ) : (
-                                    <MuiTooltip title="Not verified">
+                                    <MuiTooltip title={t('inventory.pbsNotVerified')}>
                                       <i className="ri-checkbox-blank-circle-line" style={{ fontSize: 18, opacity: 0.3 }} />
                                     </MuiTooltip>
                                   )}
@@ -5409,10 +5409,10 @@ return vm?.isCluster ?? false
                                     borderColor: 'divider',
                                     bgcolor: 'background.paper'
                                   }}>
-                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6 }}>Date</Typography>
-                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6 }}>Size</Typography>
-                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, textAlign: 'center' }}>Status</Typography>
-                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, textAlign: 'center' }}>Actions</Typography>
+                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6 }}>{t('common.date')}</Typography>
+                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6 }}>{t('common.size')}</Typography>
+                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, textAlign: 'center' }}>{t('common.status')}</Typography>
+                                    <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, textAlign: 'center' }}>{t('common.actions')}</Typography>
                                   </Box>
                                   {groupBackups.map((backup: any, idx: number) => (
                                     <Box 
@@ -5446,7 +5446,7 @@ return vm?.isCluster ?? false
                                             <i className="ri-checkbox-circle-fill" style={{ fontSize: 16, color: '#4caf50' }} />
                                           </MuiTooltip>
                                         ) : (
-                                          <MuiTooltip title="Not verified">
+                                          <MuiTooltip title={t('inventory.pbsNotVerified')}>
                                             <i className="ri-checkbox-blank-circle-line" style={{ fontSize: 16, opacity: 0.3 }} />
                                           </MuiTooltip>
                                         )}
@@ -5919,11 +5919,11 @@ return
             </FormControl>
             
             <FormControl fullWidth size="small">
-              <InputLabel>Mode</InputLabel>
+              <InputLabel>{t('inventory.backupMode')}</InputLabel>
               <Select
                 value={backupMode}
                 onChange={(e) => setBackupMode(e.target.value as any)}
-                label="Mode"
+                label={t('inventory.backupMode')}
               >
                 <MenuItem value="snapshot">{t('audit.actions.snapshot')}</MenuItem>
                 <MenuItem value="suspend">{t('audit.actions.suspend')}</MenuItem>
@@ -5932,15 +5932,15 @@ return
             </FormControl>
             
             <FormControl fullWidth size="small">
-              <InputLabel>Compression</InputLabel>
+              <InputLabel>{t('inventory.backupCompression')}</InputLabel>
               <Select
                 value={backupCompress}
                 onChange={(e) => setBackupCompress(e.target.value as any)}
-                label="Compression"
+                label={t('inventory.backupCompression')}
               >
                 <MenuItem value="zstd">{t('inventoryPage.zstdRecommended')}</MenuItem>
                 <MenuItem value="lzo">{t('inventoryPage.lzoFast')}</MenuItem>
-                <MenuItem value="gzip">GZIP</MenuItem>
+                <MenuItem value="gzip">{t('inventory.backupGzip')}</MenuItem>
                 <MenuItem value="none">{t('common.none')}</MenuItem>
               </Select>
             </FormControl>

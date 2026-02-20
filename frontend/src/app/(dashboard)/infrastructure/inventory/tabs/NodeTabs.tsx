@@ -222,7 +222,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-line-chart-line" style={{ fontSize: 16 }} />
-                      Summary
+                      {t('inventory.tabSummary')}
                     </Box>
                   }
                 />
@@ -231,7 +231,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-file-text-line" style={{ fontSize: 16 }} />
-                      Notes
+                      {t('inventory.tabNotes')}
                     </Box>
                   }
                 />
@@ -240,7 +240,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
-                      Shell
+                      {t('inventory.tabShell')}
                     </Box>
                   }
                 />
@@ -258,7 +258,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-camera-line" style={{ fontSize: 16 }} />
-                      Snapshots
+                      {t('inventory.tabSnapshots')}
                     </Box>
                   }
                 />
@@ -267,7 +267,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-hard-drive-2-line" style={{ fontSize: 16 }} />
-                      Disks
+                      {t('inventory.tabDisks')}
                     </Box>
                   }
                 />
@@ -276,7 +276,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
-                      System
+                      {t('inventory.tabSystem')}
                     </Box>
                   }
                 />
@@ -286,7 +286,7 @@ export default function NodeTabs(props: any) {
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-database-2-line" style={{ fontSize: 16 }} />
-                        Ceph
+                        {t('inventory.tabCeph')}
                       </Box>
                     }
                   />
@@ -297,7 +297,7 @@ export default function NodeTabs(props: any) {
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-calendar-schedule-line" style={{ fontSize: 16 }} />
-                        Backups
+                        {t('inventory.tabBackups')}
                       </Box>
                     }
                   />
@@ -308,7 +308,7 @@ export default function NodeTabs(props: any) {
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
-                        Cluster
+                        {t('inventory.tabCluster')}
                       </Box>
                     }
                   />
@@ -318,7 +318,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-refresh-line" style={{ fontSize: 16 }} />
-                      Replication
+                      {t('inventory.tabReplication')}
                     </Box>
                   }
                 />
@@ -328,7 +328,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: rollingUpdateAvailable ? 1 : 0.4 }}>
                       <i className="ri-download-cloud-line" style={{ fontSize: 16 }} />
-                      Updates
+                      {t('inventory.tabUpdates')}
                       {!rollingUpdateAvailable && (
                         <Chip
                           size="small"
@@ -377,7 +377,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-vip-crown-line" style={{ fontSize: 16 }} />
-                      Subscription
+                      {t('inventory.tabSubscription')}
                     </Box>
                   }
                 />
@@ -427,7 +427,7 @@ export default function NodeTabs(props: any) {
                         {/* CPU Usage */}
                         <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                           <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            CPU Usage
+                            {t('inventory.cpuUsage')}
                           </Typography>
                           <Box sx={{ height: 160 }}>
                             <ResponsiveContainer width="100%" height="100%">
@@ -447,7 +447,7 @@ export default function NodeTabs(props: any) {
                         {/* Memory Usage */}
                         <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                           <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            Memory Usage
+                            {t('inventory.memoryUsage')}
                           </Typography>
                           <Box sx={{ height: 160 }}>
                             <ResponsiveContainer width="100%" height="100%">
@@ -467,7 +467,7 @@ export default function NodeTabs(props: any) {
                         {/* Network Traffic */}
                         <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                           <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            Network Traffic
+                            {t('inventory.networkTrafficChart')}
                           </Typography>
                           <Box sx={{ height: 160 }}>
                             <ResponsiveContainer width="100%" height="100%">
@@ -488,7 +488,7 @@ export default function NodeTabs(props: any) {
                         {/* Server Load (nodes) ou Disk I/O (VMs) */}
                         <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                           <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {selection?.type === 'node' ? 'Server Load' : 'Disk I/O'}
+                            {selection?.type === 'node' ? t('inventory.serverLoad') : t('inventory.diskIo')}
                           </Typography>
                           <Box sx={{ height: 160 }}>
                             <ResponsiveContainer width="100%" height="100%">
@@ -533,7 +533,7 @@ export default function NodeTabs(props: any) {
                 {nodeTab === 1 && (
                   <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography variant="subtitle2" fontWeight={700}>Node Notes</Typography>
+                      <Typography variant="subtitle2" fontWeight={700}>{t('inventory.nodeNotes')}</Typography>
                       {!nodeNotesEditing ? (
                         <Button 
                           size="small" 
@@ -544,7 +544,7 @@ export default function NodeTabs(props: any) {
                             setNodeNotesEditing(true)
                           }}
                         >
-                          Edit
+                          {t('common.edit')}
                         </Button>
                       ) : (
                         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -553,7 +553,7 @@ export default function NodeTabs(props: any) {
                             variant="outlined"
                             onClick={() => setNodeNotesEditing(false)}
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </Button>
                           <Button 
                             size="small" 
@@ -573,14 +573,14 @@ export default function NodeTabs(props: any) {
                                   setNodeNotesEditing(false)
                                 } else {
                                   const err = await res.json()
-                                  alert(err.error || 'Failed to save notes')
+                                  alert(err.error || t('inventory.failedToSaveNotes'))
                                 }
                               } finally {
                                 setNodeNotesSaving(false)
                               }
                             }}
                           >
-                            {nodeNotesSaving ? <CircularProgress size={20} /> : 'Save'}
+                            {nodeNotesSaving ? <CircularProgress size={20} /> : t('inventory.save')}
                           </Button>
                         </Box>
                       )}
@@ -596,7 +596,7 @@ export default function NodeTabs(props: any) {
                         rows={15}
                         value={nodeNotesEditValue}
                         onChange={(e) => setNodeNotesEditValue(e.target.value)}
-                        placeholder="Enter notes for this node..."
+                        placeholder={t('inventory.enterNotesPlaceholder')}
                         sx={{ flex: 1, '& textarea': { fontFamily: 'inherit' } }}
                       />
                     ) : (
@@ -616,8 +616,8 @@ export default function NodeTabs(props: any) {
                           ) : (
                             <Box sx={{ textAlign: 'center', opacity: 0.5, py: 4 }}>
                               <i className="ri-file-text-line" style={{ fontSize: 48 }} />
-                              <Typography sx={{ mt: 1 }}>No notes for this node</Typography>
-                              <Typography variant="caption">Click Edit to add notes</Typography>
+                              <Typography sx={{ mt: 1 }}>{t('inventory.noNotesForNode')}</Typography>
+                              <Typography variant="caption">{t('inventory.clickEditToAddNotes')}</Typography>
                             </Box>
                           )}
                         </CardContent>
@@ -634,9 +634,9 @@ export default function NodeTabs(props: any) {
                       <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e' }}>
                         <Box sx={{ textAlign: 'center' }}>
                           <i className="ri-terminal-box-line" style={{ fontSize: 64, color: '#444' }} />
-                          <Typography sx={{ mt: 2, color: '#888' }}>Node Shell</Typography>
+                          <Typography sx={{ mt: 2, color: '#888' }}>{t('inventory.nodeShell')}</Typography>
                           <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 1, mb: 3 }}>
-                            Connect to the node's command line interface
+                            {t('inventory.connectToNodeCli')}
                           </Typography>
                           <Button 
                             variant="contained"
@@ -655,16 +655,16 @@ export default function NodeTabs(props: any) {
                                   setNodeShellConnected(true)
                                 } else {
                                   const err = await res.json()
-                                  alert(err.error || 'Failed to create terminal session')
+                                  alert(err.error || t('inventory.failedToCreateTerminal'))
                                 }
                               } catch (e: any) {
-                                alert(e.message || 'Failed to create terminal session')
+                                alert(e.message || t('inventory.failedToCreateTerminal'))
                               } finally {
                                 setNodeShellLoading(false)
                               }
                             }}
                           >
-                            {nodeShellLoading ? 'Connecting...' : 'Connect to Shell'}
+                            {nodeShellLoading ? t('inventory.connecting') : t('inventory.connectToShell')}
                           </Button>
                         </Box>
                       </Box>
@@ -743,7 +743,7 @@ export default function NodeTabs(props: any) {
                     ) : (
                       <Box sx={{ p: 4, textAlign: 'center', opacity: 0.5 }}>
                         <i className="ri-computer-line" style={{ fontSize: 48, marginBottom: 8 }} />
-                        <Typography>No VMs on this node</Typography>
+                        <Typography>{t('inventory.noVmsOnNode')}</Typography>
                       </Box>
                     )}
                   </>
@@ -774,10 +774,10 @@ export default function NodeTabs(props: any) {
                           onChange={(_e, v) => setNodeDisksSubTab(v)}
                           sx={{ borderBottom: 1, borderColor: 'divider', px: 2, minHeight: 40 }}
                         >
-                          <Tab label="Disks" sx={{ minHeight: 40, py: 0 }} />
+                          <Tab label={t('inventory.tabDisks')} sx={{ minHeight: 40, py: 0 }} />
                           <Tab label="LVM" sx={{ minHeight: 40, py: 0 }} />
                           <Tab label="LVM-Thin" sx={{ minHeight: 40, py: 0 }} />
-                          <Tab label="Directory" sx={{ minHeight: 40, py: 0 }} />
+                          <Tab label={t('inventory.tabDirectory')} sx={{ minHeight: 40, py: 0 }} />
                           <Tab label="ZFS" sx={{ minHeight: 40, py: 0 }} />
                         </Tabs>
 
@@ -787,7 +787,7 @@ export default function NodeTabs(props: any) {
                             <Card variant="outlined">
                               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                                 <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Typography variant="subtitle2" fontWeight={700}>Physical Disks</Typography>
+                                  <Typography variant="subtitle2" fontWeight={700}>{t('inventory.physicalDisks')}</Typography>
                                   <Box sx={{ display: 'flex', gap: 1 }}>
                                     <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
                                       onClick={async () => {
@@ -804,7 +804,7 @@ export default function NodeTabs(props: any) {
                                         }
                                       }}
                                     >
-                                      Reload
+                                      {t('inventory.reload')}
                                     </Button>
                                   </Box>
                                 </Box>
@@ -813,14 +813,14 @@ export default function NodeTabs(props: any) {
                                     <Table size="small" stickyHeader>
                                       <TableHead>
                                         <TableRow>
-                                          <TableCell sx={{ fontWeight: 700 }}>Device</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>Usage</TableCell>
-                                          <TableCell sx={{ fontWeight: 700, textAlign: 'right' }}>Size</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>Model</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>Serial</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>Health</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>Wearout</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.device')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.type')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.usage')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700, textAlign: 'right' }}>{t('inventory.size')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.model')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.serial')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.health')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.wearout')}</TableCell>
                                         </TableRow>
                                       </TableHead>
                                       <TableBody>

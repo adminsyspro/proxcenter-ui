@@ -320,7 +320,7 @@ function ConnectionsTab() {
       },
       {
         field: 'baseUrl',
-        headerName: 'URL API',
+        headerName: t('settings.urlApi'),
         flex: 1.2,
         minWidth: 240,
         renderCell: params => (
@@ -341,7 +341,7 @@ function ConnectionsTab() {
       },
       {
         field: 'hasCeph',
-        headerName: 'Ceph',
+        headerName: t('settings.cephHeader'),
         width: 80,
         renderCell: params => (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -355,7 +355,7 @@ function ConnectionsTab() {
       },
       {
         field: 'sshEnabled',
-        headerName: 'SSH',
+        headerName: t('settings.sshHeader'),
         width: 80,
         renderCell: params => (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -425,7 +425,7 @@ function ConnectionsTab() {
       },
       {
         field: 'baseUrl',
-        headerName: 'URL API',
+        headerName: t('settings.urlApi'),
         flex: 1.2,
         minWidth: 240,
         renderCell: params => (
@@ -498,7 +498,7 @@ function ConnectionsTab() {
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-server-line' style={{ fontSize: 18 }} />
-                <span>Proxmox VE</span>
+                <span>{t('settings.proxmoxVe')}</span>
                 <Chip size='small' label={pveConnections.length} color='primary' sx={{ height: 18, fontSize: 10, ml: 0.5 }} />
               </Box>
             }
@@ -507,7 +507,7 @@ function ConnectionsTab() {
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-hard-drive-2-line' style={{ fontSize: 18 }} />
-                <span>Proxmox Backup Server</span>
+                <span>{t('settings.proxmoxBackupServer')}</span>
                 <Chip size='small' label={pbsConnections.length} color='secondary' sx={{ height: 18, fontSize: 10, ml: 0.5 }} />
               </Box>
             }
@@ -646,35 +646,36 @@ const FEATURE_CATEGORIES = [
   },
 ]
 
-const FEATURE_LABELS = {
-  dashboard: 'Dashboard',
-  inventory: 'Inventory',
-  backups: 'Backups',
-  storage: 'Storage',
-  drs: 'DRS (Dynamic Resource Scheduler)',
-  rolling_updates: 'Rolling Updates',
-  cross_cluster_migration: 'Cross-Cluster Migration',
-  jobs: 'Job Orchestration',
-  firewall: 'Firewall Management',
-  microsegmentation: 'Microsegmentation',
-  cve_scanner: 'CVE Scanner',
-  rbac: 'RBAC (Role-Based Access Control)',
-  ldap: 'LDAP / Active Directory',
-  ai_insights: 'AI Insights',
-  predictive_alerts: 'Predictive Alerts',
-  alerts: 'Alerting',
-  notifications: 'Notifications',
-  reports: 'Reports',
-  green_metrics: 'Green Metrics / RSE',
-  ceph_replication: 'Site Recovery (Ceph Replication)',
+// FEATURE_LABELS and CATEGORY_LABELS are now resolved via t() inside the component
+const FEATURE_LABEL_KEYS = {
+  dashboard: 'settings.featureLabels.dashboard',
+  inventory: 'settings.featureLabels.inventory',
+  backups: 'settings.featureLabels.backups',
+  storage: 'settings.featureLabels.storage',
+  drs: 'settings.featureLabels.drs',
+  rolling_updates: 'settings.featureLabels.rolling_updates',
+  cross_cluster_migration: 'settings.featureLabels.cross_cluster_migration',
+  jobs: 'settings.featureLabels.jobs',
+  firewall: 'settings.featureLabels.firewall',
+  microsegmentation: 'settings.featureLabels.microsegmentation',
+  cve_scanner: 'settings.featureLabels.cve_scanner',
+  rbac: 'settings.featureLabels.rbac',
+  ldap: 'settings.featureLabels.ldap',
+  ai_insights: 'settings.featureLabels.ai_insights',
+  predictive_alerts: 'settings.featureLabels.predictive_alerts',
+  alerts: 'settings.featureLabels.alerts',
+  notifications: 'settings.featureLabels.notifications',
+  reports: 'settings.featureLabels.reports',
+  green_metrics: 'settings.featureLabels.green_metrics',
+  ceph_replication: 'settings.featureLabels.ceph_replication',
 }
 
-const CATEGORY_LABELS = {
-  infrastructure: 'Infrastructure',
-  automation: 'Automation & Orchestration',
-  security: 'Security & Access Control',
-  monitoring: 'Monitoring & Intelligence',
-  disaster_recovery: 'Disaster Recovery',
+const CATEGORY_LABEL_KEYS = {
+  infrastructure: 'settings.categoryLabels.infrastructure',
+  automation: 'settings.categoryLabels.automation',
+  security: 'settings.categoryLabels.security',
+  monitoring: 'settings.categoryLabels.monitoring',
+  disaster_recovery: 'settings.categoryLabels.disaster_recovery',
 }
 
 function LicenseTab() {
@@ -702,7 +703,7 @@ function LicenseTab() {
       setSuccess(t('settings.licenseActivated'))
       setLicenseKey('')
     } else {
-      setError(result.error || 'Activation failed')
+      setError(result.error || t('settings.activationFailed'))
     }
   }
 
@@ -713,7 +714,7 @@ function LicenseTab() {
     if (result.success) {
       setSuccess(t('settings.licenseDeactivated'))
     } else {
-      setError(result.error || 'Deactivation failed')
+      setError(result.error || t('settings.deactivationFailed'))
     }
   }
 
@@ -792,7 +793,7 @@ function LicenseTab() {
                   )}
                 </>
               ) : (
-                <Chip label='Community' color='default' size='small' variant='outlined' />
+                <Chip label={t('settings.community')} color='default' size='small' variant='outlined' />
               )}
             </Box>
           </Box>
@@ -839,7 +840,7 @@ function LicenseTab() {
                       }}
                     />
                     <Typography variant='caption' sx={{ opacity: 0.5 }}>
-                      {nodeUsagePct}% used
+                      {t('settings.percentUsed', { percent: nodeUsagePct })}
                     </Typography>
                   </>
                 ) : (
@@ -871,7 +872,7 @@ function LicenseTab() {
                   }}
                 />
                 <Typography variant='caption' sx={{ opacity: 0.5 }}>
-                  {enabledCount === totalCount ? 'All features enabled' : `${totalCount - enabledCount} features available with upgrade`}
+                  {enabledCount === totalCount ? t('settings.allFeaturesEnabled') : t('settings.featuresAvailableWithUpgrade', { count: totalCount - enabledCount })}
                 </Typography>
               </Box>
 
@@ -881,16 +882,16 @@ function LicenseTab() {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <i className='ri-calendar-check-line' style={{ fontSize: 18, opacity: 0.6 }} />
                     <Typography variant='caption' fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
-                      License Validity
+                      {t('settings.licenseValidity')}
                     </Typography>
                   </Box>
                   <Typography variant='h5' fontWeight={700} color={
                     licenseStatus.expired ? 'error.main' : licenseStatus.expiration_warn ? 'warning.main' : 'text.primary'
                   }>
-                    {licenseStatus.expired ? 'Expired' : `${licenseStatus.days_remaining ?? '—'} days`}
+                    {licenseStatus.expired ? t('settings.licenseExpired') : t('settings.licenseDays', { count: licenseStatus.days_remaining ?? '—' })}
                   </Typography>
                   <Typography variant='caption' sx={{ opacity: 0.5 }}>
-                    {licenseStatus.expired ? 'Please renew your license' : `Until ${new Date(licenseStatus.expires_at).toLocaleDateString()}`}
+                    {licenseStatus.expired ? t('settings.pleaseRenewLicense') : t('settings.untilDate', { date: new Date(licenseStatus.expires_at).toLocaleDateString() })}
                   </Typography>
                 </Box>
               )}
@@ -906,7 +907,7 @@ function LicenseTab() {
                 </Button>
               }
             >
-              Node quota exceeded ({currentNodes}/{maxNodes}). Some features may be restricted.
+              {t('settings.nodeQuotaExceeded', { current: currentNodes, max: maxNodes })}
             </Alert>
           )}
         </CardContent>
@@ -924,7 +925,7 @@ function LicenseTab() {
             {FEATURE_CATEGORIES.map(cat => {
               const catFeatures = cat.features.map(fId => ({
                 id: fId,
-                label: FEATURE_LABELS[fId] || fId,
+                label: FEATURE_LABEL_KEYS[fId] ? t(FEATURE_LABEL_KEYS[fId]) : fId,
                 enabled: featureMap[fId]?.enabled ?? false,
               }))
               const catEnabled = catFeatures.filter(f => f.enabled).length
@@ -941,10 +942,10 @@ function LicenseTab() {
                     </Box>
                     <Box sx={{ flex: 1 }}>
                       <Typography variant='subtitle2' fontWeight={600}>
-                        {CATEGORY_LABELS[cat.key] || cat.key}
+                        {CATEGORY_LABEL_KEYS[cat.key] ? t(CATEGORY_LABEL_KEYS[cat.key]) : cat.key}
                       </Typography>
                       <Typography variant='caption' sx={{ opacity: 0.5 }}>
-                        {catEnabled}/{catFeatures.length} enabled
+                        {t('settings.nEnabled', { enabled: catEnabled, total: catFeatures.length })}
                       </Typography>
                     </Box>
                   </Box>
@@ -969,7 +970,7 @@ function LicenseTab() {
           {!isEnterprise && (
             <Box sx={{ mt: 2, p: 2, borderRadius: 2, bgcolor: 'action.hover', textAlign: 'center' }}>
               <Typography variant='body2' sx={{ mb: 1, opacity: 0.7 }}>
-                Unlock all features with an Enterprise license
+                {t('settings.unlockAllFeatures')}
               </Typography>
               <Button
                 variant='contained'
@@ -978,7 +979,7 @@ function LicenseTab() {
                 target='_blank'
                 startIcon={<i className='ri-external-link-line' />}
               >
-                View pricing
+                {t('settings.viewPricingBtn')}
               </Button>
             </Box>
           )}
@@ -991,7 +992,7 @@ function LicenseTab() {
           <CardContent sx={{ p: 3 }}>
             <Typography variant='subtitle1' fontWeight={700} sx={{ mb: 2 }}>
               <i className='ri-settings-3-line' style={{ marginRight: 8, opacity: 0.6 }} />
-              License Management
+              {t('settings.licenseManagementTitle')}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <Button
@@ -1001,7 +1002,7 @@ function LicenseTab() {
                 target='_blank'
                 startIcon={<i className='ri-shopping-cart-line' />}
               >
-                Manage subscription
+                {t('settings.manageSubscription')}
               </Button>
               <Box sx={{ flex: 1 }} />
               <Button

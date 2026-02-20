@@ -142,7 +142,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
         setNodes(json.data?.nodes || [])
       }
     } catch (e: any) {
-      const msg = e?.message || 'Failed to load backup jobs'
+      const msg = e?.message || t('inventory.failedToLoadBackupJobs')
       setError(msg)
       onError?.(msg)
     } finally {
@@ -253,7 +253,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
         loadJobs()
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to save backup job')
+      setError(e?.message || t('inventory.failedToSaveBackupJob'))
     } finally {
       setSaving(false)
     }
@@ -281,7 +281,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
         loadJobs()
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to delete backup job')
+      setError(e?.message || t('inventory.failedToDeleteBackupJob'))
     } finally {
       setDeleting(false)
     }
@@ -323,7 +323,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
         setError(json.error)
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to run backup job')
+      setError(e?.message || t('inventory.failedToRunBackupJob'))
     }
   }
 
@@ -331,13 +331,13 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
   const formatSelection = (job: any) => {
     if (job.selectionMode === 'all') {
       if (job.excludedVmids?.length > 0) {
-        return `All except ${job.excludedVmids.length}`
+        return t('inventory.allExceptCount', { count: job.excludedVmids.length })
       }
-      return 'All VMs'
+      return t('inventory.allVms')
     }
 
     if (job.selectionMode === 'include') {
-      return `${job.vmids?.length || 0} VMs`
+      return t('inventory.vmCount', { count: job.vmids?.length || 0 })
     }
 
     return '—'
@@ -381,13 +381,13 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     },
     {
       field: 'node',
-      headerName: 'Node',
+      headerName: t('inventory.nodeHeader'),
       width: 120,
-      renderCell: (params) => params.value || <Typography sx={{ opacity: 0.5, fontSize: 12 }}>— All —</Typography>
+      renderCell: (params) => params.value || <Typography sx={{ opacity: 0.5, fontSize: 12 }}>{t('inventory.allNodes')}</Typography>
     },
     {
       field: 'schedule',
-      headerName: 'Schedule',
+      headerName: t('inventory.scheduleHeader'),
       width: 80,
       renderCell: (params) => (
         <Chip size="small" label={params.value} variant="outlined" sx={{ fontSize: 11 }} />
@@ -395,7 +395,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     },
     {
       field: 'nextRun',
-      headerName: 'Next Run',
+      headerName: t('inventory.nextRun'),
       width: 150,
       renderCell: (params) => (
         <Typography variant="caption">{getNextRun(params.row.schedule)}</Typography>
@@ -403,18 +403,18 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     },
     {
       field: 'storage',
-      headerName: 'Storage',
+      headerName: t('inventory.storageHeader'),
       width: 130
     },
     {
       field: 'selection',
-      headerName: 'Selection',
+      headerName: t('inventory.selectionHeader'),
       width: 120,
       renderCell: (params) => formatSelection(params.row)
     },
     {
       field: 'comment',
-      headerName: 'Comment',
+      headerName: t('inventory.commentHeader'),
       flex: 1,
       minWidth: 150
     },
@@ -425,7 +425,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       sortable: false,
       renderCell: (params) => (
         <Stack direction="row" spacing={0.5}>
-          <Tooltip title="Run now">
+          <Tooltip title={t('inventory.runNow')}>
             <IconButton size="small" onClick={() => handleRunNow(params.row)}>
               <i className="ri-play-line" style={{ fontSize: 16 }} />
             </IconButton>
@@ -451,7 +451,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className="ri-calendar-schedule-line" style={{ fontSize: 20, opacity: 0.7 }} />
-          Backup Jobs
+          {t('inventory.backupJobs')}
         </Typography>
         <Button
           variant="contained"
@@ -479,14 +479,14 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       ) : jobs.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 4, opacity: 0.5 }}>
           <i className="ri-calendar-todo-line" style={{ fontSize: 48, marginBottom: 8 }} />
-          <Typography>No backup job configured</Typography>
+          <Typography>{t('inventory.noBackupJobConfigured')}</Typography>
           <Button
             variant="outlined"
             size="small"
             sx={{ mt: 2 }}
             onClick={handleCreate}
           >
-            Create first job
+            {t('inventory.createFirstJob')}
           </Button>
         </Box>
       ) : (
@@ -511,13 +511,13 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className={dialogMode === 'create' ? 'ri-add-line' : 'ri-edit-line'} />
-          {dialogMode === 'create' ? 'Create Backup Job' : 'Edit Backup Job'}
+          {dialogMode === 'create' ? t('inventory.createBackupJob') : t('inventory.editBackupJob')}
         </DialogTitle>
         <DialogContent>
           <Tabs value={dialogTab} onChange={(_, v) => setDialogTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-            <Tab label="General" />
-            <Tab label="Retention" />
-            <Tab label="Advanced" />
+            <Tab label={t('inventory.tabGeneral')} />
+            <Tab label={t('inventory.tabRetention')} />
+            <Tab label={t('inventory.tabAdvanced')} />
           </Tabs>
 
           {/* Tab General */}
@@ -525,13 +525,13 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
             <Stack spacing={2} sx={{ mt: 1 }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <FormControl size="small" fullWidth>
-                  <InputLabel>Node</InputLabel>
+                  <InputLabel>{t('inventory.nodeLabel')}</InputLabel>
                   <Select
                     value={formData.node}
                     onChange={(e) => setFormData(prev => ({ ...prev, node: e.target.value }))}
-                    label="Node"
+                    label={t('inventory.nodeLabel')}
                   >
-                    <MenuItem value="">— All —</MenuItem>
+                    <MenuItem value="">{t('inventory.allNodes')}</MenuItem>
                     {nodes.map(n => (
                       <MenuItem key={n.node || n.name} value={n.node || n.name}>{n.node || n.name}</MenuItem>
                     ))}
@@ -539,11 +539,11 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                 </FormControl>
 
                 <FormControl size="small" fullWidth>
-                  <InputLabel>Storage</InputLabel>
+                  <InputLabel>{t('inventory.storageFormLabel')}</InputLabel>
                   <Select
                     value={formData.storage}
                     onChange={(e) => setFormData(prev => ({ ...prev, storage: e.target.value }))}
-                    label="Storage"
+                    label={t('inventory.storageFormLabel')}
                   >
                     {storages.map(s => (
                       <MenuItem key={s.storage} value={s.storage}>{s.storage}</MenuItem>
@@ -555,23 +555,23 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <TextField
                   size="small"
-                  label="Schedule"
+                  label={t('inventory.scheduleFormLabel')}
                   value={formData.schedule}
                   onChange={(e) => setFormData(prev => ({ ...prev, schedule: e.target.value }))}
                   placeholder="HH:MM"
-                  helperText="Format: HH:MM (e.g., 02:00)"
+                  helperText={t('inventory.scheduleHelperText')}
                 />
 
                 <FormControl size="small" fullWidth>
-                  <InputLabel>Selection Mode</InputLabel>
+                  <InputLabel>{t('inventory.selectionMode')}</InputLabel>
                   <Select
                     value={formData.selectionMode}
                     onChange={(e) => setFormData(prev => ({ ...prev, selectionMode: e.target.value as any }))}
-                    label="Selection Mode"
+                    label={t('inventory.selectionMode')}
                   >
-                    <MenuItem value="all">All VMs</MenuItem>
-                    <MenuItem value="include">Include selected VMs</MenuItem>
-                    <MenuItem value="exclude">Exclude selected VMs</MenuItem>
+                    <MenuItem value="all">{t('inventory.allVmsOption')}</MenuItem>
+                    <MenuItem value="include">{t('inventory.includeSelectedVms')}</MenuItem>
+                    <MenuItem value="exclude">{t('inventory.excludeSelectedVms')}</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
@@ -584,7 +584,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   getOptionLabel={(option) => `${option.vmid} - ${option.name}`}
                   value={vms.filter(vm => formData.vmids.includes(vm.vmid))}
                   onChange={(_, newValue) => setFormData(prev => ({ ...prev, vmids: newValue.map(v => v.vmid) }))}
-                  renderInput={(params) => <TextField {...params} label="Select VMs" />}
+                  renderInput={(params) => <TextField {...params} label={t('inventory.selectVms')} />}
                   renderOption={(props, option) => (
                     <li {...props}>
                       <Chip 
@@ -607,7 +607,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   getOptionLabel={(option) => `${option.vmid} - ${option.name}`}
                   value={vms.filter(vm => formData.excludedVmids.includes(vm.vmid))}
                   onChange={(_, newValue) => setFormData(prev => ({ ...prev, excludedVmids: newValue.map(v => v.vmid) }))}
-                  renderInput={(params) => <TextField {...params} label="Exclude VMs" />}
+                  renderInput={(params) => <TextField {...params} label={t('inventory.excludeVms')} />}
                   renderOption={(props, option) => (
                     <li {...props}>
                       <Chip 
@@ -624,29 +624,29 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <FormControl size="small" fullWidth>
-                  <InputLabel>Compression</InputLabel>
+                  <InputLabel>{t('inventory.compression')}</InputLabel>
                   <Select
                     value={formData.compress}
                     onChange={(e) => setFormData(prev => ({ ...prev, compress: e.target.value }))}
-                    label="Compression"
+                    label={t('inventory.compression')}
                   >
-                    <MenuItem value="0">None</MenuItem>
+                    <MenuItem value="0">{t('inventory.compressionNone')}</MenuItem>
                     <MenuItem value="gzip">GZIP</MenuItem>
                     <MenuItem value="lzo">LZO</MenuItem>
-                    <MenuItem value="zstd">ZSTD (fast and good)</MenuItem>
+                    <MenuItem value="zstd">{t('inventory.compressionZstd')}</MenuItem>
                   </Select>
                 </FormControl>
 
                 <FormControl size="small" fullWidth>
-                  <InputLabel>Mode</InputLabel>
+                  <InputLabel>{t('inventory.modeLabel')}</InputLabel>
                   <Select
                     value={formData.mode}
                     onChange={(e) => setFormData(prev => ({ ...prev, mode: e.target.value }))}
-                    label="Mode"
+                    label={t('inventory.modeLabel')}
                   >
-                    <MenuItem value="snapshot">Snapshot</MenuItem>
-                    <MenuItem value="suspend">Suspend</MenuItem>
-                    <MenuItem value="stop">Stop</MenuItem>
+                    <MenuItem value="snapshot">{t('inventory.modeSnapshot')}</MenuItem>
+                    <MenuItem value="suspend">{t('inventory.modeSuspend')}</MenuItem>
+                    <MenuItem value="stop">{t('inventory.modeStop')}</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
@@ -658,7 +658,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                     onChange={(e) => setFormData(prev => ({ ...prev, enabled: e.target.checked }))}
                   />
                 }
-                label="Enable"
+                label={t('inventory.enableLabel')}
               />
             </Stack>
           )}
@@ -669,19 +669,19 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
               <TextField
                 size="small"
                 type="number"
-                label="Max backups to keep"
+                label={t('inventory.maxBackupsToKeep')}
                 value={formData.maxfiles}
                 onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: parseInt(e.target.value) || 1 }))}
                 inputProps={{ min: 1 }}
-                helperText="Number of backups to keep per VM"
+                helperText={t('inventory.backupsPerVmHelper')}
               />
 
               <TextField
                 size="small"
-                label="PBS Namespace"
+                label={t('inventory.pbsNamespace')}
                 value={formData.namespace}
                 onChange={(e) => setFormData(prev => ({ ...prev, namespace: e.target.value }))}
-                helperText="Optional namespace for PBS storage"
+                helperText={t('inventory.pbsNamespaceHelper')}
               />
             </Stack>
           )}
@@ -691,7 +691,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
             <Stack spacing={2} sx={{ mt: 1 }}>
               <TextField
                 size="small"
-                label="Comment"
+                label={t('inventory.commentLabel')}
                 value={formData.comment}
                 onChange={(e) => setFormData(prev => ({ ...prev, comment: e.target.value }))}
                 multiline
@@ -700,22 +700,22 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
               <TextField
                 size="small"
-                label="Email to"
+                label={t('inventory.emailTo')}
                 value={formData.mailto}
                 onChange={(e) => setFormData(prev => ({ ...prev, mailto: e.target.value }))}
                 placeholder="admin@example.com"
               />
 
               <FormControl size="small" fullWidth>
-                <InputLabel>Send email</InputLabel>
+                <InputLabel>{t('inventory.sendEmail')}</InputLabel>
                 <Select
                   value={formData.mailnotification}
                   onChange={(e) => setFormData(prev => ({ ...prev, mailnotification: e.target.value }))}
-                  label="Send email"
+                  label={t('inventory.sendEmail')}
                 >
-                  <MenuItem value="always">Always</MenuItem>
-                  <MenuItem value="failure">On failure only</MenuItem>
-                  <MenuItem value="never">Never</MenuItem>
+                  <MenuItem value="always">{t('inventory.sendEmailAlways')}</MenuItem>
+                  <MenuItem value="failure">{t('inventory.sendEmailFailure')}</MenuItem>
+                  <MenuItem value="never">{t('inventory.sendEmailNever')}</MenuItem>
                 </Select>
               </FormControl>
             </Stack>
@@ -735,17 +735,17 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className="ri-delete-bin-line" style={{ color: 'red' }} />
-          Delete Backup Job
+          {t('inventory.deleteBackupJob')}
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete this backup job?
+            {t('inventory.confirmDeleteBackupJob')}
           </Typography>
           {jobToDelete && (
             <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <Typography variant="body2"><strong>Schedule:</strong> {jobToDelete.schedule}</Typography>
-              <Typography variant="body2"><strong>Storage:</strong> {jobToDelete.storage}</Typography>
-              {jobToDelete.comment && <Typography variant="body2"><strong>Comment:</strong> {jobToDelete.comment}</Typography>}
+              <Typography variant="body2"><strong>{t('inventory.scheduleHeader')}:</strong> {jobToDelete.schedule}</Typography>
+              <Typography variant="body2"><strong>{t('inventory.storageHeader')}:</strong> {jobToDelete.storage}</Typography>
+              {jobToDelete.comment && <Typography variant="body2"><strong>{t('inventory.commentHeader')}:</strong> {jobToDelete.comment}</Typography>}
             </Box>
           )}
         </DialogContent>

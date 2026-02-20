@@ -48,7 +48,7 @@ export default function RuleFormDialog({
 
   const isGroup = rule.type === 'group'
   const scopeColor = scopeColors[scope.type] || '#3b82f6'
-  const scopeLabel = scope.type === 'cluster' ? 'Cluster' : `SG: ${scope.name}`
+  const scopeLabel = scope.type === 'cluster' ? t('firewall.cluster') : t('firewall.sgPrefix', { name: scope.name })
   const showGroupType = scope.type === 'cluster' // only cluster rules can be of type 'group'
 
   const set = (field: keyof RuleFormData, value: string | number) => {
@@ -68,23 +68,23 @@ export default function RuleFormDialog({
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Type</InputLabel>
-              <Select value={rule.type} label="Type" onChange={(e) => set('type', e.target.value)}>
+              <InputLabel>{t('firewall.type')}</InputLabel>
+              <Select value={rule.type} label={t('firewall.type')} onChange={(e) => set('type', e.target.value)}>
                 <MenuItem value="in">IN</MenuItem>
                 <MenuItem value="out">OUT</MenuItem>
-                {showGroupType && <MenuItem value="group">GROUP (Security Group)</MenuItem>}
+                {showGroupType && <MenuItem value="group">{t('firewall.typeGroup')}</MenuItem>}
               </Select>
             </FormControl>
           </Grid>
           <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Action</InputLabel>
+              <InputLabel>{t('firewall.action')}</InputLabel>
               {isGroup ? (
-                <Select value={rule.action} label="Action" onChange={(e) => set('action', e.target.value)}>
+                <Select value={rule.action} label={t('firewall.action')} onChange={(e) => set('action', e.target.value)}>
                   {securityGroups.map(sg => (<MenuItem key={sg.group} value={sg.group}>{sg.group}</MenuItem>))}
                 </Select>
               ) : (
-                <Select value={rule.action} label="Action" onChange={(e) => set('action', e.target.value)}>
+                <Select value={rule.action} label={t('firewall.action')} onChange={(e) => set('action', e.target.value)}>
                   <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                   <MenuItem value="DROP">DROP</MenuItem>
                   <MenuItem value="REJECT">REJECT</MenuItem>
@@ -124,10 +124,10 @@ export default function RuleFormDialog({
                 <TextField fullWidth size="small" label={t('network.destPort')} value={rule.dport} onChange={(e) => set('dport', e.target.value)} placeholder="22, 80, 443..." InputProps={{ sx: monoStyle }} />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label="Port source" value={rule.sport} onChange={(e) => set('sport', e.target.value)} InputProps={{ sx: monoStyle }} />
+                <TextField fullWidth size="small" label={t('firewall.sourcePort')} value={rule.sport} onChange={(e) => set('sport', e.target.value)} InputProps={{ sx: monoStyle }} />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label="Interface" value={rule.iface} onChange={(e) => set('iface', e.target.value)} placeholder="vmbr0, eth0..." InputProps={{ sx: monoStyle }} />
+                <TextField fullWidth size="small" label={t('firewall.interface')} value={rule.iface} onChange={(e) => set('iface', e.target.value)} placeholder="vmbr0, eth0..." InputProps={{ sx: monoStyle }} />
               </Grid>
             </>
           )}

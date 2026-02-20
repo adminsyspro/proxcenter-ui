@@ -1589,13 +1589,13 @@ return next
         const validated = await res.json()
 
         mutateRecs(validated, false)
-        alert('Cette VM a été déplacée depuis la création de la recommandation. La liste a été actualisée.')
+        alert(t('drsPage.vmMovedAlert'))
       } else if (errorMsg.includes('404') || errorMsg.includes('not found') || errorMsg.includes('Recommendation not found')) {
         // Recommandation n'existe plus
         setDrawerOpen(false)
         setSelectedRec(null)
         await mutateRecs()
-        alert('Cette recommandation a expiré suite à une réévaluation. La liste a été actualisée.')
+        alert(t('drsPage.recommendationExpiredAlert'))
       } else if (errorMsg.includes('already on target')) {
         // VM déjà sur la cible
         setDrawerOpen(false)
@@ -1604,7 +1604,7 @@ return next
         const validated = await res.json()
 
         mutateRecs(validated, false)
-        alert('Cette VM est déjà sur le nœud cible. La liste a été actualisée.')
+        alert(t('drsPage.vmAlreadyOnTargetAlert'))
       }
     } finally {
       setActionLoading(null)
@@ -1701,7 +1701,7 @@ return next
   }, [clusters, connectionNames])
 
   return (
-    <EnterpriseGuard requiredFeature={Features.DRS} featureName="DRS (Distributed Resource Scheduler)">
+    <EnterpriseGuard requiredFeature={Features.DRS} featureName={`${t('drs.title')} (${t('drs.subtitle')})`}>
       <Box sx={{ p: 3 }}>
         {/* Header Actions */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 3 }}>
@@ -1856,7 +1856,7 @@ return next
 
           {/* DRS Mode */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>Mode</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.modeLabel')}</Typography>
             <Chip
               size="small"
               label={(status?.mode || 'manual').toUpperCase()}
@@ -1866,7 +1866,7 @@ return next
 
           {/* Max Imbalance */}
           <Box>
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Imbalance</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{t('drsPage.imbalanceTitle')}</Typography>
             <Box sx={{ position: 'relative' }}>
               <LinearProgress
                 variant="determinate"
@@ -2029,10 +2029,10 @@ return next
           {/* Cluster selector */}
           {clusters.length > 1 && (
             <FormControl size="small" sx={{ mb: 2, minWidth: 250 }}>
-              <InputLabel>Cluster</InputLabel>
+              <InputLabel>{t('drsPage.clusterLabel')}</InputLabel>
               <Select
                 value={selectedCluster}
-                label="Cluster"
+                label={t('drsPage.clusterLabel')}
                 onChange={(e) => setSelectedCluster(e.target.value)}
               >
                 {clusters.map(c => (

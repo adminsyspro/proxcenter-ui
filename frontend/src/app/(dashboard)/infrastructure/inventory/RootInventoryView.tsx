@@ -297,7 +297,7 @@ function RootInventoryView({
               <Box>
                 <Typography variant="h5" fontWeight={900}>{t('navigation.inventory')}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {clusters.length} {clusters.length > 1 ? 'clusters' : 'cluster'} • {hosts.length} {t('inventory.nodes')} • {vmStats.total} VMs{pbsServers && pbsServers.length > 0 ? ` • ${pbsServers.length} PBS` : ''}
+                  {clusters.length > 1 ? t('inventory.clustersCount', { count: clusters.length }) : t('inventory.clusterCount', { count: clusters.length })} • {hosts.length} {t('inventory.nodes')} • {vmStats.total} VMs{pbsServers && pbsServers.length > 0 ? ` • ${pbsServers.length} PBS` : ''}
                 </Typography>
               </Box>
             </Stack>
@@ -306,11 +306,11 @@ function RootInventoryView({
             <Stack direction="row" spacing={3}>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" fontWeight={900} color="success.main">{vmStats.running}</Typography>
-                <Typography variant="caption" color="text.secondary">Running</Typography>
+                <Typography variant="caption" color="text.secondary">{t('inventory.running')}</Typography>
               </Box>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" fontWeight={900} color="text.disabled">{vmStats.stopped}</Typography>
-                <Typography variant="caption" color="text.secondary">Stopped</Typography>
+                <Typography variant="caption" color="text.secondary">{t('inventory.stopped')}</Typography>
               </Box>
               <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" fontWeight={900} color="primary.main">{hosts.length}</Typography>
@@ -603,7 +603,7 @@ function RootInventoryView({
       {/* Séparateur PVE */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <i className="ri-server-fill" style={{ fontSize: 16, color: '#F29221' }} />
-        <Typography variant="subtitle2" fontWeight={700} sx={{ opacity: 0.7 }}>Proxmox VE</Typography>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ opacity: 0.7 }}>{t('inventory.proxmoxVe')}</Typography>
         <Box sx={{ flex: 1, height: 1, bgcolor: 'divider', ml: 1 }} />
       </Box>
 
@@ -652,7 +652,7 @@ function RootInventoryView({
                 />
                 <Chip 
                   size="small" 
-                  label={`${runningCount} running`} 
+                  label={t('inventory.nRunning', { count: runningCount })} 
                   color="success"
                   variant="outlined"
                   sx={{ height: 20, fontSize: 11 }} 
@@ -711,7 +711,7 @@ function RootInventoryView({
                             {host.node}
                           </Typography>
                           <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                            ({host.vms.length} VMs, {hostRunning} running)
+                            {t('inventory.vmsAndRunning', { vms: host.vms.length, running: hostRunning })}
                           </Typography>
                           
                           {/* Indicateurs CPU/RAM du host */}
@@ -771,8 +771,8 @@ function RootInventoryView({
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 1 }}>
               <i className="ri-hard-drive-2-fill" style={{ fontSize: 16, color: '#2196f3' }} />
-              <Typography variant="subtitle2" fontWeight={700} sx={{ opacity: 0.7 }}>Proxmox Backup Server</Typography>
-              <Chip size="small" label={`${pbsServers.reduce((acc, pbs) => acc + pbs.backupCount, 0)} backups`} sx={{ height: 18, fontSize: 10, ml: 1 }} />
+              <Typography variant="subtitle2" fontWeight={700} sx={{ opacity: 0.7 }}>{t('inventory.proxmoxBackupServer')}</Typography>
+              <Chip size="small" label={t('inventory.nBackups', { count: pbsServers.reduce((acc, pbs) => acc + pbs.backupCount, 0) })} sx={{ height: 18, fontSize: 10, ml: 1 }} />
               <Box sx={{ flex: 1, height: 1, bgcolor: 'divider', ml: 1 }} />
             </Box>
 
@@ -800,7 +800,7 @@ function RootInventoryView({
                     <i className="ri-hard-drive-2-fill" style={{ fontSize: 18, color: '#2196f3' }} />
                     <Typography fontWeight={700}>{pbs.name}</Typography>
                     <Typography variant="caption" sx={{ opacity: 0.6, ml: 'auto' }}>
-                      {pbs.backupCount} backups
+                      {t('inventory.nBackups', { count: pbs.backupCount })}
                     </Typography>
                   </Box>
                 </Card>

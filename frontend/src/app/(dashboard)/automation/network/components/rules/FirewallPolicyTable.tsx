@@ -390,7 +390,7 @@ export default function FirewallPolicyTable({
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <code style={{ background: 'transparent', fontSize: 13, fontWeight: 600, color: 'inherit' }}>{section.name}</code>
                 <Chip
-                  label={`${section.ruleCount} rules, ${section.activeRuleCount} ${t('networkPage.activeRulesCount', { count: section.activeRuleCount }).split(' ').slice(-1)[0]}`}
+                  label={`${t('firewall.rulesCount', { count: section.ruleCount })}, ${t('networkPage.activeRulesCount', { count: section.activeRuleCount })}`}
                   size="small" sx={{ height: 20, fontSize: 10 }}
                 />
                 {section.type === 'security-group' && (
@@ -442,11 +442,11 @@ export default function FirewallPolicyTable({
                     <TableCell sx={{ width: 30, p: 0.5 }}></TableCell>
                     <TableCell sx={{ fontWeight: 700, width: 35, fontSize: 11 }}>#</TableCell>
                     <TableCell sx={{ fontWeight: 700, width: 55, fontSize: 11 }}>{t('common.active')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 65, fontSize: 11 }}>Dir</TableCell>
+                    <TableCell sx={{ fontWeight: 700, width: 65, fontSize: 11 }}>{t('firewall.direction')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('network.source')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('network.destination')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 100, fontSize: 11 }}>Service</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 90, fontSize: 11 }}>Action</TableCell>
+                    <TableCell sx={{ fontWeight: 700, width: 100, fontSize: 11 }}>{t('firewall.service')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, width: 90, fontSize: 11 }}>{t('firewall.action')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('network.comment')}</TableCell>
                     <TableCell sx={{ width: 80 }}></TableCell>
                   </TableRow>
@@ -587,7 +587,7 @@ export default function FirewallPolicyTable({
       {/* Summary chips */}
       <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Chip label={t('networkPage.policiesCount', { count: totalPolicies })} size="small" variant="outlined" />
-        <Chip label={`${totalRulesCount} rules`} size="small" variant="outlined" />
+        <Chip label={t('firewall.rulesCount', { count: totalRulesCount })} size="small" variant="outlined" />
         <Chip label={t('networkPage.activeRulesCount', { count: totalActiveCount })} size="small" variant="outlined" sx={{ color: '#22c55e' }} />
       </Box>
 

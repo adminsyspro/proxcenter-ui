@@ -30,49 +30,49 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 -------------------------------- */
 
 const CATEGORIES = {
-  auth: { label: 'Authentification', icon: 'ri-lock-line', color: 'primary' },
-  users: { label: 'Utilisateurs', icon: 'ri-user-line', color: 'secondary' },
-  connections: { label: 'Connexions', icon: 'ri-server-line', color: 'info' },
-  vms: { label: 'VMs', icon: 'ri-computer-line', color: 'success' },
-  containers: { label: 'Containers', icon: 'ri-instance-line', color: 'warning' },
-  nodes: { label: 'Nodes', icon: 'ri-database-2-line', color: 'error' },
-  storage: { label: 'Stockage', icon: 'ri-hard-drive-2-line', color: 'default' },
-  backups: { label: 'Backups', icon: 'ri-shield-check-line', color: 'success' },
-  settings: { label: 'Paramètres', icon: 'ri-settings-3-line', color: 'default' },
-  system: { label: 'Système', icon: 'ri-terminal-box-line', color: 'error' },
+  auth: { labelKey: 'audit.categories.authentication', icon: 'ri-lock-line', color: 'primary' },
+  users: { labelKey: 'audit.categories.users', icon: 'ri-user-line', color: 'secondary' },
+  connections: { labelKey: 'audit.categories.connections', icon: 'ri-server-line', color: 'info' },
+  vms: { labelKey: 'audit.categories.vms', icon: 'ri-computer-line', color: 'success' },
+  containers: { labelKey: 'audit.categories.containers', icon: 'ri-instance-line', color: 'warning' },
+  nodes: { labelKey: 'audit.categories.nodes', icon: 'ri-database-2-line', color: 'error' },
+  storage: { labelKey: 'audit.categories.storage', icon: 'ri-hard-drive-2-line', color: 'default' },
+  backups: { labelKey: 'audit.categories.backups', icon: 'ri-shield-check-line', color: 'success' },
+  settings: { labelKey: 'audit.categories.settings', icon: 'ri-settings-3-line', color: 'default' },
+  system: { labelKey: 'audit.categories.system', icon: 'ri-terminal-box-line', color: 'error' },
 }
 
-const ACTIONS = {
+const ACTION_KEYS = {
   // Auth
-  login: 'Connexion',
-  logout: 'Déconnexion',
-  login_failed: 'Échec connexion',
-  password_changed: 'Changement MDP',
+  login: 'audit.actions.login',
+  logout: 'audit.actions.logout',
+  login_failed: 'audit.actions.loginFailed',
+  password_changed: 'audit.actions.passwordChange',
 
   // CRUD
-  create: 'Création',
-  read: 'Lecture',
-  update: 'Modification',
-  delete: 'Suppression',
+  create: 'audit.actions.create',
+  read: 'audit.actions.read',
+  update: 'audit.actions.update',
+  delete: 'audit.actions.delete',
 
   // VM actions
-  start: 'Démarrage',
-  stop: 'Arrêt',
-  restart: 'Redémarrage',
-  suspend: 'Suspension',
-  resume: 'Reprise',
-  migrate: 'Migration',
-  clone: 'Clonage',
-  snapshot: 'Snapshot',
-  backup: 'Backup',
-  restore: 'Restauration',
+  start: 'audit.actions.start',
+  stop: 'audit.actions.stop',
+  restart: 'audit.actions.restart',
+  suspend: 'audit.actions.suspend',
+  resume: 'audit.actions.resume',
+  migrate: 'audit.actions.migrate',
+  clone: 'audit.actions.clone',
+  snapshot: 'audit.actions.snapshot',
+  backup: 'audit.actions.backup',
+  restore: 'audit.actions.restore',
 
   // Other
-  export: 'Export',
-  import: 'Import',
-  test: 'Test',
-  enable: 'Activation',
-  disable: 'Désactivation',
+  export: 'audit.actions.export',
+  import: 'audit.actions.import',
+  test: 'audit.actions.test',
+  enable: 'audit.actions.enable',
+  disable: 'audit.actions.disable',
 }
 
 /* --------------------------------
@@ -100,10 +100,10 @@ function timeAgo(dateStr, t, locale) {
   const date = new Date(dateStr)
   const diff = Math.floor((now - date) / 1000)
 
-  if (diff < 60) return t ? t('time.secondsAgo') : 'il y a quelques secondes'
-  if (diff < 3600) return t ? t('time.minutesAgo', { count: Math.floor(diff / 60) }) : `il y a ${Math.floor(diff / 60)} min`
-  if (diff < 86400) return t ? t('time.hoursAgo', { count: Math.floor(diff / 3600) }) : `il y a ${Math.floor(diff / 3600)} h`
-  if (diff < 604800) return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `il y a ${Math.floor(diff / 86400)} j`
+  if (diff < 60) return t('time.secondsAgo')
+  if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
+  if (diff < 604800) return t('time.daysAgo', { count: Math.floor(diff / 86400) })
 
 return formatDate(dateStr, locale)
 }
@@ -112,14 +112,15 @@ return formatDate(dateStr, locale)
    Components
 -------------------------------- */
 
-function CategoryChip({ category }) {
-  const cfg = CATEGORIES[category] || { label: category, icon: 'ri-question-line', color: 'default' }
+function CategoryChip({ category, t }) {
+  const cfg = CATEGORIES[category] || { labelKey: null, icon: 'ri-question-line', color: 'default' }
+  const label = cfg.labelKey ? t(cfg.labelKey) : category
 
-  
+
 return (
     <Chip
       size='small'
-      label={cfg.label}
+      label={label}
       color={cfg.color}
       variant='outlined'
       icon={<i className={cfg.icon} style={{ fontSize: 14 }} />}
@@ -129,9 +130,9 @@ return (
 
 function StatusChip({ status, t }) {
   const config = {
-    success: { label: t ? t('common.success') : 'Succès', color: 'success' },
-    failure: { label: t ? t('common.error') : 'Échec', color: 'error' },
-    warning: { label: t ? t('common.warning') : 'Attention', color: 'warning' },
+    success: { label: t('common.success'), color: 'success' },
+    failure: { label: t('common.error'), color: 'error' },
+    warning: { label: t('common.warning'), color: 'warning' },
   }
 
   const cfg = config[status] || { label: status, color: 'default' }
@@ -199,25 +200,25 @@ function StatsCards({ logs, t }) {
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
       <Card variant='outlined'>
         <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('common.total') : 'Total événements'}</Typography>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.totalEvents')}</Typography>
           <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.total}</Typography>
         </CardContent>
       </Card>
       <Card variant='outlined'>
         <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>Aujourd'hui</Typography>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.today')}</Typography>
           <Typography variant='h5' sx={{ fontWeight: 700, color: 'info.main' }}>{stats.today}</Typography>
         </CardContent>
       </Card>
       <Card variant='outlined'>
         <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('common.error') : 'Échecs'}</Typography>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('common.error')}</Typography>
           <Typography variant='h5' sx={{ fontWeight: 700, color: 'error.main' }}>{stats.failures}</Typography>
         </CardContent>
       </Card>
       <Card variant='outlined'>
         <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t ? t('audit.categories.authentication') : 'Authentification'}</Typography>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.categories.authentication')}</Typography>
           <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.auth}</Typography>
         </CardContent>
       </Card>
@@ -309,13 +310,13 @@ return () => clearTimeout(timer)
 
   const handleExport = () => {
     // Export CSV basique
-    const headers = ['Date', 'Utilisateur', 'Action', 'Catégorie', 'Ressource', 'Statut', 'IP']
+    const headers = [t('audit.csvDate'), t('audit.csvUser'), t('audit.csvAction'), t('audit.csvCategory'), t('audit.csvResource'), t('audit.csvStatus'), t('audit.csvIp')]
 
     const rows = logs.map(l => [
       formatDate(l.timestamp, dateLocale),
       l.user_email || '—',
-      ACTIONS[l.action] || l.action,
-      CATEGORIES[l.category]?.label || l.category,
+      ACTION_KEYS[l.action] ? t(ACTION_KEYS[l.action]) : l.action,
+      CATEGORIES[l.category]?.labelKey ? t(CATEGORIES[l.category].labelKey) : l.category,
       l.resource_name || l.resource_id || '—',
       l.status,
       l.ip_address || '—',
@@ -362,15 +363,15 @@ return () => clearTimeout(timer)
         width: 140,
         renderCell: params => (
           <Typography variant='body2' sx={{ fontWeight: 500 }}>
-            {ACTIONS[params.row.action] || params.row.action}
+            {ACTION_KEYS[params.row.action] ? t(ACTION_KEYS[params.row.action]) : params.row.action}
           </Typography>
         ),
       },
       {
         field: 'category',
-        headerName: 'Catégorie',
+        headerName: t('audit.category'),
         width: 150,
-        renderCell: params => <CategoryChip category={params.row.category} />,
+        renderCell: params => <CategoryChip category={params.row.category} t={t} />,
       },
       {
         field: 'resource',
@@ -474,15 +475,15 @@ return () => clearTimeout(timer)
             />
 
             <FormControl size='small' sx={{ minWidth: 150 }}>
-              <InputLabel>Catégorie</InputLabel>
+              <InputLabel>{t('audit.category')}</InputLabel>
               <Select
                 value={category}
-                label='Catégorie'
+                label={t('audit.category')}
                 onChange={e => setCategory(e.target.value)}
               >
                 <MenuItem value='all'>{t('common.all')}</MenuItem>
                 {Object.entries(CATEGORIES).map(([key, cfg]) => (
-                  <MenuItem key={key} value={key}>{cfg.label}</MenuItem>
+                  <MenuItem key={key} value={key}>{t(cfg.labelKey)}</MenuItem>
                 ))}
               </Select>
             </FormControl>

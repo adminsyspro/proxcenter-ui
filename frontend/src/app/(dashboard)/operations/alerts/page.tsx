@@ -518,7 +518,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
   }
 
   return (
-    <EnterpriseGuard requiredFeature={Features.ALERTS} featureName="Alertes">
+    <EnterpriseGuard requiredFeature={Features.ALERTS} featureName={t('alerts.title')}>
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
       {!orchestratorAvailable && (
         <Alert severity="warning" sx={{ flexShrink: 0 }}>
@@ -605,8 +605,8 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
             <Typography variant="h6" sx={{ mb: 3 }}>{t('alerts.thresholdsConfig')}</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 600 }}>
               <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><i className="ri-cpu-line" style={{ fontSize: 20 }} /><Typography variant="subtitle1" sx={{ fontWeight: 600 }}>CPU</Typography></Box>
-                <Typography variant="body2" sx={{ opacity: 0.7, mb: 2 }}>Warning: {thresholds.cpu_warning}% | Critical: {thresholds.cpu_critical}%</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><i className="ri-cpu-line" style={{ fontSize: 20 }} /><Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('alerts.cpu')}</Typography></Box>
+                <Typography variant="body2" sx={{ opacity: 0.7, mb: 2 }}>{t('alerts.warningCriticalFormat', { warning: thresholds.cpu_warning, critical: thresholds.cpu_critical })}</Typography>
                 <Slider value={[thresholds.cpu_warning, thresholds.cpu_critical]} onChange={(_, v) => { const [w, c] = v as number[];
 
  setThresholds(th => ({ ...th, cpu_warning: w, cpu_critical: c })) }}
@@ -614,7 +614,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               </Box>
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><i className="ri-ram-line" style={{ fontSize: 20 }} /><Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('alerts.memory')}</Typography></Box>
-                <Typography variant="body2" sx={{ opacity: 0.7, mb: 2 }}>Warning: {thresholds.memory_warning}% | Critical: {thresholds.memory_critical}%</Typography>
+                <Typography variant="body2" sx={{ opacity: 0.7, mb: 2 }}>{t('alerts.warningCriticalFormat', { warning: thresholds.memory_warning, critical: thresholds.memory_critical })}</Typography>
                 <Slider value={[thresholds.memory_warning, thresholds.memory_critical]} onChange={(_, v) => { const [w, c] = v as number[];
 
  setThresholds(th => ({ ...th, memory_warning: w, memory_critical: c })) }}
@@ -622,7 +622,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               </Box>
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}><i className="ri-hard-drive-2-line" style={{ fontSize: 20 }} /><Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('alerts.storage')}</Typography></Box>
-                <Typography variant="body2" sx={{ opacity: 0.7, mb: 2 }}>Warning: {thresholds.storage_warning}% | Critical: {thresholds.storage_critical}%</Typography>
+                <Typography variant="body2" sx={{ opacity: 0.7, mb: 2 }}>{t('alerts.warningCriticalFormat', { warning: thresholds.storage_warning, critical: thresholds.storage_critical })}</Typography>
                 <Slider value={[thresholds.storage_warning, thresholds.storage_critical]} onChange={(_, v) => { const [w, c] = v as number[];
 
  setThresholds(th => ({ ...th, storage_warning: w, storage_critical: c })) }}

@@ -205,14 +205,14 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                               <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 30, p: 0.5 }}></TableCell>
                               <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 35 }}>#</TableCell>
                               <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 50 }}>{t('common.active')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Type</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Action</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Proto</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Source</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Dest</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Port</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Commentaire</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}>Actions</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.type')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.action')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.proto')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.source')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.dest')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.port')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.comment')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}>{t('firewall.actions')}</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -312,23 +312,23 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Type</InputLabel>
-                <Select value={newHostRule.type} label="Type" onChange={(e) => setNewHostRule({ ...newHostRule, type: e.target.value })}>
-                  <MenuItem value="in">IN (entrant)</MenuItem>
-                  <MenuItem value="out">OUT (sortant)</MenuItem>
-                  <MenuItem value="group">GROUP (Security Group)</MenuItem>
+                <InputLabel>{t('firewall.type')}</InputLabel>
+                <Select value={newHostRule.type} label={t('firewall.type')} onChange={(e) => setNewHostRule({ ...newHostRule, type: e.target.value })}>
+                  <MenuItem value="in">{t('firewall.typeIn')}</MenuItem>
+                  <MenuItem value="out">{t('firewall.typeOut')}</MenuItem>
+                  <MenuItem value="group">{t('firewall.typeGroup')}</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Action</InputLabel>
+                <InputLabel>{t('firewall.action')}</InputLabel>
                 {newHostRule.type === 'group' ? (
-                  <Select value={newHostRule.action} label="Action" onChange={(e) => setNewHostRule({ ...newHostRule, action: e.target.value })}>
+                  <Select value={newHostRule.action} label={t('firewall.action')} onChange={(e) => setNewHostRule({ ...newHostRule, action: e.target.value })}>
                     {securityGroups.map(sg => (<MenuItem key={sg.group} value={sg.group}>{sg.group}</MenuItem>))}
                   </Select>
                 ) : (
-                  <Select value={newHostRule.action} label="Action" onChange={(e) => setNewHostRule({ ...newHostRule, action: e.target.value })}>
+                  <Select value={newHostRule.action} label={t('firewall.action')} onChange={(e) => setNewHostRule({ ...newHostRule, action: e.target.value })}>
                     <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                     <MenuItem value="DROP">DROP</MenuItem>
                     <MenuItem value="REJECT">REJECT</MenuItem>
@@ -338,37 +338,37 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Actif</InputLabel>
-                <Select value={newHostRule.enable} label="Actif" onChange={(e) => setNewHostRule({ ...newHostRule, enable: Number(e.target.value) })}>
-                  <MenuItem value={1}>Oui</MenuItem>
-                  <MenuItem value={0}>Non</MenuItem>
+                <InputLabel>{t('firewall.active')}</InputLabel>
+                <Select value={newHostRule.enable} label={t('firewall.active')} onChange={(e) => setNewHostRule({ ...newHostRule, enable: Number(e.target.value) })}>
+                  <MenuItem value={1}>{t('firewall.yes')}</MenuItem>
+                  <MenuItem value={0}>{t('firewall.no')}</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
             {newHostRule.type !== 'group' && (
               <>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Protocole" value={newHostRule.proto} onChange={(e) => setNewHostRule({ ...newHostRule, proto: e.target.value })} placeholder="tcp, udp, icmp..." />
+                  <TextField fullWidth size="small" label={t('firewall.protocol')} value={newHostRule.proto} onChange={(e) => setNewHostRule({ ...newHostRule, proto: e.target.value })} placeholder="tcp, udp, icmp..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Source" value={newHostRule.source} onChange={(e) => setNewHostRule({ ...newHostRule, source: e.target.value })} placeholder="IP, CIDR, alias..." />
+                  <TextField fullWidth size="small" label={t('firewall.source')} value={newHostRule.source} onChange={(e) => setNewHostRule({ ...newHostRule, source: e.target.value })} placeholder="IP, CIDR, alias..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Destination" value={newHostRule.dest} onChange={(e) => setNewHostRule({ ...newHostRule, dest: e.target.value })} placeholder="IP, CIDR, alias..." />
+                  <TextField fullWidth size="small" label={t('firewall.destination')} value={newHostRule.dest} onChange={(e) => setNewHostRule({ ...newHostRule, dest: e.target.value })} placeholder="IP, CIDR, alias..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Port destination" value={newHostRule.dport} onChange={(e) => setNewHostRule({ ...newHostRule, dport: e.target.value })} placeholder="22, 80, 443..." />
+                  <TextField fullWidth size="small" label={t('firewall.destPort')} value={newHostRule.dport} onChange={(e) => setNewHostRule({ ...newHostRule, dport: e.target.value })} placeholder="22, 80, 443..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Port source" value={newHostRule.sport} onChange={(e) => setNewHostRule({ ...newHostRule, sport: e.target.value })} />
+                  <TextField fullWidth size="small" label={t('firewall.sourcePort')} value={newHostRule.sport} onChange={(e) => setNewHostRule({ ...newHostRule, sport: e.target.value })} />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Interface" value={newHostRule.iface} onChange={(e) => setNewHostRule({ ...newHostRule, iface: e.target.value })} placeholder="vmbr0, eth0..." />
+                  <TextField fullWidth size="small" label={t('firewall.interface')} value={newHostRule.iface} onChange={(e) => setNewHostRule({ ...newHostRule, iface: e.target.value })} placeholder="vmbr0, eth0..." />
                 </Grid>
               </>
             )}
             <Grid size={{ xs: 12 }}>
-              <TextField fullWidth size="small" label="Commentaire" value={newHostRule.comment} onChange={(e) => setNewHostRule({ ...newHostRule, comment: e.target.value })} />
+              <TextField fullWidth size="small" label={t('firewall.comment')} value={newHostRule.comment} onChange={(e) => setNewHostRule({ ...newHostRule, comment: e.target.value })} />
             </Grid>
           </Grid>
         </DialogContent>

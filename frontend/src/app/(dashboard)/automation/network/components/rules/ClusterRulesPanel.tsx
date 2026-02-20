@@ -157,12 +157,12 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
                 <TableCell sx={{ fontWeight: 700, width: 30 }}></TableCell>
                 <TableCell sx={{ fontWeight: 700, width: 35, fontSize: 11 }}>#</TableCell>
                 <TableCell sx={{ fontWeight: 700, width: 50, fontSize: 11 }}>{t('common.active')}</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Type</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Action</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Proto</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Source</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Dest</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Port</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.type')}</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.action')}</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.proto')}</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.source')}</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.dest')}</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.port')}</TableCell>
                 <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('networkPage.comment')}</TableCell>
                 <TableCell sx={{ fontWeight: 700, width: 80, fontSize: 11 }}>{t('common.actions')}</TableCell>
               </TableRow>
@@ -270,23 +270,23 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Type</InputLabel>
-                <Select value={newClusterRule.type} label="Type" onChange={(e) => setNewClusterRule({ ...newClusterRule, type: e.target.value })}>
-                  <MenuItem value="in">IN (entrant)</MenuItem>
-                  <MenuItem value="out">OUT (sortant)</MenuItem>
-                  <MenuItem value="group">GROUP (Security Group)</MenuItem>
+                <InputLabel>{t('firewall.type')}</InputLabel>
+                <Select value={newClusterRule.type} label={t('firewall.type')} onChange={(e) => setNewClusterRule({ ...newClusterRule, type: e.target.value })}>
+                  <MenuItem value="in">{t('firewall.typeIn')}</MenuItem>
+                  <MenuItem value="out">{t('firewall.typeOut')}</MenuItem>
+                  <MenuItem value="group">{t('firewall.typeGroup')}</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Action</InputLabel>
+                <InputLabel>{t('firewall.action')}</InputLabel>
                 {newClusterRule.type === 'group' ? (
-                  <Select value={newClusterRule.action} label="Action" onChange={(e) => setNewClusterRule({ ...newClusterRule, action: e.target.value })}>
+                  <Select value={newClusterRule.action} label={t('firewall.action')} onChange={(e) => setNewClusterRule({ ...newClusterRule, action: e.target.value })}>
                     {securityGroups.map(sg => (<MenuItem key={sg.group} value={sg.group}>{sg.group}</MenuItem>))}
                   </Select>
                 ) : (
-                  <Select value={newClusterRule.action} label="Action" onChange={(e) => setNewClusterRule({ ...newClusterRule, action: e.target.value })}>
+                  <Select value={newClusterRule.action} label={t('firewall.action')} onChange={(e) => setNewClusterRule({ ...newClusterRule, action: e.target.value })}>
                     <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                     <MenuItem value="DROP">DROP</MenuItem>
                     <MenuItem value="REJECT">REJECT</MenuItem>
@@ -296,37 +296,37 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Actif</InputLabel>
-                <Select value={newClusterRule.enable} label="Actif" onChange={(e) => setNewClusterRule({ ...newClusterRule, enable: Number(e.target.value) })}>
-                  <MenuItem value={1}>Oui</MenuItem>
-                  <MenuItem value={0}>Non</MenuItem>
+                <InputLabel>{t('firewall.active')}</InputLabel>
+                <Select value={newClusterRule.enable} label={t('firewall.active')} onChange={(e) => setNewClusterRule({ ...newClusterRule, enable: Number(e.target.value) })}>
+                  <MenuItem value={1}>{t('firewall.yes')}</MenuItem>
+                  <MenuItem value={0}>{t('firewall.no')}</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
             {newClusterRule.type !== 'group' && (
               <>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Protocole" value={newClusterRule.proto} onChange={(e) => setNewClusterRule({ ...newClusterRule, proto: e.target.value })} placeholder="tcp, udp, icmp..." />
+                  <TextField fullWidth size="small" label={t('firewall.protocol')} value={newClusterRule.proto} onChange={(e) => setNewClusterRule({ ...newClusterRule, proto: e.target.value })} placeholder="tcp, udp, icmp..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Source" value={newClusterRule.source} onChange={(e) => setNewClusterRule({ ...newClusterRule, source: e.target.value })} placeholder="IP, CIDR, alias..." />
+                  <TextField fullWidth size="small" label={t('firewall.source')} value={newClusterRule.source} onChange={(e) => setNewClusterRule({ ...newClusterRule, source: e.target.value })} placeholder="IP, CIDR, alias..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Destination" value={newClusterRule.dest} onChange={(e) => setNewClusterRule({ ...newClusterRule, dest: e.target.value })} placeholder="IP, CIDR, alias..." />
+                  <TextField fullWidth size="small" label={t('firewall.destination')} value={newClusterRule.dest} onChange={(e) => setNewClusterRule({ ...newClusterRule, dest: e.target.value })} placeholder="IP, CIDR, alias..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Port destination" value={newClusterRule.dport} onChange={(e) => setNewClusterRule({ ...newClusterRule, dport: e.target.value })} placeholder="22, 80, 443..." />
+                  <TextField fullWidth size="small" label={t('firewall.destPort')} value={newClusterRule.dport} onChange={(e) => setNewClusterRule({ ...newClusterRule, dport: e.target.value })} placeholder="22, 80, 443..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Port source" value={newClusterRule.sport} onChange={(e) => setNewClusterRule({ ...newClusterRule, sport: e.target.value })} />
+                  <TextField fullWidth size="small" label={t('firewall.sourcePort')} value={newClusterRule.sport} onChange={(e) => setNewClusterRule({ ...newClusterRule, sport: e.target.value })} />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label="Interface" value={newClusterRule.iface} onChange={(e) => setNewClusterRule({ ...newClusterRule, iface: e.target.value })} placeholder="vmbr0, eth0..." />
+                  <TextField fullWidth size="small" label={t('firewall.interface')} value={newClusterRule.iface} onChange={(e) => setNewClusterRule({ ...newClusterRule, iface: e.target.value })} placeholder="vmbr0, eth0..." />
                 </Grid>
               </>
             )}
             <Grid size={{ xs: 12 }}>
-              <TextField fullWidth size="small" label="Commentaire" value={newClusterRule.comment} onChange={(e) => setNewClusterRule({ ...newClusterRule, comment: e.target.value })} />
+              <TextField fullWidth size="small" label={t('firewall.comment')} value={newClusterRule.comment} onChange={(e) => setNewClusterRule({ ...newClusterRule, comment: e.target.value })} />
             </Grid>
           </Grid>
         </DialogContent>

@@ -267,7 +267,7 @@ export default function VmDetailTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
-                      Options
+                      {t('inventory.tabs.options')}
                     </Box>
                   }
                 />
@@ -294,7 +294,7 @@ export default function VmDetailTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-camera-line" style={{ fontSize: 16 }} />
-                      Snapshots
+                      {t('inventory.tabs.snapshots')}
                       {snapshots.length > 0 && (
                         <Chip size="small" label={snapshots.length} sx={{ height: 18, fontSize: 11, ml: 0.5 }} />
                       )}
@@ -305,7 +305,7 @@ export default function VmDetailTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-sticky-note-line" style={{ fontSize: 16 }} />
-                      Notes
+                      {t('inventory.tabs.notes')}
                     </Box>
                   }
                 />
@@ -325,7 +325,7 @@ export default function VmDetailTabs(props: any) {
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-shield-check-line" style={{ fontSize: 16 }} />
-                        HA
+                        {t('inventory.tabs.ha')}
                       </Box>
                     }
                   />
@@ -334,7 +334,7 @@ export default function VmDetailTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
-                      Firewall
+                      {t('inventory.tabs.firewall')}
                     </Box>
                   }
                 />
@@ -356,9 +356,9 @@ export default function VmDetailTabs(props: any) {
                             {[
                               { label: '1h', value: 'hour' as RrdTimeframe },
                               { label: '24h', value: 'day' as RrdTimeframe },
-                              { label: '7j', value: 'week' as RrdTimeframe },
-                              { label: '30j', value: 'month' as RrdTimeframe },
-                              { label: '1an', value: 'year' as RrdTimeframe },
+                              { label: t('inventory.rrd7d'), value: 'week' as RrdTimeframe },
+                              { label: t('inventory.rrd30d'), value: 'month' as RrdTimeframe },
+                              { label: t('inventory.rrd1y'), value: 'year' as RrdTimeframe },
                             ].map(opt => (
                               <Chip
                                 key={opt.value}
@@ -390,7 +390,7 @@ export default function VmDetailTabs(props: any) {
                           {/* CPU Usage */}
                           <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                             <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                              CPU Usage
+                              {t('inventory.cpuUsage')}
                             </Typography>
                             <Box sx={{ height: 160 }}>
                               <ResponsiveContainer width="100%" height="100%">
@@ -410,7 +410,7 @@ export default function VmDetailTabs(props: any) {
                           {/* Memory Usage */}
                           <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                             <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                              Memory Usage
+                              {t('inventory.memoryUsage')}
                             </Typography>
                             <Box sx={{ height: 160 }}>
                               <ResponsiveContainer width="100%" height="100%">
@@ -451,7 +451,7 @@ export default function VmDetailTabs(props: any) {
                           {/* Disk I/O (VMs) */}
                           <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                             <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                              Disk I/O
+                              {t('inventory.diskIo')}
                             </Typography>
                             <Box sx={{ height: 160 }}>
                               <ResponsiveContainer width="100%" height="100%">
@@ -493,7 +493,7 @@ export default function VmDetailTabs(props: any) {
                           <CardContent>
                             <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                               <i className="ri-cpu-line" style={{ fontSize: 20 }} />
-                              Processeur (CPU)
+                              {t('inventory.processor')}
                             </Typography>
                           
                           {/* Avertissement si config CPU en attente de reboot */}
@@ -519,7 +519,7 @@ export default function VmDetailTabs(props: any) {
                           {/* Sockets Slider */}
                           <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                              <Typography variant="body2" fontWeight={600}>Sockets</Typography>
+                              <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
                               <TextField
                                 size="small"
                                 type="number"
@@ -548,7 +548,7 @@ export default function VmDetailTabs(props: any) {
                           {/* Cores Slider */}
                           <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                              <Typography variant="body2" fontWeight={600}>Cores par socket</Typography>
+                              <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
                               <TextField
                                 size="small"
                                 type="number"
@@ -583,15 +583,15 @@ export default function VmDetailTabs(props: any) {
 
                           {/* CPU Type */}
                           <FormControl fullWidth sx={{ mb: 3 }}>
-                            <InputLabel>Type CPU</InputLabel>
+                            <InputLabel>{t('inventory.cpuType')}</InputLabel>
                             <Select
                               value={cpuType}
-                              label="Type CPU"
+                              label={t('inventory.cpuType')}
                               onChange={(e) => setCpuType(e.target.value)}
                             >
-                              <MenuItem value="host">host ({t('inventory.performances')} maximales)</MenuItem>
-                              <MenuItem value="kvm64">kvm64 (Compatible)</MenuItem>
-                              <MenuItem value="qemu64">qemu64 (Émulation)</MenuItem>
+                              <MenuItem value="host">host ({t('inventory.maxPerformance')})</MenuItem>
+                              <MenuItem value="kvm64">kvm64 ({t('inventory.compatible')})</MenuItem>
+                              <MenuItem value="qemu64">qemu64 ({t('inventory.emulation')})</MenuItem>
                               <MenuItem value="Broadwell">Intel Broadwell</MenuItem>
                               <MenuItem value="Haswell">Intel Haswell</MenuItem>
                               <MenuItem value="IvyBridge">Intel IvyBridge</MenuItem>
@@ -611,12 +611,12 @@ export default function VmDetailTabs(props: any) {
                                   onChange={(e) => setCpuLimitEnabled(e.target.checked)}
                                 />
                               }
-                              label="Limiter l'utilisation CPU"
+                              label={t('inventory.limitCpuUsage')}
                             />
                             {cpuLimitEnabled && (
                               <Box sx={{ mt: 2 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="body2" fontWeight={600}>Limite CPU</Typography>
+                                  <Typography variant="body2" fontWeight={600}>{t('inventory.cpuLimit')}</Typography>
                                   <TextField
                                     size="small"
                                     type="number"
@@ -635,7 +635,7 @@ export default function VmDetailTabs(props: any) {
                                   valueLabelDisplay="auto"
                                 />
                                 <Typography variant="caption" color="text.secondary">
-                                  0 = Pas de limite. Valeur max : {cpuSockets * cpuCores}
+                                  {t('inventory.cpuLimitHint', { max: cpuSockets * cpuCores })}
                                 </Typography>
                               </Box>
                             )}
@@ -644,10 +644,10 @@ export default function VmDetailTabs(props: any) {
                           {/* Résumé */}
                           <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1, mb: 2 }}>
                             <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                              Total : {cpuSockets * cpuCores} vCPUs
+                              {t('inventory.totalVcpus', { count: cpuSockets * cpuCores })}
                             </Typography>
                             <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                              {cpuSockets} socket(s) × {cpuCores} core(s)
+                              {t('inventory.socketsCoresBreakdown', { sockets: cpuSockets, cores: cpuCores })}
                             </Typography>
                           </Box>
 
@@ -802,7 +802,7 @@ export default function VmDetailTabs(props: any) {
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                               <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <i className="ri-hard-drive-line" style={{ fontSize: 20 }} />
-                                Disques ({data.disksInfo?.length || 0})
+                                {t('inventory.disks')} ({data.disksInfo?.length || 0})
                               </Typography>
                               <Stack direction="row" spacing={1}>
                                 {data.optionsInfo?.scsihw && (
@@ -981,9 +981,9 @@ export default function VmDetailTabs(props: any) {
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '30%' }}>Option</th>
-                                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)' }}>Valeur</th>
-                                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '60px' }}>Actions</th>
+                                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '30%' }}>{t('inventory.option')}</th>
+                                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)' }}>{t('inventory.value')}</th>
+                                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '60px' }}>{t('inventory.actions')}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -991,13 +991,13 @@ export default function VmDetailTabs(props: any) {
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-file-text-line" style={{ fontSize: 16, opacity: 0.6 }} />
-                                    Nom
+                                    {t('common.name')}
                                   </Box>
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>{data.name || data.title || 'N/A'}</td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'name', label: 'Nom', value: data.name || '', type: 'text' })}>
+                                  <MuiTooltip title={t('common.edit')}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'name', label: t('common.name'), value: data.name || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1007,15 +1007,15 @@ export default function VmDetailTabs(props: any) {
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-sticky-note-line" style={{ fontSize: 16, opacity: 0.6 }} />
-                                    Description
+                                    {t('common.description')}
                                   </Box>
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.description ? 1 : 0.5, fontStyle: data.description ? 'normal' : 'italic' }}>
                                   {data.description || t('common.noData')}
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'description', label: 'Description', value: data.description || '', type: 'text' })}>
+                                  <MuiTooltip title={t('common.edit')}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'description', label: t('common.description'), value: data.description || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1057,7 +1057,7 @@ return (
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tags', label: 'Tags', value: (localTags || []).join(','), type: 'text' })}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tags', label: t('inventory.tags'), value: (localTags || []).join(','), type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1117,7 +1117,7 @@ return (
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ostype', label: t('inventory.osType'), value: data.optionsInfo?.ostype || 'other', type: 'select', options: [
-                                      { value: 'other', label: 'Other' },
+                                      { value: 'other', label: t('inventory.other') },
                                       { value: 'wxp', label: 'Windows XP' },
                                       { value: 'w2k', label: 'Windows 2000' },
                                       { value: 'w2k3', label: 'Windows 2003' },
@@ -1140,15 +1140,15 @@ return (
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-restart-line" style={{ fontSize: 16, opacity: 0.6 }} />
-                                    Boot order
+                                    {t('inventory.bootOrder')}
                                   </Box>
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontFamily: 'monospace', fontSize: '0.9rem' }}>
                                   {data.optionsInfo?.bootOrder || t('common.noData')}
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'boot', label: 'Ordre de boot', value: data.optionsInfo?.bootOrder || '', type: 'text' })}>
+                                  <MuiTooltip title={t('common.edit')}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'boot', label: t('inventory.bootOrder'), value: data.optionsInfo?.bootOrder || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1158,7 +1158,7 @@ return (
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-cursor-line" style={{ fontSize: 16, opacity: 0.6 }} />
-                                    Tablette USB
+                                    {t('inventory.usbTablet')}
                                   </Box>
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
@@ -1171,7 +1171,7 @@ return (
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tablet', label: 'USB Tablet', value: data.optionsInfo?.useTablet !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tablet', label: t('inventory.usbTablet'), value: data.optionsInfo?.useTablet !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1188,7 +1188,7 @@ return (
                                   {data.optionsInfo?.hotplug || 'disk,network,usb'}
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
+                                  <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'hotplug', label: 'Hotplug (disk,network,usb,memory,cpu)', value: data.optionsInfo?.hotplug || 'disk,network,usb', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
@@ -1234,7 +1234,7 @@ return (
                                   />
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
+                                  <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'kvm', label: 'KVM Hardware Virtualization', value: data.optionsInfo?.kvmEnabled !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
@@ -1276,7 +1276,7 @@ return (
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'localtime', label: 'RTC Local Time', value: data.optionsInfo?.useLocalTime || '', type: 'select', options: [{ value: '', label: 'Default' }, { value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'localtime', label: t('inventory.rtcLocalTime'), value: data.optionsInfo?.useLocalTime || '', type: 'select', options: [{ value: '', label: t('common.default') }, { value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1336,7 +1336,7 @@ return (
                                   />
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
+                                  <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'agent', label: 'QEMU Guest Agent', value: data.optionsInfo?.agentEnabled ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.enabled') }, { value: '0', label: t('common.disabled') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
@@ -1359,8 +1359,8 @@ return (
                                   />
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'protection', label: 'Protection', value: data.optionsInfo?.protection ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
+                                  <MuiTooltip title={t('common.edit')}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'protection', label: t('inventory.protection'), value: data.optionsInfo?.protection ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1377,8 +1377,8 @@ return (
                                   {data.optionsInfo?.spiceEnhancements || 'none'}
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'spice_enhancements', label: 'Spice Enhancements', value: data.optionsInfo?.spiceEnhancements || '', type: 'text' })}>
+                                  <MuiTooltip title={t('common.edit')}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'spice_enhancements', label: t('inventory.spiceEnhancements'), value: data.optionsInfo?.spiceEnhancements || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1392,11 +1392,11 @@ return (
                                   </Box>
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
-                                  {data.optionsInfo?.vmStateStorage || 'Automatique'}
+                                  {data.optionsInfo?.vmStateStorage || t('inventoryPage.automatic')}
                                 </td>
                                 <td style={{ padding: '10px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
-                                  <MuiTooltip title="Éditer">
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'vmstatestorage', label: 'VM State Storage', value: data.optionsInfo?.vmStateStorage || '', type: 'text' })}>
+                                  <MuiTooltip title={t('common.edit')}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'vmstatestorage', label: t('inventory.vmStateStorage'), value: data.optionsInfo?.vmStateStorage || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -1415,7 +1415,7 @@ return (
                                 <td style={{ padding: '10px 16px', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'amd_sev', label: 'AMD SEV', value: data.optionsInfo?.amdSEV || '', type: 'select', options: [
-                                      { value: '', label: 'Default' },
+                                      { value: '', label: t('common.default') },
                                       { value: 'sev', label: 'AMD SEV' },
                                       { value: 'sev-es', label: 'AMD SEV-ES (highly experimental)' },
                                       { value: 'sev-snp', label: 'AMD SEV-SNP (highly experimental)' },
@@ -1476,11 +1476,11 @@ return (
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>Start Time</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>End Time</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>User name</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>Description</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem', width: '180px' }}>Status</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('inventory.startTime')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('inventory.endTime')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('inventory.userName')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('common.description')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem', width: '180px' }}>{t('updates.status')}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1558,7 +1558,7 @@ return (
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <i className="ri-hard-drive-2-line" style={{ fontSize: 20 }} />
-                        Sauvegardes
+                        {t('inventory.tabs.backups')}
                       </Typography>
                       <Button
                         variant="contained"
@@ -1582,7 +1582,7 @@ return (
                           setCreateBackupDialogOpen(true)
                         }}
                       >
-                        Nouvelle sauvegarde
+                        {t('inventory.newBackup')}
                       </Button>
                     </Box>
                   )}
@@ -1704,7 +1704,7 @@ return (
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                               <i className="ri-folder-open-line" style={{ marginRight: 8 }} />
-                              Contenu du backup
+                              {t('inventory.backupContent')}
                             </Typography>
                             <Stack direction="row" spacing={1} alignItems="center">
                               {selectedPveStorage && (
@@ -1774,7 +1774,7 @@ return (
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                             {storage.storage}
                                             {storage.matchType === 'exact' && (
-                                              <Chip label="Recommended" size="small" color="success" sx={{ height: 18, fontSize: 10 }} />
+                                              <Chip label={t('inventory.recommended')} size="small" color="success" sx={{ height: 18, fontSize: 10 }} />
                                             )}
                                           </Box>
                                         }
@@ -1791,7 +1791,7 @@ return (
                                 onClick={() => loadBackupContentViaPbs(selectedBackup)}
                                 sx={{ mt: 1 }}
                               >
-                                Utiliser PBS directement
+                                {t('inventory.usePbsDirectly')}
                               </Button>
                             </Box>
                           )}
@@ -1800,7 +1800,7 @@ return (
                           {!explorerArchive && !explorerLoading && (explorerArchives.length > 0 || explorerMode === 'pbs' || selectedPveStorage) && (
                             <>
                               <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', mb: 1 }}>
-                                {explorerMode === 'pve' ? 'Drives et archives du backup' : 'Archives du backup'}
+                                {explorerMode === 'pve' ? t('inventory.drivesAndArchives') : t('inventory.backupArchives')}
                               </Typography>
                               <List dense sx={{ mx: -1 }}>
                                 {explorerArchives.map((file: any, idx: number) => (
@@ -1822,10 +1822,10 @@ return (
                                       <ListItemText
                                         primary={file.name}
                                         secondary={
-                                          file.type === 'virtual' ? 'Drive / Partition' :
-                                          file.isRawDiskImage ? 'Image disque (non explorable)' :
-                                          file.browsable ? 'Cliquer pour explorer' :
-                                          file.sizeFormatted || 'Non explorable'
+                                          file.type === 'virtual' ? t('inventory.drivePartition') :
+                                          file.isRawDiskImage ? t('inventory.diskImageNotBrowsable') :
+                                          file.browsable ? t('inventory.clickToExplore') :
+                                          file.sizeFormatted || t('inventory.notBrowsable')
                                         }
                                       />
                                       {file.browsable && (
@@ -1970,8 +1970,8 @@ return (
                                           primary={file.name}
                                           secondary={
                                             file.sizeFormatted && file.sizeFormatted !== '0 B' 
-                                              ? file.sizeFormatted 
-                                              : isNavigable ? 'Dossier' : '-'
+                                              ? file.sizeFormatted
+                                              : isNavigable ? t('inventory.folder') : '-'
                                           }
                                         />
                                         {isNavigable && (
@@ -1988,7 +1988,7 @@ return (
                                 )}
                                 {explorerFiles.length === 0 && (
                                   <Typography variant="body2" sx={{ opacity: 0.5, py: 2, textAlign: 'center' }}>
-                                    Dossier vide
+                                    {t('inventory.emptyFolder')}
                                   </Typography>
                                 )}
                               </List>
@@ -2022,7 +2022,7 @@ return (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <i className="ri-camera-line" style={{ fontSize: 20, opacity: 0.7 }} />
                         <Typography variant="subtitle1" fontWeight={600}>
-                          Snapshots
+                          {t('inventory.tabs.snapshots')}
                         </Typography>
                         {snapshots.length > 0 && (
                           <Chip 
@@ -2235,7 +2235,7 @@ return (
                                             {isOldest && (
                                               <Chip 
                                                 size="small" 
-                                                label="Plus ancien" 
+                                                label={t('inventory.oldest')}
                                                 variant="outlined"
                                                 sx={{ height: 20, fontSize: '0.65rem' }} 
                                               />
@@ -2323,7 +2323,7 @@ return (
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <i className="ri-sticky-note-line" style={{ fontSize: 20 }} />
-                          Notes
+                          {t('inventory.tabs.notes')}
                         </Typography>
                         {!notesEditing && (
                           <Button
@@ -2361,7 +2361,7 @@ return (
                                 maxRows={20}
                                 value={vmNotes}
                                 onChange={(e) => setVmNotes(e.target.value)}
-                                placeholder="Entrez vos notes pour cette VM..."
+                                placeholder={t('inventory.notesPlaceholder')}
                                 sx={{ mb: 2 }}
                               />
                               <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -2457,7 +2457,7 @@ return (
                                   <TableCell>{t('replication.lastSync')}</TableCell>
                                   <TableCell>{t('replication.nextSync')}</TableCell>
                                   <TableCell align="center">{t('updates.status')}</TableCell>
-                                  <TableCell align="center">Actions</TableCell>
+                                  <TableCell align="center">{t('inventory.actions')}</TableCell>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -2597,7 +2597,7 @@ return (
                                     <TableCell>{t('replication.schedule')}</TableCell>
                                     <TableCell>{t('replication.lastSync')}</TableCell>
                                     <TableCell align="center">{t('updates.status')}</TableCell>
-                                    <TableCell align="center">Actions</TableCell>
+                                    <TableCell align="center">{t('inventory.actions')}</TableCell>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -3122,7 +3122,7 @@ return (
                               }}
                             >
                               <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>État</Typography>
+                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.state')}</Typography>
                                 <Typography variant="body2" fontWeight={600}>
                                   <Chip 
                                     label={haConfig.state || 'started'} 
@@ -3132,7 +3132,7 @@ return (
                                 </Typography>
                               </Box>
                               <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>Groupe</Typography>
+                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.group')}</Typography>
                                 <Typography variant="body2" fontWeight={600}>
                                   {haConfig.group || <span style={{ opacity: 0.5 }}>{t('common.none')}</span>}
                                 </Typography>
@@ -3151,7 +3151,7 @@ return (
                               </Box>
                               {haConfig.comment && (
                                 <Box sx={{ gridColumn: '1 / -1' }}>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>Commentaire</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventoryPage.comment')}</Typography>
                                   <Typography variant="body2">
                                     {haConfig.comment}
                                   </Typography>

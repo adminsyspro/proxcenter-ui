@@ -158,7 +158,7 @@ return `${mins}m`
         {!showConsole && !hostInfo ? (
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1, gap: 1, flexWrap: 'wrap' }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-              {kindLabel !== 'DATASTORE' && <Typography fontWeight={900}>Summary</Typography>}
+              {kindLabel !== 'DATASTORE' && <Typography fontWeight={900}>{t('inventory.summary')}</Typography>}
               <Chip size="small" label={kindLabel} variant="outlined" />
               {kindLabel !== 'DATASTORE' && (vmState ? (
                 <Chip
@@ -225,7 +225,7 @@ return `${mins}m`
               }}
             >
               <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
-              <UsageBar themeColor={primaryColor} label="Memory" used={memUsed} capacity={memCap} mode="bytes" />
+              <UsageBar themeColor={primaryColor} label={t('inventory.memoryLabel')} used={memUsed} capacity={memCap} mode="bytes" />
 
               {/* IP et Uptime */}
               <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -254,7 +254,7 @@ return `${mins}m`
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <i className="ri-time-line" style={{ fontSize: 14, opacity: 0.6 }} />
-                  <Typography variant="body2" sx={{ opacity: 0.7 }}>Uptime:</Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.7 }}>{t('inventory.uptime')}:</Typography>
                   {guestInfoLoading ? (
                     <CircularProgress size={12} />
                   ) : formatUptime(guestInfo?.uptime) ? (
@@ -322,7 +322,7 @@ return `${mins}m`
                       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                         <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>IO delay</Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ioDelay')}</Typography>
                           <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
                         </Box>
                       </Box>
@@ -331,7 +331,7 @@ return `${mins}m`
                       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                         <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>KSM sharing</Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ksmSharing')}</Typography>
                           <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
                         </Box>
                       </Box>
@@ -366,7 +366,7 @@ return `${mins}m`
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     <i className="ri-terminal-box-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>Kernel Version</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.kernelVersion')}</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.kernelVersion}</Typography>
                     </Box>
                   </Box>
@@ -375,7 +375,7 @@ return `${mins}m`
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     <i className="ri-restart-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>Boot Mode</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.bootMode')}</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.bootMode}</Typography>
                     </Box>
                   </Box>
@@ -384,7 +384,7 @@ return `${mins}m`
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     <i className="ri-server-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>Manager Version</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.managerVersion')}</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.pveVersion}</Typography>
                     </Box>
                   </Box>
@@ -682,11 +682,11 @@ return `${mins}m`
                 }}
               >
                 {kindLabel === 'PBS' ? (
-                  <UsageBar themeColor={primaryColor} label="Storage" used={diskUsed} capacity={diskCap} mode="bytes" />
+                  <UsageBar themeColor={primaryColor} label={t('inventory.storageLabel')} used={diskUsed} capacity={diskCap} mode="bytes" />
                 ) : (
                   <>
                     <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
-                    <UsageBar themeColor={primaryColor} label="Memory" used={memUsed} capacity={memCap} mode="bytes" />
+                    <UsageBar themeColor={primaryColor} label={t('inventory.memoryLabel')} used={memUsed} capacity={memCap} mode="bytes" />
                   </>
                 )}
               </Box>

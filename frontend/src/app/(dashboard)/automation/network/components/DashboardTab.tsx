@@ -106,7 +106,7 @@ export default function DashboardTab({
                 <i className="ri-arrow-down-line" style={{ fontSize: 16, color: currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e' }} />
               </Avatar>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>Policy IN</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('firewall.policyIn')}</Typography>
                 <Chip
                   label={currentOptions?.policy_in || 'ACCEPT'}
                   size="small"
@@ -125,7 +125,7 @@ export default function DashboardTab({
                 <i className="ri-arrow-up-line" style={{ fontSize: 16, color: currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e' }} />
               </Avatar>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>Policy OUT</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('firewall.policyOut')}</Typography>
                 <Chip
                   label={currentOptions?.policy_out || 'ACCEPT'}
                   size="small"
@@ -144,9 +144,9 @@ export default function DashboardTab({
                 <i className={firewallMode === 'cluster' ? "ri-server-line" : "ri-computer-line"} style={{ fontSize: 16, color: firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b' }} />
               </Avatar>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>Mode</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('firewall.mode')}</Typography>
                 <Chip
-                  label={firewallMode === 'cluster' ? 'Cluster' : 'Standalone'}
+                  label={firewallMode === 'cluster' ? t('firewall.cluster') : t('firewall.standalone')}
                   size="small"
                   sx={{
                     height: 20, fontSize: 10, fontWeight: 700,
@@ -240,7 +240,7 @@ export default function DashboardTab({
             if (currentOptions?.policy_in !== 'DROP') {
               recommendations.push({
                 severity: 'warning', icon: 'ri-arrow-down-line',
-                title: 'Policy IN permissive',
+                title: t('firewall.policyInPermissive'),
                 description: t('network.switchToDropZeroTrust'), action: t('microseg.configure'), onClick: () => { onNavigateTab(2); onNavigateRulesSubTab(1) }
               })
             }
@@ -249,14 +249,14 @@ export default function DashboardTab({
               recommendations.push({
                 severity: 'warning', icon: 'ri-computer-line',
                 title: t('network.vmsWithDisabledFirewall', { count: unprotectedVMs.length }),
-                description: t('network.enableFirewallVms'), action: t('common.view') + ' VMs', onClick: () => { onNavigateTab(2); onNavigateRulesSubTab(2) }
+                description: t('network.enableFirewallVms'), action: t('firewall.viewVms'), onClick: () => { onNavigateTab(2); onNavigateRulesSubTab(2) }
               })
             }
             const vmsWithoutSG = vmFirewallData.filter(v => v.firewallEnabled && !v.rules.some(r => r.type === 'group'))
             if (vmsWithoutSG.length > 0 && firewallMode === 'cluster') {
               recommendations.push({
                 severity: 'info', icon: 'ri-shield-keyhole-line',
-                title: `${vmsWithoutSG.length} VMs without micro-segmentation`,
+                title: t('firewall.vmsWithoutMicroseg', { count: vmsWithoutSG.length }),
                 description: t('microseg.clickVmToIsolate'), action: t('microseg.configure'), onClick: () => onNavigateTab(1)
               })
             }

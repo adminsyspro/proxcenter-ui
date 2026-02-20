@@ -167,7 +167,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-dashboard-line" style={{ fontSize: 16 }} />
-                      Summary
+                      {t('inventory.tabSummary')}
                     </Box>
                   }
                 />
@@ -175,7 +175,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-server-line" style={{ fontSize: 16 }} />
-                      Nodes
+                      {t('inventory.tabNodes')}
                       <Chip size="small" label={data.nodesData.length} sx={{ height: 18, fontSize: 11 }} />
                     </Box>
                   }
@@ -195,7 +195,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-check-line" style={{ fontSize: 16 }} />
-                      High Availability
+                      {t('inventory.tabHighAvailability')}
                     </Box>
                   }
                 />
@@ -203,7 +203,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-calendar-schedule-line" style={{ fontSize: 16 }} />
-                      Backups
+                      {t('inventory.tabBackups')}
                     </Box>
                   }
                 />
@@ -211,7 +211,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-camera-line" style={{ fontSize: 16 }} />
-                      Snapshots
+                      {t('inventory.tabSnapshots')}
                     </Box>
                   }
                 />
@@ -219,7 +219,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-file-text-line" style={{ fontSize: 16 }} />
-                      Notes
+                      {t('inventory.tabNotes')}
                     </Box>
                   }
                 />
@@ -227,7 +227,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-database-2-line" style={{ fontSize: 16 }} />
-                      Ceph
+                      {t('inventory.tabCeph')}
                     </Box>
                   }
                 />
@@ -235,7 +235,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-hard-drive-2-line" style={{ fontSize: 16 }} />
-                      Storage
+                      {t('inventory.tabStorage')}
                     </Box>
                   }
                 />
@@ -243,7 +243,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
-                      Firewall
+                      {t('inventory.tabFirewall')}
                     </Box>
                   }
                 />
@@ -252,7 +252,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: rollingUpdateAvailable ? 1 : 0.4 }}>
                       <i className="ri-refresh-line" style={{ fontSize: 16 }} />
-                      Rolling Update
+                      {t('inventory.tabRollingUpdate')}
                       {!rollingUpdateAvailable && (
                         <Chip
                           size="small"
@@ -299,7 +299,7 @@ export default function ClusterTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
-                      Cluster
+                      {t('inventory.tabCluster')}
                     </Box>
                   }
                 />
@@ -320,12 +320,12 @@ export default function ClusterTabs(props: any) {
                       <Card variant="outlined" sx={{ height: '100%' }}>
                         <CardContent sx={{ p: 2 }}>
                           <Typography variant="subtitle2" color="primary" fontWeight={700} sx={{ mb: 2 }}>
-                            Health
+                            {t('inventory.healthLabel')}
                           </Typography>
                           <Grid container spacing={3}>
                               {/* Status */}
                               <Grid size={4} sx={{ textAlign: 'center' }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Status</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.statusLabel')}</Typography>
                                 <Box sx={{ 
                                   width: 48, 
                                   height: 48, 
@@ -340,26 +340,26 @@ export default function ClusterTabs(props: any) {
                                   <i className={data.status === 'ok' ? "ri-check-line" : "ri-alert-line"} style={{ fontSize: 24, color: '#fff' }} />
                                 </Box>
                                 <Typography variant="caption" sx={{ display: 'block' }}>
-                                  Cluster: {data.title}
+                                  {t('inventory.tabCluster')}: {data.title}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  Quorate: Yes
+                                  {t('inventory.quorateYes')}
                                 </Typography>
                               </Grid>
                               {/* Nodes */}
                               <Grid size={4} sx={{ textAlign: 'center' }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Nodes</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.nodesLabel')}</Typography>
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                                    <Typography variant="body2">Online</Typography>
+                                    <Typography variant="body2">{t('inventory.online')}</Typography>
                                     <Typography variant="body2" fontWeight={700}>
                                       {(data.nodesData as any[])?.filter((n: any) => n.status === 'online').length || 0}
                                     </Typography>
                                   </Box>
                                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />
-                                    <Typography variant="body2">Offline</Typography>
+                                    <Typography variant="body2">{t('inventory.offline')}</Typography>
                                     <Typography variant="body2" fontWeight={700}>
                                       {(data.nodesData as any[])?.filter((n: any) => n.status !== 'online').length || 0}
                                     </Typography>
@@ -368,7 +368,7 @@ export default function ClusterTabs(props: any) {
                               </Grid>
                               {/* Ceph */}
                               <Grid size={4} sx={{ textAlign: 'center' }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Ceph</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.cephLabel')}</Typography>
                                 <Box sx={{ 
                                   width: 48, 
                                   height: 48, 
@@ -385,9 +385,9 @@ export default function ClusterTabs(props: any) {
                                   <i className={data.cephHealth ? "ri-check-line" : "ri-question-line"} style={{ fontSize: 24, color: '#fff' }} />
                                 </Box>
                                 <Typography variant="caption">
-                                  {data.cephHealth === 'HEALTH_OK' ? 'Healthy' : 
-                                   data.cephHealth === 'HEALTH_WARN' ? 'Warning' : 
-                                   data.cephHealth ? 'Error' : 'N/A'}
+                                  {data.cephHealth === 'HEALTH_OK' ? t('inventory.healthy') :
+                                   data.cephHealth === 'HEALTH_WARN' ? t('inventory.warning') :
+                                   data.cephHealth ? t('inventory.error') : t('inventory.notAvailable')}
                                 </Typography>
                               </Grid>
                             </Grid>
@@ -398,12 +398,12 @@ export default function ClusterTabs(props: any) {
                       <Card variant="outlined" sx={{ height: '100%' }}>
                         <CardContent sx={{ p: 2 }}>
                             <Typography variant="subtitle2" color="primary" fontWeight={700} sx={{ mb: 2 }}>
-                              Guests
+                              {t('inventory.guests')}
                             </Typography>
                             <Grid container spacing={2}>
                               {/* Virtual Machines */}
                               <Grid size={6}>
-                                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Virtual Machines</Typography>
+                                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.virtualMachines')}</Typography>
                                 {(() => {
                                   const allVms = (data as any).allVms || []
                                   const qemuVms = allVms.filter((v: any) => v.type === 'qemu')
@@ -414,17 +414,17 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                                        <Typography variant="body2">Running</Typography>
+                                        <Typography variant="body2">{t('inventory.running')}</Typography>
                                         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{running}</Typography>
                                       </Box>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'text.disabled' }} />
-                                        <Typography variant="body2">Stopped</Typography>
+                                        <Typography variant="body2">{t('inventory.stopped')}</Typography>
                                         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{stopped}</Typography>
                                       </Box>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'transparent', border: '1px solid', borderColor: 'text.disabled' }} />
-                                        <Typography variant="body2">Templates</Typography>
+                                        <Typography variant="body2">{t('inventory.templates')}</Typography>
                                         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{templates}</Typography>
                                       </Box>
                                     </Box>
@@ -433,7 +433,7 @@ export default function ClusterTabs(props: any) {
                               </Grid>
                               {/* LXC Containers */}
                               <Grid size={6}>
-                                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>LXC Containers</Typography>
+                                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.lxcContainers')}</Typography>
                                 {(() => {
                                   const allVms = (data as any).allVms || []
                                   const lxcVms = allVms.filter((v: any) => v.type === 'lxc')
@@ -443,12 +443,12 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                                        <Typography variant="body2">Running</Typography>
+                                        <Typography variant="body2">{t('inventory.running')}</Typography>
                                         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{running}</Typography>
                                       </Box>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'text.disabled' }} />
-                                        <Typography variant="body2">Stopped</Typography>
+                                        <Typography variant="body2">{t('inventory.stopped')}</Typography>
                                         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{stopped}</Typography>
                                       </Box>
                                     </Box>
@@ -463,7 +463,7 @@ export default function ClusterTabs(props: any) {
                       <Card variant="outlined" sx={{ height: '100%' }}>
                         <CardContent sx={{ p: 2 }}>
                           <Typography variant="subtitle2" color="primary" fontWeight={700} sx={{ mb: 2 }}>
-                            Resources
+                            {t('inventory.resources')}
                           </Typography>
                           <Grid container spacing={3}>
                               {(() => {
@@ -498,12 +498,12 @@ export default function ClusterTabs(props: any) {
                                         </Box>
                                       </Box>
                                       <Typography variant="caption" sx={{ display: 'block' }}>
-                                        {nodes.length} nodes
+                                        {t('cluster.nodesCount', { count: nodes.length })}
                                       </Typography>
                                     </Grid>
                                     {/* Memory */}
                                     <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: 'center' }}>
-                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Memory</Typography>
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.memoryLabel')}</Typography>
                                       <Box sx={{ position: 'relative', display: 'inline-flex', mb: 1 }}>
                                         <CircularProgress
                                           variant="determinate"
@@ -517,12 +517,12 @@ export default function ClusterTabs(props: any) {
                                         </Box>
                                       </Box>
                                       <Typography variant="caption" sx={{ display: 'block' }}>
-                                        {formatBytes(usedMem)} of {formatBytes(totalMem)}
+                                        {t('cluster.usageOf', { used: formatBytes(usedMem), total: formatBytes(totalMem) })}
                                       </Typography>
                                     </Grid>
                                     {/* Storage */}
                                     <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: 'center' }}>
-                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Storage</Typography>
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.storageLabel')}</Typography>
                                       <Box sx={{ position: 'relative', display: 'inline-flex', mb: 1 }}>
                                         <CircularProgress
                                           variant="determinate"
@@ -536,7 +536,7 @@ export default function ClusterTabs(props: any) {
                                         </Box>
                                       </Box>
                                       <Typography variant="caption" sx={{ display: 'block' }}>
-                                        {formatBytes(usedStorage)} of {formatBytes(totalStorage)}
+                                        {t('cluster.usageOf', { used: formatBytes(usedStorage), total: formatBytes(totalStorage) })}
                                       </Typography>
                                     </Grid>
                                   </>
@@ -552,21 +552,21 @@ export default function ClusterTabs(props: any) {
                       <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                         <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
                           <Typography variant="subtitle2" color="primary" fontWeight={700}>
-                            Nodes
+                            {t('inventory.nodesLabel')}
                           </Typography>
                         </Box>
                         <TableContainer>
                               <Table size="small">
                                 <TableHead>
                                   <TableRow>
-                                    <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>Online</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>Support</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>Server Address</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>CPU usage</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>Memory usage</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>Uptime</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('common.name')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.id')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.onlineHeader')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.support')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.serverAddress')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.cpuUsageHeader')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.memoryUsageHeader')}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{t('inventory.uptime')}</TableCell>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -596,7 +596,7 @@ export default function ClusterTabs(props: any) {
                                           )}
                                         </TableCell>
                                         <TableCell>
-                                          <Chip size="small" label="Community" sx={{ height: 20, fontSize: 10 }} />
+                                          <Chip size="small" label={t('cluster.community')} sx={{ height: 20, fontSize: 10 }} />
                                         </TableCell>
                                         <TableCell sx={{ fontSize: 12 }}>{node.ip || '-'}</TableCell>
                                         <TableCell>
@@ -751,7 +751,7 @@ export default function ClusterTabs(props: any) {
                               
                               {isExpanded && nodeVms.length === 0 && (
                                 <Box sx={{ px: 4, py: 2, bgcolor: 'background.default', opacity: 0.5 }}>
-                                  <Typography variant="body2">No VMs on this node</Typography>
+                                  <Typography variant="body2">{t('inventory.noVmsOnNode')}</Typography>
                                 </Box>
                               )}
                             </Box>
@@ -795,7 +795,7 @@ export default function ClusterTabs(props: any) {
                         <Box>
                           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <i className="ri-stack-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                            Ressources ({clusterHaResources.length})
+                            {t('cluster.haResources')} ({clusterHaResources.length})
                           </Typography>
                           
                           {clusterHaResources.length === 0 ? (
@@ -823,13 +823,13 @@ export default function ClusterTabs(props: any) {
                                 borderColor: 'divider',
                                 '& > *': { fontWeight: 600, fontSize: 12, opacity: 0.8 }
                               }}>
-                                <Typography variant="caption">ID</Typography>
-                                <Typography variant="caption">State</Typography>
-                                <Typography variant="caption">Node</Typography>
-                                <Typography variant="caption">Max. Restart</Typography>
-                                <Typography variant="caption">Max. Reloc.</Typography>
-                                {clusterPveMajorVersion < 9 && <Typography variant="caption">Group</Typography>}
-                                <Typography variant="caption">Description</Typography>
+                                <Typography variant="caption">{t('inventory.id')}</Typography>
+                                <Typography variant="caption">{t('cluster.state')}</Typography>
+                                <Typography variant="caption">{t('cluster.nodeCol')}</Typography>
+                                <Typography variant="caption">{t('cluster.maxRestart')}</Typography>
+                                <Typography variant="caption">{t('cluster.maxRelocate')}</Typography>
+                                {clusterPveMajorVersion < 9 && <Typography variant="caption">{t('cluster.group')}</Typography>}
+                                <Typography variant="caption">{t('common.description')}</Typography>
                               </Box>
                               {/* Rows */}
                               {clusterHaResources.map((res: any) => (
@@ -889,7 +889,7 @@ export default function ClusterTabs(props: any) {
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                               <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <i className="ri-group-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                                Groupes ({clusterHaGroups.length})
+                                {t('cluster.groups')} ({clusterHaGroups.length})
                               </Typography>
                               <Button
                                 size="small"
@@ -927,12 +927,12 @@ export default function ClusterTabs(props: any) {
                                   borderColor: 'divider',
                                   '& > *': { fontWeight: 600, fontSize: 12, opacity: 0.8 }
                                 }}>
-                                  <Typography variant="caption">Group</Typography>
-                                  <Typography variant="caption">Restricted</Typography>
-                                  <Typography variant="caption">Nofailback</Typography>
-                                  <Typography variant="caption">Nodes</Typography>
-                                  <Typography variant="caption">Comment</Typography>
-                                  <Typography variant="caption" sx={{ textAlign: 'center' }}>Actions</Typography>
+                                  <Typography variant="caption">{t('cluster.group')}</Typography>
+                                  <Typography variant="caption">{t('cluster.restricted')}</Typography>
+                                  <Typography variant="caption">{t('cluster.nofailback')}</Typography>
+                                  <Typography variant="caption">{t('inventory.nodesLabel')}</Typography>
+                                  <Typography variant="caption">{t('inventory.commentHeader')}</Typography>
+                                  <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('common.actions')}</Typography>
                                 </Box>
                                 {/* Rows */}
                                 {clusterHaGroups.map((group: any) => (
@@ -954,10 +954,10 @@ export default function ClusterTabs(props: any) {
                                       {group.group}
                                     </Typography>
                                     <Typography variant="body2">
-                                      {group.restricted ? 'Yes' : 'No'}
+                                      {group.restricted ? t('common.yes') : t('common.no')}
                                     </Typography>
                                     <Typography variant="body2">
-                                      {group.nofailback ? 'Yes' : 'No'}
+                                      {group.nofailback ? t('common.yes') : t('common.no')}
                                     </Typography>
                                     <Typography variant="body2" sx={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                       {group.nodes || '-'}
@@ -1002,7 +1002,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                                 <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <i className="ri-node-tree" style={{ fontSize: 18, opacity: 0.7 }} />
-                                  Node Affinity Rules ({clusterHaRules.filter((r: any) => r.type === 'node-affinity').length})
+                                  {t('cluster.nodeAffinityRules')} ({clusterHaRules.filter((r: any) => r.type === 'node-affinity').length})
                                 </Typography>
                                 <Button
                                   size="small"
@@ -1041,12 +1041,12 @@ export default function ClusterTabs(props: any) {
                                     borderColor: 'divider',
                                     '& > *': { fontWeight: 600, fontSize: 12, opacity: 0.8 }
                                   }}>
-                                    <Typography variant="caption">Enabled</Typography>
-                                    <Typography variant="caption">State</Typography>
-                                    <Typography variant="caption">Strict</Typography>
-                                    <Typography variant="caption">HA Resources</Typography>
-                                    <Typography variant="caption">Nodes</Typography>
-                                    <Typography variant="caption" sx={{ textAlign: 'center' }}>Actions</Typography>
+                                    <Typography variant="caption">{t('common.enabled')}</Typography>
+                                    <Typography variant="caption">{t('cluster.state')}</Typography>
+                                    <Typography variant="caption">{t('cluster.strict')}</Typography>
+                                    <Typography variant="caption">{t('cluster.haResourcesCol')}</Typography>
+                                    <Typography variant="caption">{t('inventory.nodesLabel')}</Typography>
+                                    <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('common.actions')}</Typography>
                                   </Box>
                                   {/* Rows */}
                                   {clusterHaRules.filter((r: any) => r.type === 'node-affinity').map((rule: any) => (
@@ -1067,16 +1067,16 @@ export default function ClusterTabs(props: any) {
                                       <Box>
                                         <Chip 
                                           size="small" 
-                                          label={rule.state === 'disabled' ? 'No' : 'Yes'} 
+                                          label={rule.state === 'disabled' ? t('common.no') : t('common.yes')}
                                           color={rule.state === 'disabled' ? 'default' : 'success'}
-                                          sx={{ height: 20, fontSize: 11 }} 
+                                          sx={{ height: 20, fontSize: 11 }}
                                         />
                                       </Box>
                                       <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                                        {rule.state || 'enabled'}
+                                        {rule.state || t('common.enabled')}
                                       </Typography>
                                       <Typography variant="body2">
-                                        {rule.strict ? 'Yes' : 'No'}
+                                        {rule.strict ? t('common.yes') : t('common.no')}
                                       </Typography>
                                       <Typography variant="body2" sx={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {rule.resources || '-'}
@@ -1086,8 +1086,8 @@ export default function ClusterTabs(props: any) {
                                       </Typography>
                                       <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
                                         <MuiTooltip title={t('common.edit')}>
-                                          <IconButton 
-                                            size="small" 
+                                          <IconButton
+                                            size="small"
                                             onClick={() => {
                                               setHaRuleType('node-affinity')
                                               setEditingHaRule(rule)
@@ -1118,7 +1118,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                                 <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <i className="ri-links-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                                  Resource Affinity Rules ({clusterHaRules.filter((r: any) => r.type === 'resource-affinity').length})
+                                  {t('cluster.resourceAffinityRules')} ({clusterHaRules.filter((r: any) => r.type === 'resource-affinity').length})
                                 </Typography>
                                 <Button
                                   size="small"
@@ -1157,11 +1157,11 @@ export default function ClusterTabs(props: any) {
                                     borderColor: 'divider',
                                     '& > *': { fontWeight: 600, fontSize: 12, opacity: 0.8 }
                                   }}>
-                                    <Typography variant="caption">Enabled</Typography>
-                                    <Typography variant="caption">State</Typography>
-                                    <Typography variant="caption">Affinity</Typography>
-                                    <Typography variant="caption">HA Resources</Typography>
-                                    <Typography variant="caption" sx={{ textAlign: 'center' }}>Actions</Typography>
+                                    <Typography variant="caption">{t('common.enabled')}</Typography>
+                                    <Typography variant="caption">{t('cluster.state')}</Typography>
+                                    <Typography variant="caption">{t('cluster.affinity')}</Typography>
+                                    <Typography variant="caption">{t('cluster.haResourcesCol')}</Typography>
+                                    <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('common.actions')}</Typography>
                                   </Box>
                                   {/* Rows */}
                                   {clusterHaRules.filter((r: any) => r.type === 'resource-affinity').map((rule: any) => (
@@ -1182,17 +1182,17 @@ export default function ClusterTabs(props: any) {
                                       <Box>
                                         <Chip 
                                           size="small" 
-                                          label={rule.state === 'disabled' ? 'No' : 'Yes'} 
+                                          label={rule.state === 'disabled' ? t('common.no') : t('common.yes')}
                                           color={rule.state === 'disabled' ? 'default' : 'success'}
-                                          sx={{ height: 20, fontSize: 11 }} 
+                                          sx={{ height: 20, fontSize: 11 }}
                                         />
                                       </Box>
                                       <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                                        {rule.state || 'enabled'}
+                                        {rule.state || t('common.enabled')}
                                       </Typography>
-                                      <Chip 
-                                        size="small" 
-                                        label={rule.affinity === 'positive' ? 'Keep Together' : 'Keep Separate'} 
+                                      <Chip
+                                        size="small"
+                                        label={rule.affinity === 'positive' ? t('cluster.keepTogether') : t('cluster.keepSeparate')}
                                         color={rule.affinity === 'positive' ? 'info' : 'warning'}
                                         sx={{ height: 20, fontSize: 10 }} 
                                       />
@@ -1252,7 +1252,7 @@ export default function ClusterTabs(props: any) {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <i className="ri-file-text-line" style={{ fontSize: 20 }} />
-                        Datacenter Notes
+                        {t('cluster.datacenterNotes')}
                       </Typography>
                       <Button
                         variant="outlined"
@@ -1260,7 +1260,7 @@ export default function ClusterTabs(props: any) {
                         startIcon={<i className="ri-edit-line" />}
                         onClick={() => setClusterNotesEditMode(!clusterNotesEditMode)}
                       >
-                        {clusterNotesEditMode ? 'Cancel' : 'Edit'}
+                        {clusterNotesEditMode ? t('common.cancel') : t('common.edit')}
                       </Button>
                     </Box>
                     
@@ -1276,7 +1276,7 @@ export default function ClusterTabs(props: any) {
                           minRows={10}
                           value={clusterNotesContent}
                           onChange={(e) => setClusterNotesContent(e.target.value)}
-                          placeholder="Enter datacenter notes here... (supports Markdown)"
+                          placeholder={t('cluster.enterNotesPlaceholder')}
                           sx={{ flex: 1, fontFamily: 'monospace' }}
                         />
                         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
@@ -1286,7 +1286,7 @@ export default function ClusterTabs(props: any) {
                             onClick={handleSaveClusterNotes}
                             disabled={clusterNotesSaving}
                           >
-                            {clusterNotesSaving ? 'Saving...' : 'Save'}
+                            {clusterNotesSaving ? t('common.saving') : t('common.save')}
                           </Button>
                         </Box>
                       </Box>
@@ -1325,7 +1325,7 @@ export default function ClusterTabs(props: any) {
                         ) : (
                           <Box sx={{ textAlign: 'center', py: 4, opacity: 0.5 }}>
                             <i className="ri-file-text-line" style={{ fontSize: 48 }} />
-                            <Typography sx={{ mt: 1 }}>No notes</Typography>
+                            <Typography sx={{ mt: 1 }}>{t('cluster.noNotes')}</Typography>
                           </Box>
                         )}
                       </Box>
@@ -1347,11 +1347,11 @@ export default function ClusterTabs(props: any) {
                           {/* Health Card - avec Summary comme Proxmox */}
                           <Card variant="outlined">
                             <CardContent>
-                              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Health</Typography>
+                              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>{t('inventory.healthLabel')}</Typography>
                               <Box sx={{ display: 'flex', gap: 3 }}>
                                 {/* Status avec icône */}
                                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 100 }}>
-                                  <Typography variant="caption" fontWeight={600} sx={{ mb: 1 }}>Status</Typography>
+                                  <Typography variant="caption" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.statusLabel')}</Typography>
                                   <Box sx={{ 
                                     width: 56, 
                                     height: 56, 
@@ -1366,13 +1366,13 @@ export default function ClusterTabs(props: any) {
                                     <i className={clusterCephData.health?.status === 'HEALTH_OK' ? 'ri-checkbox-circle-fill' : 'ri-alert-fill'} style={{ fontSize: 28, color: 'white' }} />
                                   </Box>
                                   <Typography variant="body2" fontWeight={700}>
-                                    {clusterCephData.health?.status || 'Unknown'}
+                                    {clusterCephData.health?.status || t('common.unknown')}
                                   </Typography>
                                 </Box>
                                 
                                 {/* Summary - Warnings/Errors */}
                                 <Box sx={{ flex: 1, borderLeft: '1px solid', borderColor: 'divider', pl: 2 }}>
-                                  <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>Summary</Typography>
+                                  <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>{t('inventory.tabSummary')}</Typography>
                                   {clusterCephData._normalized?.healthChecks?.length > 0 ? (
                                     <Box sx={{ maxHeight: 120, overflow: 'auto' }}>
                                       {clusterCephData._normalized.healthChecks.map((check: any, idx: number) => (
@@ -1393,7 +1393,7 @@ export default function ClusterTabs(props: any) {
                                     </Box>
                                   ) : (
                                     <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                      No Warnings/Errors
+                                      {t('cluster.noWarningsErrors')}
                                     </Typography>
                                   )}
                                 </Box>
@@ -1402,7 +1402,7 @@ export default function ClusterTabs(props: any) {
                               {/* Ceph Version en bas */}
                               {clusterCephData.version && (
                                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>Ceph Version</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.cephVersion')}</Typography>
                                   <Typography variant="body2" fontWeight={600}>{clusterCephData.version}</Typography>
                                 </Box>
                               )}
@@ -1412,7 +1412,7 @@ export default function ClusterTabs(props: any) {
                           {/* Status Card - OSDs & PGs */}
                           <Card variant="outlined">
                             <CardContent>
-                              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Status</Typography>
+                              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>{t('common.status')}</Typography>
                               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                                 <Box>
                                   <Typography variant="caption" sx={{ opacity: 0.7 }}>OSDs</Typography>
@@ -1443,20 +1443,20 @@ export default function ClusterTabs(props: any) {
                         {/* Services */}
                         <Card variant="outlined">
                           <CardContent>
-                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Services</Typography>
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>{t('cluster.services')}</Typography>
                             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
                               <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>Monitors</Typography>
+                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.monitors')}</Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                   {clusterCephData.monmap?.mons?.map((mon: any) => (
                                     <MuiTooltip 
                                       key={mon.name} 
                                       title={
                                         <Box sx={{ p: 0.5 }}>
-                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>Monitor: {mon.name}</Typography>
-                                          {mon.addr && <Typography variant="caption" sx={{ display: 'block' }}>Address: {mon.addr}</Typography>}
-                                          {mon.public_addr && <Typography variant="caption" sx={{ display: 'block' }}>Public: {mon.public_addr}</Typography>}
-                                          <Typography variant="caption" sx={{ display: 'block', color: '#4caf50' }}>Status: running</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>{t('cluster.monitor')}: {mon.name}</Typography>
+                                          {mon.addr && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.address')}: {mon.addr}</Typography>}
+                                          {mon.public_addr && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.publicAddr')}: {mon.public_addr}</Typography>}
+                                          <Typography variant="caption" sx={{ display: 'block', color: '#4caf50' }}>{t('common.status')}: running</Typography>
                                         </Box>
                                       }
                                       arrow
@@ -1467,15 +1467,15 @@ export default function ClusterTabs(props: any) {
                                 </Box>
                               </Box>
                               <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>Managers</Typography>
+                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.managers')}</Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                   {clusterCephData.mgrmap?.active_name && (
                                     <MuiTooltip 
                                       title={
                                         <Box sx={{ p: 0.5 }}>
-                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>Manager: {clusterCephData.mgrmap.active_name}</Typography>
-                                          {clusterCephData.mgrmap.active_addr && <Typography variant="caption" sx={{ display: 'block' }}>Address: {clusterCephData.mgrmap.active_addr}</Typography>}
-                                          <Typography variant="caption" sx={{ display: 'block', color: '#4caf50' }}>Status: active</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>{t('cluster.manager')}: {clusterCephData.mgrmap.active_name}</Typography>
+                                          {clusterCephData.mgrmap.active_addr && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.address')}: {clusterCephData.mgrmap.active_addr}</Typography>}
+                                          <Typography variant="caption" sx={{ display: 'block', color: '#4caf50' }}>{t('common.status')}: {t('common.active').toLowerCase()}</Typography>
                                         </Box>
                                       }
                                       arrow
@@ -1488,9 +1488,9 @@ export default function ClusterTabs(props: any) {
                                       key={mgr.name}
                                       title={
                                         <Box sx={{ p: 0.5 }}>
-                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>Manager: {mgr.name}</Typography>
-                                          {mgr.addr && <Typography variant="caption" sx={{ display: 'block' }}>Address: {mgr.addr}</Typography>}
-                                          <Typography variant="caption" sx={{ display: 'block', color: '#ff9800' }}>Status: standby</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>{t('cluster.manager')}: {mgr.name}</Typography>
+                                          {mgr.addr && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.address')}: {mgr.addr}</Typography>}
+                                          <Typography variant="caption" sx={{ display: 'block', color: '#ff9800' }}>{t('common.status')}: standby</Typography>
                                         </Box>
                                       }
                                       arrow
@@ -1501,7 +1501,7 @@ export default function ClusterTabs(props: any) {
                                 </Box>
                               </Box>
                               <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>Metadata Servers</Typography>
+                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.metadataServers')}</Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                   {(clusterCephData._normalized?.mds?.length > 0 
                                     ? clusterCephData._normalized.mds 
@@ -1512,11 +1512,11 @@ export default function ClusterTabs(props: any) {
                                       title={
                                         <Box sx={{ p: 0.5 }}>
                                           <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>MDS: {mds.name}</Typography>
-                                          {mds.addr && <Typography variant="caption" sx={{ display: 'block' }}>Address: {mds.addr}</Typography>}
-                                          {mds.host && <Typography variant="caption" sx={{ display: 'block' }}>Host: {mds.host}</Typography>}
-                                          {mds.rank !== undefined && <Typography variant="caption" sx={{ display: 'block' }}>Rank: {mds.rank}</Typography>}
+                                          {mds.addr && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.address')}: {mds.addr}</Typography>}
+                                          {mds.host && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.host')}: {mds.host}</Typography>}
+                                          {mds.rank !== undefined && <Typography variant="caption" sx={{ display: 'block' }}>{t('cluster.rank')}: {mds.rank}</Typography>}
                                           <Typography variant="caption" sx={{ display: 'block', color: mds.state === 'standby' ? '#ff9800' : '#4caf50' }}>
-                                            Status: {mds.state || 'active'}
+                                            {t('common.status')}: {mds.state || t('common.active').toLowerCase()}
                                           </Typography>
                                         </Box>
                                       }
@@ -1536,7 +1536,7 @@ export default function ClusterTabs(props: any) {
                           {/* Usage */}
                           <Card variant="outlined">
                             <CardContent>
-                              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Usage</Typography>
+                              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>{t('cluster.usage')}</Typography>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                 <Box sx={{ position: 'relative', width: 100, height: 100 }}>
                                   <CircularProgress
@@ -1564,11 +1564,11 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 </Box>
                                 <Box>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>Used</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('common.used')}</Typography>
                                   <Typography variant="body2" fontWeight={600}>
                                     {clusterCephData.pgmap?.bytes_used ? formatBytes(clusterCephData.pgmap.bytes_used) : '—'}
                                   </Typography>
-                                  <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>Total</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>{t('common.total')}</Typography>
                                   <Typography variant="body2" fontWeight={600}>
                                     {clusterCephData.pgmap?.bytes_total ? formatBytes(clusterCephData.pgmap.bytes_total) : '—'}
                                   </Typography>
@@ -1581,35 +1581,35 @@ export default function ClusterTabs(props: any) {
                           <Card variant="outlined">
                             <CardContent>
                               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>
-                                Performance
+                                {t('cluster.performance')}
                                 <Typography component="span" variant="caption" sx={{ ml: 1, opacity: 0.6 }}>
-                                  (live)
+                                  ({t('cluster.live')})
                                 </Typography>
                               </Typography>
                               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                                 <Box>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>Reads:</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.reads')}:</Typography>
                                   <Typography variant="body1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     {clusterCephPerf?.read_bytes_sec ? formatBps(clusterCephPerf.read_bytes_sec) : '0 B/s'}
                                     <TrendIcon trend={cephTrends.read_bytes} />
                                   </Typography>
                                 </Box>
                                 <Box>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>Writes:</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.writes')}:</Typography>
                                   <Typography variant="body1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     {clusterCephPerf?.write_bytes_sec ? formatBps(clusterCephPerf.write_bytes_sec) : '0 B/s'}
                                     <TrendIcon trend={cephTrends.write_bytes} />
                                   </Typography>
                                 </Box>
                                 <Box>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>IOPS Reads:</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.iopsReads')}:</Typography>
                                   <Typography variant="body1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     {clusterCephPerf?.read_op_per_sec?.toLocaleString() || 0}
                                     <TrendIcon trend={cephTrends.read_iops} />
                                   </Typography>
                                 </Box>
                                 <Box>
-                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>IOPS Writes:</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.iopsWrites')}:</Typography>
                                   <Typography variant="body1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     {clusterCephPerf?.write_op_per_sec?.toLocaleString() || 0}
                                     <TrendIcon trend={cephTrends.write_iops} />
@@ -1625,7 +1625,7 @@ export default function ClusterTabs(props: any) {
                           <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                               <Typography variant="subtitle2" fontWeight={700}>
-                                Performance History
+                                {t('cluster.performanceHistory')}
                               </Typography>
                               {/* Sélecteur de timeframe */}
                               <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -1659,7 +1659,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    Reads:
+                                    {t('cluster.reads')}:
                                     <TrendIcon trend={cephTrends.read_bytes} />
                                   </Typography>
                                   <Typography variant="caption" fontWeight={700}>
@@ -1698,7 +1698,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    Writes:
+                                    {t('cluster.writes')}:
                                     <TrendIcon trend={cephTrends.write_bytes} />
                                   </Typography>
                                   <Typography variant="caption" fontWeight={700}>
@@ -1737,7 +1737,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    IOPS Reads:
+                                    {t('cluster.iopsReads')}:
                                     <TrendIcon trend={cephTrends.read_iops} />
                                   </Typography>
                                   <Typography variant="caption" fontWeight={700}>
@@ -1776,7 +1776,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    IOPS Writes:
+                                    {t('cluster.iopsWrites')}:
                                     <TrendIcon trend={cephTrends.write_iops} />
                                   </Typography>
                                   <Typography variant="caption" fontWeight={700}>
@@ -1830,12 +1830,10 @@ export default function ClusterTabs(props: any) {
                           <i className="ri-database-2-line" style={{ fontSize: 40, opacity: 0.5 }} />
                         </Box>
                         <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-                          Ceph not installed on this cluster
+                          {t('cluster.cephNotInstalled')}
                         </Typography>
                         <Typography variant="body2" sx={{ opacity: 0.7, mb: 3, maxWidth: 500, mx: 'auto' }}>
-                          Ceph is a distributed storage system that provides high availability, scalability, 
-                          and excellent performance. Install Ceph on your cluster nodes to enable distributed 
-                          storage with RBD, CephFS, and Object Gateway support.
+                          {t('cluster.cephDescription')}
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
                           <Button
@@ -1843,7 +1841,7 @@ export default function ClusterTabs(props: any) {
                             startIcon={<i className="ri-download-cloud-line" />}
                             disabled
                           >
-                            Install Ceph
+                            {t('cluster.installCeph')}
                           </Button>
                           <Button
                             variant="outlined"
@@ -1851,11 +1849,11 @@ export default function ClusterTabs(props: any) {
                             href="https://pve.proxmox.com/wiki/Deploy_Hyper-Converged_Ceph_Cluster"
                             target="_blank"
                           >
-                            Documentation
+                            {t('cluster.documentation')}
                           </Button>
                         </Box>
                         <Typography variant="caption" sx={{ display: 'block', mt: 2, opacity: 0.5 }}>
-                          Installation wizard coming soon - Use Proxmox VE directly for now
+                          {t('cluster.installWizardComingSoon')}
                         </Typography>
                       </Box>
                     )}
@@ -1874,12 +1872,12 @@ export default function ClusterTabs(props: any) {
                         <Table size="small" sx={{ minWidth: 800 }}>
                           <TableHead>
                             <TableRow sx={{ bgcolor: 'action.hover' }}>
-                              <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
-                              <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-                              <TableCell sx={{ fontWeight: 700 }}>Content</TableCell>
-                              <TableCell sx={{ fontWeight: 700 }}>Path/Target</TableCell>
-                              <TableCell sx={{ fontWeight: 700 }} align="center">Shared</TableCell>
-                              <TableCell sx={{ fontWeight: 700 }} align="center">Enabled</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>{t('inventory.id')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>{t('common.type')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>{t('cluster.content')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>{t('cluster.pathTarget')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }} align="center">{t('cluster.shared')}</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }} align="center">{t('common.enabled')}</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -1916,7 +1914,7 @@ export default function ClusterTabs(props: any) {
                                     {storage.shared ? (
                                       <i className="ri-checkbox-circle-fill" style={{ color: '#4caf50', fontSize: 18 }} />
                                     ) : (
-                                      <Typography variant="caption" sx={{ opacity: 0.5 }}>No</Typography>
+                                      <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('common.no')}</Typography>
                                     )}
                                   </TableCell>
                                   <TableCell align="center">
@@ -1933,7 +1931,7 @@ export default function ClusterTabs(props: any) {
                                 <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                                   <Box sx={{ opacity: 0.5 }}>
                                     <i className="ri-hard-drive-2-line" style={{ fontSize: 48 }} />
-                                    <Typography sx={{ mt: 1 }}>No storage configured</Typography>
+                                    <Typography sx={{ mt: 1 }}>{t('cluster.noStorageConfigured')}</Typography>
                                   </Box>
                                 </TableCell>
                               </TableRow>
@@ -2626,7 +2624,7 @@ export default function ClusterTabs(props: any) {
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <i className="ri-information-line" style={{ fontSize: 20 }} />
-                            Cluster Information
+                            {t('cluster.clusterInformation')}
                           </Typography>
                           <Stack direction="row" spacing={1}>
                             {clusterConfig?.isCluster && (
@@ -2636,7 +2634,7 @@ export default function ClusterTabs(props: any) {
                                 startIcon={<i className="ri-key-line" />}
                                 onClick={() => setJoinInfoDialogOpen(true)}
                               >
-                                Join Information
+                                {t('cluster.joinInformation')}
                               </Button>
                             )}
                           </Stack>
@@ -2650,35 +2648,35 @@ export default function ClusterTabs(props: any) {
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                                   <Chip 
                                     icon={<i className="ri-checkbox-circle-fill" />}
-                                    label="Cluster Active" 
+                                    label={t('cluster.clusterActive')}
                                     color="success" 
                                     size="small"
                                   />
                                   <Typography variant="h6" fontWeight={700}>
-                                    {clusterConfig?.clusterName || 'Unnamed Cluster'}
+                                    {clusterConfig?.clusterName || t('cluster.unnamedCluster')}
                                   </Typography>
                                 </Box>
                                 {clusterConfig?.clusterStatus && (
                                   <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                                     <Box>
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>Config Version</Typography>
+                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.configVersion')}</Typography>
                                       <Typography variant="body2" fontWeight={600}>
                                         {clusterConfig.clusterStatus.version || '—'}
                                       </Typography>
                                     </Box>
                                     <Box>
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>Quorum</Typography>
+                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.quorum')}</Typography>
                                       <Typography variant="body2" fontWeight={600}>
                                         <Chip 
                                           size="small" 
-                                          label={clusterConfig.clusterStatus.quorate ? 'Yes' : 'No'} 
+                                          label={clusterConfig.clusterStatus.quorate ? t('common.yes') : t('common.no')}
                                           color={clusterConfig.clusterStatus.quorate ? 'success' : 'error'}
                                           sx={{ height: 20, fontSize: 11 }}
                                         />
                                       </Typography>
                                     </Box>
                                     <Box>
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>Nodes</Typography>
+                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.nodesLabel')}</Typography>
                                       <Typography variant="body2" fontWeight={600}>
                                         {clusterConfig.clusterStatus.nodes || clusterConfig?.nodes?.length || 0}
                                       </Typography>
@@ -2690,10 +2688,10 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ textAlign: 'center', py: 2 }}>
                                 <i className="ri-server-line" style={{ fontSize: 48, opacity: 0.3 }} />
                                 <Typography variant="body1" sx={{ mt: 1, fontWeight: 600 }}>
-                                  Standalone node - no cluster defined
+                                  {t('cluster.standaloneNode')}
                                 </Typography>
                                 <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                                  Create a new cluster or join an existing one
+                                  {t('cluster.createOrJoin')}
                                 </Typography>
                                 <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3 }}>
                                   <Button
@@ -2701,14 +2699,14 @@ export default function ClusterTabs(props: any) {
                                     startIcon={<i className="ri-add-circle-line" />}
                                     onClick={() => setCreateClusterDialogOpen(true)}
                                   >
-                                    Create Cluster
+                                    {t('cluster.createCluster')}
                                   </Button>
                                   <Button
                                     variant="outlined"
                                     startIcon={<i className="ri-links-line" />}
                                     onClick={() => setJoinClusterDialogOpen(true)}
                                   >
-                                    Join Cluster
+                                    {t('cluster.joinCluster')}
                                   </Button>
                                 </Stack>
                               </Box>
@@ -2723,7 +2721,7 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                                 <Typography fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <i className="ri-server-line" style={{ fontSize: 18 }} />
-                                  Cluster Nodes
+                                  {t('cluster.clusterNodes')}
                                 </Typography>
                               </Box>
                               <Box>
@@ -2738,11 +2736,11 @@ export default function ClusterTabs(props: any) {
                                   borderBottom: '1px solid',
                                   borderColor: 'divider'
                                 }}>
-                                  <Typography variant="caption" fontWeight={600}>Nodename</Typography>
-                                  <Typography variant="caption" fontWeight={600}>ID</Typography>
-                                  <Typography variant="caption" fontWeight={600}>Status</Typography>
-                                  <Typography variant="caption" fontWeight={600}>Votes</Typography>
-                                  <Typography variant="caption" fontWeight={600}>IP Address</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('cluster.nodename')}</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('inventory.id')}</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('common.status')}</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('cluster.votes')}</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('cluster.ipAddress')}</Typography>
                                 </Box>
                                 {/* Rows */}
                                 {clusterConfig.nodes.map((node: any) => (
@@ -2807,16 +2805,16 @@ export default function ClusterTabs(props: any) {
           <Dialog open={joinInfoDialogOpen} onClose={() => setJoinInfoDialogOpen(false)} maxWidth="md" fullWidth>
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <i className="ri-key-line" style={{ color: '#2196f3' }} />
-              Cluster Join Information
+              {t('cluster.clusterJoinInformation')}
             </DialogTitle>
             <DialogContent>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                Copy the Join Information here and use it on the node you want to add.
+                {t('cluster.copyJoinInfoDescription')}
               </Typography>
               {clusterConfig?.joinInfo && (
                 <Stack spacing={2.5}>
                   <Box>
-                    <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>IP Address:</Typography>
+                    <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>{t('cluster.ipAddress')}:</Typography>
                     <Box sx={{ 
                       mt: 0.5, 
                       p: 1.5, 
@@ -2829,7 +2827,7 @@ export default function ClusterTabs(props: any) {
                     </Box>
                   </Box>
                   <Box>
-                    <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>Fingerprint:</Typography>
+                    <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>{t('cluster.fingerprint')}:</Typography>
                     <Box sx={{ 
                       mt: 0.5, 
                       p: 1.5, 
@@ -2843,7 +2841,7 @@ export default function ClusterTabs(props: any) {
                     </Box>
                   </Box>
                   <Box>
-                    <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>Join Information:</Typography>
+                    <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>{t('cluster.joinInformation')}:</Typography>
                     <Box sx={{ 
                       mt: 0.5, 
                       p: 1.5, 
@@ -2870,7 +2868,7 @@ export default function ClusterTabs(props: any) {
                   navigator.clipboard.writeText(clusterConfig?.joinInfo?.encoded || '')
                 }}
               >
-                Copy Information
+                {t('cluster.copyInformation')}
               </Button>
               <Button onClick={() => setJoinInfoDialogOpen(false)}>
                 {t('common.close')}
@@ -2882,7 +2880,7 @@ export default function ClusterTabs(props: any) {
           <Dialog open={createClusterDialogOpen} onClose={() => setCreateClusterDialogOpen(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <i className="ri-add-circle-line" style={{ color: '#4caf50' }} />
-              Create Cluster
+              {t('cluster.createCluster')}
             </DialogTitle>
             <DialogContent>
               {clusterActionError && (
@@ -2892,7 +2890,7 @@ export default function ClusterTabs(props: any) {
               )}
               <Stack spacing={2} sx={{ mt: 1 }}>
                 <TextField
-                  label="Cluster Name"
+                  label={t('cluster.clusterName')}
                   value={newClusterName}
                   onChange={(e) => setNewClusterName(e.target.value)}
                   size="small"
@@ -2901,7 +2899,7 @@ export default function ClusterTabs(props: any) {
                   placeholder="my-cluster"
                 />
                 <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Cluster Network</Typography>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('cluster.clusterNetwork')}</Typography>
                   {clusterConfig?.networks && clusterConfig.networks.length > 0 ? (
                     <FormControl fullWidth size="small">
                       <InputLabel>Link 0</InputLabel>
@@ -2919,7 +2917,7 @@ export default function ClusterTabs(props: any) {
                     </FormControl>
                   ) : (
                     <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                      No network interfaces available
+                      {t('cluster.noNetworkInterfaces')}
                     </Typography>
                   )}
                 </Box>
@@ -2934,7 +2932,7 @@ export default function ClusterTabs(props: any) {
                 onClick={() => handleCreateCluster(selection?.id?.split(':')[0] || '')}
                 disabled={clusterActionLoading || !newClusterName}
               >
-                {clusterActionLoading ? <CircularProgress size={20} /> : 'Create'}
+                {clusterActionLoading ? <CircularProgress size={20} /> : t('common.create')}
               </Button>
             </DialogActions>
           </Dialog>
@@ -2943,7 +2941,7 @@ export default function ClusterTabs(props: any) {
           <Dialog open={joinClusterDialogOpen} onClose={() => setJoinClusterDialogOpen(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <i className="ri-links-line" style={{ color: '#2196f3' }} />
-              Cluster Join
+              {t('cluster.clusterJoin')}
             </DialogTitle>
             <DialogContent>
               {clusterActionError && (
@@ -2954,30 +2952,30 @@ export default function ClusterTabs(props: any) {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <i className="ri-checkbox-circle-line" style={{ color: '#4caf50' }} />
                 <Typography variant="body2">
-                  Assisted join: Paste encoded cluster join information and enter password.
+                  {t('cluster.assistedJoinDescription')}
                 </Typography>
               </Box>
               <Stack spacing={2}>
                 <TextField
-                  label="Information"
+                  label={t('common.info')}
                   value={joinClusterInfo}
                   onChange={(e) => setJoinClusterInfo(e.target.value)}
                   size="small"
                   fullWidth
                   multiline
                   rows={4}
-                  placeholder="Paste encoded Cluster Information here"
+                  placeholder={t('cluster.pasteJoinInfoPlaceholder')}
                   required
                 />
                 <TextField
-                  label="Password"
+                  label={t('cluster.password')}
                   type="password"
                   value={joinClusterPassword}
                   onChange={(e) => setJoinClusterPassword(e.target.value)}
                   size="small"
                   fullWidth
                   required
-                  helperText="Root password of the node to join"
+                  helperText={t('cluster.rootPasswordHelper')}
                 />
               </Stack>
             </DialogContent>
@@ -2990,7 +2988,7 @@ export default function ClusterTabs(props: any) {
                 onClick={() => handleJoinCluster(selection?.id?.split(':')[0] || '')}
                 disabled={clusterActionLoading || !joinClusterInfo || !joinClusterPassword}
               >
-                {clusterActionLoading ? <CircularProgress size={20} /> : 'Join'}
+                {clusterActionLoading ? <CircularProgress size={20} /> : t('cluster.join')}
               </Button>
             </DialogActions>
           </Dialog>

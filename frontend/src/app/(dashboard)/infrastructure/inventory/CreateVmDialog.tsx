@@ -189,13 +189,13 @@ return
     
     // Vérifier les limites Proxmox (100-999999999)
     if (vmidNum < 100) {
-      setVmidError('VM ID must be >= 100')
+      setVmidError(t('inventory.createVm.vmIdMin'))
       
 return
     }
 
     if (vmidNum > 999999999) {
-      setVmidError('VM ID must be <= 999999999')
+      setVmidError(t('inventory.createVm.vmIdMax'))
       
 return
     }
@@ -204,7 +204,7 @@ return
     const isUsed = allVms.some(vm => parseInt(String(vm.vmid), 10) === vmidNum)
 
     if (isUsed) {
-      setVmidError(`VM ID ${vmidNum} is already in use`)
+      setVmidError(t('inventory.createVm.vmIdInUse', { id: vmidNum }))
       
 return
     }
@@ -503,7 +503,16 @@ return
     }
   }
 
-  const tabs = ['General', 'OS', 'System', 'Disks', 'CPU', 'Memory', 'Network', 'Confirm']
+  const tabs = [
+    t('inventory.createVm.tabs.general'),
+    t('inventory.createVm.tabs.os'),
+    t('inventory.createVm.tabs.system'),
+    t('inventory.createVm.tabs.disks'),
+    t('inventory.createVm.tabs.cpu'),
+    t('inventory.createVm.tabs.memory'),
+    t('inventory.createVm.tabs.network'),
+    t('inventory.createVm.tabs.confirm'),
+  ]
   
   // Filtrer les storages selon leur contenu
   const isoStoragesList = storages.filter(s => s.content?.includes('iso'))
@@ -515,11 +524,11 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Node</InputLabel>
+              <InputLabel>{t('inventory.createVm.node')}</InputLabel>
               <Select
                 value={selectedNode}
                 onChange={(e) => handleNodeChange(e.target.value)}
-                label="Node"
+                label={t('inventory.createVm.node')}
                 MenuProps={{ PaperProps: { sx: { maxHeight: 400 } } }}
               >
                 {groupedNodes.map(group => [
@@ -626,8 +635,8 @@ return
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
-              <InputLabel>Resource Pool</InputLabel>
-              <Select value={resourcePool} onChange={(e) => setResourcePool(e.target.value)} label="Resource Pool">
+              <InputLabel>{t('inventory.createVm.resourcePool')}</InputLabel>
+              <Select value={resourcePool} onChange={(e) => setResourcePool(e.target.value)} label={t('inventory.createVm.resourcePool')}>
                 <MenuItem value="">({t('common.none')})</MenuItem>
               </Select>
             </FormControl>
@@ -641,18 +650,18 @@ return
               inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
             />
             <Box />
-            <TextField label="Name" value={vmName} onChange={(e) => setVmName(e.target.value)} size="small" fullWidth />
+            <TextField label={t('inventory.createVm.vmName')} value={vmName} onChange={(e) => setVmName(e.target.value)} size="small" fullWidth />
             <Box />
             <FormControlLabel 
               control={<Switch checked={startOnBoot} onChange={(e) => setStartOnBoot(e.target.checked)} size="small" />} 
-              label="Start at boot" 
+              label={t('inventory.createVm.startAtBoot')} 
             />
             <Box />
-            <TextField label="Start/Shutdown order" value={startupOrder} onChange={(e) => setStartupOrder(e.target.value)} size="small" placeholder="any" />
+            <TextField label={t('inventory.createVm.startupShutdownOrder')} value={startupOrder} onChange={(e) => setStartupOrder(e.target.value)} size="small" placeholder="any" />
             <Box />
-            <TextField label="Startup delay" value={startupDelay} onChange={(e) => setStartupDelay(e.target.value)} size="small" placeholder="default" />
+            <TextField label={t('inventory.createVm.startupDelay')} value={startupDelay} onChange={(e) => setStartupDelay(e.target.value)} size="small" placeholder="default" />
             <Box />
-            <TextField label="Shutdown timeout" value={shutdownTimeout} onChange={(e) => setShutdownTimeout(e.target.value)} size="small" placeholder="default" />
+            <TextField label={t('inventory.createVm.shutdownTimeout')} value={shutdownTimeout} onChange={(e) => setShutdownTimeout(e.target.value)} size="small" placeholder="default" />
           </Box>
         )
 
@@ -664,7 +673,7 @@ return
                 <Stack spacing={1}>
                   <FormControlLabel
                     control={<Switch checked={osMediaType === 'iso'} onChange={(e) => setOsMediaType(e.target.checked ? 'iso' : 'none')} size="small" />}
-                    label="Use CD/DVD disc image file (iso)"
+                    label={t('inventory.createVm.useCdDvd')}
                   />
                 </Stack>
               </FormControl>
@@ -673,16 +682,16 @@ return
             {osMediaType === 'iso' && (
               <>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Storage</InputLabel>
-                  <Select value={isoStorage} onChange={(e) => setIsoStorage(e.target.value)} label="Storage">
+                  <InputLabel>{t('inventory.createVm.storage')}</InputLabel>
+                  <Select value={isoStorage} onChange={(e) => setIsoStorage(e.target.value)} label={t('inventory.createVm.storage')}>
                     {isoStoragesList.map(s => <MenuItem key={s.storage} value={s.storage}>{s.storage}</MenuItem>)}
                   </Select>
                 </FormControl>
-                <Typography variant="subtitle2" sx={{ alignSelf: 'center', fontWeight: 600 }}>Guest OS:</Typography>
+                <Typography variant="subtitle2" sx={{ alignSelf: 'center', fontWeight: 600 }}>{t('inventory.createVm.guestOs')}</Typography>
                 
                 <FormControl fullWidth size="small">
-                  <InputLabel>ISO image</InputLabel>
-                  <Select value={isoImage} onChange={(e) => setIsoImage(e.target.value)} label="ISO image">
+                  <InputLabel>{t('inventory.createVm.isoImage')}</InputLabel>
+                  <Select value={isoImage} onChange={(e) => setIsoImage(e.target.value)} label={t('inventory.createVm.isoImage')}>
                     {isoImages.length > 0 ? (
                       isoImages.map((iso: any) => (
                         <MenuItem key={iso.volid || iso.name} value={iso.name || iso.volid?.split('/').pop()}>
@@ -695,19 +704,19 @@ return
                   </Select>
                 </FormControl>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Type</InputLabel>
-                  <Select value={guestOsType} onChange={(e) => setGuestOsType(e.target.value)} label="Type">
-                    <MenuItem value="Linux">Linux</MenuItem>
-                    <MenuItem value="Windows">Windows</MenuItem>
-                    <MenuItem value="Solaris">Solaris</MenuItem>
-                    <MenuItem value="Other">Other</MenuItem>
+                  <InputLabel>{t('inventory.createVm.osType')}</InputLabel>
+                  <Select value={guestOsType} onChange={(e) => setGuestOsType(e.target.value)} label={t('inventory.createVm.osType')}>
+                    <MenuItem value="Linux">{t('inventory.createVm.osLinux')}</MenuItem>
+                    <MenuItem value="Windows">{t('inventory.createVm.osWindows')}</MenuItem>
+                    <MenuItem value="Solaris">{t('inventory.createVm.osSolaris')}</MenuItem>
+                    <MenuItem value="Other">{t('inventory.createVm.osOther')}</MenuItem>
                   </Select>
                 </FormControl>
                 
                 <Box />
                 <FormControl fullWidth size="small">
-                  <InputLabel>Version</InputLabel>
-                  <Select value={guestOsVersion} onChange={(e) => setGuestOsVersion(e.target.value)} label="Version">
+                  <InputLabel>{t('inventory.createVm.osVersion')}</InputLabel>
+                  <Select value={guestOsVersion} onChange={(e) => setGuestOsVersion(e.target.value)} label={t('inventory.createVm.osVersion')}>
                     {guestOsType === 'Linux' && [
                       <MenuItem key="l26" value="l26">6.x - 2.6 Kernel</MenuItem>,
                       <MenuItem key="l24" value="l24">2.4 Kernel</MenuItem>,
@@ -727,7 +736,7 @@ return
             
             {osMediaType === 'none' && (
               <Typography variant="body2" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
-                Do not use any media
+                {t('inventory.createVm.doNotUseMedia')}
               </Typography>
             )}
           </Box>
@@ -737,8 +746,8 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Graphic card</InputLabel>
-              <Select value={graphicCard} onChange={(e) => setGraphicCard(e.target.value)} label="Graphic card">
+              <InputLabel>{t('inventory.createVm.graphicCard')}</InputLabel>
+              <Select value={graphicCard} onChange={(e) => setGraphicCard(e.target.value)} label={t('inventory.createVm.graphicCard')}>
                 <MenuItem value="default">Default</MenuItem>
                 <MenuItem value="std">Standard VGA</MenuItem>
                 <MenuItem value="vmware">VMware compatible</MenuItem>
@@ -748,8 +757,8 @@ return
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
-              <InputLabel>SCSI Controller</InputLabel>
-              <Select value={scsiController} onChange={(e) => setScsiController(e.target.value)} label="SCSI Controller">
+              <InputLabel>{t('inventory.createVm.scsiController')}</InputLabel>
+              <Select value={scsiController} onChange={(e) => setScsiController(e.target.value)} label={t('inventory.createVm.scsiController')}>
                 <MenuItem value="virtio-scsi-single">VirtIO SCSI single</MenuItem>
                 <MenuItem value="virtio-scsi-pci">VirtIO SCSI</MenuItem>
                 <MenuItem value="lsi">LSI 53C895A</MenuItem>
@@ -759,17 +768,17 @@ return
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
-              <InputLabel>Machine</InputLabel>
-              <Select value={machine} onChange={(e) => setMachine(e.target.value)} label="Machine">
+              <InputLabel>{t('inventory.createVm.machine')}</InputLabel>
+              <Select value={machine} onChange={(e) => setMachine(e.target.value)} label={t('inventory.createVm.machine')}>
                 <MenuItem value="i440fx">Default (i440fx)</MenuItem>
                 <MenuItem value="q35">q35</MenuItem>
               </Select>
             </FormControl>
             <FormControlLabel 
               control={<Switch checked={qemuAgent} onChange={(e) => setQemuAgent(e.target.checked)} size="small" />} 
-              label="Qemu Agent" 
+              label={t('inventory.createVm.qemuAgent')} 
             />
-            <Typography variant="body2" sx={{ fontWeight: 600, mt: 1 }}>Firmware</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, mt: 1 }}>{t('inventory.createVm.firmware')}</Typography>
             <Box />
             <FormControl fullWidth size="small">
               <InputLabel>BIOS</InputLabel>
@@ -780,7 +789,7 @@ return
             </FormControl>
             <FormControlLabel 
               control={<Switch checked={addTpm} onChange={(e) => setAddTpm(e.target.checked)} size="small" />} 
-              label="Add TPM" 
+              label={t('inventory.createVm.addTpm')} 
             />
           </Box>
         )
@@ -791,14 +800,14 @@ return
             <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
               <Chip label="scsi0" variant="outlined" sx={{ fontFamily: 'monospace' }} />
               <Tabs value={0} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5 } }}>
-                <Tab label="Disk" />
-                <Tab label="Bandwidth" disabled />
+                <Tab label={t('inventory.createVm.disk')} />
+                <Tab label={t('inventory.createVm.bandwidth')} disabled />
               </Tabs>
             </Box>
             
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="body2" sx={{ minWidth: 100 }}>Bus/Device:</Typography>
+                <Typography variant="body2" sx={{ minWidth: 100 }}>{t('inventory.createVm.busDevice')}</Typography>
                 <FormControl size="small" sx={{ minWidth: 100 }}>
                   <Select value={diskBus} onChange={(e) => setDiskBus(e.target.value)}>
                     <MenuItem value="scsi">SCSI</MenuItem>
@@ -810,25 +819,25 @@ return
                 <TextField size="small" value="0" disabled sx={{ width: 60 }} />
               </Stack>
               <FormControl fullWidth size="small">
-                <InputLabel>Cache</InputLabel>
-                <Select value={diskCache} onChange={(e) => setDiskCache(e.target.value)} label="Cache">
-                  <MenuItem value="none">Default (No cache)</MenuItem>
-                  <MenuItem value="directsync">Direct sync</MenuItem>
-                  <MenuItem value="writethrough">Write through</MenuItem>
-                  <MenuItem value="writeback">Write back</MenuItem>
-                  <MenuItem value="unsafe">Write back (unsafe)</MenuItem>
+                <InputLabel>{t('inventory.createVm.cache')}</InputLabel>
+                <Select value={diskCache} onChange={(e) => setDiskCache(e.target.value)} label={t('inventory.createVm.cache')}>
+                  <MenuItem value="none">{t('inventory.createVm.defaultNoCache')}</MenuItem>
+                  <MenuItem value="directsync">{t('inventory.createVm.directSync')}</MenuItem>
+                  <MenuItem value="writethrough">{t('inventory.createVm.writeThrough')}</MenuItem>
+                  <MenuItem value="writeback">{t('inventory.createVm.writeBack')}</MenuItem>
+                  <MenuItem value="unsafe">{t('inventory.createVm.writeBackUnsafe')}</MenuItem>
                 </Select>
               </FormControl>
               
-              <Typography variant="body2">SCSI Controller: {scsiController}</Typography>
+              <Typography variant="body2">{t('inventory.createVm.scsiControllerLabel', { controller: scsiController })}</Typography>
               <FormControlLabel 
                 control={<Switch checked={diskDiscard} onChange={(e) => setDiskDiscard(e.target.checked)} size="small" />} 
-                label="Discard" 
+                label={t('inventory.createVm.discard')} 
               />
               
               <FormControl fullWidth size="small">
-                <InputLabel>Storage</InputLabel>
-                <Select value={diskStorage} onChange={(e) => setDiskStorage(e.target.value)} label="Storage">
+                <InputLabel>{t('inventory.createVm.storage')}</InputLabel>
+                <Select value={diskStorage} onChange={(e) => setDiskStorage(e.target.value)} label={t('inventory.createVm.storage')}>
                   {diskStoragesList.map(s => (
                     <MenuItem key={s.storage} value={s.storage}>
                       {s.storage} ({s.type})
@@ -838,11 +847,11 @@ return
               </FormControl>
               <FormControlLabel 
                 control={<Switch checked={diskIoThread} onChange={(e) => setDiskIoThread(e.target.checked)} size="small" />} 
-                label="IO thread" 
+                label={t('inventory.createVm.ioThread')} 
               />
               
               <TextField 
-                label="Disk size (GiB)" 
+                label={t('inventory.createVm.diskSizeGib')} 
                 value={diskSize} 
                 onChange={(e) => setDiskSize(parseInt(e.target.value) || 0)} 
                 size="small" 
@@ -850,18 +859,18 @@ return
               />
               <Box />
               
-              <Typography variant="body2" sx={{ opacity: 0.7 }}>Format: {diskFormat}</Typography>
+              <Typography variant="body2" sx={{ opacity: 0.7 }}>{t('inventory.createVm.format', { format: diskFormat })}</Typography>
               <Box />
               
               <Divider sx={{ gridColumn: '1 / -1', my: 1 }} />
               
               <FormControlLabel 
                 control={<Switch checked={diskSsd} onChange={(e) => setDiskSsd(e.target.checked)} size="small" />} 
-                label="SSD emulation" 
+                label={t('inventory.createVm.ssdEmulation')} 
               />
               <FormControlLabel 
                 control={<Switch checked={diskBackup} onChange={(e) => setDiskBackup(e.target.checked)} size="small" />} 
-                label="Backup" 
+                label={t('inventory.createVm.backup')} 
               />
             </Box>
           </Box>
@@ -871,7 +880,7 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <TextField 
-              label="Sockets" 
+              label={t('inventory.createVm.sockets')} 
               value={cpuSockets} 
               onChange={(e) => setCpuSockets(parseInt(e.target.value) || 1)} 
               size="small" 
@@ -879,8 +888,8 @@ return
               inputProps={{ min: 1, max: 4 }}
             />
             <FormControl fullWidth size="small">
-              <InputLabel>Type</InputLabel>
-              <Select value={cpuType} onChange={(e) => setCpuType(e.target.value)} label="Type">
+              <InputLabel>{t('inventory.createVm.cpuType')}</InputLabel>
+              <Select value={cpuType} onChange={(e) => setCpuType(e.target.value)} label={t('inventory.createVm.cpuType')}>
                 <MenuItem value="x86-64-v2-AES">x86-64-v2-AES</MenuItem>
                 <MenuItem value="host">host</MenuItem>
                 <MenuItem value="kvm64">kvm64</MenuItem>
@@ -890,7 +899,7 @@ return
             </FormControl>
             
             <TextField 
-              label="Cores" 
+              label={t('inventory.createVm.cores')} 
               value={cpuCores} 
               onChange={(e) => setCpuCores(parseInt(e.target.value) || 1)} 
               size="small" 
@@ -898,19 +907,19 @@ return
               inputProps={{ min: 1, max: 128 }}
             />
             <Typography variant="body2" sx={{ alignSelf: 'center' }}>
-              Total cores: <b>{cpuSockets * cpuCores}</b>
+              {t('inventory.createVm.totalCores', { count: cpuSockets * cpuCores })}
             </Typography>
             
             <Divider sx={{ gridColumn: '1 / -1', my: 1 }} />
             
             <TextField 
-              label="VCPUs" 
+              label={t('inventory.createVm.vcpus')} 
               value={cpuSockets * cpuCores} 
               size="small" 
               disabled
             />
             <TextField 
-              label="CPU units" 
+              label={t('inventory.createVm.cpuUnits')} 
               value={cpuUnits} 
               onChange={(e) => setCpuUnits(parseInt(e.target.value) || 100)} 
               size="small" 
@@ -918,7 +927,7 @@ return
             />
             
             <TextField 
-              label="CPU limit" 
+              label={t('inventory.createVm.cpuLimit')} 
               value={cpuLimit === 0 ? 'unlimited' : cpuLimit} 
               onChange={(e) => setCpuLimit(e.target.value === 'unlimited' ? 0 : parseFloat(e.target.value) || 0)} 
               size="small" 
@@ -926,7 +935,7 @@ return
             />
             <FormControlLabel 
               control={<Switch checked={enableNuma} onChange={(e) => setEnableNuma(e.target.checked)} size="small" />} 
-              label="Enable NUMA" 
+              label={t('inventory.createVm.enableNuma')} 
             />
           </Box>
         )
@@ -935,7 +944,7 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <TextField 
-              label="Memory (MiB)" 
+              label={t('inventory.createVm.memoryMib')} 
               value={memorySize} 
               onChange={(e) => setMemorySize(parseInt(e.target.value) || 512)} 
               size="small" 
@@ -945,7 +954,7 @@ return
             <Box />
             
             <TextField 
-              label="Minimum memory (MiB)" 
+              label={t('inventory.createVm.minMemoryMib')} 
               value={minMemory} 
               onChange={(e) => setMinMemory(parseInt(e.target.value) || 512)} 
               size="small" 
@@ -955,12 +964,12 @@ return
             />
             <Box />
             
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>Shares: Default (1000)</Typography>
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>{t('inventory.createVm.sharesDefault')}</Typography>
             <Box />
             
             <FormControlLabel 
               control={<Switch checked={ballooning} onChange={(e) => setBallooning(e.target.checked)} size="small" />} 
-              label="Ballooning Device" 
+              label={t('inventory.createVm.ballooningDevice')} 
             />
           </Box>
         )
@@ -970,21 +979,21 @@ return
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControlLabel 
               control={<Switch checked={noNetwork} onChange={(e) => setNoNetwork(e.target.checked)} size="small" />} 
-              label="No network device" 
+              label={t('inventory.createVm.noNetworkDevice')} 
               sx={{ gridColumn: '1 / -1' }}
             />
             
             {!noNetwork && (
               <>
                 <TextField 
-                  label="Bridge" 
+                  label={t('inventory.createVm.bridge')} 
                   value={networkBridge} 
                   onChange={(e) => setNetworkBridge(e.target.value)} 
                   size="small"
                 />
                 <FormControl fullWidth size="small">
-                  <InputLabel>Model</InputLabel>
-                  <Select value={networkModel} onChange={(e) => setNetworkModel(e.target.value)} label="Model">
+                  <InputLabel>{t('inventory.createVm.model')}</InputLabel>
+                  <Select value={networkModel} onChange={(e) => setNetworkModel(e.target.value)} label={t('inventory.createVm.model')}>
                     <MenuItem value="virtio">VirtIO (paravirtualized)</MenuItem>
                     <MenuItem value="e1000">Intel E1000</MenuItem>
                     <MenuItem value="rtl8139">Realtek RTL8139</MenuItem>
@@ -993,14 +1002,14 @@ return
                 </FormControl>
                 
                 <TextField 
-                  label="VLAN Tag" 
+                  label={t('inventory.createVm.vlanTag')} 
                   value={vlanTag} 
                   onChange={(e) => setVlanTag(e.target.value)} 
                   size="small"
                   placeholder="no VLAN"
                 />
                 <TextField 
-                  label="MAC address" 
+                  label={t('inventory.createVm.macAddress')} 
                   value={macAddress} 
                   onChange={(e) => setMacAddress(e.target.value)} 
                   size="small"
@@ -1009,7 +1018,7 @@ return
                 
                 <FormControlLabel 
                   control={<Switch checked={firewall} onChange={(e) => setFirewall(e.target.checked)} size="small" />} 
-                  label="Firewall" 
+                  label={t('inventory.createVm.firewall')} 
                 />
                 <Box />
                 
@@ -1017,10 +1026,10 @@ return
                 
                 <FormControlLabel 
                   control={<Switch checked={networkDisconnect} onChange={(e) => setNetworkDisconnect(e.target.checked)} size="small" />} 
-                  label="Disconnect" 
+                  label={t('inventory.createVm.disconnect')} 
                 />
                 <TextField 
-                  label="Rate limit (MB/s)" 
+                  label={t('inventory.createVm.rateLimitMbs')} 
                   value={rateLimit} 
                   onChange={(e) => setRateLimit(e.target.value)} 
                   size="small"
@@ -1028,7 +1037,7 @@ return
                 />
                 
                 <TextField 
-                  label="MTU" 
+                  label={t('inventory.createVm.mtu')} 
                   value={mtu} 
                   onChange={(e) => setMtu(e.target.value)} 
                   size="small"

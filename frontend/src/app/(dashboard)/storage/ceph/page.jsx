@@ -58,20 +58,22 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 // Health Status Badge
 const HealthBadge = ({ status, size = 'medium' }) => {
+  const t = useTranslations()
+
   const getColor = (s) => {
     if (s === 'HEALTH_OK') return 'success'
     if (s === 'HEALTH_WARN') return 'warning'
     if (s === 'HEALTH_ERR') return 'error'
-    
+
 return 'default'
   }
-  
+
   const getLabel = (s) => {
-    if (s === 'HEALTH_OK') return 'HEALTH OK'
-    if (s === 'HEALTH_WARN') return 'WARNING'
-    if (s === 'HEALTH_ERR') return 'ERROR'
-    
-return s || 'UNKNOWN'
+    if (s === 'HEALTH_OK') return t('cephPage.healthOk')
+    if (s === 'HEALTH_WARN') return t('cephPage.healthWarning')
+    if (s === 'HEALTH_ERR') return t('cephPage.healthError')
+
+return s || t('cephPage.healthUnknown')
   }
 
   const getIcon = (s) => {
@@ -130,20 +132,22 @@ const OsdStatusChip = ({ up, inCluster, status }) => {
   const statusLower = (status || '').toLowerCase()
   const isUp = up || statusLower === 'up' || statusLower.includes('up')
   
+  const t = useTranslations()
+
   if (isUp && inCluster) {
-    return <Chip size='small' label='UP / IN' color='success' sx={{ fontWeight: 600, fontSize: 11 }} />
+    return <Chip size='small' label={t('cephPage.upIn')} color='success' sx={{ fontWeight: 600, fontSize: 11 }} />
   }
 
   if (isUp && !inCluster) {
-    return <Chip size='small' label='UP / OUT' color='warning' sx={{ fontWeight: 600, fontSize: 11 }} />
+    return <Chip size='small' label={t('cephPage.upOut')} color='warning' sx={{ fontWeight: 600, fontSize: 11 }} />
   }
 
   if (!isUp && inCluster) {
-    return <Chip size='small' label='DOWN / IN' color='error' sx={{ fontWeight: 600, fontSize: 11 }} />
+    return <Chip size='small' label={t('cephPage.downIn')} color='error' sx={{ fontWeight: 600, fontSize: 11 }} />
   }
 
-  
-return <Chip size='small' label='DOWN / OUT' color='default' sx={{ fontWeight: 600, fontSize: 11 }} />
+
+return <Chip size='small' label={t('cephPage.downOut')} color='default' sx={{ fontWeight: 600, fontSize: 11 }} />
 }
 
 // Device Class Chip
@@ -428,7 +432,7 @@ return updated.slice(-30)
   const osdColumns = useMemo(() => [
     {
       field: 'name',
-      headerName: 'OSD',
+      headerName: t('cephPage.osd'),
       width: 100,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -438,7 +442,7 @@ return updated.slice(-30)
     },
     {
       field: 'host',
-      headerName: 'Host',
+      headerName: t('cephPage.host'),
       flex: 1,
       minWidth: 120,
       renderCell: params => (
@@ -484,7 +488,7 @@ return updated.slice(-30)
     },
     {
       field: 'commitLatencyMs',
-      headerName: 'Latency',
+      headerName: t('cephPage.latencyHeader'),
       width: 100,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -500,7 +504,7 @@ return updated.slice(-30)
   const poolColumns = useMemo(() => [
     {
       field: 'name',
-      headerName: 'Pool',
+      headerName: t('cephPage.pool'),
       flex: 1,
       minWidth: 150,
       renderCell: params => (
@@ -521,7 +525,7 @@ return updated.slice(-30)
     },
     {
       field: 'size',
-      headerName: 'Replication',
+      headerName: t('cephPage.replication'),
       width: 110,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -533,7 +537,7 @@ return updated.slice(-30)
     },
     {
       field: 'pgNum',
-      headerName: 'PGs',
+      headerName: t('cephPage.pgs'),
       width: 80,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -563,7 +567,7 @@ return updated.slice(-30)
     },
     {
       field: 'objects',
-      headerName: 'Objects',
+      headerName: t('cephPage.objects'),
       width: 100,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -577,20 +581,20 @@ return updated.slice(-30)
   const monColumns = useMemo(() => [
     {
       field: 'name',
-      headerName: 'Monitor',
+      headerName: t('cephPage.monitor'),
       width: 120,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
           <Typography variant='body2' sx={{ fontWeight: 700 }}>{params.row.name}</Typography>
           {params.row.leader && (
-            <Chip size='small' label='Leader' color='primary' sx={{ fontSize: 10, height: 18 }} />
+            <Chip size='small' label={t('cephPage.leader')} color='primary' sx={{ fontSize: 10, height: 18 }} />
           )}
         </Box>
       )
     },
     {
       field: 'host',
-      headerName: 'Host',
+      headerName: t('cephPage.host'),
       flex: 1,
       minWidth: 120,
       renderCell: params => (
@@ -601,7 +605,7 @@ return updated.slice(-30)
     },
     {
       field: 'addr',
-      headerName: 'Address',
+      headerName: t('cephPage.address'),
       flex: 1,
       minWidth: 150,
       renderCell: params => (
@@ -614,14 +618,14 @@ return updated.slice(-30)
     },
     {
       field: 'inQuorum',
-      headerName: 'Quorum',
+      headerName: t('cephPage.quorum'),
       width: 100,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
           {params.row.inQuorum ? (
-            <Chip size='small' label='In Quorum' color='success' sx={{ fontSize: 11 }} />
+            <Chip size='small' label={t('cephPage.inQuorum')} color='success' sx={{ fontSize: 11 }} />
           ) : (
-            <Chip size='small' label='Out' color='error' sx={{ fontSize: 11 }} />
+            <Chip size='small' label={t('cephPage.out')} color='error' sx={{ fontSize: 11 }} />
           )}
         </Box>
       )
@@ -782,17 +786,17 @@ return updated.slice(-30)
             />
 
             <KpiCard
-              title='IOPS'
+              title={t('cephPage.iops')}
               value={(cephData.performance?.totalIops || 0).toLocaleString()}
-              subtitle={`R: ${cephData.performance?.readOpsSec || 0} / W: ${cephData.performance?.writeOpsSec || 0}`}
+              subtitle={`${t('cephPage.rShort')}: ${cephData.performance?.readOpsSec || 0} / ${t('cephPage.wShort')}: ${cephData.performance?.writeOpsSec || 0}`}
               icon='ri-speed-line'
               color='#9c27b0'
             />
 
             <KpiCard
-              title='Throughput'
+              title={t('cephPage.throughput')}
               value={cephData.performance?.readFormatted}
-              subtitle={`Write: ${cephData.performance?.writeFormatted}`}
+              subtitle={`${t('cephPage.writeLabel')}: ${cephData.performance?.writeFormatted}`}
               icon='ri-upload-2-line'
               color='#ff9800'
             />
@@ -912,7 +916,7 @@ return updated.slice(-30)
                             }} 
                           />
                         )}
-                        LIVE
+                        {t('cephPage.live')}
                       </Box>
                     </ToggleButton>
                     <ToggleButton value='hour' sx={{ px: 1.5, py: 0.25, fontSize: 11 }}>1H</ToggleButton>
@@ -928,7 +932,7 @@ return updated.slice(-30)
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant='caption' sx={{ fontWeight: 600, opacity: 0.7 }}>
-                        IOPS Ceph
+                        {t('cephPage.iopsCeph')}
                       </Typography>
                       {liveMode && (
                         <Chip 
@@ -951,10 +955,10 @@ return updated.slice(-30)
                     {liveMode && (
                       <Box sx={{ display: 'flex', gap: 2 }}>
                         <Typography variant='caption' sx={{ color: '#2196f3', fontWeight: 700 }}>
-                          R: {(cephData?.performance?.readOpsSec || 0).toLocaleString()}
+                          {t('cephPage.rShort')}: {(cephData?.performance?.readOpsSec || 0).toLocaleString()}
                         </Typography>
                         <Typography variant='caption' sx={{ color: '#ff9800', fontWeight: 700 }}>
-                          W: {(cephData?.performance?.writeOpsSec || 0).toLocaleString()}
+                          {t('cephPage.wShort')}: {(cephData?.performance?.writeOpsSec || 0).toLocaleString()}
                         </Typography>
                       </Box>
                     )}
@@ -981,7 +985,7 @@ return updated.slice(-30)
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} width={45} />
                             <RTooltip 
                               contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
-                              formatter={(value, name) => [value.toLocaleString(), name === 'readIops' ? 'Read' : 'Write']}
+                              formatter={(value, name) => [value.toLocaleString(), name === 'readIops' ? t('cephPage.readLabel') : t('cephPage.writeLabel')]}
                             />
                             <Area type='monotone' dataKey='readIops' name='readIops' stroke='#2196f3' fill='url(#readIopsGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='writeIops' name='writeIops' stroke='#ff9800' fill='url(#writeIopsGrad)' strokeWidth={2} />
@@ -1002,13 +1006,13 @@ return updated.slice(-30)
                             <Typography variant='h3' sx={{ fontWeight: 800, color: '#2196f3' }}>
                               {(cephData?.performance?.readOpsSec || 0).toLocaleString()}
                             </Typography>
-                            <Typography variant='body2' sx={{ opacity: 0.7 }}>Read IOPS</Typography>
+                            <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('cephPage.readIops')}</Typography>
                           </Box>
                           <Box sx={{ textAlign: 'center' }}>
                             <Typography variant='h3' sx={{ fontWeight: 800, color: '#ff9800' }}>
                               {(cephData?.performance?.writeOpsSec || 0).toLocaleString()}
                             </Typography>
-                            <Typography variant='body2' sx={{ opacity: 0.7 }}>Write IOPS</Typography>
+                            <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('cephPage.writeIops')}</Typography>
                           </Box>
                         </Box>
                         <Divider sx={{ width: '60%', my: 1.5 }} />
@@ -1048,10 +1052,10 @@ return updated.slice(-30)
                     {liveMode && (
                       <Box sx={{ display: 'flex', gap: 2 }}>
                         <Typography variant='caption' sx={{ color: '#2196f3', fontWeight: 700 }}>
-                          R: {formatBytes(cephData?.performance?.readBytesSec || 0)}/s
+                          {t('cephPage.rShort')}: {formatBytes(cephData?.performance?.readBytesSec || 0)}/s
                         </Typography>
                         <Typography variant='caption' sx={{ color: '#ff9800', fontWeight: 700 }}>
-                          W: {formatBytes(cephData?.performance?.writeBytesSec || 0)}/s
+                          {t('cephPage.wShort')}: {formatBytes(cephData?.performance?.writeBytesSec || 0)}/s
                         </Typography>
                       </Box>
                     )}
@@ -1192,7 +1196,7 @@ return updated.slice(-30)
                         />
                         <Bar 
                           dataKey='commitLatencyMs' 
-                          name='Commit Latency' 
+                          name={t('cephPage.commitLatency')}
                           fill={primaryColor}
                           radius={[4, 4, 0, 0]}
                         />
@@ -1227,13 +1231,13 @@ return updated.slice(-30)
               <CardContent sx={{ py: 3 }}>
                 <Typography variant='subtitle1' sx={{ fontWeight: 700, mb: 3 }}>
                   <i className='ri-hard-drive-2-line' style={{ marginRight: 8 }} />
-                  OSDs
+                  {t('cephPage.osdsTitle')}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-around' }}>
-                  <StatBox label='Total' value={cephData.osds?.total || 0} color={primaryColor} />
-                  <StatBox label='Up' value={cephData.osds?.up || 0} color='#4caf50' />
-                  <StatBox label='In' value={cephData.osds?.in || 0} color='#2196f3' />
-                  <StatBox label='Down' value={cephData.osds?.down || 0} color={cephData.osds?.down > 0 ? '#f44336' : undefined} />
+                  <StatBox label={t('cephPage.totalLabel')} value={cephData.osds?.total || 0} color={primaryColor} />
+                  <StatBox label={t('cephPage.upLabel')} value={cephData.osds?.up || 0} color='#4caf50' />
+                  <StatBox label={t('cephPage.inLabel')} value={cephData.osds?.in || 0} color='#2196f3' />
+                  <StatBox label={t('cephPage.downLabel')} value={cephData.osds?.down || 0} color={cephData.osds?.down > 0 ? '#f44336' : undefined} />
                 </Box>
               </CardContent>
             </Card>
@@ -1243,15 +1247,15 @@ return updated.slice(-30)
               <CardContent sx={{ py: 3 }}>
                 <Typography variant='subtitle1' sx={{ fontWeight: 700, mb: 3 }}>
                   <i className='ri-eye-line' style={{ marginRight: 8 }} />
-                  Monitors
+                  {t('cephPage.monitorsTitle')}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-around' }}>
-                  <StatBox label='Total' value={cephData.monitors?.total || 0} color={primaryColor} />
-                  <StatBox label='In Quorum' value={cephData.monitors?.inQuorum || 0} color='#4caf50' />
+                  <StatBox label={t('cephPage.totalLabel')} value={cephData.monitors?.total || 0} color={primaryColor} />
+                  <StatBox label={t('cephPage.totalInQuorum')} value={cephData.monitors?.inQuorum || 0} color='#4caf50' />
                 </Box>
                 {cephData.monitors?.quorumNames?.length > 0 && (
                   <Typography variant='caption' sx={{ opacity: 0.6, display: 'block', textAlign: 'center', mt: 2 }}>
-                    Quorum: {cephData.monitors.quorumNames.join(', ')}
+                    {t('cephPage.quorumPrefix')}: {cephData.monitors.quorumNames.join(', ')}
                   </Typography>
                 )}
               </CardContent>
@@ -1262,11 +1266,11 @@ return updated.slice(-30)
               <CardContent sx={{ py: 3 }}>
                 <Typography variant='subtitle1' sx={{ fontWeight: 700, mb: 3 }}>
                   <i className='ri-pie-chart-line' style={{ marginRight: 8 }} />
-                  Placement Groups
+                  {t('cephPage.placementGroups')}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-around' }}>
-                  <StatBox label='Total PGs' value={cephData.pgs?.total || 0} color={primaryColor} />
-                  <StatBox label='Pools' value={cephData.pools?.total || 0} color='#9c27b0' />
+                  <StatBox label={t('cephPage.totalPgs')} value={cephData.pgs?.total || 0} color={primaryColor} />
+                  <StatBox label={t('cephPage.poolsLabel')} value={cephData.pools?.total || 0} color='#9c27b0' />
                 </Box>
               </CardContent>
             </Card>
@@ -1279,10 +1283,10 @@ return updated.slice(-30)
               onChange={(e, v) => setActiveTab(v)}
               sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
             >
-              <Tab label={`OSDs (${cephData.osds?.total || 0})`} />
-              <Tab label={`Pools (${cephData.pools?.total || 0})`} />
-              <Tab label={`Monitors (${cephData.monitors?.total || 0})`} />
-              {cephData.mds?.total > 0 && <Tab label={`MDS (${cephData.mds.total})`} />}
+              <Tab label={`${t('cephPage.osdsTab')} (${cephData.osds?.total || 0})`} />
+              <Tab label={`${t('cephPage.poolsTab')} (${cephData.pools?.total || 0})`} />
+              <Tab label={`${t('cephPage.monitorsTab')} (${cephData.monitors?.total || 0})`} />
+              {cephData.mds?.total > 0 && <Tab label={`${t('cephPage.mdsTab')} (${cephData.mds.total})`} />}
             </Tabs>
 
             {/* OSDs Tab */}

@@ -129,7 +129,7 @@ return }
           <TextField label={t('common.color')} type='color' value={color} onChange={e => setColor(e.target.value)} sx={{ width: 100 }} disabled={role?.is_system} />
         </Box>
         <TextField fullWidth label={t('common.description')} value={description} onChange={e => setDescription(e.target.value)} multiline rows={2} sx={{ mb: 2 }} disabled={role?.is_system} />
-        <Typography variant='subtitle2' sx={{ mb: 1, fontWeight: 600 }}>Permissions ({selectedPerms.size})</Typography>
+        <Typography variant='subtitle2' sx={{ mb: 1, fontWeight: 600 }}>{t('rbacPage.permissionsCount', { count: selectedPerms.size })}</Typography>
         {role?.is_system && <Alert severity='info' sx={{ mb: 1 }}>{t('rbac.cannotModifySystem')}</Alert>}
         <Paper variant='outlined' sx={{ maxHeight: 350, overflow: 'auto' }}>
           {categories.map(cat => {
@@ -223,7 +223,7 @@ function AssignmentDialog({ open, onClose, roles, users, onSave, t }) {
         return inventory.clusters.map((c: any) => ({
           id: c.id,
           label: c.name,
-          sublabel: `${c.nodes?.length || 0} node(s)`,
+          sublabel: t('rbacPage.nodeCount', { count: c.nodes?.length || 0 }),
           icon: 'ri-server-line',
           status: c.status
         }))
@@ -427,7 +427,7 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-global-line' style={{ color: '#6366f1' }} />
                 <Box>
-                  <Typography variant='body2'>Global</Typography>
+                  <Typography variant='body2'>{t('rbacPage.globalScope')}</Typography>
                   <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.accessAllResources')}</Typography>
                 </Box>
               </Box>
@@ -765,7 +765,7 @@ return (
     return (
       <Tooltip title={row.scope_targets.join('\n')}>
         <Chip 
-          label={`${count} ${row.scope_type === 'vm' ? 'VMs/CTs' : row.scope_type === 'node' ? t('rbac.scopes.node') : t('rbac.scopes.connection')}`}
+          label={`${count} ${row.scope_type === 'vm' ? t('rbacPage.vmsCts') : row.scope_type === 'node' ? t('rbac.scopes.node') : t('rbac.scopes.connection')}`}
           size='small' 
           variant='outlined'
           sx={{ height: 22, fontSize: '0.75rem' }}
@@ -907,7 +907,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, onSave, t
         return inventory.clusters.map((c: any) => ({
           id: c.id,
           label: c.name,
-          sublabel: `${c.nodes?.length || 0} node(s)`,
+          sublabel: t('rbacPage.nodeCount', { count: c.nodes?.length || 0 }),
           icon: 'ri-server-line',
           status: c.status
         }))
@@ -1166,7 +1166,7 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-global-line' style={{ color: '#6366f1' }} />
                 <Box>
-                  <Typography variant='body2'>Global</Typography>
+                  <Typography variant='body2'>{t('rbacPage.globalScope')}</Typography>
                   <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.accessAllResources')}</Typography>
                 </Box>
               </Box>
@@ -1193,7 +1193,7 @@ return
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-instance-line' style={{ color: '#10b981' }} />
                 <Box>
-                  <Typography variant='body2'>VM / Container</Typography>
+                  <Typography variant='body2'>{t('rbacPage.vmContainer')}</Typography>
                   <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToVmsCts')}</Typography>
                 </Box>
               </Box>

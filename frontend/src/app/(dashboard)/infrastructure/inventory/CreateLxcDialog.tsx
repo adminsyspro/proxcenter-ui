@@ -41,8 +41,9 @@ function CreateLxcDialog({
   allVms: AllVmItem[]
   onCreated?: (vmid: string, connId: string, node: string) => void
 }) {
+  const t = useTranslations()
   const theme = useTheme()
-  
+
   const [activeTab, setActiveTab] = useState(0)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -134,13 +135,13 @@ return
     const ctidNum = parseInt(numericValue, 10)
     
     if (ctidNum < 100) {
-      setCtidError('CT ID must be >= 100')
+      setCtidError(t('inventory.createLxc.ctIdMin'))
       
 return
     }
 
     if (ctidNum > 999999999) {
-      setCtidError('CT ID must be <= 999999999')
+      setCtidError(t('inventory.createLxc.ctIdMax'))
       
 return
     }
@@ -148,7 +149,7 @@ return
     const isUsed = allVms.some(vm => parseInt(String(vm.vmid), 10) === ctidNum)
 
     if (isUsed) {
-      setCtidError(`CT ID ${ctidNum} is already in use`)
+      setCtidError(t('inventory.createLxc.ctIdInUse', { id: ctidNum }))
       
 return
     }
@@ -329,7 +330,7 @@ return
     
     try {
       if (rootPassword && rootPassword !== confirmPassword) {
-        throw new Error('Passwords do not match')
+        throw new Error(t('inventory.createLxc.passwordsDoNotMatch'))
       }
 
       const payload: any = {
@@ -399,13 +400,22 @@ return
       onCreated?.(ctid, selectedConnection, selectedNode)
       onClose()
     } catch (e: any) {
-      setError(e?.message || 'Error creating container')
+      setError(e?.message || t('inventory.createLxc.errorCreatingContainer'))
     } finally {
       setCreating(false)
     }
   }
 
-  const tabs = ['General', 'Template', 'Disks', 'CPU', 'Memory', 'Network', 'DNS', 'Confirm']
+  const tabs = [
+    t('inventory.createLxc.tabs.general'),
+    t('inventory.createLxc.tabs.template'),
+    t('inventory.createLxc.tabs.disks'),
+    t('inventory.createLxc.tabs.cpu'),
+    t('inventory.createLxc.tabs.memory'),
+    t('inventory.createLxc.tabs.network'),
+    t('inventory.createLxc.tabs.dns'),
+    t('inventory.createLxc.tabs.confirm'),
+  ]
   
   const templateStoragesList = storages.filter(s => s.content?.includes('vztmpl'))
   const diskStoragesList = storages.filter(s => s.content?.includes('rootdir') || s.content?.includes('images'))
@@ -416,11 +426,11 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Node</InputLabel>
+              <InputLabel>{t('inventory.createLxc.node')}</InputLabel>
               <Select
                 value={selectedNode}
                 onChange={(e) => handleNodeChange(e.target.value)}
-                label="Node"
+                label={t('inventory.createLxc.node')}
                 MenuProps={{ PaperProps: { sx: { maxHeight: 400 } } }}
               >
                 {groupedNodes.map(group => [
@@ -442,7 +452,7 @@ return
                           <Typography variant="body2" fontWeight={600}>
                             {group.connName}
                             <Typography component="span" sx={{ ml: 1, opacity: 0.6, fontSize: '0.8em' }}>
-                              (auto)
+                              ({t('inventory.createLxc.auto')})
                             </Typography>
                           </Typography>
                         </Box>
@@ -527,9 +537,9 @@ return
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
-              <InputLabel>Resource Pool</InputLabel>
-              <Select value={resourcePool} onChange={(e) => setResourcePool(e.target.value)} label="Resource Pool">
-                <MenuItem value="">(None)</MenuItem>
+              <InputLabel>{t('inventory.createLxc.resourcePool')}</InputLabel>
+              <Select value={resourcePool} onChange={(e) => setResourcePool(e.target.value)} label={t('inventory.createLxc.resourcePool')}>
+                <MenuItem value="">({t('common.none')})</MenuItem>
               </Select>
             </FormControl>
             
@@ -544,29 +554,29 @@ return
             />
             <Box />
             
-            <TextField label="Hostname" value={hostname} onChange={(e) => setHostname(e.target.value)} size="small" />
+            <TextField label={t('inventory.createLxc.hostname')} value={hostname} onChange={(e) => setHostname(e.target.value)} size="small" />
             <Box />
             
             <FormControlLabel 
               control={<Switch checked={unprivileged} onChange={(e) => setUnprivileged(e.target.checked)} size="small" />} 
-              label="Unprivileged container" 
+              label={t('inventory.createLxc.unprivilegedContainer')}
             />
             <FormControlLabel 
               control={<Switch checked={nesting} onChange={(e) => setNesting(e.target.checked)} size="small" />} 
-              label="Nesting" 
+              label={t('inventory.createLxc.nesting')}
             />
             
             <Divider sx={{ gridColumn: '1 / -1', my: 1 }} />
             
             <TextField 
-              label="Password" 
+              label={t('inventory.createLxc.password')}
               value={rootPassword} 
               onChange={(e) => setRootPassword(e.target.value)} 
               size="small" 
               type="password"
             />
             <TextField 
-              label="Confirm password" 
+              label={t('inventory.createLxc.confirmPassword')}
               value={confirmPassword} 
               onChange={(e) => setConfirmPassword(e.target.value)} 
               size="small" 
@@ -575,7 +585,7 @@ return
             />
             
             <TextField 
-              label="SSH public key" 
+              label={t('inventory.createLxc.sshPublicKey')}
               value={sshKeys} 
               onChange={(e) => setSshKeys(e.target.value)} 
               size="small" 
@@ -591,21 +601,21 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Storage</InputLabel>
-              <Select value={templateStorage} onChange={(e) => setTemplateStorage(e.target.value)} label="Storage">
+              <InputLabel>{t('inventory.createLxc.storage')}</InputLabel>
+              <Select value={templateStorage} onChange={(e) => setTemplateStorage(e.target.value)} label={t('inventory.createLxc.storage')}>
                 {templateStoragesList.map(s => <MenuItem key={s.storage} value={s.storage}>{s.storage}</MenuItem>)}
               </Select>
             </FormControl>
             <Box />
-            
-            <TextField 
-              label="Template" 
-              value={template} 
-              onChange={(e) => setTemplate(e.target.value)} 
-              size="small" 
+
+            <TextField
+              label={t('inventory.createLxc.template')}
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              size="small"
               sx={{ gridColumn: '1 / -1' }}
-              placeholder="debian-12-standard_12.2-1_amd64.tar.zst"
-              helperText="Enter the template filename (must be downloaded on the storage first)"
+              placeholder={t('inventory.createLxc.templatePlaceholder')}
+              helperText={t('inventory.createLxc.templateHelperText')}
             />
           </Box>
         )
@@ -614,17 +624,17 @@ return
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <FormControl fullWidth size="small">
-              <InputLabel>Storage</InputLabel>
-              <Select value={rootStorage} onChange={(e) => setRootStorage(e.target.value)} label="Storage">
+              <InputLabel>{t('inventory.createLxc.storage')}</InputLabel>
+              <Select value={rootStorage} onChange={(e) => setRootStorage(e.target.value)} label={t('inventory.createLxc.storage')}>
                 {diskStoragesList.map(s => (
                   <MenuItem key={s.storage} value={s.storage}>{s.storage} ({s.type})</MenuItem>
                 ))}
               </Select>
             </FormControl>
             <Box />
-            
-            <TextField 
-              label="Disk size (GiB)" 
+
+            <TextField
+              label={t('inventory.createLxc.diskSizeGib')}
               value={rootSize} 
               onChange={(e) => setRootSize(parseInt(e.target.value) || 1)} 
               size="small" 
@@ -637,8 +647,8 @@ return
       case 3: // CPU
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField 
-              label="Cores" 
+            <TextField
+              label={t('inventory.createLxc.cores')}
               value={cpuCores} 
               onChange={(e) => setCpuCores(parseInt(e.target.value) || 1)} 
               size="small" 
@@ -647,17 +657,17 @@ return
             />
             <Box />
             
-            <TextField 
-              label="CPU limit" 
+            <TextField
+              label={t('inventory.createLxc.cpuLimit')}
               value={cpuLimit === 0 ? '' : cpuLimit} 
               onChange={(e) => setCpuLimit(parseFloat(e.target.value) || 0)} 
               size="small" 
               type="number"
-              placeholder="unlimited"
+              placeholder={t('inventory.createLxc.unlimited')}
               inputProps={{ min: 0, max: cpuCores, step: 0.1 }}
             />
-            <TextField 
-              label="CPU units" 
+            <TextField
+              label={t('inventory.createLxc.cpuUnits')}
               value={cpuUnits} 
               onChange={(e) => setCpuUnits(parseInt(e.target.value) || 1024)} 
               size="small" 
@@ -669,8 +679,8 @@ return
       case 4: // Memory
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField 
-              label="Memory (MiB)" 
+            <TextField
+              label={t('inventory.createLxc.memoryMib')}
               value={memorySize} 
               onChange={(e) => setMemorySize(parseInt(e.target.value) || 128)} 
               size="small" 
@@ -679,8 +689,8 @@ return
             />
             <Box />
             
-            <TextField 
-              label="Swap (MiB)" 
+            <TextField
+              label={t('inventory.createLxc.swapMib')}
               value={swapSize} 
               onChange={(e) => setSwapSize(parseInt(e.target.value) || 0)} 
               size="small" 
@@ -693,48 +703,48 @@ return
       case 5: // Network
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField 
-              label="Name" 
-              value={networkName} 
-              onChange={(e) => setNetworkName(e.target.value)} 
+            <TextField
+              label={t('inventory.createLxc.networkName')}
+              value={networkName}
+              onChange={(e) => setNetworkName(e.target.value)}
               size="small"
             />
-            <TextField 
-              label="Bridge" 
-              value={networkBridge} 
-              onChange={(e) => setNetworkBridge(e.target.value)} 
+            <TextField
+              label={t('inventory.createLxc.bridge')}
+              value={networkBridge}
+              onChange={(e) => setNetworkBridge(e.target.value)}
               size="small"
             />
             
             <FormControl fullWidth size="small">
-              <InputLabel>IPv4</InputLabel>
-              <Select value={ipConfig} onChange={(e) => setIpConfig(e.target.value)} label="IPv4">
-                <MenuItem value="dhcp">DHCP</MenuItem>
-                <MenuItem value="static">Static</MenuItem>
-                <MenuItem value="manual">Manual</MenuItem>
+              <InputLabel>{t('inventory.createLxc.ipv4')}</InputLabel>
+              <Select value={ipConfig} onChange={(e) => setIpConfig(e.target.value)} label={t('inventory.createLxc.ipv4')}>
+                <MenuItem value="dhcp">{t('inventory.createLxc.dhcp')}</MenuItem>
+                <MenuItem value="static">{t('inventory.createLxc.static')}</MenuItem>
+                <MenuItem value="manual">{t('inventory.createLxc.manual')}</MenuItem>
               </Select>
             </FormControl>
             <FormControl fullWidth size="small">
-              <InputLabel>IPv6</InputLabel>
-              <Select value={ip6Config} onChange={(e) => setIp6Config(e.target.value)} label="IPv6">
-                <MenuItem value="auto">SLAAC</MenuItem>
-                <MenuItem value="dhcp">DHCP</MenuItem>
-                <MenuItem value="static">Static</MenuItem>
-                <MenuItem value="manual">Manual</MenuItem>
+              <InputLabel>{t('inventory.createLxc.ipv6')}</InputLabel>
+              <Select value={ip6Config} onChange={(e) => setIp6Config(e.target.value)} label={t('inventory.createLxc.ipv6')}>
+                <MenuItem value="auto">{t('inventory.createLxc.slaac')}</MenuItem>
+                <MenuItem value="dhcp">{t('inventory.createLxc.dhcp')}</MenuItem>
+                <MenuItem value="static">{t('inventory.createLxc.static')}</MenuItem>
+                <MenuItem value="manual">{t('inventory.createLxc.manual')}</MenuItem>
               </Select>
             </FormControl>
             
             {ipConfig === 'static' && (
               <>
-                <TextField 
-                  label="IPv4/CIDR" 
+                <TextField
+                  label={t('inventory.createLxc.ipv4Cidr')}
                   value={ip4} 
                   onChange={(e) => setIp4(e.target.value)} 
                   size="small"
                   placeholder="192.168.1.100/24"
                 />
-                <TextField 
-                  label="Gateway (IPv4)" 
+                <TextField
+                  label={t('inventory.createLxc.gatewayIpv4')}
                   value={gw4} 
                   onChange={(e) => setGw4(e.target.value)} 
                   size="small"
@@ -745,14 +755,14 @@ return
             
             {ip6Config === 'static' && (
               <>
-                <TextField 
-                  label="IPv6/CIDR" 
+                <TextField
+                  label={t('inventory.createLxc.ipv6Cidr')}
                   value={ip6} 
                   onChange={(e) => setIp6(e.target.value)} 
                   size="small"
                 />
-                <TextField 
-                  label="Gateway (IPv6)" 
+                <TextField
+                  label={t('inventory.createLxc.gatewayIpv6')}
                   value={gw6} 
                   onChange={(e) => setGw6(e.target.value)} 
                   size="small"
@@ -764,29 +774,29 @@ return
             
             <FormControlLabel 
               control={<Switch checked={firewall} onChange={(e) => setFirewall(e.target.checked)} size="small" />} 
-              label="Firewall" 
+              label={t('inventory.createLxc.firewall')}
             />
-            <TextField 
-              label="VLAN Tag" 
-              value={vlanTag} 
-              onChange={(e) => setVlanTag(e.target.value)} 
+            <TextField
+              label={t('inventory.createLxc.vlanTag')}
+              value={vlanTag}
+              onChange={(e) => setVlanTag(e.target.value)}
               size="small"
-              placeholder="no VLAN"
+              placeholder={t('inventory.createLxc.noVlan')}
             />
             
-            <TextField 
-              label="MTU" 
-              value={mtu} 
-              onChange={(e) => setMtu(e.target.value)} 
+            <TextField
+              label={t('inventory.createLxc.mtu')}
+              value={mtu}
+              onChange={(e) => setMtu(e.target.value)}
               size="small"
-              placeholder="same as bridge"
+              placeholder={t('inventory.createLxc.sameasBridge')}
             />
-            <TextField 
-              label="Rate limit (MB/s)" 
-              value={rateLimit} 
-              onChange={(e) => setRateLimit(e.target.value)} 
+            <TextField
+              label={t('inventory.createLxc.rateLimitMbs')}
+              value={rateLimit}
+              onChange={(e) => setRateLimit(e.target.value)}
               size="small"
-              placeholder="unlimited"
+              placeholder={t('inventory.createLxc.unlimited')}
             />
           </Box>
         )
@@ -794,21 +804,21 @@ return
       case 6: // DNS
         return (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField 
-              label="DNS domain" 
-              value={searchDomain} 
-              onChange={(e) => setSearchDomain(e.target.value)} 
+            <TextField
+              label={t('inventory.createLxc.dnsDomain')}
+              value={searchDomain}
+              onChange={(e) => setSearchDomain(e.target.value)}
               size="small"
-              placeholder="use host settings"
+              placeholder={t('inventory.createLxc.useHostSettings')}
             />
             <Box />
-            
-            <TextField 
-              label="DNS servers" 
-              value={dnsServer} 
-              onChange={(e) => setDnsServer(e.target.value)} 
+
+            <TextField
+              label={t('inventory.createLxc.dnsServers')}
+              value={dnsServer}
+              onChange={(e) => setDnsServer(e.target.value)}
               size="small"
-              placeholder="use host settings"
+              placeholder={t('inventory.createLxc.useHostSettings')}
             />
           </Box>
         )
@@ -818,23 +828,23 @@ return
           <Box>
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
             <Alert severity="info" sx={{ mb: 2 }}>
-              Review your settings before creating the container
+              {t('inventory.createLxc.reviewSettingsLxc')}
             </Alert>
             <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-              <Typography variant="body2"><b>Node:</b> {selectedNode}</Typography>
-              <Typography variant="body2"><b>CT ID:</b> {ctid}</Typography>
-              <Typography variant="body2"><b>Hostname:</b> {hostname}</Typography>
-              <Typography variant="body2"><b>Unprivileged:</b> {unprivileged ? 'Yes' : 'No'}</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmNode')}</b> {selectedNode}</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmCtId')}</b> {ctid}</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmHostname')}</b> {hostname}</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmUnprivileged')}</b> {unprivileged ? t('common.yes') : t('common.no')}</Typography>
               <Divider sx={{ my: 1 }} />
-              <Typography variant="body2"><b>Template:</b> {templateStorage}:vztmpl/{template || '(none)'}</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmTemplate')}</b> {templateStorage}:vztmpl/{template || `(${t('common.none')})`}</Typography>
               <Divider sx={{ my: 1 }} />
-              <Typography variant="body2"><b>Root disk:</b> {rootStorage}:{rootSize}GB</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmRootDisk')}</b> {rootStorage}:{rootSize}GB</Typography>
               <Divider sx={{ my: 1 }} />
-              <Typography variant="body2"><b>CPU:</b> {cpuCores} core(s){cpuLimit > 0 ? `, limit: ${cpuLimit}` : ''}</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmCpu')}</b> {t('inventory.createLxc.coreCount', { count: cpuCores })}{cpuLimit > 0 ? `, ${t('inventory.createLxc.limitLabel', { limit: cpuLimit })}` : ''}</Typography>
               <Divider sx={{ my: 1 }} />
-              <Typography variant="body2"><b>Memory:</b> {memorySize} MiB, Swap: {swapSize} MiB</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmMemory')}</b> {memorySize} MiB, {t('inventory.createLxc.confirmSwap')} {swapSize} MiB</Typography>
               <Divider sx={{ my: 1 }} />
-              <Typography variant="body2"><b>Network:</b> {networkName} on {networkBridge} ({ipConfig})</Typography>
+              <Typography variant="body2"><b>{t('inventory.createLxc.confirmNetwork')}</b> {networkName} on {networkBridge} ({ipConfig})</Typography>
             </Box>
           </Box>
         )
@@ -855,7 +865,7 @@ return
         py: 1.5
       }}>
         <i className="ri-instance-line" style={{ fontSize: 20 }} />
-        Create: LXC Container
+        {t('inventory.createLxc.title')}
       </DialogTitle>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -889,27 +899,27 @@ return
       </DialogContent>
       
       <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Button onClick={onClose} disabled={creating}>Cancel</Button>
+        <Button onClick={onClose} disabled={creating}>{t('common.cancel')}</Button>
         <Box sx={{ flex: 1 }} />
-        <Button 
-          onClick={() => setActiveTab(prev => Math.max(0, prev - 1))} 
+        <Button
+          onClick={() => setActiveTab(prev => Math.max(0, prev - 1))}
           disabled={activeTab === 0 || creating}
         >
-          Back
+          {t('common.back')}
         </Button>
         {activeTab < tabs.length - 1 ? (
           <Button onClick={() => setActiveTab(prev => prev + 1)} variant="contained">
-            Next
+            {t('common.next')}
           </Button>
         ) : (
-          <Button 
-            onClick={handleCreate} 
-            variant="contained" 
+          <Button
+            onClick={handleCreate}
+            variant="contained"
             color="primary"
             disabled={creating || !ctid || !selectedNode || !!ctidError}
             startIcon={creating ? <CircularProgress size={16} /> : null}
           >
-            Create
+            {t('common.create')}
           </Button>
         )}
       </DialogActions>

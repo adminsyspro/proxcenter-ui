@@ -117,8 +117,8 @@ export default function NetworkAutomationPage() {
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>Cluster</InputLabel>
-              <Select value={selectedConnection} label="Cluster" onChange={(e) => {
+              <InputLabel>{t('firewall.cluster')}</InputLabel>
+              <Select value={selectedConnection} label={t('firewall.cluster')} onChange={(e) => {
                 setSelectedConnection(e.target.value)
                 setVMFirewallData([])
               }}>
@@ -145,17 +145,17 @@ export default function NetworkAutomationPage() {
           gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
           gap: 2, mb: 3, width: '100%'
         }}>
-          <StatCard icon="ri-shield-check-line" label="Security Groups" value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => { setActiveTab(2); setRulesSubTab(3) }} />
-          <StatCard icon="ri-database-2-line" label="IP Sets" value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(3)} />
-          <StatCard icon="ri-price-tag-3-line" label="Aliases" value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(3)} />
+          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => { setActiveTab(2); setRulesSubTab(3) }} />
+          <StatCard icon="ri-database-2-line" label={t('firewall.ipSets')} value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(3)} />
+          <StatCard icon="ri-price-tag-3-line" label={t('firewall.aliases')} value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(3)} />
           <StatCard icon="ri-cloud-line" label={t('network.clusterRules')} value={clusterRules.length} subvalue={clusterOptions?.enable === 1 ? t('network.firewallActive') : t('network.firewallInactive')} color={clusterOptions?.enable === 1 ? '#06b6d4' : '#94a3b8'} loading={loading} onClick={() => { setActiveTab(2); setRulesSubTab(0) }} />
         </Box>
 
         {/* Main Content Card */}
         <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3 }}>
           <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-            <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label="Dashboard" sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label="Micro-segmentation" sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('firewall.microsegmentation')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-list-check-3" />} iconPosition="start" label={t('networkPage.tabRules')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-archive-2-line" />} iconPosition="start" label={t('networkPage.tabObjects')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>

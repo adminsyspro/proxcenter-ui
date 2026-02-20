@@ -90,13 +90,13 @@ function RoleChips({ roles, t }) {
   )
 }
 
-function AuthProviderChip({ provider }) {
+function AuthProviderChip({ provider, t }) {
   if (provider === 'ldap') {
-    return <Chip size='small' label='LDAP' variant='outlined' icon={<i className='ri-server-line' style={{ fontSize: 14 }} />} />
+    return <Chip size='small' label={t('usersPage.ldapAuth')} variant='outlined' icon={<i className='ri-server-line' style={{ fontSize: 14 }} />} />
   }
 
 
-return <Chip size='small' label='Local' variant='outlined' icon={<i className='ri-user-line' style={{ fontSize: 14 }} />} />
+return <Chip size='small' label={t('usersPage.localAuth')} variant='outlined' icon={<i className='ri-user-line' style={{ fontSize: 14 }} />} />
 }
 
 /* --------------------------------
@@ -231,7 +231,7 @@ return
         {!isEdit && (
           <TextField
             fullWidth
-            label='Email'
+            label={t ? t('usersPage.emailLabel') : 'Email'}
             type='email'
             value={email}
             onChange={e => setEmail(e.target.value)}
@@ -243,7 +243,7 @@ return
         {isEdit && (
           <TextField
             fullWidth
-            label='Email'
+            label={t ? t('usersPage.emailLabel') : 'Email'}
             value={user?.email || ''}
             disabled
             sx={{ mb: 2 }}
@@ -498,7 +498,7 @@ return () => setPageInfo('', '', '')
     () => [
       {
         field: 'email',
-        headerName: 'Email',
+        headerName: t('usersPage.emailHeader'),
         flex: 1,
         minWidth: 200,
         renderCell: params => (
@@ -519,9 +519,9 @@ return () => setPageInfo('', '', '')
       }] : []),
       {
         field: 'auth_provider',
-        headerName: 'Auth',
+        headerName: t('usersPage.authHeader'),
         width: 100,
-        renderCell: params => <AuthProviderChip provider={params.row.auth_provider} />,
+        renderCell: params => <AuthProviderChip provider={params.row.auth_provider} t={t} />,
       },
       {
         field: 'enabled',

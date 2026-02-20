@@ -375,10 +375,21 @@ return () => window.removeEventListener('keydown', onKeyDown)
     await signOut({ callbackUrl: '/login' })
   }
 
-  // PXCore (orchestrator) status - derived from SWR
+  // PXCore (orchestrator) status - derived from orchestrator-native components only
   const pxcoreStatus = useMemo(() => {
-    if (!healthData) return { status: 'unknown', syncing: false, components: null }
-    return { status: healthData.status, syncing: false, components: healthData.components }
+    if (!healthData) return { status: 'unknown', components: null }
+
+    const components = healthData.components
+
+    // Derive status from orchestrator-internal health (database, DRS engine)
+    // NOT from infrastructure metrics (connections, alerts)
+    let status = 'healthy'
+
+    if (components?.database && components.database.status !== 'ok') {
+      status = 'error'
+    }
+
+    return { status, components }
   }, [healthData])
 
   // PXCore status colors and labels
@@ -388,8 +399,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
     if (components) {
       const parts = []
 
-      if (components.connections) {
-        parts.push(t('pxcore.connections', { connected: components.connections.connected, total: components.connections.total }))
+      // Database status (orchestrator-native)
+      if (components.database) {
+        parts.push(components.database.status === 'ok' ? t('pxcore.databaseOk') : t('pxcore.databaseError'))
       }
 
       // Only show DRS info if license feature is available
@@ -399,10 +411,6 @@ return () => window.removeEventListener('keydown', onKeyDown)
         if (components.drs.active_migrations > 0) {
           parts.push(t('pxcore.migrations', { count: components.drs.active_migrations }))
         }
-      }
-
-      if (components.alerts?.critical > 0) {
-        parts.push(t('pxcore.criticalAlerts', { count: components.alerts.critical }))
       }
 
       details = parts.length > 0 ? ` • ${parts.join(' • ')}` : ''

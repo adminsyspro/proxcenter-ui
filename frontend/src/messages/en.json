@@ -185,11 +185,11 @@
     "error": "PXCore error",
     "offline": "PXCore offline",
     "unknown": "PXCore...",
-    "connections": "{connected}/{total} connections",
+    "databaseOk": "Database OK",
+    "databaseError": "Database error",
     "drsActive": "DRS active",
     "drsInactive": "DRS inactive",
-    "migrations": "{count} migration(s)",
-    "criticalAlerts": "{count} critical alert(s)"
+    "migrations": "{count} migration(s)"
   },
   "user": {
     "defaultName": "User",

@@ -47,6 +47,7 @@ services:
       - LICENSE_KEY=${LICENSE_KEY:-}
       - LOG_LEVEL=info
       - LOG_FORMAT=json
+      - TZ=${TZ:-Europe/Paris}
     volumes:
       - orchestrator_data:/app/data
       - proxcenter_data:/app/shared_data:ro

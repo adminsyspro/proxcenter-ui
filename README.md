@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="docs/logo.png" alt="ProxCenter Logo" width="120">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo.svg">
+    <img src="docs/logo.svg" alt="ProxCenter Logo" width="120">
+  </picture>
 </p>
 
 <h1 align="center">ProxCenter</h1>
@@ -345,7 +349,11 @@ docker compose restart
 ---
 
 <p align="center">
-  <img src="docs/logo.png" alt="ProxCenter" width="40">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo.svg">
+    <img src="docs/logo.svg" alt="ProxCenter" width="40">
+  </picture>
   <br>
   <strong>ProxCenter</strong> — Enterprise Proxmox Management Made Simple
 </p>

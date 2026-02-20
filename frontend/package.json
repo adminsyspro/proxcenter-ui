@@ -65,7 +65,7 @@
   },
   "devDependencies": {
     "@iconify/json": "2.2.408",
-    "@iconify/tools": "4.2.0",
+    "@iconify/tools": "5.0.3",
     "@iconify/utils": "3.1.0",
     "@tailwindcss/postcss": "4.1.17",
     "@types/node": "^22.15.2",

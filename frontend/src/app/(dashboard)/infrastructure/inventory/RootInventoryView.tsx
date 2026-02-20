@@ -283,19 +283,14 @@ function RootInventoryView({
         <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
             <Stack direction="row" alignItems="center" spacing={2}>
-              <Box sx={{ 
-                width: 48, 
-                height: 48, 
-                borderRadius: 2, 
-                bgcolor: 'primary.main', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                <i className="ri-stack-fill" style={{ fontSize: 24, color: 'white' }} />
-              </Box>
+              <Box
+                component="img"
+                src="/images/proxcenter-logo.svg"
+                alt="ProxCenter"
+                sx={{ width: 44, height: 44 }}
+              />
               <Box>
-                <Typography variant="h5" fontWeight={900}>{t('navigation.inventory')}</Typography>
+                <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: 1 }}>PROXCENTER</Typography>
                 <Typography variant="body2" color="text.secondary">
                   {clusters.length > 1 ? t('inventory.clustersCount', { count: clusters.length }) : t('inventory.clusterCount', { count: clusters.length })} • {hosts.length} {t('inventory.nodes')} • {vmStats.total} VMs{pbsServers && pbsServers.length > 0 ? ` • ${pbsServers.length} PBS` : ''}
                 </Typography>

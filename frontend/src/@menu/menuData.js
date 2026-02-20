@@ -99,8 +99,7 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.alerts'),
         icon: 'ri-notification-3-line',
         href: '/operations/alerts',
-
-        // Accessible à tous - lecture d'alertes
+        requiredFeature: 'alerts'
       },
       {
         label: t('navigation.jobs'),

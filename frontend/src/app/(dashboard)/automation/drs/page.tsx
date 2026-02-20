@@ -1855,7 +1855,7 @@ return next
 
           {/* Load Spread */}
           {(() => {
-            const threshold = drsSettings?.max_load_spread ?? 10
+            const threshold = drsSettings?.imbalance_threshold ?? 5
             const value = globalStats.maxImbalance
             const ratio = value / threshold
             const barValue = Math.min(100, (value / Math.max(threshold, 1)) * 100)

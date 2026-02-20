@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
+import { hasPermission } from "@/lib/rbac"
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -88,7 +89,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!["admin", "super_admin"].includes(session.user.role)) {
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 
@@ -188,7 +189,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!["admin", "super_admin"].includes(session.user.role)) {
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 

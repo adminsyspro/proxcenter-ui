@@ -8,6 +8,7 @@ import { nanoid } from "nanoid"
 import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
+import { hasPermission } from "@/lib/rbac"
 
 // GET /api/v1/rbac/assignments - Liste toutes les assignations
 export async function GET(req: NextRequest) {
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!["admin", "super_admin"].includes(session.user.role)) {
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 

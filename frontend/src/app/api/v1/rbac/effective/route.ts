@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
+import { hasPermission } from "@/lib/rbac"
 
 // GET /api/v1/rbac/effective - Récupérer les permissions effectives d'un utilisateur
 // Query params: user_id (optionnel, admin only), resource_type, resource_id
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     const resourceId = url.searchParams.get("resource_id")
 
     // Seuls les admins peuvent voir les permissions d'autres utilisateurs
-    if (targetUserId !== session.user.id && !["admin", "super_admin"].includes(session.user.role)) {
+    if (targetUserId !== session.user.id && !hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
       return NextResponse.json({ error: "Non autorisé à voir les permissions d'autres utilisateurs" }, { status: 403 })
     }
 

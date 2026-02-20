@@ -149,7 +149,7 @@ return n })}>
                   <i className={catIcons[cat.id] || 'ri-folder-line'} style={{ margin: '0 8px' }} />
                   <Typography variant='subtitle2' sx={{ flex: 1 }}>{cat.label}</Typography>
                   <Chip size='small' label={`${sel}/${cat.permissions.length}`} color={sel === cat.permissions.length ? 'primary' : 'default'} variant='outlined' sx={{ mr: 1 }} />
-                  {!role?.is_system && <Checkbox checked={sel === cat.permissions.length} indeterminate={sel > 0 && sel < cat.permissions.length} onChange={() => toggleCat(cat.id)} onClick={e => e.stopPropagation()} size='small' />}
+                  <Checkbox checked={sel === cat.permissions.length} indeterminate={sel > 0 && sel < cat.permissions.length} onChange={() => toggleCat(cat.id)} onClick={e => e.stopPropagation()} size='small' disabled={role?.is_system} />
                 </Box>
                 <Collapse in={isExp}>
                   <List dense disablePadding>
@@ -157,7 +157,7 @@ return n })}>
                       <ListItem key={perm.id} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider' }}>
                         <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title={t('common.warning')}><i className='ri-alert-line' style={{ color: '#f59e0b' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
                         <ListItemText primary={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><code style={{ fontSize: '0.85rem' }}>{perm.name}</code>{perm.is_dangerous && <Chip label={t('common.warning')} size='small' color='warning' sx={{ height: 18, fontSize: '0.7rem' }} />}</Box>} secondary={perm.description} />
-                        {!role?.is_system && <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' /></ListItemSecondaryAction>}
+                        <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' disabled={role?.is_system} /></ListItemSecondaryAction>
                       </ListItem>
                     ))}
                   </List>

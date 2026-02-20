@@ -1853,30 +1853,55 @@ return next
             />
           </Box>
 
-          {/* Max Imbalance */}
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{t('drsPage.imbalanceTitle')}</Typography>
-            <Box sx={{ position: 'relative' }}>
-              <LinearProgress
-                variant="determinate"
-                value={Math.min(100, globalStats.maxImbalance)}
-                sx={{
-                  height: 14,
-                  borderRadius: 0,
-                  bgcolor: alpha(theme.palette.grey[500], 0.15),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 0,
-                    bgcolor: globalStats.maxImbalance > 10 ? theme.palette.error.main
-                      : globalStats.maxImbalance > 5 ? theme.palette.warning.main
-                      : theme.palette.success.main,
-                  }
-                }}
-              />
-              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                {globalStats.maxImbalance.toFixed(1)}
-              </Typography>
-            </Box>
-          </Box>
+          {/* Load Spread */}
+          {(() => {
+            const threshold = drsSettings?.max_load_spread ?? 10
+            const value = globalStats.maxImbalance
+            const ratio = value / threshold
+            const barValue = Math.min(100, (value / Math.max(threshold, 1)) * 100)
+            const spreadColor = ratio > 1 ? theme.palette.error.main
+              : ratio > 0.5 ? theme.palette.warning.main
+              : theme.palette.success.main
+            const spreadLabel = ratio > 1 ? t('drsPage.loadSpreadUnbalanced')
+              : ratio > 0.5 ? t('drsPage.loadSpreadMinor')
+              : t('drsPage.loadSpreadBalanced')
+            const spreadLabelColor = ratio > 1 ? 'error.main'
+              : ratio > 0.5 ? 'warning.main'
+              : 'success.main'
+
+            return (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Tooltip title={t('drsPage.loadSpreadTooltip')} placement="top" arrow>
+                    <Typography variant="body2" sx={{ fontWeight: 500, cursor: 'help', borderBottom: '1px dashed', borderColor: 'text.disabled' }}>
+                      {t('drsPage.loadSpreadLabel')}
+                    </Typography>
+                  </Tooltip>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: spreadLabelColor }}>
+                    {spreadLabel}
+                  </Typography>
+                </Box>
+                <Box sx={{ position: 'relative' }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={barValue}
+                    sx={{
+                      height: 14,
+                      borderRadius: 0,
+                      bgcolor: alpha(theme.palette.grey[500], 0.15),
+                      '& .MuiLinearProgress-bar': {
+                        borderRadius: 0,
+                        bgcolor: spreadColor,
+                      }
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
+                    {value.toFixed(1)} / {threshold.toFixed(1)}
+                  </Typography>
+                </Box>
+              </Box>
+            )
+          })()}
         </Paper>
       </Box>
 

@@ -3005,7 +3005,14 @@
     "clusterLabel": "Cluster",
     "vmMovedAlert": "Cette VM a été déplacée depuis la création de la recommandation. La liste a été actualisée.",
     "recommendationExpiredAlert": "Cette recommandation a expiré suite à une réévaluation. La liste a été actualisée.",
-    "vmAlreadyOnTargetAlert": "Cette VM est déjà sur le nœud cible. La liste a été actualisée."
+    "vmAlreadyOnTargetAlert": "Cette VM est déjà sur le nœud cible. La liste a été actualisée.",
+    "rebalanceSchedule": "Fréquence de rééquilibrage",
+    "scheduleInterval": "À intervalles réguliers",
+    "scheduleDaily": "Tous les jours à une heure précise",
+    "rebalanceEvery": "Exécuter toutes les",
+    "rebalanceAt": "Exécuter à",
+    "scheduleSummaryInterval": "Les migrations s'exécuteront toutes les {interval}",
+    "scheduleSummaryDaily": "Les migrations s'exécuteront tous les jours à {time}"
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

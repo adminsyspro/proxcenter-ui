@@ -65,6 +65,9 @@ export interface DRSSettings {
   prevent_overprovisioning: boolean
   enable_affinity_rules: boolean
   enforce_affinity: boolean
+  rebalance_schedule: 'interval' | 'daily'
+  rebalance_interval: string
+  rebalance_time: string
 }
 
 export interface ClusterVersionInfo {
@@ -110,6 +113,9 @@ export const defaultDRSSettings: DRSSettings = {
   prevent_overprovisioning: true,
   enable_affinity_rules: true,
   enforce_affinity: false,
+  rebalance_schedule: 'interval',
+  rebalance_interval: '15m',
+  rebalance_time: '10:00',
 }
 
 // ============================================
@@ -256,6 +262,69 @@ export default function DRSSettingsPanel({
                 </Select>
               </FormControl>
             </Grid>
+
+            {/* Rebalance scheduling — only shown for non-manual modes */}
+            {settings.mode !== 'manual' && (
+              <>
+                <Grid size={{ xs: 12 }}>
+                  <Divider sx={{ my: 1 }} />
+                  <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, fontWeight: 600 }}>
+                    <i className="ri-calendar-schedule-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
+                    {t('drsPage.rebalanceSchedule')}
+                  </Typography>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>{t('drsPage.rebalanceSchedule')}</InputLabel>
+                    <Select
+                      value={settings.rebalance_schedule}
+                      label={t('drsPage.rebalanceSchedule')}
+                      onChange={(e) => handleChange('rebalance_schedule', e.target.value as DRSSettings['rebalance_schedule'])}
+                    >
+                      <MenuItem value="interval">{t('drsPage.scheduleInterval')}</MenuItem>
+                      <MenuItem value="daily">{t('drsPage.scheduleDaily')}</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  {settings.rebalance_schedule === 'interval' ? (
+                    <FormControl fullWidth size="small">
+                      <InputLabel>{t('drsPage.rebalanceEvery')}</InputLabel>
+                      <Select
+                        value={settings.rebalance_interval}
+                        label={t('drsPage.rebalanceEvery')}
+                        onChange={(e) => handleChange('rebalance_interval', e.target.value)}
+                      >
+                        <MenuItem value="5m">5 min</MenuItem>
+                        <MenuItem value="10m">10 min</MenuItem>
+                        <MenuItem value="15m">15 min</MenuItem>
+                        <MenuItem value="30m">30 min</MenuItem>
+                        <MenuItem value="1h">1 h</MenuItem>
+                        <MenuItem value="2h">2 h</MenuItem>
+                        <MenuItem value="6h">6 h</MenuItem>
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="time"
+                      label={t('drsPage.rebalanceAt')}
+                      value={settings.rebalance_time}
+                      onChange={(e) => handleChange('rebalance_time', e.target.value)}
+                      slotProps={{ inputLabel: { shrink: true } }}
+                    />
+                  )}
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {settings.rebalance_schedule === 'interval'
+                      ? t('drsPage.scheduleSummaryInterval', { interval: settings.rebalance_interval })
+                      : t('drsPage.scheduleSummaryDaily', { time: settings.rebalance_time })}
+                  </Typography>
+                </Grid>
+              </>
+            )}
 
             <Grid size={{ xs: 12, md: 6 }}>
               <FormControl fullWidth size="small">

@@ -31,6 +31,9 @@ const defaultSettings = {
   prevent_overprovisioning: true,
   enable_affinity_rules: true,
   enforce_affinity: false,
+  rebalance_schedule: 'interval',
+  rebalance_interval: '15m',
+  rebalance_time: '10:00',
 }
 
 // GET /api/v1/orchestrator/drs/settings

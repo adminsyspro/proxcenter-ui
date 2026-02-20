@@ -3000,7 +3000,14 @@
     "clusterLabel": "Cluster",
     "vmMovedAlert": "This VM has been moved since the recommendation was created. The list has been refreshed.",
     "recommendationExpiredAlert": "This recommendation has expired following a re-evaluation. The list has been refreshed.",
-    "vmAlreadyOnTargetAlert": "This VM is already on the target node. The list has been refreshed."
+    "vmAlreadyOnTargetAlert": "This VM is already on the target node. The list has been refreshed.",
+    "rebalanceSchedule": "Rebalance schedule",
+    "scheduleInterval": "Every interval",
+    "scheduleDaily": "Daily at specific time",
+    "rebalanceEvery": "Run every",
+    "rebalanceAt": "Run at",
+    "scheduleSummaryInterval": "Migrations will run every {interval}",
+    "scheduleSummaryDaily": "Migrations will run daily at {time}"
   },
   "usersPage": {
     "rbacRoles": "RBAC Roles",

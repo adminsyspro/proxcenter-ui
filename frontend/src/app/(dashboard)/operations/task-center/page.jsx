@@ -594,7 +594,7 @@ export default function JobsPage() {
 
   return (
     <EnterpriseGuard requiredFeature={Features.TASK_CENTER} featureName="Task Center">
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button
             variant='outlined'
@@ -636,7 +636,7 @@ export default function JobsPage() {
       </Box>
 
       {/* Filtres + Table */}
-      <Card variant='outlined' sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <Card variant='outlined'>
         <CardContent sx={{ pb: 0 }}>
           <Stack direction='row' spacing={1.5} sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
             <TextField

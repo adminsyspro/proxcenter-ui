@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/images/proxcenter.png" alt="ProxCenter Logo" width="120">
+  <img src="docs/logo.png" alt="ProxCenter Logo" width="120">
 </p>
 
 <h1 align="center">ProxCenter</h1>
@@ -345,7 +345,7 @@ docker compose restart
 ---
 
 <p align="center">
-  <img src="frontend/public/images/proxcenter.png" alt="ProxCenter" width="40">
+  <img src="docs/logo.png" alt="ProxCenter" width="40">
   <br>
   <strong>ProxCenter</strong> — Enterprise Proxmox Management Made Simple
 </p>

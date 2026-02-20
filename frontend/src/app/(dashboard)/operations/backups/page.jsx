@@ -141,6 +141,7 @@ return () => setPageInfo('', '', '')
   const [backupStats, setBackupStats] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [warnings, setWarnings] = useState([])
 
   // Filters
   const [search, setSearch] = useState('')
@@ -357,6 +358,7 @@ return () => setPageInfo('', '', '')
     const loadBackups = async () => {
       setLoading(true)
       setError(null)
+      setWarnings([])
 
       try {
         const params = new URLSearchParams({
@@ -378,6 +380,7 @@ return () => setPageInfo('', '', '')
           setBackups(json?.data?.backups || [])
           setBackupStats(json?.data?.stats || null)
           setTotalRows(json?.data?.pagination?.totalItems || 0)
+          setWarnings(json?.data?.warnings || [])
         } else {
           const errJson = await res.json().catch(() => ({}))
 
@@ -707,6 +710,14 @@ return () => clearTimeout(timer)
 
             {error && (
               <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>
+            )}
+
+            {warnings.length > 0 && (
+              <Alert severity='warning' sx={{ mb: 2 }}>
+                {warnings.map((w, i) => (
+                  <div key={i}>{w}</div>
+                ))}
+              </Alert>
             )}
 
             <Box sx={{ height: 'calc(100vh - 340px)', minHeight: 400 }}>

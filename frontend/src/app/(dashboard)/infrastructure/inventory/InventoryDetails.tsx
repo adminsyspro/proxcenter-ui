@@ -1188,6 +1188,7 @@ return next
   const [backupsLoading, setBackupsLoading] = useState(false)
   const [backupsError, setBackupsError] = useState<string | null>(null)
   const [backupsStats, setBackupsStats] = useState<any>(null)
+  const [backupsWarnings, setBackupsWarnings] = useState<string[]>([])
   const [backupsPreloaded, setBackupsPreloaded] = useState(false)
   const backupsLoadedForIdRef = React.useRef<string | null>(null) // Track which selection ID backups were loaded for
   const [selectedBackup, setSelectedBackup] = useState<any>(null)
@@ -1391,7 +1392,8 @@ return next
     setBackupsError(null)
     setBackups([])
     setBackupsStats(null)
-    
+    setBackupsWarnings([])
+
     try {
       const params = new URLSearchParams()
 
@@ -1406,6 +1408,7 @@ return next
       } else {
         setBackups(json.data?.backups || [])
         setBackupsStats(json.data?.stats || null)
+        setBackupsWarnings(json.data?.warnings || [])
       }
     } catch (e: any) {
       setBackupsError(e.message || t('errors.loadingError'))
@@ -2745,6 +2748,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
       setBackups([])
       setBackupsStats(null)
       setBackupsError(null)
+      setBackupsWarnings([])
       setBackupsPreloaded(false)
       // Note: backupsLoadedForIdRef est géré dans l'effet de chargement des backups
       setGuestInfo(null)
@@ -4615,7 +4619,7 @@ return vm?.isCluster ?? false
           {selection?.type === 'vm' && (
             <VmDetailTabs
               {...{addCephReplicationDialogOpen, addReplicationDialogOpen, availableTargetNodes, backToArchives, backToBackupsList,
-                backups, backupsError, backupsLoading, backupsStats, balloon,
+                backups, backupsError, backupsLoading, backupsStats, backupsWarnings, balloon,
                 balloonEnabled, browseArchive, canPreview, canShowRrd, cephClusters, cephClustersLoading,
                 cephReplicationJobs, cephReplicationSchedule, compatibleStorages, cpuCores, cpuLimit,
                 cpuLimitEnabled, cpuModified, cpuSockets, cpuType, createSnapshot,

@@ -33,6 +33,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // Récupérer les snapshots de chaque datastore EN PARALLÈLE
     // L'endpoint /snapshots sans paramètres retourne TOUS les snapshots du datastore
     const allBackups: any[] = []
+    const warnings: string[] = []
 
     const datastorePromises = targetDatastores.map(async (ds) => {
       const storeName = ds.store || ds.name
@@ -88,9 +89,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
             comment: snap.comment || '',
           }
         })
-      } catch (e) {
+      } catch (e: any) {
         console.warn(`Failed to get snapshots for datastore ${storeName}:`, e)
-        
+        warnings.push(`Failed to fetch datastore '${storeName}': ${e?.message || String(e)}`)
+
 return []
       }
     })
@@ -140,6 +142,7 @@ return []
       data: {
         backups: paginatedBackups,
         stats,
+        warnings,
         pagination: {
           page,
           pageSize,

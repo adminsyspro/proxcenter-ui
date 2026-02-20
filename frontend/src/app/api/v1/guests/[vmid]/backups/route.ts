@@ -59,6 +59,7 @@ export async function GET(
     }
 
     const allBackups: any[] = []
+    const warnings: string[] = []
 
     // Interroger chaque PBS en parallèle
     const pbsPromises = pbsConnections.map(async (pbs) => {
@@ -156,9 +157,10 @@ export async function GET(
                   comment: snap.comment || '',
                 }
               })
-          } catch (e) {
+          } catch (e: any) {
             console.warn(`Failed to get snapshots for ${pbs.name}/${storeName}:`, e)
-            
+            warnings.push(`${pbs.name}/${storeName}: ${e?.message || String(e)}`)
+
 return []
           }
         })
@@ -167,9 +169,10 @@ return []
 
         
 return results.flat()
-      } catch (e) {
+      } catch (e: any) {
         console.warn(`Failed to query PBS ${pbs.name}:`, e)
-        
+        warnings.push(`PBS ${pbs.name}: ${e?.message || String(e)}`)
+
 return []
       }
     })
@@ -199,6 +202,7 @@ return []
         vmid,
         backups: allBackups,
         stats,
+        warnings,
       }
     })
   } catch (e: any) {

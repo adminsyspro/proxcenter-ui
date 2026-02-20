@@ -77,6 +77,7 @@ export default function VmDetailTabs(props: any) {
     backupsError,
     backupsLoading,
     backupsStats,
+    backupsWarnings,
     balloon,
     balloonEnabled,
     browseArchive,
@@ -1597,6 +1598,14 @@ return (
                   {/* Error */}
                   {backupsError && (
                     <Alert severity="warning" sx={{ mb: 2 }}>{backupsError}</Alert>
+                  )}
+
+                  {backupsWarnings?.length > 0 && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {backupsWarnings.map((w: string, i: number) => (
+                        <div key={i}>{w}</div>
+                      ))}
+                    </Alert>
                   )}
 
                   {/* Stats */}

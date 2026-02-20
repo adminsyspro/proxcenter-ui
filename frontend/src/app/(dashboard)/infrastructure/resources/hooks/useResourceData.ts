@@ -82,7 +82,14 @@ export function useResourceData(connectionId?: string) {
       if (!res.ok) throw new Error(t('resources.analysisError'))
       const json = await res.json()
 
-      setAiAnalysis({ summary: json.data?.summary || '', recommendations: json.data?.recommendations || [], loading: false, provider: json.data?.provider })
+      setAiAnalysis({
+        summary: json.data?.summary || '',
+        recommendations: json.data?.recommendations || [],
+        loading: false,
+        provider: json.data?.provider,
+        summaryKey: json.data?.summaryKey,
+        summaryParams: json.data?.summaryParams,
+      })
     } catch (e: any) {
       setAiAnalysis(prev => ({ ...prev, loading: false, error: e.message }))
     }

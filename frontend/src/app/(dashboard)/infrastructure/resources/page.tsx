@@ -60,7 +60,7 @@ export default function ResourcesPage() {
 
   // Auto-trigger AI analysis on first load
   useEffect(() => {
-    if (kpis && !aiAnalysis.summary && !aiAnalysis.loading) runAiAnalysis()
+    if (kpis && !aiAnalysis.summary && !aiAnalysis.summaryKey && !aiAnalysis.loading) runAiAnalysis()
   }, [kpis])
 
   // Improved predictions with EWMA (F3)

@@ -2029,7 +2029,31 @@
     "confidencePct": "{value}% conf.",
     "daysUnit": "j",
     "loadError": "Erreur lors du chargement",
-    "analysisError": "Erreur d'analyse"
+    "analysisError": "Erreur d'analyse",
+    "rec": {
+      "cpuHighTitle": "Utilisation CPU élevée",
+      "cpuHighDesc": "L'utilisation CPU globale est à {usage}%. Envisagez d'ajouter des ressources ou de migrer des VMs.",
+      "cpuOverTitle": "CPU surprovisionné",
+      "cpuOverDesc": "Seulement {usage}% de CPU utilisé malgré {allocated} vCPUs alloués. Des VMs pourraient être redimensionnées.",
+      "cpuOverSavings": "Réduction possible des vCPUs",
+      "ramHighTitle": "Mémoire presque saturée",
+      "ramHighDesc": "L'utilisation RAM est à {usage}%. Risque de saturation imminente.",
+      "storageHighTitle": "Stockage critique",
+      "storageHighDesc": "Le stockage est utilisé à {usage}%. Libérez de l'espace ou ajoutez du stockage.",
+      "stoppedTitle": "{count} VMs arrêtées",
+      "stoppedDesc": "Vérifiez si ces VMs sont encore nécessaires. Les supprimer libérerait du stockage.",
+      "stoppedSavings": "Stockage récupérable",
+      "cpuUnderusedTitle": "VM CPU sous-utilisée",
+      "cpuUnderusedDesc": "{vmName} utilise seulement {cpu}% CPU avec {allocated} vCPUs alloués.",
+      "cpuUnderusedSavings": "{reclaimable} vCPUs récupérables",
+      "efficiencyTitle": "Score d'efficacité faible",
+      "efficiencyDesc": "Le score d'efficacité de {score}% indique un déséquilibre entre ressources allouées et utilisées.",
+      "summaryGoodWithCritical": "Infrastructure avec {total} VMs dont {running} en fonctionnement. Bonne efficacité globale ({efficiency}%). {criticalCount} point(s) critiques nécessitent votre attention.",
+      "summaryBadWithCritical": "Infrastructure avec {total} VMs dont {running} en fonctionnement. Efficacité à améliorer ({efficiency}%). {criticalCount} point(s) critiques nécessitent votre attention.",
+      "summaryGoodWithOptimizations": "Infrastructure avec {total} VMs dont {running} en fonctionnement. Bonne efficacité globale ({efficiency}%). {optCount} optimisations possibles identifiées.",
+      "summaryBadWithOptimizations": "Infrastructure avec {total} VMs dont {running} en fonctionnement. Efficacité à améliorer ({efficiency}%). {optCount} optimisations possibles identifiées.",
+      "summaryAllClear": "Infrastructure avec {total} VMs dont {running} en fonctionnement. Bonne efficacité globale ({efficiency}%). Aucun problème majeur détecté."
+    }
   },
   "siteRecovery": {
     "title": "Site Recovery",

@@ -41,6 +41,10 @@ type Recommendation = {
   savings?: string
   vmId?: string
   vmName?: string
+  titleKey?: string
+  descriptionKey?: string
+  savingsKey?: string
+  params?: Record<string, string | number>
 }
 
 // Appeler Ollama pour l'analyse
@@ -198,12 +202,10 @@ export async function POST(req: Request) {
     
     if (!responseText) {
       // Fallback sur recommandations basiques (silencieux - normal sans Ollama)
-      
-return NextResponse.json({
-        data: {
-          ...generateBasicRecommendations(kpis, topCpuVms || [], topRamVms || []),
-          provider: 'basic'
-        }
+      const basic = generateBasicRecommendations(kpis, topCpuVms || [], topRamVms || [])
+
+      return NextResponse.json({
+        data: { ...basic, provider: 'basic' }
       })
     }
 
@@ -215,7 +217,7 @@ return NextResponse.json({
         .replace(/```json\s*/g, '')
         .replace(/```\s*/g, '')
         .trim()
-      
+
       // Extraire le JSON si entouré d'autre texte
       const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
 
@@ -226,12 +228,10 @@ return NextResponse.json({
       }
     } catch (parseError) {
       console.error("[resources/analyze] JSON parse error:", parseError)
-      
-return NextResponse.json({
-        data: {
-          ...generateBasicRecommendations(kpis, topCpuVms || [], topRamVms || []),
-          provider: 'basic'
-        }
+      const basic = generateBasicRecommendations(kpis, topCpuVms || [], topRamVms || [])
+
+      return NextResponse.json({
+        data: { ...basic, provider: 'basic' }
       })
     }
 
@@ -250,67 +250,79 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 // Générer des recommandations basiques sans IA
+// Returns i18n keys + params instead of hardcoded text — the frontend resolves them with t()
 function generateBasicRecommendations(
-  kpis: KpiData, 
-  topCpuVms: TopVm[], 
+  kpis: KpiData,
+  topCpuVms: TopVm[],
   topRamVms: TopVm[]
-): { summary: string; recommendations: Recommendation[] } {
+): { summary: string; summaryKey: string; summaryParams: Record<string, string | number>; recommendations: Recommendation[] } {
   const recommendations: Recommendation[] = []
-  
+
   // Analyse CPU
   if (kpis.cpu.used > 80) {
     recommendations.push({
       id: 'rec_cpu_high',
       type: 'prediction',
       severity: 'high',
-      title: 'Utilisation CPU élevée',
-      description: `L'utilisation CPU globale est à ${kpis.cpu.used.toFixed(1)}%. Envisagez d'ajouter des ressources ou de migrer des VMs.`
+      title: '', description: '',
+      titleKey: 'resources.rec.cpuHighTitle',
+      descriptionKey: 'resources.rec.cpuHighDesc',
+      params: { usage: kpis.cpu.used.toFixed(1) }
     })
   } else if (kpis.cpu.used < 20 && kpis.cpu.allocated > kpis.cpu.total * 0.5) {
     recommendations.push({
       id: 'rec_cpu_over',
       type: 'overprovisioned',
       severity: 'medium',
-      title: 'CPU surprovisionné',
-      description: `Seulement ${kpis.cpu.used.toFixed(1)}% de CPU utilisé malgré ${kpis.cpu.allocated} vCPUs alloués. Des VMs pourraient être redimensionnées.`,
-      savings: 'Réduction possible des vCPUs'
+      title: '', description: '',
+      titleKey: 'resources.rec.cpuOverTitle',
+      descriptionKey: 'resources.rec.cpuOverDesc',
+      savingsKey: 'resources.rec.cpuOverSavings',
+      params: { usage: kpis.cpu.used.toFixed(1), allocated: kpis.cpu.allocated }
     })
   }
-  
+
   // Analyse RAM
   if (kpis.ram.used > 85) {
     recommendations.push({
       id: 'rec_ram_high',
       type: 'prediction',
       severity: 'high',
-      title: 'Mémoire presque saturée',
-      description: `L'utilisation RAM est à ${kpis.ram.used.toFixed(1)}%. Risque de saturation imminente.`
+      title: '', description: '',
+      titleKey: 'resources.rec.ramHighTitle',
+      descriptionKey: 'resources.rec.ramHighDesc',
+      params: { usage: kpis.ram.used.toFixed(1) }
     })
   }
-  
+
   // Analyse stockage
-  if ((kpis.storage.used / kpis.storage.total) > 0.8) {
+  const storagePct = (kpis.storage.used / kpis.storage.total) * 100
+  if (storagePct > 80) {
     recommendations.push({
       id: 'rec_storage_high',
       type: 'prediction',
       severity: 'high',
-      title: 'Stockage critique',
-      description: `Le stockage est utilisé à ${((kpis.storage.used / kpis.storage.total) * 100).toFixed(1)}%. Libérez de l'espace ou ajoutez du stockage.`
+      title: '', description: '',
+      titleKey: 'resources.rec.storageHighTitle',
+      descriptionKey: 'resources.rec.storageHighDesc',
+      params: { usage: storagePct.toFixed(1) }
     })
   }
-  
+
   // VMs arrêtées
   if (kpis.vms.stopped > 5) {
     recommendations.push({
       id: 'rec_vms_stopped',
       type: 'stopped',
       severity: 'low',
-      title: `${kpis.vms.stopped} VMs arrêtées`,
-      description: 'Vérifiez si ces VMs sont encore nécessaires. Les supprimer libérerait du stockage.',
-      savings: 'Stockage récupérable'
+      title: '', description: '',
+      titleKey: 'resources.rec.stoppedTitle',
+      descriptionKey: 'resources.rec.stoppedDesc',
+      savingsKey: 'resources.rec.stoppedSavings',
+      params: { count: kpis.vms.stopped }
     })
   }
-  
+
   // Top VM CPU sous-utilisée
   const underusedCpu = topCpuVms.find(vm => vm.cpu < 10 && vm.cpuAllocated >= 4)
 
@@ -319,40 +331,46 @@ function generateBasicRecommendations(
       id: 'rec_vm_cpu_underused',
       type: 'underused',
       severity: 'medium',
-      title: 'VM CPU sous-utilisée',
-      description: `${underusedCpu.name} utilise seulement ${underusedCpu.cpu}% CPU avec ${underusedCpu.cpuAllocated} vCPUs alloués.`,
+      title: '', description: '',
+      titleKey: 'resources.rec.cpuUnderusedTitle',
+      descriptionKey: 'resources.rec.cpuUnderusedDesc',
+      savingsKey: 'resources.rec.cpuUnderusedSavings',
       vmName: underusedCpu.name,
-      savings: `${Math.floor(underusedCpu.cpuAllocated / 2)} vCPUs récupérables`
+      params: { vmName: underusedCpu.name, cpu: underusedCpu.cpu, allocated: underusedCpu.cpuAllocated, reclaimable: Math.floor(underusedCpu.cpuAllocated / 2) }
     })
   }
-  
+
   // Score d'efficacité
   if (kpis.efficiency < 50) {
     recommendations.push({
       id: 'rec_efficiency',
       type: 'optimization',
       severity: 'medium',
-      title: 'Score d\'efficacité faible',
-      description: `Le score d'efficacité de ${kpis.efficiency}% indique un déséquilibre entre ressources allouées et utilisées.`
+      title: '', description: '',
+      titleKey: 'resources.rec.efficiencyTitle',
+      descriptionKey: 'resources.rec.efficiencyDesc',
+      params: { score: kpis.efficiency }
     })
   }
-  
-  // Générer le résumé
-  let summary = `Infrastructure avec ${kpis.vms.total} VMs dont ${kpis.vms.running} en fonctionnement. `
-  
-  if (kpis.efficiency >= 70) {
-    summary += `Bonne efficacité globale (${kpis.efficiency}%). `
-  } else {
-    summary += `Efficacité à améliorer (${kpis.efficiency}%). `
+
+  // Build summary key
+  const highCount = recommendations.filter(r => r.severity === 'high').length
+  let summaryKey: string
+  let summaryParams: Record<string, string | number> = {
+    total: kpis.vms.total,
+    running: kpis.vms.running,
+    efficiency: kpis.efficiency,
   }
-  
-  if (recommendations.filter(r => r.severity === 'high').length > 0) {
-    summary += `${recommendations.filter(r => r.severity === 'high').length} point(s) critiques nécessitent votre attention.`
+
+  if (highCount > 0) {
+    summaryKey = kpis.efficiency >= 70 ? 'resources.rec.summaryGoodWithCritical' : 'resources.rec.summaryBadWithCritical'
+    summaryParams.criticalCount = highCount
   } else if (recommendations.length > 0) {
-    summary += `${recommendations.length} optimisations possibles identifiées.`
+    summaryKey = kpis.efficiency >= 70 ? 'resources.rec.summaryGoodWithOptimizations' : 'resources.rec.summaryBadWithOptimizations'
+    summaryParams.optCount = recommendations.length
   } else {
-    summary += `Aucun problème majeur détecté.`
+    summaryKey = 'resources.rec.summaryAllClear'
   }
-  
-  return { summary, recommendations }
+
+  return { summary: '', summaryKey, summaryParams, recommendations }
 }

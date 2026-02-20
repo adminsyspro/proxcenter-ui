@@ -2024,7 +2024,31 @@
     "confidencePct": "{value}% conf.",
     "daysUnit": "d",
     "loadError": "Error loading data",
-    "analysisError": "Analysis error"
+    "analysisError": "Analysis error",
+    "rec": {
+      "cpuHighTitle": "High CPU usage",
+      "cpuHighDesc": "Global CPU usage is at {usage}%. Consider adding resources or migrating VMs.",
+      "cpuOverTitle": "CPU overprovisioned",
+      "cpuOverDesc": "Only {usage}% CPU used despite {allocated} vCPUs allocated. VMs could be rightsized.",
+      "cpuOverSavings": "Possible vCPU reduction",
+      "ramHighTitle": "Memory near saturation",
+      "ramHighDesc": "RAM usage is at {usage}%. Risk of imminent saturation.",
+      "storageHighTitle": "Critical storage",
+      "storageHighDesc": "Storage is at {usage}% capacity. Free up space or add storage.",
+      "stoppedTitle": "{count} stopped VMs",
+      "stoppedDesc": "Check if these VMs are still needed. Removing them would free up storage.",
+      "stoppedSavings": "Recoverable storage",
+      "cpuUnderusedTitle": "Underused CPU VM",
+      "cpuUnderusedDesc": "{vmName} uses only {cpu}% CPU with {allocated} vCPUs allocated.",
+      "cpuUnderusedSavings": "{reclaimable} reclaimable vCPUs",
+      "efficiencyTitle": "Low efficiency score",
+      "efficiencyDesc": "Efficiency score of {score}% indicates an imbalance between allocated and used resources.",
+      "summaryGoodWithCritical": "Infrastructure with {total} VMs, {running} running. Good overall efficiency ({efficiency}%). {criticalCount} critical point(s) need your attention.",
+      "summaryBadWithCritical": "Infrastructure with {total} VMs, {running} running. Efficiency needs improvement ({efficiency}%). {criticalCount} critical point(s) need your attention.",
+      "summaryGoodWithOptimizations": "Infrastructure with {total} VMs, {running} running. Good overall efficiency ({efficiency}%). {optCount} possible optimizations identified.",
+      "summaryBadWithOptimizations": "Infrastructure with {total} VMs, {running} running. Efficiency needs improvement ({efficiency}%). {optCount} possible optimizations identified.",
+      "summaryAllClear": "Infrastructure with {total} VMs, {running} running. Good overall efficiency ({efficiency}%). No major issues detected."
+    }
   },
   "siteRecovery": {
     "title": "Site Recovery",

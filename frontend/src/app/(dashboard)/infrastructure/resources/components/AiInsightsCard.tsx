@@ -28,6 +28,18 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
   const t = useTranslations()
 
   const isAi = analysis.provider === 'ollama'
+  const isBasic = analysis.provider === 'basic'
+
+  // Resolve i18n keys for basic (rule-based) provider
+  const resolvedSummary = isBasic && analysis.summaryKey
+    ? t(analysis.summaryKey, analysis.summaryParams)
+    : analysis.summary
+
+  const resolveRec = (rec: typeof analysis.recommendations[number]) => ({
+    title: isBasic && rec.titleKey ? t(rec.titleKey, rec.params) : rec.title,
+    description: isBasic && rec.descriptionKey ? t(rec.descriptionKey, rec.params) : rec.description,
+    savings: isBasic && rec.savingsKey ? t(rec.savingsKey, rec.params) : rec.savings,
+  })
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -86,11 +98,11 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
 
         {analysis.error && <Alert severity="error" sx={{ mb: 2 }}>{analysis.error}</Alert>}
 
-        {analysis.summary && (
+        {(resolvedSummary || analysis.summary) && (
           <Paper sx={{ p: 2.5, mb: 2.5, bgcolor: alpha(COLORS.primary, 0.04), border: '1px solid', borderColor: alpha(COLORS.primary, 0.15), borderRadius: 2 }}>
             <Stack direction="row" spacing={1.5} alignItems="flex-start">
               <RocketLaunchIcon sx={{ color: COLORS.primary, fontSize: 20, mt: 0.25 }} />
-              <Typography variant="body2" sx={{ lineHeight: 1.7 }}>{analysis.summary}</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.7 }}>{resolvedSummary}</Typography>
             </Stack>
           </Paper>
         )}
@@ -101,16 +113,17 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
             <Stack spacing={1.5}>
               {analysis.recommendations.slice(0, 5).map(rec => {
                 const severityColor = getSeverityColor(rec.severity)
+                const resolved = resolveRec(rec)
                 return (
                   <Paper key={rec.id} sx={{ p: 2, border: '1px solid', borderColor: alpha(severityColor, 0.25), bgcolor: alpha(severityColor, 0.03), borderRadius: 2, '&:hover': { bgcolor: alpha(severityColor, 0.06), transform: 'translateX(4px)' }, transition: 'all 0.2s' }}>
                     <Stack direction="row" spacing={1.5} alignItems="flex-start">
                       <Typography sx={{ fontSize: 18 }}>{getTypeIcon(rec.type)}</Typography>
                       <Box sx={{ flex: 1 }}>
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                          <Typography variant="subtitle2" fontWeight={700}>{rec.title}</Typography>
-                          {rec.savings && <Chip size="small" label={rec.savings} sx={{ height: 18, fontSize: '0.65rem', bgcolor: alpha(COLORS.success, 0.1), color: COLORS.success, fontWeight: 600 }} />}
+                          <Typography variant="subtitle2" fontWeight={700}>{resolved.title}</Typography>
+                          {resolved.savings && <Chip size="small" label={resolved.savings} sx={{ height: 18, fontSize: '0.65rem', bgcolor: alpha(COLORS.success, 0.1), color: COLORS.success, fontWeight: 600 }} />}
                         </Stack>
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{rec.description}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{resolved.description}</Typography>
                         {rec.vmName && <Chip size="small" label={rec.vmName} sx={{ mt: 1, height: 20, fontSize: '0.7rem' }} />}
                       </Box>
                       <Box sx={{ color: severityColor }}>{getSeverityIcon(rec.severity)}</Box>
@@ -122,7 +135,7 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
           </Box>
         )}
 
-        {!analysis.loading && !analysis.summary && analysis.recommendations.length === 0 && (
+        {!analysis.loading && !resolvedSummary && analysis.recommendations.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <PsychologyIcon sx={{ fontSize: 64, color: alpha(COLORS.primary, 0.2), mb: 2 }} />
             <Typography variant="body1" fontWeight={600}>{t('resources.analyzeInfra')}</Typography>

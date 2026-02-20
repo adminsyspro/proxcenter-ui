@@ -41,6 +41,11 @@ export type Recommendation = {
   savings?: string
   vmId?: string
   vmName?: string
+  // i18n keys for basic (rule-based) provider
+  titleKey?: string
+  descriptionKey?: string
+  savingsKey?: string
+  params?: Record<string, string | number>
 }
 
 export type PredictiveAlert = {
@@ -61,6 +66,9 @@ export type AiAnalysis = {
   loading: boolean
   error?: string
   provider?: string
+  // i18n keys for basic (rule-based) provider
+  summaryKey?: string
+  summaryParams?: Record<string, string | number>
 }
 
 export type GreenMetrics = {

@@ -10,7 +10,7 @@ export const createConnectionSchema = z.object({
   name: z.string().min(1, 'name is required').transform(s => s.trim()),
   type: z.enum(['pve', 'pbs']).default('pve'),
   baseUrl: z.string().min(1, 'baseUrl is required').transform(s => s.trim()),
-  uiUrl: z.string().transform(s => s.trim()).nullable().optional(),
+  uiUrl: z.nullable(z.string().transform(s => s.trim())).optional(),
   insecureTLS: z.boolean().default(false),
   hasCeph: z.boolean().default(false),
   latitude: z.number().min(-90).max(90).nullable().optional(),
@@ -23,9 +23,9 @@ export const createConnectionSchema = z.object({
   sshPort: z.number().int().min(1).max(65535).default(22),
   sshUser: z.string().transform(s => s.trim()).default('root'),
   sshAuthMethod: z.enum(['key', 'password']).nullable().optional(),
-  sshKey: z.string().transform(s => s.trim()).nullable().optional(),
-  sshPassphrase: z.string().transform(s => s.trim()).nullable().optional(),
-  sshPassword: z.string().transform(s => s.trim()).nullable().optional(),
+  sshKey: z.nullable(z.string().transform(s => s.trim())).optional(),
+  sshPassphrase: z.nullable(z.string().transform(s => s.trim())).optional(),
+  sshPassword: z.nullable(z.string().transform(s => s.trim())).optional(),
 }).superRefine((data, ctx) => {
   if (data.sshEnabled) {
     if (!data.sshAuthMethod) {
@@ -57,7 +57,7 @@ export const updateConnectionSchema = z.object({
   name: z.string().min(1).transform(s => s.trim()).optional(),
   type: z.enum(['pve', 'pbs']).optional(),
   baseUrl: z.string().min(1).transform(s => s.trim()).optional(),
-  uiUrl: z.string().transform(s => s.trim()).nullable().optional(),
+  uiUrl: z.nullable(z.string().transform(s => s.trim())).optional(),
   insecureTLS: z.boolean().optional(),
   hasCeph: z.boolean().optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),
@@ -70,9 +70,9 @@ export const updateConnectionSchema = z.object({
   sshPort: z.number().int().min(1).max(65535).optional(),
   sshUser: z.string().transform(s => s.trim()).optional(),
   sshAuthMethod: z.enum(['key', 'password']).nullable().optional(),
-  sshKey: z.string().transform(s => s.trim()).nullable().optional(),
-  sshPassphrase: z.string().transform(s => s.trim()).nullable().optional(),
-  sshPassword: z.string().transform(s => s.trim()).nullable().optional(),
+  sshKey: z.nullable(z.string().transform(s => s.trim())).optional(),
+  sshPassphrase: z.nullable(z.string().transform(s => s.trim())).optional(),
+  sshPassword: z.nullable(z.string().transform(s => s.trim())).optional(),
 })
 
 // ─── Alerts ────────────────────────────────────────────────────────────────────

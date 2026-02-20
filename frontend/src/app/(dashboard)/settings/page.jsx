@@ -209,7 +209,7 @@ function ConnectionsTab() {
       name: formData.name.trim(),
       type: addConnType,
       baseUrl: formData.baseUrl.trim(),
-      uiUrl: formData.uiUrl.trim() || null,
+      uiUrl: (formData.uiUrl || '').trim() || null,
       insecureTLS: !!formData.insecureTLS,
       hasCeph: addConnType === 'pve' ? !!formData.hasCeph : false,
       // Location fields
@@ -267,7 +267,7 @@ function ConnectionsTab() {
       name: addConn.name.trim(),
       type: addConnType,
       baseUrl: addConn.baseUrl.trim(),
-      uiUrl: addConn.uiUrl.trim() || null,
+      uiUrl: (addConn.uiUrl || '').trim() || null,
       insecureTLS: !!addConn.insecureTLS,
       hasCeph: addConnType === 'pve' ? !!addConn.hasCeph : false,
       apiToken: addConn.apiToken.trim()

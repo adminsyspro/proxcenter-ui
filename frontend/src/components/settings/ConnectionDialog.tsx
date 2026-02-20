@@ -113,6 +113,8 @@ export default function ConnectionDialog({
         setForm({
           ...defaultFormData,
           ...initialData,
+          // Ensure nullable string fields fallback to '' (prevent null spreading)
+          uiUrl: initialData.uiUrl || '',
           // Ne pas pré-remplir les secrets en mode edit
           apiToken: '',
           sshKey: '',

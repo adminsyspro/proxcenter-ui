@@ -79,7 +79,8 @@
     "color": "Couleur",
     "comingSoon": "Fonctionnalité à venir",
     "loadVms": "Charger les VMs",
-    "default": "Par défaut"
+    "default": "Par défaut",
+    "node": "Nœud"
   },
   "license": {
     "enterpriseRequired": "Licence Enterprise requise",
@@ -371,12 +372,13 @@
     "deleteVmDisks": "Supprimer également les disques associés",
     "vmRunningWarning": "Arrêtez la VM avant de la supprimer",
     "health": {
+      "label": "Santé",
       "resourceUsage": "Utilisation des ressources",
       "vmDistribution": "Distribution des VMs",
       "running": "En cours",
       "stopped": "Arrêtées",
       "other": "Autres",
-      "vmTypeSplit": "Types de VMs",
+      "vmTypeSplit": "Répartition par type",
       "topConsumers": "Plus gros consommateurs"
     },
     "tabs": {
@@ -832,7 +834,53 @@
     "allNodes": "— Tous —",
     "quorateYes": "Quorum : Oui",
     "healthLabel": "Santé",
-    "id": "ID"
+    "id": "ID",
+    "rrd7d": "7j",
+    "rrd30d": "30j",
+    "rrd1y": "1an",
+    "processor": "Processeur",
+    "sockets": "Sockets",
+    "coresPerSocket": "Cœurs par socket",
+    "cpuType": "Type de CPU",
+    "maxPerformance": "Performance max.",
+    "compatible": "Compatible",
+    "emulation": "Émulation",
+    "limitCpuUsage": "Limiter l'utilisation CPU",
+    "cpuLimit": "Limite CPU",
+    "cpuLimitHint": "Limiter l'utilisation CPU (0 = pas de limite)",
+    "totalVcpus": "Total vCPUs",
+    "socketsCoresBreakdown": "{sockets} socket(s) × {cores} cœur(s)",
+    "disks": "Disques",
+    "option": "Option",
+    "value": "Valeur",
+    "actions": "Actions",
+    "tags": "Tags",
+    "other": "Autre",
+    "bootOrder": "Ordre de démarrage",
+    "usbTablet": "Tablette USB",
+    "protection": "Protection",
+    "spiceEnhancements": "Améliorations SPICE",
+    "vmStateStorage": "Stockage état VM",
+    "startTime": "Heure de début",
+    "endTime": "Heure de fin",
+    "userName": "Nom d'utilisateur",
+    "newBackup": "Nouvelle sauvegarde",
+    "backupContent": "Contenu de la sauvegarde",
+    "recommended": "Recommandé",
+    "usePbsDirectly": "Utiliser PBS directement pour cette fonctionnalité",
+    "drivesAndArchives": "Lecteurs et archives",
+    "backupArchives": "Archives de sauvegarde",
+    "drivePartition": "Lecteur/Partition",
+    "diskImageNotBrowsable": "Image disque — non navigable",
+    "clickToExplore": "Cliquer pour explorer",
+    "notBrowsable": "Non navigable",
+    "folder": "Dossier",
+    "emptyFolder": "Dossier vide",
+    "oldest": "Le plus ancien",
+    "notesPlaceholder": "Écrivez vos notes ici...",
+    "state": "État",
+    "group": "Groupe",
+    "node": "Nœud"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",
@@ -887,7 +935,17 @@
     "memoryLabel": "Mémoire :",
     "lastUpdated": "Dernière mise à jour :",
     "deleteGroupConfirm": "Êtes-vous sûr de vouloir supprimer le groupe",
-    "resourcesWillBeDisassociated": "Les ressources utilisant ce groupe seront dissociées."
+    "resourcesWillBeDisassociated": "Les ressources utilisant ce groupe seront dissociées.",
+    "affinityLabel": "Affinité",
+    "haResourcesCount": "Ressources HA ({count})",
+    "keepSeparate": "Séparer",
+    "keepTogether": "Garder ensemble",
+    "noFailback": "Pas de failback",
+    "nodeAffinityRule": "Règle d'affinité de nœud",
+    "nodesCountSlash": "Nœuds ({selected}/{total})",
+    "resourceAffinityRule": "Règle d'affinité de ressource",
+    "restricted": "Restreint",
+    "strict": "Strict"
   },
   "storage": {
     "title": "Stockage",
@@ -2203,6 +2261,11 @@
   },
   "templates": {
     "title": "Templates",
+    "subtitle": "Gestion des templates VM/LXC",
+    "catalogSubtitle": "Catalogue de templates (cloud-init, images, presets).",
+    "osTemplates": "Templates OS",
+    "networkStoragePresets": "Presets réseau/stockage",
+    "versioningApproval": "Versionnement et approbation",
     "create": "Créer un template",
     "fromVm": "Depuis une VM",
     "fromIso": "Depuis une ISO"
@@ -3135,7 +3198,11 @@
     "sgPrefix": "SG : {name}",
     "policyInPermissive": "Policy IN permissive",
     "vmsWithoutMicroseg": "{count} VMs sans micro-segmentation",
-    "viewVms": "Voir les VMs"
+    "viewVms": "Voir les VMs",
+    "vmFirewallCoverage": "Couverture Firewall des VMs",
+    "protectedLabel": "Protégées",
+    "unprotectedLabel": "Non protégées",
+    "withSgLabel": "Avec SG"
   },
   "themes": {
     "categories": {

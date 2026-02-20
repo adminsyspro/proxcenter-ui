@@ -819,7 +819,7 @@ export default function NodeTabs(props: any) {
                                           <TableCell sx={{ fontWeight: 700, textAlign: 'right' }}>{t('inventory.size')}</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>{t('inventory.model')}</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>{t('inventory.serial')}</TableCell>
-                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.health')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.health.label')}</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>{t('inventory.wearout')}</TableCell>
                                         </TableRow>
                                       </TableHead>

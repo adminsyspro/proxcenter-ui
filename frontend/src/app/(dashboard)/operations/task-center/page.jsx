@@ -531,10 +531,9 @@ export default function JobsPage() {
         flex: 1.2,
         minWidth: 220,
         renderCell: params => (
-          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.2 }}>{params.row.name}</Typography>
-            <Typography variant='caption' sx={{ opacity: 0.5, lineHeight: 1.2 }}>{params.row.id?.slice(0, 8)}</Typography>
-          </Box>
+          <Tooltip title={params.row.id?.slice(0, 8)}>
+            <Typography variant='body2' sx={{ fontWeight: 600 }}>{params.row.name}</Typography>
+          </Tooltip>
         )
       },
       {
@@ -696,7 +695,7 @@ export default function JobsPage() {
           </Stack>
         </CardContent>
 
-        <Box sx={{ flex: 1, minHeight: 400 }}>
+        <Box sx={{ height: 'calc(100vh - 380px)', minHeight: 300 }}>
           {loading && jobs.length === 0 ? (
             <Box sx={{ p: 2 }}>
               <TableSkeleton rows={5} columns={6} />
@@ -723,22 +722,25 @@ export default function JobsPage() {
               onPaginationModelChange={setPaginationModel}
               pageSizeOptions={[10, 25, 50]}
               disableRowSelectionOnClick
-              rowHeight={56}
+              density='compact'
               loading={isValidating}
               onRowDoubleClick={handleRowDoubleClick}
               sx={{
                 border: 'none',
+                '& .MuiDataGrid-row': {
+                  minHeight: '36px !important',
+                  maxHeight: '36px !important',
+                  cursor: 'pointer'
+                },
                 '& .MuiDataGrid-cell': {
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  py: 0.5,
                 },
                 '& .MuiDataGrid-columnHeaders': {
                   borderBottom: '1px solid',
                   borderColor: 'divider'
                 },
-                '& .MuiDataGrid-row': {
-                  cursor: 'pointer'
-                }
               }}
             />
           )}

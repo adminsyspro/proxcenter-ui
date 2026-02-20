@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server"
 
+import { prisma } from "@/lib/db/prisma"
+
 export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
+
+/** Extract hostname from a baseUrl like "https://pve1.example.com:8006" */
+function extractHostname(baseUrl: string): string {
+  try {
+    const u = new URL(baseUrl)
+    return u.hostname
+  } catch {
+    return baseUrl
+  }
+}
 
 // GET /api/v1/orchestrator/jobs - List all jobs (rolling updates, future: DRS, migrations, etc.)
 export async function GET(req: Request) {
@@ -12,8 +24,21 @@ export async function GET(req: Request) {
     const status = searchParams.get("status") // filter by status: running, completed, failed, etc.
     const limit = searchParams.get("limit") || "50"
 
-    // For now, we only have rolling updates as jobs
-    // In the future, this could aggregate from multiple sources
+    // Build connection lookup maps: id → hostname, name → hostname
+    const connections = await prisma.connection.findMany({ select: { id: true, name: true, baseUrl: true } })
+    const connById = new Map<string, string>()
+    const connByName = new Map<string, string>()
+
+    for (const c of connections) {
+      const host = extractHostname(c.baseUrl)
+      connById.set(c.id, host)
+      connByName.set(c.name, host)
+    }
+
+    /** Resolve a connection identifier (id or name) to its server hostname */
+    const resolve = (idOrName: string): string =>
+      connById.get(idOrName) || connByName.get(idOrName) || idOrName
+
     const jobs: any[] = []
 
     // Fetch rolling updates
@@ -48,19 +73,21 @@ export async function GET(req: Request) {
             ? Math.round((ru.completed_nodes / ru.total_nodes) * 100) 
             : 0
 
+          const ruTarget = resolve(ru.connection_id)
+
           jobs.push({
             id: ru.id,
-            name: `Rolling Update - ${ru.cluster_name || ru.connection_id}`,
+            name: `Rolling Update - ${ruTarget}`,
             type: "rolling_update",
             status: jobStatus,
             progress,
             startedAt: ru.started_at,
             endedAt: ru.completed_at,
             createdAt: ru.created_at,
-            detail: ru.current_node 
+            detail: ru.current_node
               ? `En cours: ${ru.current_node} (${ru.completed_nodes}/${ru.total_nodes} nœuds)`
               : `${ru.completed_nodes}/${ru.total_nodes} nœuds`,
-            target: ru.cluster_name || ru.connection_id,
+            target: ruTarget,
             // Additional data for drill-down
             metadata: {
               connectionId: ru.connection_id,
@@ -91,6 +118,8 @@ export async function GET(req: Request) {
           let jobStatus = m.status
           if (m.status === "completed") jobStatus = "success"
 
+          const drsTarget = resolve(m.connection_id)
+
           jobs.push({
             id: m.id,
             name: `DRS Migration - ${m.vm_name || `VM ${m.vmid}`}`,
@@ -101,7 +130,7 @@ export async function GET(req: Request) {
             endedAt: m.completed_at,
             createdAt: m.started_at,
             detail: `${m.vm_name || `VM ${m.vmid}`}: ${m.source_node} → ${m.target_node}`,
-            target: m.connection_id,
+            target: drsTarget,
             metadata: {
               connectionId: m.connection_id,
               vmid: m.vmid,
@@ -140,6 +169,9 @@ export async function GET(req: Request) {
             ? rj.vm_names.slice(0, 3).join(", ") + (rj.vm_names.length > 3 ? ` +${rj.vm_names.length - 3}` : "")
             : `${(rj.vm_ids || []).length} VM(s)`
 
+          const replSource = resolve(rj.source_cluster)
+          const replTarget = resolve(rj.target_cluster)
+
           jobs.push({
             id: rj.id,
             name: `Replication - ${vmLabel}`,
@@ -149,8 +181,8 @@ export async function GET(req: Request) {
             startedAt: rj.last_sync || rj.created_at,
             endedAt: rj.status === "synced" ? rj.last_sync : undefined,
             createdAt: rj.created_at,
-            detail: `${rj.source_cluster} → ${rj.target_cluster}${rj.schedule ? ` (${rj.schedule})` : ""}`,
-            target: rj.source_cluster,
+            detail: `${replSource} → ${replTarget}${rj.schedule ? ` (${rj.schedule})` : ""}`,
+            target: replSource,
             metadata: {
               sourceCluster: rj.source_cluster,
               targetCluster: rj.target_cluster,
@@ -197,6 +229,9 @@ export async function GET(req: Request) {
 
               const typeLabel = exec.type === "failover" ? "Failover" : exec.type === "failback" ? "Failback" : "Test Failover"
 
+              const planSource = resolve(plan.source_cluster)
+              const planTarget = resolve(plan.target_cluster)
+
               jobs.push({
                 id: exec.id,
                 name: `${typeLabel} - ${plan.name}`,
@@ -206,8 +241,8 @@ export async function GET(req: Request) {
                 startedAt: exec.started_at,
                 endedAt: exec.completed_at,
                 createdAt: exec.started_at,
-                detail: `${plan.source_cluster} → ${plan.target_cluster} (${(exec.vm_results || []).length} VMs)`,
-                target: plan.source_cluster,
+                detail: `${planSource} → ${planTarget} (${(exec.vm_results || []).length} VMs)`,
+                target: planSource,
                 metadata: {
                   planId: plan.id,
                   planName: plan.name,

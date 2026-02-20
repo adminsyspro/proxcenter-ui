@@ -116,14 +116,14 @@ export async function middleware(request: NextRequest) {
   // Vérifier le token JWT pour les API
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET
+    secret: AUTH_SECRET
   })
 
   // Si pas de token, retourner 401 pour les API
   if (!token) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
-        { error: "Non authentifié" },
+        { error: "Not authenticated" },
         { status: 401 }
       )
     }

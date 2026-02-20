@@ -344,7 +344,7 @@ export async function checkPermission(
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
   const allowed = hasPermission({
@@ -356,7 +356,7 @@ export async function checkPermission(
 
   if (!allowed) {
     return NextResponse.json(
-      { error: `Permission refusée: ${permission}` },
+      { error: `Permission denied: ${permission}` },
       { status: 403 }
     )
   }
@@ -372,7 +372,7 @@ export async function requireAdmin(): Promise<NextResponse | null> {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
   const db = getDb()
@@ -380,7 +380,7 @@ export async function requireAdmin(): Promise<NextResponse | null> {
 
   if (!isAdminRole(user?.role)) {
     return NextResponse.json(
-      { error: "Accès administrateur requis" },
+      { error: "Admin access required" },
       { status: 403 }
     )
   }

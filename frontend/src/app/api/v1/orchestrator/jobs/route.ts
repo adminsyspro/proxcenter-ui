@@ -106,7 +106,7 @@ export async function GET(req: Request) {
 
     // Fetch DRS migrations
     try {
-      const drsRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations`, {
+      const drsRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations?limit=50`, {
         headers: { "Content-Type": "application/json" },
       })
 

@@ -631,6 +631,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                 columns={alertColumns}
                 loading={loading}
                 density="compact"
+                getRowHeight={() => 'auto'}
                 pageSizeOptions={[25, 50, 100]}
                 initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
                 sx={{
@@ -638,10 +639,8 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   '& .MuiDataGrid-cell': {
                     display: 'flex',
                     alignItems: 'center',
+                    py: 0.5,
                   },
-                  '& .MuiDataGrid-row': {
-                    minHeight: '52px !important',
-                  }
                 }}
               />
               )}
@@ -695,6 +694,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                 columns={ruleColumns}
                 loading={loading}
                 density="compact"
+                getRowHeight={() => 'auto'}
                 pageSizeOptions={[10, 25, 50]}
                 initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
                 sx={{
@@ -702,10 +702,8 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   '& .MuiDataGrid-cell': {
                     display: 'flex',
                     alignItems: 'center',
+                    py: 0.5,
                   },
-                  '& .MuiDataGrid-row': {
-                    minHeight: '52px !important',
-                  }
                 }}
               />
             </Box>

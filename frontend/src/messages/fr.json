@@ -470,6 +470,8 @@
     "backupMode": "Mode",
     "backupCompression": "Compression",
     "backupGzip": "GZIP",
+    "pveFailoverError": "Échec via PVE : {error}. Basculement sur PBS...",
+    "rawDiskNotBrowsable": "Les images disques brutes (.img.fidx) ne peuvent pas être explorées. Seules les archives .pxar supportent la restauration fichier par fichier.",
     "createVm": {
       "title": "Créer : Machine virtuelle",
       "tabs": {

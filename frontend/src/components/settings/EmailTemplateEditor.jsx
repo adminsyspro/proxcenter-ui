@@ -30,73 +30,73 @@ import {
   Typography
 } from '@mui/material'
 
-// Macros disponibles organisées par catégorie
+// Available macros organized by category
 const TEMPLATE_MACROS = {
   event: {
-    label: 'Événement',
+    label: 'Event',
     icon: 'ri-calendar-event-line',
     macros: [
       { key: '{{event.type}}', label: 'Type (qmsnapshot, vzdump...)', example: 'vzdump' },
-      { key: '{{event.type_label}}', label: 'Type lisible', example: 'Backup' },
-      { key: '{{event.entity}}', label: 'VM/CT concerné', example: 'VM 101 (web-server)' },
-      { key: '{{event.status}}', label: 'Statut', example: 'OK' },
-      { key: '{{event.message}}', label: 'Message complet', example: 'Backup (101) - OK' },
-      { key: '{{event.user}}', label: 'Utilisateur', example: 'root@pam' },
-      { key: '{{event.timestamp}}', label: 'Date/heure', example: '03/02/2026 15:30:00' },
+      { key: '{{event.type_label}}', label: 'Readable type', example: 'Backup' },
+      { key: '{{event.entity}}', label: 'Related VM/CT', example: 'VM 101 (web-server)' },
+      { key: '{{event.status}}', label: 'Status', example: 'OK' },
+      { key: '{{event.message}}', label: 'Full message', example: 'Backup (101) - OK' },
+      { key: '{{event.user}}', label: 'User', example: 'root@pam' },
+      { key: '{{event.timestamp}}', label: 'Date/time', example: '03/02/2026 15:30:00' },
     ]
   },
   infrastructure: {
     label: 'Infrastructure',
     icon: 'ri-server-line',
     macros: [
-      { key: '{{node.name}}', label: 'Nom du nœud', example: 'pve-node-01' },
-      { key: '{{node.ip}}', label: 'IP du nœud', example: '192.168.1.10' },
-      { key: '{{cluster.name}}', label: 'Nom du cluster', example: 'production-cluster' },
-      { key: '{{cluster.id}}', label: 'ID connexion', example: 'conn_abc123' },
+      { key: '{{node.name}}', label: 'Node name', example: 'pve-node-01' },
+      { key: '{{node.ip}}', label: 'Node IP', example: '192.168.1.10' },
+      { key: '{{cluster.name}}', label: 'Cluster name', example: 'production-cluster' },
+      { key: '{{cluster.id}}', label: 'Connection ID', example: 'conn_abc123' },
       { key: '{{datacenter}}', label: 'Datacenter', example: 'GRA4' },
     ]
   },
   alert: {
-    label: 'Alerte',
+    label: 'Alert',
     icon: 'ri-alarm-warning-line',
     macros: [
-      { key: '{{alert.severity}}', label: 'Sévérité', example: 'critical' },
-      { key: '{{alert.severity_icon}}', label: 'Icône sévérité', example: '🚨' },
-      { key: '{{alert.severity_color}}', label: 'Couleur sévérité', example: '#dc2626' },
-      { key: '{{rule.name}}', label: 'Nom de la règle', example: 'Backup échoué' },
-      { key: '{{rule.id}}', label: 'ID de la règle', example: 'rule_backup_failed' },
+      { key: '{{alert.severity}}', label: 'Severity', example: 'critical' },
+      { key: '{{alert.severity_icon}}', label: 'Severity icon', example: '🚨' },
+      { key: '{{alert.severity_color}}', label: 'Severity color', example: '#dc2626' },
+      { key: '{{rule.name}}', label: 'Rule name', example: 'Backup failed' },
+      { key: '{{rule.id}}', label: 'Rule ID', example: 'rule_backup_failed' },
     ]
   },
   system: {
-    label: 'Système',
+    label: 'System',
     icon: 'ri-settings-3-line',
     macros: [
-      { key: '{{app.name}}', label: 'Nom application', example: 'ProxCenter' },
-      { key: '{{app.url}}', label: 'URL application', example: 'https://proxcenter.example.com' },
+      { key: '{{app.name}}', label: 'Application name', example: 'ProxCenter' },
+      { key: '{{app.url}}', label: 'Application URL', example: 'https://proxcenter.example.com' },
       { key: '{{app.version}}', label: 'Version', example: '1.0.0' },
-      { key: '{{date.now}}', label: 'Date actuelle', example: '03/02/2026' },
-      { key: '{{date.time}}', label: 'Heure actuelle', example: '15:30:00' },
+      { key: '{{date.now}}', label: 'Current date', example: '03/02/2026' },
+      { key: '{{date.time}}', label: 'Current time', example: '15:30:00' },
     ]
   }
 }
 
-// Templates par défaut
+// Default templates
 const DEFAULT_TEMPLATES = {
   event: {
-    name: 'Événement Proxmox',
+    name: 'Proxmox Event',
     subject: '[{{alert.severity}}] {{event.type_label}} - {{event.entity}}',
     body: `<div style="font-family: 'Inter', sans-serif;">
   <h2 style="margin: 0 0 16px 0; color: #18181b;">
     {{event.type_label}}
   </h2>
-  
+
   <p style="color: #3f3f46; margin-bottom: 20px;">
     {{event.message}}
   </p>
-  
+
   <table style="width: 100%; border-collapse: collapse;">
     <tr>
-      <td style="padding: 8px 0; color: #71717a; width: 120px;">Nœud</td>
+      <td style="padding: 8px 0; color: #71717a; width: 120px;">Node</td>
       <td style="padding: 8px 0; font-weight: 600;">{{node.name}}</td>
     </tr>
     <tr>
@@ -104,17 +104,17 @@ const DEFAULT_TEMPLATES = {
       <td style="padding: 8px 0;">{{cluster.name}}</td>
     </tr>
     <tr>
-      <td style="padding: 8px 0; color: #71717a;">Utilisateur</td>
+      <td style="padding: 8px 0; color: #71717a;">User</td>
       <td style="padding: 8px 0;">{{event.user}}</td>
     </tr>
     <tr>
-      <td style="padding: 8px 0; color: #71717a;">Statut</td>
+      <td style="padding: 8px 0; color: #71717a;">Status</td>
       <td style="padding: 8px 0; font-weight: 600; color: {{alert.severity_color}};">{{event.status}}</td>
     </tr>
   </table>
-  
+
   <p style="margin-top: 20px; padding: 12px; background: #f4f4f5; border-radius: 8px; font-size: 13px; color: #71717a;">
-    Règle déclenchée: {{rule.name}}
+    Triggered rule: {{rule.name}}
   </p>
 </div>`
   },
@@ -125,11 +125,11 @@ const DEFAULT_TEMPLATES = {
   <h2 style="margin: 0 0 16px 0; color: #18181b;">
     Backup {{event.status}}
   </h2>
-  
+
   <p style="color: #3f3f46;">
-    Le backup de <strong>{{event.entity}}</strong> sur <strong>{{node.name}}</strong> s'est terminé avec le statut: <strong style="color: {{alert.severity_color}};">{{event.status}}</strong>
+    The backup of <strong>{{event.entity}}</strong> on <strong>{{node.name}}</strong> completed with status: <strong style="color: {{alert.severity_color}};">{{event.status}}</strong>
   </p>
-  
+
   <table style="width: 100%; margin-top: 20px; border-collapse: collapse; background: #f8fafc; border-radius: 8px;">
     <tr>
       <td style="padding: 12px; color: #64748b;">Cluster</td>
@@ -149,52 +149,52 @@ const DEFAULT_TEMPLATES = {
   <h2 style="margin: 0 0 16px 0; color: #18181b;">
     Migration {{event.status}}
   </h2>
-  
+
   <p style="color: #3f3f46;">
-    Migration de <strong>{{event.entity}}</strong> terminée.
+    Migration of <strong>{{event.entity}}</strong> completed.
   </p>
-  
+
   <table style="width: 100%; margin-top: 20px;">
     <tr>
-      <td style="padding: 8px 0; color: #71717a;">Nœud source</td>
+      <td style="padding: 8px 0; color: #71717a;">Source node</td>
       <td style="padding: 8px 0; font-weight: 600;">{{node.name}}</td>
     </tr>
     <tr>
-      <td style="padding: 8px 0; color: #71717a;">Statut</td>
+      <td style="padding: 8px 0; color: #71717a;">Status</td>
       <td style="padding: 8px 0; color: {{alert.severity_color}};">{{event.status}}</td>
     </tr>
   </table>
 </div>`
   },
   alert: {
-    name: 'Alerte système',
+    name: 'System Alert',
     subject: '{{alert.severity_icon}} [{{alert.severity}}] {{rule.name}}',
     body: `<div style="font-family: 'Inter', sans-serif;">
   <h2 style="margin: 0 0 16px 0; color: {{alert.severity_color}};">
     {{alert.severity_icon}} {{rule.name}}
   </h2>
-  
+
   <p style="color: #3f3f46; margin-bottom: 20px;">
     {{event.message}}
   </p>
-  
+
   <div style="padding: 16px; background: #fef2f2; border-left: 4px solid {{alert.severity_color}}; border-radius: 4px;">
-    <strong>Ressource:</strong> {{event.entity}}<br>
-    <strong>Nœud:</strong> {{node.name}}<br>
+    <strong>Resource:</strong> {{event.entity}}<br>
+    <strong>Node:</strong> {{node.name}}<br>
     <strong>Cluster:</strong> {{cluster.name}}
   </div>
 </div>`
   }
 }
 
-// Données d'exemple pour la prévisualisation
+// Example data for preview
 const PREVIEW_DATA = {
   event: {
     type: 'vzdump',
     type_label: 'Backup',
     entity: 'VM 101 (web-server)',
     status: 'OK',
-    message: 'Backup (101) terminé avec succès',
+    message: 'Backup (101) completed successfully',
     user: 'root@pam',
     timestamp: '03/02/2026 15:30:00'
   },
@@ -213,7 +213,7 @@ const PREVIEW_DATA = {
     severity_color: '#f59e0b'
   },
   rule: {
-    name: 'Backups terminés',
+    name: 'Backups completed',
     id: 'rule_backup_completed'
   },
   app: {
@@ -227,13 +227,13 @@ const PREVIEW_DATA = {
   }
 }
 
-// Fonction pour remplacer les macros par les valeurs
+// Function to replace macros with values
 function replaceMacros(template, data) {
   if (!template) return ''
   
   let result = template
   
-  // Parcourir toutes les catégories de macros
+  // Iterate through all macro categories
   Object.entries(data).forEach(([category, values]) => {
     if (typeof values === 'object') {
       Object.entries(values).forEach(([key, value]) => {
@@ -249,7 +249,7 @@ function replaceMacros(template, data) {
   return result
 }
 
-// Fonction pour obtenir la couleur de fin du gradient
+// Function to get the gradient end color
 function getSeverityGradientEnd(color) {
   switch (color) {
     case '#dc2626': return '#991b1b' // critical - red
@@ -284,7 +284,7 @@ export default function EmailTemplateEditor() {
   const [previewData, setPreviewData] = useState(PREVIEW_DATA)
   const [showMacroDialog, setShowMacroDialog] = useState(false)
 
-  // Charger les templates depuis l'API
+  // Load templates from API
   const loadTemplates = async () => {
     setLoading(true)
     try {
@@ -294,7 +294,7 @@ export default function EmailTemplateEditor() {
         setSelectedTemplate(data[0])
         setEditedTemplate({ ...data[0] })
       } else {
-        // Utiliser les templates par défaut
+        // Use default templates
         const defaultList = Object.entries(DEFAULT_TEMPLATES).map(([id, tpl]) => ({
           id,
           ...tpl,
@@ -306,7 +306,7 @@ export default function EmailTemplateEditor() {
       }
     } catch (err) {
       console.error('Failed to load templates:', err)
-      // Fallback aux templates par défaut
+      // Fallback to default templates
       const defaultList = Object.entries(DEFAULT_TEMPLATES).map(([id, tpl]) => ({
         id,
         ...tpl,
@@ -320,7 +320,7 @@ export default function EmailTemplateEditor() {
     }
   }
 
-  // Sauvegarder le template
+  // Save the template
   const saveTemplate = async () => {
     if (!editedTemplate) return
     
@@ -340,7 +340,7 @@ export default function EmailTemplateEditor() {
     }
   }
 
-  // Réinitialiser au template par défaut
+  // Reset to default template
   const resetToDefault = () => {
     if (selectedTemplate && DEFAULT_TEMPLATES[selectedTemplate.id]) {
       setEditedTemplate({
@@ -350,7 +350,7 @@ export default function EmailTemplateEditor() {
     }
   }
 
-  // Insérer une macro dans le body
+  // Insert a macro into the body
   const insertMacro = (macro) => {
     if (!editedTemplate) return
     setEditedTemplate(prev => ({
@@ -359,7 +359,7 @@ export default function EmailTemplateEditor() {
     }))
   }
 
-  // Prévisualisation HTML
+  // HTML preview
   const previewHtml = useMemo(() => {
     if (!editedTemplate) return ''
     return replaceMacros(editedTemplate.body, previewData)
@@ -391,7 +391,7 @@ export default function EmailTemplateEditor() {
       )}
 
       <Grid container spacing={3}>
-        {/* Sidebar - Liste des templates */}
+        {/* Sidebar - Template list */}
         <Grid item xs={12} md={3}>
           <Card variant="outlined">
             <CardContent>
@@ -423,7 +423,7 @@ export default function EmailTemplateEditor() {
 
               <Divider sx={{ my: 2 }} />
 
-              {/* Macros disponibles */}
+              {/* Available macros */}
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>
                 <i className="ri-code-s-slash-line" style={{ marginRight: 8 }} />
                 {t('emailTemplate.macros')}
@@ -464,7 +464,7 @@ export default function EmailTemplateEditor() {
           </Card>
         </Grid>
 
-        {/* Éditeur principal */}
+        {/* Main editor */}
         <Grid item xs={12} md={9}>
           <Card variant="outlined">
             <CardContent>
@@ -485,7 +485,7 @@ export default function EmailTemplateEditor() {
               </Box>
 
               {previewTab === 0 ? (
-                /* Mode Édition */
+                /* Edit mode */
                 <Box>
                   <TextField
                     fullWidth
@@ -549,9 +549,9 @@ export default function EmailTemplateEditor() {
                   </Box>
                 </Box>
               ) : (
-                /* Mode Prévisualisation */
+                /* Preview mode */
                 <Box>
-                  {/* Prévisualisation du sujet */}
+                  {/* Subject preview */}
                   <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: '#f8fafc', borderRadius: 2 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
                       {t('emailTemplate.emailSubjectPreview')}
@@ -581,7 +581,7 @@ export default function EmailTemplateEditor() {
                       overflow: 'hidden',
                       boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
                     }}>
-                      {/* Header ProxCenter avec Logo */}
+                      {/* ProxCenter header with logo */}
                       <Box sx={{ 
                         background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', 
                         p: 3, 
@@ -660,7 +660,7 @@ export default function EmailTemplateEditor() {
                     </Box>
                   </Paper>
 
-                  {/* Données de test modifiables */}
+                  {/* Editable test data */}
                   <Box sx={{ mt: 3 }}>
                     <Typography variant="subtitle2" sx={{ mb: 2 }}>
                       <i className="ri-test-tube-line" style={{ marginRight: 8 }} />
@@ -743,7 +743,7 @@ export default function EmailTemplateEditor() {
         </Grid>
       </Grid>
 
-      {/* Dialog d'aide sur les macros */}
+      {/* Macro help dialog */}
       <Dialog open={showMacroDialog} onClose={() => setShowMacroDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <i className="ri-code-s-slash-line" style={{ marginRight: 8 }} />

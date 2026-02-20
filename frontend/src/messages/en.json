@@ -470,6 +470,8 @@
     "backupMode": "Mode",
     "backupCompression": "Compression",
     "backupGzip": "GZIP",
+    "pveFailoverError": "PVE failed: {error}. Falling back to PBS...",
+    "rawDiskNotBrowsable": "Raw disk images (.img.fidx) cannot be explored. Only .pxar archives support file-by-file restore.",
     "createVm": {
       "title": "Create: Virtual Machine",
       "tabs": {

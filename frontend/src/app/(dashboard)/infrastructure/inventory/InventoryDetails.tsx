@@ -1873,7 +1873,7 @@ return []
 
       if (json.error && !json.data?.files?.length) {
         console.warn('PVE file-restore failed, falling back to PBS:', json.error)
-        setExplorerError(`Échec via PVE: ${json.error}. Basculement sur PBS...`)
+        setExplorerError(t('inventory.pveFailoverError', { error: json.error }))
         setExplorerLoading(false)
         await loadBackupContentViaPbs(backup)
         
@@ -2016,7 +2016,7 @@ return
       /^drive-.*\.(img|raw)?\.?fidx$/i.test(fileName)
     )
     if (isRawDiskImage) {
-      setExplorerError('Les images disques brutes (.img.fidx) ne peuvent pas être explorées. Seules les archives .pxar supportent la restauration fichier par fichier.')
+      setExplorerError(t('inventory.rawDiskNotBrowsable'))
       return
     }
 

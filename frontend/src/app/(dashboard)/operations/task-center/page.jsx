@@ -72,7 +72,7 @@ function useTimeAgo(t) {
 
 const TYPE_LABELS = {
   backup: 'Backup',
-  replication: 'Réplication',
+  replication: 'Replication',
   drs: 'DRS',
   maintenance: 'Maintenance',
   migration: 'Migration',

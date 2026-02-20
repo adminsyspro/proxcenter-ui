@@ -385,7 +385,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
     // NOT from infrastructure metrics (connections, alerts)
     let status = 'healthy'
 
-    if (components?.database && components.database.status !== 'ok') {
+    if (components?.database && components.database.status !== 'ok' && components.database.status !== 'connected') {
       status = 'error'
     }
 
@@ -401,7 +401,8 @@ return () => window.removeEventListener('keydown', onKeyDown)
 
       // Database status (orchestrator-native)
       if (components.database) {
-        parts.push(components.database.status === 'ok' ? t('pxcore.databaseOk') : t('pxcore.databaseError'))
+        const dbOk = components.database.status === 'ok' || components.database.status === 'connected'
+        parts.push(dbOk ? t('pxcore.databaseOk') : t('pxcore.databaseError'))
       }
 
       // Only show DRS info if license feature is available

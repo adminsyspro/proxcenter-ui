@@ -6,6 +6,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 const nextConfig = {
     output: 'standalone',
     basePath: process.env.BASEPATH,
+    serverExternalPackages: ['ssh2'],
     redirects: async () => {
         return [
             {

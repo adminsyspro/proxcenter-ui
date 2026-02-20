@@ -2,112 +2,10 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
-import { prisma } from "@/lib/db/prisma"
-import { decryptSecret } from "@/lib/crypto/secret"
-import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { executeSSH } from "@/lib/ssh/exec"
+import { getNodeIp } from "@/lib/ssh/node-ip"
 
 export const runtime = "nodejs"
-
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
-
-/**
- * Execute an SSH command via the orchestrator
- */
-async function executeSSHCommand(
-  connectionId: string,
-  nodeIp: string,
-  command: string
-): Promise<{ success: boolean; output?: string; error?: string }> {
-  const connection = await prisma.connection.findUnique({
-    where: { id: connectionId },
-    select: {
-      sshEnabled: true,
-      sshPort: true,
-      sshUser: true,
-      sshAuthMethod: true,
-      sshKeyEnc: true,
-      sshPassEnc: true,
-    },
-  })
-
-  if (!connection?.sshEnabled) {
-    return { success: false, error: "SSH not enabled for this connection" }
-  }
-
-  const sshCredentials: any = {
-    host: nodeIp,
-    port: connection.sshPort || 22,
-    user: connection.sshUser || "root",
-    command,
-  }
-
-  if (connection.sshKeyEnc) {
-    try {
-      sshCredentials.key = decryptSecret(connection.sshKeyEnc)
-    } catch {
-      return { success: false, error: "Failed to decrypt SSH key" }
-    }
-  }
-
-  if (connection.sshPassEnc) {
-    try {
-      const decrypted = decryptSecret(connection.sshPassEnc)
-      if (connection.sshAuthMethod === 'key') {
-        sshCredentials.passphrase = decrypted
-      } else {
-        sshCredentials.password = decrypted
-      }
-    } catch {
-      // Ignore passphrase decryption errors
-    }
-  }
-
-  try {
-    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sshCredentials),
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      return { success: true, output: data.output }
-    } else {
-      const err = await res.json().catch(() => ({}))
-      return { success: false, error: err?.error || res.statusText }
-    }
-  } catch (e: any) {
-    return { success: false, error: e.message }
-  }
-}
-
-/**
- * Get the management IP of a Proxmox node.
- */
-async function getNodeIp(conn: any, nodeName: string): Promise<string> {
-  // 1. Try node network interfaces (gateway = management)
-  try {
-    const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`)
-    const ip = resolveManagementIp(networks)
-    if (ip) return ip
-  } catch {}
-
-  // 2. Try DNS resolution of the node name
-  try {
-    const dns = await import('dns')
-    const resolved = await dns.promises.resolve4(nodeName)
-    if (resolved?.[0]) return resolved[0]
-  } catch {}
-
-  // 3. Fallback to connection host
-  try {
-    const host = conn.host || conn.baseUrl || ''
-    const cleanHost = host.replace(/^https?:\/\//, '').replace(/:\d+$/, '').replace(/\/.*$/, '')
-    if (cleanHost && !cleanHost.includes('/')) return cleanHost
-  } catch {}
-
-  return nodeName
-}
 
 /**
  * GET /api/v1/connections/[id]/nodes/[node]/maintenance
@@ -166,7 +64,7 @@ export async function POST(
     const command = `ha-manager crm-command node-maintenance enable ${node}`
 
     console.log(`[maintenance] POST ${node}: executing via SSH on ${nodeIp}: ${command}`)
-    const result = await executeSSHCommand(id, nodeIp, command)
+    const result = await executeSSH(id, nodeIp, command)
 
     if (result.success) {
       return NextResponse.json({ success: true, method: 'ssh', output: result.output })
@@ -207,7 +105,7 @@ export async function DELETE(
     const command = `ha-manager crm-command node-maintenance disable ${node}`
 
     console.log(`[maintenance] DELETE ${node}: executing via SSH on ${nodeIp}: ${command}`)
-    const result = await executeSSHCommand(id, nodeIp, command)
+    const result = await executeSSH(id, nodeIp, command)
 
     if (result.success) {
       return NextResponse.json({ success: true, method: 'ssh', output: result.output })

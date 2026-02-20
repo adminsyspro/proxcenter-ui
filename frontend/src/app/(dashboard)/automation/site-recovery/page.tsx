@@ -300,12 +300,22 @@ export default function SiteRecoveryPage() {
           <Tab
             icon={<i className='ri-file-shield-2-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
-            label={t('siteRecovery.tabs.recoveryPlans')}
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {t('siteRecovery.tabs.recoveryPlans')}
+                <Chip size='small' label='Beta' sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, bgcolor: 'warning.main', color: 'warning.contrastText' }} />
+              </Box>
+            }
           />
           <Tab
             icon={<i className='ri-alarm-warning-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
-            label={t('siteRecovery.tabs.emergencyDR')}
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {t('siteRecovery.tabs.emergencyDR')}
+                <Chip size='small' label='Beta' sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, bgcolor: 'warning.main', color: 'warning.contrastText' }} />
+              </Box>
+            }
           />
           <Tab
             icon={<i className='ri-test-tube-line' style={{ fontSize: 18 }} />}

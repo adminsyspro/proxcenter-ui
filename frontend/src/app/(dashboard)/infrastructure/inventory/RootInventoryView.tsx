@@ -285,7 +285,7 @@ function RootInventoryView({
             <Stack direction="row" alignItems="center" spacing={2}>
               <Box
                 component="img"
-                src="/images/proxcenter.png"
+                src={theme.palette.mode === 'dark' ? '/images/proxcenter-logo-dark.svg' : '/images/proxcenter-logo-light.svg'}
                 alt="ProxCenter"
                 sx={{ width: 40, height: 40 }}
               />

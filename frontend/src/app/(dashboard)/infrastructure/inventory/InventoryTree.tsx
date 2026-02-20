@@ -458,6 +458,7 @@ function safeJson<T>(x: any): T {
 
 export default function InventoryTree({ selected, onSelect, onRefreshRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed }: Props) {
   const t = useTranslations()
+  const theme = useTheme()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
@@ -2107,7 +2108,7 @@ return (
           itemId="root:root"
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <img src='/images/proxcenter.png' alt='' width={18} height={18} style={{ flexShrink: 0 }} />
+              <img src={theme.palette.mode === 'dark' ? '/images/proxcenter-logo-dark.svg' : '/images/proxcenter-logo-light.svg'} alt='' width={18} height={18} style={{ flexShrink: 0 }} />
               <span style={{ fontSize: 14, fontWeight: 700 }}>PROXCENTER</span>
               <span style={{ opacity: 0.5, fontSize: 12 }}>
                 ({(() => {

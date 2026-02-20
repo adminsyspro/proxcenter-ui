@@ -2110,22 +2110,6 @@ return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               <img src={theme.palette.mode === 'dark' ? '/images/proxcenter-logo-dark.svg' : '/images/proxcenter-logo-light.svg'} alt='' width={18} height={18} style={{ flexShrink: 0 }} />
               <span style={{ fontSize: 14, fontWeight: 700 }}>PROXCENTER</span>
-              <span style={{ opacity: 0.5, fontSize: 12 }}>
-                ({(() => {
-                  // Compter les vrais clusters connectés (isCluster === true ET au moins un node online)
-                  const connectedClusters = filteredClusters.filter(clu => 
-                    clu.isCluster && clu.nodes.some(n => n.status === 'online')
-                  )
-                  // Compter le total des nodes (PVE)
-                  const totalNodes = filteredClusters.reduce((acc, clu) => acc + clu.nodes.length, 0)
-                  // Compter les nodes online
-                  const onlineNodes = filteredClusters.reduce((acc, clu) => 
-                    acc + clu.nodes.filter(n => n.status === 'online').length, 0
-                  )
-                  
-                  return `${connectedClusters.length} ${connectedClusters.length > 1 ? 'clusters' : 'cluster'}, ${onlineNodes}/${totalNodes} PVE, ${allVms.length} VMs${pbsServers.length > 0 ? `, ${pbsServers.length} PBS` : ''}`
-                })()})
-              </span>
             </Box>
           }
         >

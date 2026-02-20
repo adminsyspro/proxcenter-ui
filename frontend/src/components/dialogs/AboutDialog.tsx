@@ -21,7 +21,7 @@ import {
   AccordionDetails
 } from '@mui/material'
 
-import { VERSION, VERSION_NAME, GITHUB_URL, CHANGELOG } from '@/config/version'
+import { VERSION, VERSION_NAME, GIT_SHA, GITHUB_URL, CHANGELOG } from '@/config/version'
 
 interface VersionInfo {
   currentVersion: string
@@ -136,6 +136,19 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
               <Typography variant="h5" sx={{ fontWeight: 700 }}>
                 v{VERSION}
               </Typography>
+              {GIT_SHA && (
+                <Chip
+                  label={GIT_SHA.substring(0, 7)}
+                  size="small"
+                  variant="outlined"
+                  component="a"
+                  href={`${GITHUB_URL}/commit/${GIT_SHA}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  clickable
+                  sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.7rem', fontWeight: 600 }}
+                />
+              )}
               {loading && <CircularProgress size={16} />}
               {!loading && versionInfo?.updateAvailable && (
                 <Chip

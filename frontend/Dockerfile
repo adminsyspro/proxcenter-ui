@@ -47,6 +47,7 @@ ENV NODE_ENV=production
 
 # Git commit SHA for version display (injected by CI)
 ARG GIT_SHA=""
+ENV NEXT_PUBLIC_GIT_SHA=${GIT_SHA}
 
 # Create data directory for SQLite (needed during build for page data collection)
 RUN mkdir -p /app/data

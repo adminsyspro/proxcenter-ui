@@ -855,10 +855,13 @@ const RecommendationRow = ({
       {/* Icône migration */}
       <SwapHorizIcon sx={{ opacity: 0.5, fontSize: 20 }} />
 
-      {/* VM Name + Type */}
+      {/* VM Name + Type + Reason */}
       <Box sx={{ minWidth: 160 }}>
         <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }} noWrap>
           {rec.vm_name || `VM ${rec.vmid}`}
+        </Typography>
+        <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', lineHeight: 1.2 }} noWrap>
+          {rec.reason}
         </Typography>
         {rec.guest_type === 'lxc' && (
           <Chip label="CT" size="small" sx={{ height: 16, fontSize: '0.6rem' }} />
@@ -1347,21 +1350,7 @@ return Object.entries(metricsData as any)
     }
   }, [clusters, selectedCluster])
 
-  // Expand first cluster with recommendations on initial load only
-  const [initialExpandDone, setInitialExpandDone] = useState(false)
-
-  useEffect(() => {
-    if (!initialExpandDone && clusters.length > 0) {
-      const clusterWithRecs = clusters.find(c => c.recommendations.length > 0)
-
-      if (clusterWithRecs) {
-        setExpandedClusters(new Set([clusterWithRecs.id]))
-      } else {
-        setExpandedClusters(new Set([clusters[0].id]))
-      }
-      setInitialExpandDone(true)
-    }
-  }, [clusters, initialExpandDone])
+  // All clusters collapsed by default — no auto-expand
 
   // Detect PVE HA groups / affinity rules that may conflict with DRS
   const clusterIds = useMemo(() => clusters.map(c => c.id).sort().join(','), [clusters])
@@ -1966,6 +1955,13 @@ return next
       {/* Tab: Recommendations */}
       {tab === 1 && (
         <Stack spacing={2}>
+          {/* Explainer */}
+          <Alert severity="info" variant="outlined" icon={<i className="ri-information-line" style={{ fontSize: 20 }} />}>
+            <Typography variant="body2">
+              {t('drsPage.recsExplainer')}
+            </Typography>
+          </Alert>
+
           {/* Migrations actives en cours */}
           {activeMigrations.length > 0 && (
             <Card variant="outlined" sx={{ borderRadius: 2, borderColor: 'info.main' }}>

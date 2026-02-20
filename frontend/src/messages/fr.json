@@ -2871,6 +2871,7 @@
     "affinity": "Affinité",
     "configuration": "Configuration",
     "noClusterConnected": "Aucun cluster connecté",
+    "recsExplainer": "Le DRS analyse la répartition mémoire et CPU entre les nœuds. Même lorsqu'un cluster est marqué « Équilibré » (score de santé supérieur à 80), des déséquilibres mineurs entre nœuds peuvent être optimisés en migrant des VMs des nœuds surchargés vers les moins chargés.",
     "clustersEquilibrated": "Tous les clusters sont équilibrés. Aucune action nécessaire.",
     "noNewRecommendation": "Aucune nouvelle recommandation. {count} migration(s) en cours.",
     "pendingRecommendations": "Recommandations en attente ({count})",

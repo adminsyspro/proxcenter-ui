@@ -2865,6 +2865,7 @@
     "affinity": "Affinity",
     "configuration": "Configuration",
     "noClusterConnected": "No cluster connected",
+    "recsExplainer": "DRS analyzes the memory and CPU distribution across nodes. Even when a cluster is marked \"Balanced\" (health score above 80), minor imbalances between nodes can still be optimized by migrating VMs from overloaded nodes to less loaded ones.",
     "clustersEquilibrated": "All clusters are balanced. No action needed.",
     "noNewRecommendation": "No new recommendation. {count} migration(s) in progress.",
     "pendingRecommendations": "Pending recommendations ({count})",

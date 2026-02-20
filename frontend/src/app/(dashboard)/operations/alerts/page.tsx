@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -99,6 +100,54 @@ interface EventRule {
   created_at: string
   updated_at: string
 }
+
+/* --------------------------------
+   Proxmox task types
+-------------------------------- */
+
+const TASK_TYPES = [
+  // VM (QEMU)
+  { id: 'qmstart', label: 'VM Start', group: 'VM' },
+  { id: 'qmstop', label: 'VM Stop', group: 'VM' },
+  { id: 'qmshutdown', label: 'VM Shutdown', group: 'VM' },
+  { id: 'qmreboot', label: 'VM Reboot', group: 'VM' },
+  { id: 'qmsuspend', label: 'VM Suspend', group: 'VM' },
+  { id: 'qmresume', label: 'VM Resume', group: 'VM' },
+  { id: 'qmclone', label: 'VM Clone', group: 'VM' },
+  { id: 'qmcreate', label: 'VM Create', group: 'VM' },
+  { id: 'qmdestroy', label: 'VM Delete', group: 'VM' },
+  { id: 'qmmigrate', label: 'VM Migrate', group: 'VM' },
+  { id: 'qmrollback', label: 'VM Rollback', group: 'VM' },
+  { id: 'qmsnapshot', label: 'VM Snapshot', group: 'VM' },
+  { id: 'qmdelsnapshot', label: 'VM Delete Snapshot', group: 'VM' },
+  // Container (LXC)
+  { id: 'vzstart', label: 'CT Start', group: 'Container' },
+  { id: 'vzstop', label: 'CT Stop', group: 'Container' },
+  { id: 'vzshutdown', label: 'CT Shutdown', group: 'Container' },
+  { id: 'vzreboot', label: 'CT Reboot', group: 'Container' },
+  { id: 'vzsuspend', label: 'CT Suspend', group: 'Container' },
+  { id: 'vzresume', label: 'CT Resume', group: 'Container' },
+  { id: 'vzcreate', label: 'CT Create', group: 'Container' },
+  { id: 'vzdestroy', label: 'CT Delete', group: 'Container' },
+  { id: 'vzmigrate', label: 'CT Migrate', group: 'Container' },
+  // Backup
+  { id: 'vzdump', label: 'Backup (vzdump)', group: 'Backup' },
+  { id: 'imgcopy', label: 'Image Copy', group: 'Backup' },
+  { id: 'download', label: 'Download', group: 'Backup' },
+  // System
+  { id: 'vncproxy', label: 'VNC Console', group: 'System' },
+  { id: 'vncshell', label: 'Shell Console', group: 'System' },
+  { id: 'spiceproxy', label: 'SPICE Console', group: 'System' },
+  { id: 'aptupdate', label: 'APT Update', group: 'System' },
+  { id: 'startall', label: 'Start All', group: 'System' },
+  { id: 'stopall', label: 'Stop All', group: 'System' },
+  { id: 'migrateall', label: 'Migrate All', group: 'System' },
+  { id: 'srvreload', label: 'Service Reload', group: 'System' },
+  { id: 'srvrestart', label: 'Service Restart', group: 'System' },
+  // Ceph
+  { id: 'cephcreateosd', label: 'Ceph Create OSD', group: 'Ceph' },
+  { id: 'cephdestroyosd', label: 'Ceph Destroy OSD', group: 'Ceph' },
+]
 
 /* --------------------------------
    Helpers
@@ -689,8 +738,30 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                 </Select>
               </FormControl>
             </Box>
-            <TextField label={t('alerts.taskTypes')} value={ruleForm.task_types || ''} onChange={(e) => setRuleForm({ ...ruleForm, task_types: e.target.value })} fullWidth
-              placeholder={t('alerts.taskTypesPlaceholder')} helperText={t('alerts.leaveEmptyForAll')} />
+            <Autocomplete
+              multiple
+              options={TASK_TYPES}
+              groupBy={(option) => option.group}
+              getOptionLabel={(option) => typeof option === 'string' ? option : `${option.id} — ${option.label}`}
+              value={TASK_TYPES.filter(tt => (ruleForm.task_types || '').split(',').filter(Boolean).includes(tt.id))}
+              onChange={(_, values) => setRuleForm({ ...ruleForm, task_types: values.map(v => v.id).join(',') })}
+              renderTags={(value, getTagProps) => value.map((option, index) => (
+                <Chip {...getTagProps({ index })} key={option.id} label={option.id} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }} />
+              ))}
+              renderInput={(params) => (
+                <TextField {...params} label={t('alerts.taskTypes')} placeholder={ruleForm.task_types ? '' : t('alerts.leaveEmptyForAll')} helperText={t('alerts.leaveEmptyForAll')} />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, minWidth: 120 }}>{option.id}</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.6 }}>{option.label}</Typography>
+                  </Box>
+                </li>
+              )}
+              fullWidth
+              disableCloseOnSelect
+            />
             <TextField label={t('alerts.pattern')} value={ruleForm.pattern || ''} onChange={(e) => setRuleForm({ ...ruleForm, pattern: e.target.value })} fullWidth
               placeholder={t('alerts.patternPlaceholder')} helperText={t('alerts.optionalRegex')} />
             <FormControl fullWidth>

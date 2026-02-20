@@ -254,19 +254,8 @@ node bundle-novnc.js
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // wsUrl comes from API as "/ws/console/{sessionId}"
-        // If accessing on the default Docker port (3000), connect directly to WS proxy (3001).
-        // Any other port means we're behind a reverse proxy → use the /api/internal proxy path.
-        const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-        const directPort = '3000'; // Default Next.js port in Docker
-        let wsFullUrl;
-        if (port === directPort) {
-          // Direct Docker access: connect to WS proxy port
-          const wsPort = window.WS_PORT || '3001';
-          wsFullUrl = `${wsProtocol}//${window.location.hostname}:${wsPort}${wsUrl}`;
-        } else {
-          // Behind reverse proxy (443, 80, 8443, custom…): use proxy path
-          wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
-        }
+        // Unified server handles WS on same port — always use /api/internal prefix
+        const wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
         console.log('WebSocket URL:', wsFullUrl);
         
         rfb = new RFB(screen, wsFullUrl, { credentials: { password } });

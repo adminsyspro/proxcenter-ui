@@ -99,25 +99,24 @@ COPY --from=builder /app/node_modules/effect ./node_modules/effect
 COPY --from=builder /app/node_modules/fast-check ./node_modules/fast-check
 COPY --from=builder /app/node_modules/pure-rand ./node_modules/pure-rand
 
-# Copy WebSocket proxy and its dependencies
+# Copy unified server entry point, WebSocket proxy and ws dependency
+COPY --from=builder /app/start.js ./start.js
 COPY --from=builder /app/ws-proxy.js ./ws-proxy.js
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 
 # Copy package.json for version display in startup banner
 COPY --from=builder /app/package.json ./package.json
 
-# No extra runtime dependencies — server.js and ws-proxy.js run via shell
+# No extra runtime dependencies — start.js runs as single process
 
 # Switch to non-root user
 USER nextjs
 
-# Expose ports
+# Expose port (unified HTTP + WebSocket)
 EXPOSE 3000
-EXPOSE 3001
 
 # Environment variables (can be overridden)
 ENV PORT=3000
-ENV WS_PORT=3001
 ENV HOSTNAME="0.0.0.0"
 ENV DATABASE_URL="file:/app/data/proxcenter.db"
 
@@ -129,6 +128,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder --chown=nextjs:nodejs /app/db-migrate.js ./db-migrate.js
 
-# Start: entrypoint inits DB, CMD starts servers
+# Start: entrypoint inits DB, CMD starts unified server
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["/bin/sh", "-c", "node server.js & node ws-proxy.js & wait"]
+CMD ["node", "start.js"]

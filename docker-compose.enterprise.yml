@@ -12,8 +12,7 @@ services:
     container_name: proxcenter-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"  # Next.js
-      - "3001:3001"  # WebSocket proxy (noVNC/xterm)
+      - "3000:3000"  # Unified HTTP + WebSocket
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/proxcenter.db
@@ -21,7 +20,6 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - APP_URL=${APP_URL:-http://localhost:3000}
-      - WS_PORT=3001
       - ORCHESTRATOR_URL=http://orchestrator:8080
     volumes:
       - proxcenter_data:/app/data

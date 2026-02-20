@@ -112,8 +112,8 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
         wsRef.current.close()
       }
 
-      // Connexion WebSocket via le proxy ws-proxy.js (passé par nginx en production)
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      // Connexion WebSocket via le proxy (unified server handles WS on same port)
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       let proxyWsUrl = `${wsProtocol}//${window.location.host}/api/internal/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
 
       if (user) {
@@ -174,7 +174,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       ws.onerror = (error) => {
         console.error('[XTerm] WebSocket error:', error)
         setStatus('error')
-        setErrorMsg('WebSocket connection failed. Make sure ws-proxy.js is running on port 3001.')
+        setErrorMsg('WebSocket connection failed.')
       }
 
     } catch (err: any) {

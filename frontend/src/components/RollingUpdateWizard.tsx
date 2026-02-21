@@ -180,23 +180,26 @@ interface RollingUpdateWizardProps {
   nodes: NodeInfo[]
   nodeUpdates: Record<string, { count: number; updates: any[]; version: string | null }>
   connectedNode?: string | null
+  hasCeph?: boolean
 }
 
-const defaultConfig: RollingUpdateConfig = {
-  migrate_non_ha_vms: true,
-  shutdown_local_vms: false,
-  max_concurrent_migrations: 2,
-  migration_timeout: 600,
-  auto_reboot: true,
-  reboot_timeout: 300,
-  require_manual_approval: false,
-  min_healthy_nodes: 2,
-  abort_on_failure: true,
-  set_ceph_noout: true,
-  wait_ceph_healthy: true,
-  restore_vm_placement: false,
-  notify_on_complete: true,
-  notify_on_error: true,
+function buildDefaultConfig(hasCeph: boolean): RollingUpdateConfig {
+  return {
+    migrate_non_ha_vms: true,
+    shutdown_local_vms: false,
+    max_concurrent_migrations: 2,
+    migration_timeout: 600,
+    auto_reboot: true,
+    reboot_timeout: 300,
+    require_manual_approval: false,
+    min_healthy_nodes: 2,
+    abort_on_failure: true,
+    set_ceph_noout: hasCeph,
+    wait_ceph_healthy: hasCeph,
+    restore_vm_placement: false,
+    notify_on_complete: true,
+    notify_on_error: true,
+  }
 }
 
 export default function RollingUpdateWizard({
@@ -206,6 +209,7 @@ export default function RollingUpdateWizard({
   nodes,
   nodeUpdates,
   connectedNode,
+  hasCeph = false,
 }: RollingUpdateWizardProps) {
   const t = useTranslations()
   
@@ -214,7 +218,7 @@ export default function RollingUpdateWizard({
   const steps = [t('updates.wizardStepConfiguration'), t('updates.wizardStepVerifications'), t('updates.wizardStepExecution'), t('updates.wizardStepCompleted')]
   
   // Configuration state
-  const [config, setConfig] = useState<RollingUpdateConfig>({ ...defaultConfig })
+  const [config, setConfig] = useState<RollingUpdateConfig>(() => buildDefaultConfig(hasCeph))
   const [nodeOrder, setNodeOrder] = useState<string[]>([])
   const [excludedNodes, setExcludedNodes] = useState<string[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -592,16 +596,18 @@ export default function RollingUpdateWizard({
                     label={t('updates.autoRebootIfKernel')}
                   />
                   
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={config.set_ceph_noout}
-                        onChange={(e) => setConfig(c => ({ ...c, set_ceph_noout: e.target.checked }))}
-                      />
-                    }
-                    label={t('updates.setCephNoout')}
-                  />
-                  
+                  {hasCeph && (
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={config.set_ceph_noout}
+                          onChange={(e) => setConfig(c => ({ ...c, set_ceph_noout: e.target.checked }))}
+                        />
+                      }
+                      label={t('updates.setCephNoout')}
+                    />
+                  )}
+
                   <FormControlLabel
                     control={
                       <Switch
@@ -691,15 +697,17 @@ export default function RollingUpdateWizard({
                         label={t('updates.shutdownLocalVms')}
                       />
                       
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={config.wait_ceph_healthy}
-                            onChange={(e) => setConfig(c => ({ ...c, wait_ceph_healthy: e.target.checked }))}
-                          />
-                        }
-                        label={t('updates.waitCephHealthy')}
-                      />
+                      {hasCeph && (
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={config.wait_ceph_healthy}
+                              onChange={(e) => setConfig(c => ({ ...c, wait_ceph_healthy: e.target.checked }))}
+                            />
+                          }
+                          label={t('updates.waitCephHealthy')}
+                        />
+                      )}
                     </Stack>
                   </CardContent>
                 </Card>

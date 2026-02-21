@@ -2333,6 +2333,7 @@ export default function ClusterTabs(props: any) {
                       })) || []}
                       nodeUpdates={nodeUpdates}
                       connectedNode={data.connectedNode || null}
+                      hasCeph={!!data.cephHealth}
                     />
 
                     {/* Dialog pour afficher les mises à jour */}

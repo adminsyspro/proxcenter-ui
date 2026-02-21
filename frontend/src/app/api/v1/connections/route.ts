@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
+import { orchestratorFetch } from "@/lib/orchestrator/client"
 
 export const runtime = "nodejs"
 
@@ -199,7 +200,12 @@ export async function POST(req: Request) {
       status: "success",
     })
 
-    return NextResponse.json({ 
+    // Notify orchestrator to reload connections immediately
+    if (type === 'pve') {
+      orchestratorFetch('/connections/reload', { method: 'POST' }).catch(() => {})
+    }
+
+    return NextResponse.json({
       data: {
         ...created,
         sshConfigured: sshEnabled && !!(sshKey || sshPassword)

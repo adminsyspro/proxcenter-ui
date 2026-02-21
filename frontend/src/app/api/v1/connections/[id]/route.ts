@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { updateConnectionSchema } from "@/lib/schemas"
+import { orchestratorFetch } from "@/lib/orchestrator/client"
 
 export const runtime = "nodejs"
 
@@ -206,10 +207,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       status: "success",
     })
 
+    // Notify orchestrator to reload connections immediately
+    orchestratorFetch('/connections/reload', { method: 'POST' }).catch(() => {})
+
     // Retourner sans les secrets
     const { sshKeyEnc, sshPassEnc, ...rest } = updated
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: {
         ...rest,
         sshKeyConfigured: !!sshKeyEnc,
@@ -261,6 +265,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       details: { type: connection?.type, baseUrl: connection?.baseUrl },
       status: "success",
     })
+
+    // Notify orchestrator to reload connections immediately
+    orchestratorFetch('/connections/reload', { method: 'POST' }).catch(() => {})
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {

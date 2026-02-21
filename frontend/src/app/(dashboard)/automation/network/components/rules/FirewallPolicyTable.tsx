@@ -25,6 +25,10 @@ interface FirewallPolicyTableProps {
   firewallMode: firewallAPI.FirewallMode
   selectedConnection: string
   setClusterRules: React.Dispatch<React.SetStateAction<firewallAPI.FirewallRule[]>>
+  clusterOptions: firewallAPI.ClusterOptions | null
+  setClusterOptions: React.Dispatch<React.SetStateAction<firewallAPI.ClusterOptions | null>>
+  aliases: firewallAPI.Alias[]
+  ipsets: firewallAPI.IPSet[]
   reload: () => void
 }
 
@@ -62,7 +66,8 @@ const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as co
 
 export default function FirewallPolicyTable({
   clusterRules, securityGroups, vmFirewallData, firewallMode,
-  selectedConnection, setClusterRules, reload
+  selectedConnection, setClusterRules, clusterOptions, setClusterOptions,
+  aliases, ipsets, reload
 }: FirewallPolicyTableProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -88,6 +93,20 @@ export default function FirewallPolicyTable({
 
   // Drag & drop
   const [dragState, setDragState] = useState<{ sectionId: string; draggedPos: number | null; dragOverPos: number | null }>({ sectionId: '', draggedPos: null, dragOverPos: null })
+
+  // ── Cluster firewall toggle ──
+  const handleToggleClusterFirewall = async () => {
+    if (!selectedConnection) return
+    const newEnable = clusterOptions?.enable === 1 ? 0 : 1
+    try {
+      await firewallAPI.updateClusterOptions(selectedConnection, { enable: newEnable })
+      showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
+      setClusterOptions(prev => prev ? { ...prev, enable: newEnable } : { enable: newEnable })
+      reload()
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    }
+  }
 
   // ── Build policy sections ──
   const sections: PolicySection[] = useMemo(() => {
@@ -368,12 +387,26 @@ export default function FirewallPolicyTable({
                 </Tooltip>
               )}
               {section.type === 'cluster' && (
-                <Chip
-                  label={t('common.all')}
-                  size="small"
-                  variant="outlined"
-                  sx={{ height: 20, fontSize: 10 }}
-                />
+                <>
+                  <Chip
+                    label={t('common.all')}
+                    size="small"
+                    variant="outlined"
+                    sx={{ height: 20, fontSize: 10 }}
+                  />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }} onClick={e => e.stopPropagation()}>
+                    <Switch
+                      checked={clusterOptions?.enable === 1}
+                      onChange={handleToggleClusterFirewall}
+                      color="success"
+                      size="small"
+                      disabled={!selectedConnection}
+                    />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: clusterOptions?.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
+                      {clusterOptions?.enable === 1 ? 'ON' : 'OFF'}
+                    </Typography>
+                  </Box>
+                </>
               )}
             </Box>
 
@@ -628,6 +661,8 @@ export default function FirewallPolicyTable({
         rule={ruleForm}
         onRuleChange={setRuleForm}
         securityGroups={securityGroups}
+        aliases={aliases}
+        ipsets={ipsets}
       />
 
       {/* Create Security Group */}

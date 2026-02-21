@@ -1,9 +1,10 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Autocomplete, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, InputLabel, MenuItem, Select, TextField, alpha
 } from '@mui/material'
 
@@ -34,6 +35,8 @@ interface RuleFormDialogProps {
   rule: RuleFormData
   onRuleChange: (rule: RuleFormData) => void
   securityGroups: firewallAPI.SecurityGroup[]
+  aliases: firewallAPI.Alias[]
+  ipsets: firewallAPI.IPSet[]
 }
 
 const scopeColors: Record<string, string> = {
@@ -42,7 +45,7 @@ const scopeColors: Record<string, string> = {
 }
 
 export default function RuleFormDialog({
-  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups
+  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets
 }: RuleFormDialogProps) {
   const t = useTranslations()
 
@@ -54,6 +57,17 @@ export default function RuleFormDialog({
   const set = (field: keyof RuleFormData, value: string | number) => {
     onRuleChange({ ...rule, [field]: value })
   }
+
+  const autocompleteOptions = useMemo(() => {
+    const opts: { label: string; secondary?: string }[] = []
+    for (const a of aliases) {
+      opts.push({ label: a.name, secondary: a.cidr })
+    }
+    for (const s of ipsets) {
+      opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
+    }
+    return opts
+  }, [aliases, ipsets])
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -115,10 +129,48 @@ export default function RuleFormDialog({
                 </FormControl>
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label={t('network.source')} value={rule.source} onChange={(e) => set('source', e.target.value)} placeholder="IP, CIDR, alias..." InputProps={{ sx: monoStyle }} />
+                <Autocomplete
+                  freeSolo
+                  options={autocompleteOptions}
+                  getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                  inputValue={rule.source}
+                  onInputChange={(_, v) => set('source', v)}
+                  renderOption={(props, opt) => (
+                    <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                        <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                        {typeof opt !== 'string' && opt.secondary && (
+                          <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+                        )}
+                      </Box>
+                    </li>
+                  )}
+                  renderInput={(params) => (
+                    <TextField {...params} fullWidth size="small" label={t('network.source')} placeholder="IP, CIDR, alias..." InputProps={{ ...params.InputProps, sx: monoStyle }} />
+                  )}
+                />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label={t('network.destination')} value={rule.dest} onChange={(e) => set('dest', e.target.value)} placeholder="IP, CIDR, alias..." InputProps={{ sx: monoStyle }} />
+                <Autocomplete
+                  freeSolo
+                  options={autocompleteOptions}
+                  getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                  inputValue={rule.dest}
+                  onInputChange={(_, v) => set('dest', v)}
+                  renderOption={(props, opt) => (
+                    <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                        <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                        {typeof opt !== 'string' && opt.secondary && (
+                          <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+                        )}
+                      </Box>
+                    </li>
+                  )}
+                  renderInput={(params) => (
+                    <TextField {...params} fullWidth size="small" label={t('network.destination')} placeholder="IP, CIDR, alias..." InputProps={{ ...params.InputProps, sx: monoStyle }} />
+                  )}
+                />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField fullWidth size="small" label={t('network.destPort')} value={rule.dport} onChange={(e) => set('dport', e.target.value)} placeholder="22, 80, 443..." InputProps={{ sx: monoStyle }} />

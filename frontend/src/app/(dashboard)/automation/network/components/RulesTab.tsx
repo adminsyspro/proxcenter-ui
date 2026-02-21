@@ -18,6 +18,8 @@ interface RulesTabProps {
   // Cluster
   clusterRules: firewallAPI.FirewallRule[]
   setClusterRules: React.Dispatch<React.SetStateAction<firewallAPI.FirewallRule[]>>
+  clusterOptions: firewallAPI.ClusterOptions | null
+  setClusterOptions: React.Dispatch<React.SetStateAction<firewallAPI.ClusterOptions | null>>
   // Host
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
   nodesList: string[]
@@ -31,6 +33,9 @@ interface RulesTabProps {
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
   // Security Groups
   securityGroups: firewallAPI.SecurityGroup[]
+  // Aliases + IPSets
+  aliases: firewallAPI.Alias[]
+  ipsets: firewallAPI.IPSet[]
   firewallMode: firewallAPI.FirewallMode
   totalRules: number
   // Common
@@ -40,7 +45,7 @@ interface RulesTabProps {
 
 /**
  * Map legacy sub-tab indices (used by StatCards / DashboardTab) to new ones:
- *   Old 0 (Cluster) / 3 (SGs) → New 0 (Distributed Firewall)
+ *   Old 0 (Cluster) / 3 (SGs) → New 0 (Cluster Firewall)
  *   Old 1 (Nodes)              → New 1 (Host Rules)
  *   Old 2 (VMs)                → New 2 (VM Rules)
  */
@@ -54,9 +59,10 @@ function mapLegacySubTab(v: number): number {
 export default function RulesTab({
   activeSubTab, onSubTabChange,
   clusterRules, setClusterRules,
+  clusterOptions, setClusterOptions,
   hostRulesByNode, nodesList, loadingHostRules, loadHostRules, reloadHostRulesForNode,
   vmFirewallData, loadingVMRules, loadVMFirewallData, reloadVMFirewallRules,
-  securityGroups, firewallMode, totalRules,
+  securityGroups, aliases, ipsets, firewallMode, totalRules,
   selectedConnection, reload
 }: RulesTabProps) {
   const theme = useTheme()
@@ -101,7 +107,7 @@ export default function RulesTab({
         >
           <ToggleButton value={0}>
             <i className="ri-shield-flash-line" style={{ marginRight: 6, fontSize: 16 }} />
-            {t('networkPage.distributedFirewall')}
+            {t('networkPage.clusterFirewall')}
             <Badge badgeContent={policyRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
           </ToggleButton>
           <ToggleButton value={1}>
@@ -125,6 +131,10 @@ export default function RulesTab({
           firewallMode={firewallMode}
           selectedConnection={selectedConnection}
           setClusterRules={setClusterRules}
+          clusterOptions={clusterOptions}
+          setClusterOptions={setClusterOptions}
+          aliases={aliases}
+          ipsets={ipsets}
           reload={reload}
         />
       )}
@@ -137,6 +147,8 @@ export default function RulesTab({
           selectedConnection={selectedConnection}
           loadHostRules={loadHostRules}
           reloadHostRulesForNode={reloadHostRulesForNode}
+          aliases={aliases}
+          ipsets={ipsets}
         />
       )}
       {currentTab === 2 && (
@@ -146,6 +158,8 @@ export default function RulesTab({
           selectedConnection={selectedConnection}
           loadVMFirewallData={loadVMFirewallData}
           reloadVMFirewallRules={reloadVMFirewallRules}
+          aliases={aliases}
+          ipsets={ipsets}
         />
       )}
     </Box>

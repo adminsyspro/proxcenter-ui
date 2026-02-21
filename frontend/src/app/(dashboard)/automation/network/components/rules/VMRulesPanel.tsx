@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Avatar, Box, Button, Chip, Collapse, Dialog, DialogTitle, DialogContent, DialogActions,
+  Autocomplete, Avatar, Box, Button, Chip, Collapse, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
   Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
   Typography, useTheme, alpha
@@ -21,9 +21,11 @@ interface VMRulesPanelProps {
   selectedConnection: string
   loadVMFirewallData: () => Promise<void>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
+  aliases: firewallAPI.Alias[]
+  ipsets: firewallAPI.IPSet[]
 }
 
-export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedConnection, loadVMFirewallData, reloadVMFirewallRules }: VMRulesPanelProps) {
+export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedConnection, loadVMFirewallData, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -43,6 +45,17 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     vm.node.toLowerCase().includes(vmSearchQuery.toLowerCase())
   )
 
+  const autocompleteOptions = useMemo(() => {
+    const opts: { label: string; secondary?: string }[] = []
+    for (const a of aliases) {
+      opts.push({ label: a.name, secondary: a.cidr })
+    }
+    for (const s of ipsets) {
+      opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
+    }
+    return opts
+  }, [aliases, ipsets])
+
   const toggleVM = (vmid: number) => {
     setExpandedVMs(prev => {
       const next = new Set(prev)
@@ -50,6 +63,19 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
       else next.add(vmid)
       return next
     })
+  }
+
+  // ── Toggle VM firewall ──
+  const handleToggleVMFirewall = async (vm: VMFirewallInfo) => {
+    if (!selectedConnection) return
+    const newEnable = vm.firewallEnabled ? 0 : 1
+    try {
+      await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { enable: newEnable })
+      showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
+      reloadVMFirewallRules(vm)
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    }
   }
 
   // ── CRUD handlers ──
@@ -197,12 +223,16 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                  <Chip
-                    icon={<i className={vm.firewallEnabled ? 'ri-shield-check-line' : 'ri-shield-line'} style={{ fontSize: 12 }} />}
-                    label={vm.firewallEnabled ? t('networkPage.firewallActiveLabel') : t('networkPage.firewallInactiveLabel')}
+                  <Switch
+                    checked={vm.firewallEnabled}
+                    onChange={() => handleToggleVMFirewall(vm)}
+                    color="success"
                     size="small"
-                    sx={{ bgcolor: vm.firewallEnabled ? alpha('#22c55e', 0.15) : alpha(theme.palette.divider, 0.3), color: vm.firewallEnabled ? '#22c55e' : 'text.secondary' }}
+                    disabled={!selectedConnection}
                   />
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
+                    {vm.firewallEnabled ? 'ON' : 'OFF'}
+                  </Typography>
                   <Chip label={t('networkPage.rulesCount', { count: vm.rules.length })} size="small" />
                   <Tooltip title={t('networkPage.addRule')}>
                     <IconButton size="small" color="primary" onClick={() => openVMRuleDialog(vm)}>
@@ -230,15 +260,15 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                           <TableRow>
                             <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 30, p: 0.5 }}></TableCell>
                             <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 35 }}>#</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 50 }}>Actif</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Type</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Action</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Proto</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Source</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Dest</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Port</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Commentaire</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}>Actions</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 50 }}>{t('common.active')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.type')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.action')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.proto')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.source')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.dest')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.port')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.comment')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}>{t('firewall.actions')}</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -383,13 +413,51 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
               <TextField label="Interface" value={newVMRule.iface || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, iface: e.target.value }))} fullWidth size="small" placeholder="net0" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} />
             </Grid>
             <Grid size={{ xs: 8, sm: 5 }}>
-              <TextField label="Source" value={newVMRule.source || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, source: e.target.value }))} fullWidth size="small" placeholder="192.168.1.0/24, +ipset, alias" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} />
+              <Autocomplete
+                freeSolo
+                options={autocompleteOptions}
+                getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                inputValue={newVMRule.source || ''}
+                onInputChange={(_, v) => setNewVMRule(prev => ({ ...prev, source: v }))}
+                renderOption={(props, opt) => (
+                  <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                      <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                      {typeof opt !== 'string' && opt.secondary && (
+                        <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+                      )}
+                    </Box>
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField {...params} label="Source" fullWidth size="small" placeholder="192.168.1.0/24, +ipset, alias" InputProps={{ ...params.InputProps, sx: { fontFamily: 'monospace', fontSize: 13 } }} />
+                )}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 5 }}>
               <TextField label="Port source" value={newVMRule.sport || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, sport: e.target.value }))} fullWidth size="small" placeholder="80, 1024:65535" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} disabled={!!newVMRule.macro} />
             </Grid>
             <Grid size={{ xs: 12, sm: 7 }}>
-              <TextField label="Destination" value={newVMRule.dest || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, dest: e.target.value }))} fullWidth size="small" placeholder="10.0.0.0/8, +ipset, alias" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} />
+              <Autocomplete
+                freeSolo
+                options={autocompleteOptions}
+                getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                inputValue={newVMRule.dest || ''}
+                onInputChange={(_, v) => setNewVMRule(prev => ({ ...prev, dest: v }))}
+                renderOption={(props, opt) => (
+                  <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                      <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                      {typeof opt !== 'string' && opt.secondary && (
+                        <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+                      )}
+                    </Box>
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField {...params} label="Destination" fullWidth size="small" placeholder="10.0.0.0/8, +ipset, alias" InputProps={{ ...params.InputProps, sx: { fontFamily: 'monospace', fontSize: 13 } }} />
+                )}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 5 }}>
               <TextField label="Port destination" value={newVMRule.dport || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, dport: e.target.value }))} fullWidth size="small" placeholder="22, 80, 443, 8000:9000" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} disabled={!!newVMRule.macro} />

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import {
   Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
   Collapse, Divider, IconButton, LinearProgress, Paper, Skeleton,
-  Stack, Switch, Tooltip, Typography, useTheme, alpha
+  Stack, Tooltip, Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -29,7 +29,6 @@ interface DashboardTabProps {
   totalIPSetEntries: number
   nodesList: string[]
   // Handlers
-  handleToggleClusterFirewall: () => void
   reload: () => void
   // Navigation
   onNavigateTab: (tab: number) => void
@@ -67,7 +66,7 @@ export default function DashboardTab({
   vmFirewallData, loadingVMRules, firewallMode, currentOptions,
   selectedConnection, clusterOptions, clusterRules, nodesList,
   securityGroups, totalRules,
-  handleToggleClusterFirewall, reload, onNavigateTab, onNavigateRulesSubTab
+  reload, onNavigateTab, onNavigateRulesSubTab
 }: DashboardTabProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -214,7 +213,6 @@ export default function DashboardTab({
                       <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
                         {t('security.firewall')} {firewallEnabled ? 'ON' : 'OFF'}
                       </Typography>
-                      <Switch checked={firewallEnabled} onChange={handleToggleClusterFirewall} color="success" disabled={!selectedConnection} size="small" />
                     </Box>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                       <Chip
@@ -302,7 +300,7 @@ export default function DashboardTab({
             </Typography>
             {loadingVMRules && <Chip label={t('networkPage.loading')} size="small" sx={{ height: 20, fontSize: 10 }} />}
           </Box>
-          <Button size="small" onClick={() => { onNavigateTab(3); onNavigateRulesSubTab(2) }} endIcon={<i className="ri-arrow-right-line" />}>
+          <Button size="small" onClick={() => { onNavigateTab(1); onNavigateRulesSubTab(2) }} endIcon={<i className="ri-arrow-right-line" />}>
             {t('networkPage.viewDetails')}
           </Button>
         </Box>
@@ -367,14 +365,14 @@ export default function DashboardTab({
               recommendations.push({
                 severity: 'error', icon: 'ri-shield-cross-line',
                 title: t('security.firewall') + ' ' + t('common.disabled').toLowerCase(),
-                description: t('network.activateFirewall'), action: t('common.enabled'), onClick: handleToggleClusterFirewall
+                description: t('network.activateFirewall'), action: t('networkPage.viewDetails'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(0) }
               })
             }
             if (currentOptions?.policy_in !== 'DROP') {
               recommendations.push({
                 severity: 'warning', icon: 'ri-arrow-down-line',
                 title: t('firewall.policyInPermissive'),
-                description: t('network.switchToDropZeroTrust'), action: t('microseg.configure'), onClick: () => { onNavigateTab(3); onNavigateRulesSubTab(1) }
+                description: t('network.switchToDropZeroTrust'), action: t('microseg.configure'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(1) }
               })
             }
             const unprotectedVMs = vmFirewallData.filter(v => !v.firewallEnabled)
@@ -382,15 +380,7 @@ export default function DashboardTab({
               recommendations.push({
                 severity: 'warning', icon: 'ri-computer-line',
                 title: t('network.vmsWithDisabledFirewall', { count: unprotectedVMs.length }),
-                description: t('network.enableFirewallVms'), action: t('firewall.viewVms'), onClick: () => { onNavigateTab(3); onNavigateRulesSubTab(2) }
-              })
-            }
-            const vmsWithoutSG = vmFirewallData.filter(v => v.firewallEnabled && !v.rules.some(r => r.type === 'group'))
-            if (vmsWithoutSG.length > 0 && firewallMode === 'cluster') {
-              recommendations.push({
-                severity: 'info', icon: 'ri-shield-keyhole-line',
-                title: t('firewall.vmsWithoutMicroseg', { count: vmsWithoutSG.length }),
-                description: t('microseg.clickVmToIsolate'), action: t('microseg.configure'), onClick: () => onNavigateTab(1)
+                description: t('network.enableFirewallVms'), action: t('firewall.viewVms'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(2) }
               })
             }
             if (recommendations.length === 0) {

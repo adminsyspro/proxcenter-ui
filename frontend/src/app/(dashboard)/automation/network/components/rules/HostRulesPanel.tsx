@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Avatar, Box, Button, Chip, Collapse, Dialog, DialogTitle, DialogContent, DialogActions,
-  FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
+  Autocomplete, Avatar, Box, Button, Chip, Collapse, Dialog, DialogTitle, DialogContent, DialogActions,
+  FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack, Switch,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
   Typography, useTheme, alpha
 } from '@mui/material'
@@ -22,9 +22,11 @@ interface HostRulesPanelProps {
   selectedConnection: string
   loadHostRules: () => Promise<void>
   reloadHostRulesForNode: (node: string) => Promise<void>
+  aliases: firewallAPI.Alias[]
+  ipsets: firewallAPI.IPSet[]
 }
 
-export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGroups, loadingHostRules, selectedConnection, loadHostRules, reloadHostRulesForNode }: HostRulesPanelProps) {
+export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGroups, loadingHostRules, selectedConnection, loadHostRules, reloadHostRulesForNode, aliases, ipsets }: HostRulesPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -37,6 +39,9 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   const [newHostRule, setNewHostRule] = useState<firewallAPI.CreateRuleRequest>({ ...DEFAULT_RULE })
   const [hostDragState, setHostDragState] = useState<{ node: string; draggedPos: number | null; dragOverPos: number | null }>({ node: '', draggedPos: null, dragOverPos: null })
 
+  // Per-node firewall options
+  const [nodeOptionsByNode, setNodeOptionsByNode] = useState<Record<string, firewallAPI.NodeOptions>>({})
+
   // Load host rules on mount if not already loaded
   useEffect(() => {
     if (selectedConnection && nodesList.length > 0 && Object.keys(hostRulesByNode).length === 0) {
@@ -44,9 +49,49 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     }
   }, [selectedConnection, nodesList, loadHostRules])
 
+  // Load node options for all nodes
+  useEffect(() => {
+    if (!selectedConnection || nodesList.length === 0) return
+    const fetchAll = async () => {
+      const result: Record<string, firewallAPI.NodeOptions> = {}
+      for (const node of nodesList) {
+        try {
+          result[node] = await firewallAPI.getNodeOptions(selectedConnection, node)
+        } catch { /* ignore */ }
+      }
+      setNodeOptionsByNode(result)
+    }
+    fetchAll()
+  }, [selectedConnection, nodesList])
+
   const filteredHosts = nodesList.filter(node =>
     !hostSearchQuery || node.toLowerCase().includes(hostSearchQuery.toLowerCase())
   )
+
+  const autocompleteOptions = useMemo(() => {
+    const opts: { label: string; secondary?: string }[] = []
+    for (const a of aliases) {
+      opts.push({ label: a.name, secondary: a.cidr })
+    }
+    for (const s of ipsets) {
+      opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
+    }
+    return opts
+  }, [aliases, ipsets])
+
+  // ── Toggle node firewall ──
+  const handleToggleNodeFirewall = async (node: string) => {
+    if (!selectedConnection) return
+    const current = nodeOptionsByNode[node]
+    const newEnable = current?.enable === 1 ? 0 : 1
+    try {
+      await firewallAPI.updateNodeOptions(selectedConnection, node, { enable: newEnable })
+      showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
+      setNodeOptionsByNode(prev => ({ ...prev, [node]: { ...prev[node], enable: newEnable } }))
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    }
+  }
 
   // ── CRUD handlers ──
   const handleAddHostRule = async () => {
@@ -159,6 +204,8 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
           {filteredHosts.map((node) => {
             const rules = hostRulesByNode[node] || []
             const isExpanded = expandedHosts.has(node)
+            const nodeOpts = nodeOptionsByNode[node]
+            const nodeEnabled = nodeOpts?.enable === 1
             return (
               <Paper key={node} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
                 <Box
@@ -182,6 +229,16 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      checked={nodeEnabled}
+                      onChange={() => handleToggleNodeFirewall(node)}
+                      color="success"
+                      size="small"
+                      disabled={!selectedConnection}
+                    />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: nodeEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
+                      {nodeEnabled ? 'ON' : 'OFF'}
+                    </Typography>
                     <Chip label={t('networkPage.rulesCount', { count: rules.length })} size="small" />
                     <Tooltip title={t('networkPage.addRule')}>
                       <IconButton size="small" color="primary" onClick={() => {
@@ -351,10 +408,48 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                   <TextField fullWidth size="small" label={t('firewall.protocol')} value={newHostRule.proto} onChange={(e) => setNewHostRule({ ...newHostRule, proto: e.target.value })} placeholder="tcp, udp, icmp..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label={t('firewall.source')} value={newHostRule.source} onChange={(e) => setNewHostRule({ ...newHostRule, source: e.target.value })} placeholder="IP, CIDR, alias..." />
+                  <Autocomplete
+                    freeSolo
+                    options={autocompleteOptions}
+                    getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                    inputValue={newHostRule.source || ''}
+                    onInputChange={(_, v) => setNewHostRule({ ...newHostRule, source: v })}
+                    renderOption={(props, opt) => (
+                      <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                          <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                          {typeof opt !== 'string' && opt.secondary && (
+                            <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+                          )}
+                        </Box>
+                      </li>
+                    )}
+                    renderInput={(params) => (
+                      <TextField {...params} fullWidth size="small" label={t('firewall.source')} placeholder="IP, CIDR, alias..." />
+                    )}
+                  />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField fullWidth size="small" label={t('firewall.destination')} value={newHostRule.dest} onChange={(e) => setNewHostRule({ ...newHostRule, dest: e.target.value })} placeholder="IP, CIDR, alias..." />
+                  <Autocomplete
+                    freeSolo
+                    options={autocompleteOptions}
+                    getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                    inputValue={newHostRule.dest || ''}
+                    onInputChange={(_, v) => setNewHostRule({ ...newHostRule, dest: v })}
+                    renderOption={(props, opt) => (
+                      <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                          <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                          {typeof opt !== 'string' && opt.secondary && (
+                            <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+                          )}
+                        </Box>
+                      </li>
+                    )}
+                    renderInput={(params) => (
+                      <TextField {...params} fullWidth size="small" label={t('firewall.destination')} placeholder="IP, CIDR, alias..." />
+                    )}
+                  />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
                   <TextField fullWidth size="small" label={t('firewall.destPort')} value={newHostRule.dport} onChange={(e) => setNewHostRule({ ...newHostRule, dport: e.target.value })} placeholder="22, 80, 443..." />

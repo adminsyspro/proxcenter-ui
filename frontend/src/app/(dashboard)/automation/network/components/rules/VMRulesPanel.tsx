@@ -60,12 +60,31 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   const [newVMRule, setNewVMRule] = useState<firewallAPI.CreateRuleRequest>({ ...DEFAULT_RULE })
   const [vmDragState, setVmDragState] = useState<{ vmid: number; draggedPos: number | null; dragOverPos: number | null }>({ vmid: 0, draggedPos: null, dragOverPos: null })
 
+  const [collapsedVlans, setCollapsedVlans] = useState<Set<string>>(new Set())
+
   const filteredVMData = vmFirewallData.filter(vm =>
     !vmSearchQuery ||
     vm.name.toLowerCase().includes(vmSearchQuery.toLowerCase()) ||
     vm.vmid.toString().includes(vmSearchQuery) ||
-    vm.node.toLowerCase().includes(vmSearchQuery.toLowerCase())
+    vm.node.toLowerCase().includes(vmSearchQuery.toLowerCase()) ||
+    vm.vlans.some(v => v.toString().includes(vmSearchQuery))
   )
+
+  // Group VMs by primary VLAN (first tag from net0)
+  const vlanGroups = useMemo(() => {
+    const map = new Map<string, VMFirewallInfo[]>()
+    for (const vm of filteredVMData) {
+      const key = vm.vlans.length > 0 ? String(vm.vlans[0]) : '__untagged__'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(vm)
+    }
+    // Sort: numbered VLANs ascending, then untagged last
+    return Array.from(map.entries()).sort((a, b) => {
+      if (a[0] === '__untagged__') return 1
+      if (b[0] === '__untagged__') return -1
+      return parseInt(a[0]) - parseInt(b[0])
+    })
+  }, [filteredVMData])
 
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
@@ -183,6 +202,8 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     }
   }
 
+  const vlanRowBg = alpha(theme.palette.warning.main, 0.06)
+  const vlanRowHoverBg = alpha(theme.palette.warning.main, 0.10)
   const sectionRowBg = alpha(theme.palette.primary.main, 0.06)
   const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.10)
 
@@ -234,86 +255,120 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredVMData.map(vm => {
-                const isExpanded = expandedVMs.has(vm.vmid)
+              {vlanGroups.map(([vlanKey, vms]) => {
+                const isUntagged = vlanKey === '__untagged__'
+                const vlanLabel = isUntagged ? t('networkPage.untagged') : `VLAN ${vlanKey}`
+                const isVlanCollapsed = collapsedVlans.has(vlanKey)
+                const vlanVmCount = vms.length
+                const vlanRulesCount = vms.reduce((acc, v) => acc + v.rules.length, 0)
 
                 return (
-                  <Fragment key={vm.vmid}>
-                    {/* Section header row */}
+                  <Fragment key={`vlan-${vlanKey}`}>
+                    {/* VLAN group header */}
                     <TableRow
                       sx={{
-                        bgcolor: sectionRowBg,
-                        '&:hover': { bgcolor: sectionRowHoverBg },
+                        bgcolor: vlanRowBg,
+                        '&:hover': { bgcolor: vlanRowHoverBg },
                         cursor: 'pointer',
-                        '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
+                        '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.2)}` }
                       }}
-                      onClick={() => setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })}
+                      onClick={() => setCollapsedVlans(prev => { const n = new Set(prev); if (n.has(vlanKey)) n.delete(vlanKey); else n.add(vlanKey); return n })}
                     >
                       <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-                            <i
-                              className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
-                              style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
-                            />
-                            <i
-                              className={vm.type === 'qemu' ? 'ri-computer-line' : 'ri-instance-line'}
-                              style={{ fontSize: 16, color: vm.firewallEnabled ? '#22c55e' : theme.palette.text.secondary, flexShrink: 0 }}
-                            />
-                            <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</code>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>({vm.vmid})</Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{vm.node}</Typography>
-                            <Chip
-                              label={t('firewall.rulesCount', { count: vm.rules.length })}
-                              size="small"
-                              sx={{ height: 20, fontSize: 10, ml: 0.5 }}
-                            />
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                            {vm.options && (
-                              <Stack direction="row" spacing={0.5} sx={{ mr: 1 }}>
-                                <Chip
-                                  label={`IN: ${vm.options.policy_in || 'ACCEPT'}`}
-                                  size="small"
-                                  sx={{
-                                    height: 18, fontSize: 9, fontWeight: 600,
-                                    bgcolor: vm.options.policy_in === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15),
-                                    color: vm.options.policy_in === 'DROP' ? '#ef4444' : '#22c55e'
-                                  }}
-                                />
-                                <Chip
-                                  label={`OUT: ${vm.options.policy_out || 'ACCEPT'}`}
-                                  size="small"
-                                  sx={{
-                                    height: 18, fontSize: 9, fontWeight: 600,
-                                    bgcolor: vm.options.policy_out === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15),
-                                    color: vm.options.policy_out === 'DROP' ? '#ef4444' : '#22c55e'
-                                  }}
-                                />
-                              </Stack>
-                            )}
-                            <Tooltip title={t('networkPage.addRule')}>
-                              <IconButton size="small" onClick={() => openVMRuleDialog(vm)}>
-                                <i className="ri-add-line" style={{ fontSize: 16 }} />
-                              </IconButton>
-                            </Tooltip>
-                            <Switch
-                              checked={vm.firewallEnabled}
-                              onChange={() => handleToggleVMFirewall(vm)}
-                              color="success"
-                              size="small"
-                              disabled={!selectedConnection}
-                            />
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
-                              {vm.firewallEnabled ? 'ON' : 'OFF'}
-                            </Typography>
-                          </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <i
+                            className={isVlanCollapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'}
+                            style={{ fontSize: 20, color: theme.palette.text.secondary }}
+                          />
+                          <i className={isUntagged ? 'ri-ethernet-line' : 'ri-git-branch-line'} style={{ fontSize: 16, color: isUntagged ? theme.palette.text.secondary : '#f59e0b' }} />
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13 }}>{vlanLabel}</Typography>
+                          <Chip label={`${vlanVmCount} VM${vlanVmCount > 1 ? 's' : ''}`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
+                          <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10 }} />
                         </Box>
                       </TableCell>
                     </TableRow>
 
-                    {/* Rule rows when expanded */}
-                    {isExpanded && (vm.rules.length > 0 ? vm.rules.map((rule, idx) => {
+                    {/* VMs in this VLAN group */}
+                    {!isVlanCollapsed && vms.map(vm => {
+                      const isExpanded = expandedVMs.has(vm.vmid)
+
+                      return (
+                        <Fragment key={vm.vmid}>
+                          {/* VM section header row */}
+                          <TableRow
+                            sx={{
+                              bgcolor: sectionRowBg,
+                              '&:hover': { bgcolor: sectionRowHoverBg },
+                              cursor: 'pointer',
+                              '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
+                            }}
+                            onClick={() => setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })}
+                          >
+                            <TableCell colSpan={10} sx={{ py: 1, px: 2, pl: 5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                                  <i
+                                    className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
+                                    style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
+                                  />
+                                  <i
+                                    className={vm.type === 'qemu' ? 'ri-computer-line' : 'ri-instance-line'}
+                                    style={{ fontSize: 16, color: vm.firewallEnabled ? '#22c55e' : theme.palette.text.secondary, flexShrink: 0 }}
+                                  />
+                                  <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</code>
+                                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>({vm.vmid})</Typography>
+                                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{vm.node}</Typography>
+                                  <Chip
+                                    label={t('firewall.rulesCount', { count: vm.rules.length })}
+                                    size="small"
+                                    sx={{ height: 20, fontSize: 10, ml: 0.5 }}
+                                  />
+                                </Box>
+                                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                                  {vm.options && (
+                                    <Stack direction="row" spacing={0.5} sx={{ mr: 1 }}>
+                                      <Chip
+                                        label={`IN: ${vm.options.policy_in || 'ACCEPT'}`}
+                                        size="small"
+                                        sx={{
+                                          height: 18, fontSize: 9, fontWeight: 600,
+                                          bgcolor: vm.options.policy_in === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15),
+                                          color: vm.options.policy_in === 'DROP' ? '#ef4444' : '#22c55e'
+                                        }}
+                                      />
+                                      <Chip
+                                        label={`OUT: ${vm.options.policy_out || 'ACCEPT'}`}
+                                        size="small"
+                                        sx={{
+                                          height: 18, fontSize: 9, fontWeight: 600,
+                                          bgcolor: vm.options.policy_out === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15),
+                                          color: vm.options.policy_out === 'DROP' ? '#ef4444' : '#22c55e'
+                                        }}
+                                      />
+                                    </Stack>
+                                  )}
+                                  <Tooltip title={t('networkPage.addRule')}>
+                                    <IconButton size="small" onClick={() => openVMRuleDialog(vm)}>
+                                      <i className="ri-add-line" style={{ fontSize: 16 }} />
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Switch
+                                    checked={vm.firewallEnabled}
+                                    onChange={() => handleToggleVMFirewall(vm)}
+                                    color="success"
+                                    size="small"
+                                    disabled={!selectedConnection}
+                                  />
+                                  <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
+                                    {vm.firewallEnabled ? 'ON' : 'OFF'}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+
+                          {/* Rule rows when expanded */}
+                          {isExpanded && (vm.rules.length > 0 ? vm.rules.map((rule, idx) => {
                       const isDragging = vmDragState.vmid === vm.vmid && vmDragState.draggedPos === rule.pos
                       const isDragOver = vmDragState.vmid === vm.vmid && vmDragState.dragOverPos === rule.pos
                       const isGroupRule = rule.type === 'group'
@@ -396,6 +451,9 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                         </TableCell>
                       </TableRow>
                     ))}
+                        </Fragment>
+                      )
+                    })}
                   </Fragment>
                 )
               })}

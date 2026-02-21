@@ -10,20 +10,31 @@ export interface VMFirewallInfo {
   firewallEnabled: boolean
   rules: firewallAPI.FirewallRule[]
   options: firewallAPI.VMOptions | null
+  vlans: number[]
 }
 
 // Helper: Check if firewall is enabled on any NIC from VM config
 function checkNICFirewallEnabled(config: Record<string, any>): boolean {
-  // Check net0, net1, net2, etc. for firewall=1
   for (let i = 0; i < 10; i++) {
     const netConfig = config[`net${i}`]
-
     if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
       return true
     }
   }
-
   return false
+}
+
+// Helper: Extract unique VLAN tags from NIC config (tag=XXX)
+function extractVLANs(config: Record<string, any>): number[] {
+  const vlans = new Set<number>()
+  for (let i = 0; i < 10; i++) {
+    const netConfig = config[`net${i}`]
+    if (netConfig && typeof netConfig === 'string') {
+      const match = netConfig.match(/tag=(\d+)/)
+      if (match) vlans.add(parseInt(match[1], 10))
+    }
+  }
+  return Array.from(vlans).sort((a, b) => a - b)
 }
 
 interface UseVMFirewallRulesReturn {
@@ -48,7 +59,8 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
       // Get all VMs for this connection using the correct API
       const vmsResp = await fetch(`/api/v1/vms?connId=${connectionId}`)
       const vmsData = await vmsResp.json()
-      const guests = vmsData?.data?.vms || []
+      const allGuests = vmsData?.data?.vms || []
+      const guests = allGuests.filter((g: any) => g.template !== 1)
 
       // Load firewall rules for each VM (limit to avoid too many requests)
       const vmData: VMFirewallInfo[] = []
@@ -64,6 +76,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
 
           // Firewall is "active" if enabled on at least one NIC
           const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
+          const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 
           vmData.push({
             vmid: parseInt(guest.vmid, 10),
@@ -73,7 +86,8 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
             status: guest.status,
             firewallEnabled: nicFirewallEnabled,
             rules: Array.isArray(rulesData) ? rulesData : [],
-            options: optionsData
+            options: optionsData,
+            vlans,
           })
         } catch {
           vmData.push({
@@ -84,7 +98,8 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
             status: guest.status,
             firewallEnabled: false,
             rules: [],
-            options: null
+            options: null,
+            vlans: [],
           })
         }
       }
@@ -118,13 +133,15 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
       ])
 
       const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
+      const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 
       setVMFirewallData(prev => prev.map(v =>
         v.vmid === vm.vmid ? {
           ...v,
           firewallEnabled: nicFirewallEnabled,
           rules: Array.isArray(rulesData) ? rulesData : [],
-          options: optionsData
+          options: optionsData,
+          vlans,
         } : v
       ))
     } catch (err) {

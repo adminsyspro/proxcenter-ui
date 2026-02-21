@@ -3189,6 +3189,7 @@
     "tabFirewalling": "Firewalling",
     "tabAliases": "Aliases",
     "tabIpSets": "IP Sets",
+    "untagged": "Non taggé",
     "tabRules": "Règles",
     "tabObjects": "Objets",
     "securityPosture": "Posture de sécurité",

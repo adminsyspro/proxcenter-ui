@@ -743,6 +743,8 @@ export async function GET(request: Request) {
           topCpuVms: [],
           topRamVms: [],
           connections: [],
+          green: null,
+          greenConfigured: !!greenSettings,
         }
       })
     }
@@ -1317,7 +1319,7 @@ export async function GET(request: Request) {
         overprovisioning: overprovisioningData,
 
         // Indicateurs RSE / Green IT
-        green: calculateGreenMetrics({
+        green: greenSettings ? calculateGreenMetrics({
           cpuUsedPct,
           totalCpuCapacity,
           totalRamCapacity,
@@ -1325,7 +1327,8 @@ export async function GET(request: Request) {
           runningVms,
           totalVms,
           efficiency
-        }, greenConfig),
+        }, greenConfig) : null,
+        greenConfigured: !!greenSettings,
 
         // F5: Storage per pool
         storagePools,

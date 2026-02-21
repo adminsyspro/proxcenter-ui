@@ -1655,6 +1655,7 @@ export default function SettingsPage() {
 
   // Mode onboarding : l'utilisateur doit configurer une connexion
   const isOnboarding = searchParams.get('onboarding') === 'true'
+  const tabParam = searchParams.get('tab')
 
   useEffect(() => {
     if (isOnboarding) {
@@ -1682,6 +1683,14 @@ export default function SettingsPage() {
     { label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS },
     { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS },
   ]
+
+  // Deep-link: ?tab=green opens the Green IT tab directly
+  useEffect(() => {
+    if (tabParam === 'green') {
+      const greenIdx = tabs.findIndex(t => t.component === GreenTab)
+      if (greenIdx >= 0) setMainTab(greenIdx)
+    }
+  }, [tabParam])
 
   return (
     <Box sx={{ p: 0 }}>

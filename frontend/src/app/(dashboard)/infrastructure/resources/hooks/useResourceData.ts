@@ -21,6 +21,7 @@ export function useResourceData(connectionId?: string) {
   const [topCpuVms, setTopCpuVms] = useState<TopVm[]>([])
   const [topRamVms, setTopRamVms] = useState<TopVm[]>([])
   const [green, setGreen] = useState<GreenMetrics | null>(null)
+  const [greenConfigured, setGreenConfigured] = useState(true)
   const [overprovisioning, setOverprovisioning] = useState<OverprovisioningData | null>(null)
   const [thresholds, setThresholds] = useState<ResourceThresholds>(DEFAULT_THRESHOLDS)
   const [storagePools, setStoragePools] = useState<StoragePool[]>([])
@@ -53,6 +54,7 @@ export function useResourceData(connectionId?: string) {
       setTopCpuVms(json.data.topCpuVms || [])
       setTopRamVms(json.data.topRamVms || [])
       setGreen(json.data.green || null)
+      setGreenConfigured(json.data.greenConfigured !== false)
       setOverprovisioning(json.data.overprovisioning || null)
       setThresholds(json.data.thresholds || DEFAULT_THRESHOLDS)
       setStoragePools(json.data.storagePools || [])
@@ -104,6 +106,7 @@ export function useResourceData(connectionId?: string) {
     topCpuVms,
     topRamVms,
     green,
+    greenConfigured,
     overprovisioning,
     thresholds,
     storagePools,

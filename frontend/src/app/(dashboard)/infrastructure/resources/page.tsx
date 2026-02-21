@@ -48,7 +48,7 @@ export default function ResourcesPage() {
   // Data hook
   const {
     loading, error, kpis, trends, trendsPeriod,
-    topCpuVms, topRamVms, green, overprovisioning,
+    topCpuVms, topRamVms, green, greenConfigured, overprovisioning,
     networkMetrics, connections,
     aiAnalysis, loadData, runAiAnalysis, setAiAnalysis,
   } = useResourceData(selectedConnection === 'all' ? undefined : selectedConnection)
@@ -162,7 +162,7 @@ export default function ResourcesPage() {
 
           {/* Green / RSE */}
           <Grid size={{ xs: 12 }}>
-            <GreenMetricsCard green={green} loading={loading} />
+            <GreenMetricsCard green={green} greenConfigured={greenConfigured} loading={loading} />
           </Grid>
 
           {/* Overprovisioning */}

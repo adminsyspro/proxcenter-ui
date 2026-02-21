@@ -2,6 +2,7 @@
 
 import {
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
@@ -14,6 +15,7 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 
 import type { GreenMetrics } from '../types'
 import { COLORS } from '../constants'
@@ -22,13 +24,40 @@ import {
   DirectionsCarIcon, EuroIcon, BoltIcon, CloudIcon,
 } from './icons'
 
-export default function GreenMetricsCard({ green, loading }: { green: GreenMetrics | null; loading?: boolean }) {
+export default function GreenMetricsCard({ green, greenConfigured = true, loading }: { green: GreenMetrics | null; greenConfigured?: boolean; loading?: boolean }) {
   const theme = useTheme()
   const t = useTranslations()
+  const router = useRouter()
+
+  const greenColor = '#22c55e'
+
+  if (!greenConfigured && !loading) {
+    return (
+      <Card sx={{ background: `linear-gradient(135deg, ${alpha(greenColor, 0.05)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`, border: '1px solid', borderColor: alpha(greenColor, 0.2) }}>
+        <CardContent sx={{ p: 4, textAlign: 'center' }}>
+          <Box sx={{ p: 1.5, borderRadius: 3, bgcolor: alpha(greenColor, 0.1), color: greenColor, display: 'inline-flex', mb: 2 }}>
+            <EnergySavingsLeafIcon sx={{ fontSize: 32 }} />
+          </Box>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>{t('resources.greenNotConfiguredTitle')}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 480, mx: 'auto' }}>
+            {t('resources.greenNotConfiguredDesc')}
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<i className="ri-settings-3-line" style={{ fontSize: 18 }} />}
+            onClick={() => router.push('/settings?tab=green')}
+            sx={{ bgcolor: greenColor, '&:hover': { bgcolor: alpha(greenColor, 0.85) } }}
+          >
+            {t('resources.configureGreenIt')}
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (loading || !green) {
     return (
-      <Card sx={{ background: `linear-gradient(135deg, ${alpha('#22c55e', 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`, border: '1px solid', borderColor: alpha('#22c55e', 0.2) }}>
+      <Card sx={{ background: `linear-gradient(135deg, ${alpha(greenColor, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`, border: '1px solid', borderColor: alpha(greenColor, 0.2) }}>
         <CardContent sx={{ p: 3 }}>
           <Skeleton variant="text" width="40%" height={32} sx={{ mb: 2 }} />
           <Stack direction="row" spacing={2}>
@@ -39,7 +68,6 @@ export default function GreenMetricsCard({ green, loading }: { green: GreenMetri
     )
   }
 
-  const greenColor = '#22c55e'
   const scoreColor = green.efficiency.score >= 70 ? greenColor : green.efficiency.score >= 50 ? COLORS.warning : COLORS.error
 
   return (

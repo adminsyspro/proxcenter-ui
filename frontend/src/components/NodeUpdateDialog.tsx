@@ -105,8 +105,9 @@ export default function NodeUpdateDialog({
       .then(json => {
         if (cancelled || !json.data?.standard_repos) return
 
-        const repos = json.data.standard_repos as Array<{ handle: string; status: number; name: string }>
-        const status: Record<string, number> = {}
+        // PVE returns status as Option<bool>: null=not configured, true=enabled, false=disabled
+        const repos = json.data.standard_repos as Array<{ handle: string; status: boolean | null; name: string }>
+        const status: Record<string, boolean | null> = {}
         for (const r of repos) {
           status[r.handle] = r.status
         }
@@ -114,15 +115,15 @@ export default function NodeUpdateDialog({
         const issues: string[] = []
 
         // PVE enterprise without no-subscription
-        if (status['enterprise'] === 1 && status['no-subscription'] !== 1) {
+        if (status['enterprise'] === true && status['no-subscription'] !== true) {
           issues.push('PVE Enterprise repository is enabled without a no-subscription alternative. apt update will fail without a valid PVE subscription.')
         }
 
-        // Ceph enterprise without no-subscription
+        // Ceph enterprise without no-subscription (e.g. ceph-squid-enterprise / ceph-squid-no-subscription)
         for (const [handle, s] of Object.entries(status)) {
-          if (s === 1 && handle.endsWith('-enterprise') && handle !== 'enterprise') {
+          if (s === true && handle.endsWith('-enterprise') && handle !== 'enterprise') {
             const base = handle.replace(/-enterprise$/, '')
-            if (status[`${base}-no-subscription`] !== 1) {
+            if (status[`${base}-no-subscription`] !== true) {
               issues.push(`${base} enterprise repository is enabled without a no-subscription alternative.`)
             }
           }

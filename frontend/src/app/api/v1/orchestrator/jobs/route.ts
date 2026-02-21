@@ -114,22 +114,24 @@ export async function GET(req: Request) {
         const drsData = await drsRes.json()
         const migrations: any[] = Array.isArray(drsData) ? drsData : (drsData?.data || [])
 
-        for (const m of migrations) {
+        for (let i = 0; i < migrations.length; i++) {
+          const m = migrations[i]
           let jobStatus = m.status
           if (m.status === "completed") jobStatus = "success"
 
           const drsTarget = resolve(m.connection_id)
+          const vmLabel = m.vm_name || (m.vmid ? `VM ${m.vmid}` : `Migration #${i + 1}`)
 
           jobs.push({
-            id: m.id,
-            name: `DRS Migration - ${m.vm_name || `VM ${m.vmid}`}`,
+            id: m.id || `drs-${m.connection_id || 'unknown'}-${m.vmid || i}-${m.started_at || i}`,
+            name: `DRS Migration - ${vmLabel}`,
             type: "drs",
             status: jobStatus,
             progress: jobStatus === "success" ? 100 : jobStatus === "running" ? 50 : 0,
             startedAt: m.started_at,
             endedAt: m.completed_at,
             createdAt: m.started_at,
-            detail: `${m.vm_name || `VM ${m.vmid}`}: ${m.source_node} → ${m.target_node}`,
+            detail: `${vmLabel}: ${m.source_node || '?'} → ${m.target_node || '?'}`,
             target: drsTarget,
             metadata: {
               connectionId: m.connection_id,

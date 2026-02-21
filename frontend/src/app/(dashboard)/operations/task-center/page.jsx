@@ -718,6 +718,7 @@ export default function JobsPage() {
             <DataGrid
               rows={filtered}
               columns={columns}
+              getRowId={(row) => row.id || `${row.type}-${row.name}-${row.startedAt}`}
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
               pageSizeOptions={[10, 25, 50]}

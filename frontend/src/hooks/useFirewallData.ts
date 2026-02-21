@@ -61,18 +61,17 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
       setClusterOptions(clusterOpts)
       setClusterRules(Array.isArray(clusterRulesData) ? clusterRulesData : [])
 
-      // Fetch nodes list from VMs API
+      // Fetch nodes list from dedicated nodes API (includes nodes without VMs)
       let nodes: string[] = []
 
       try {
-        const vmsResp = await fetch(`/api/v1/vms?connId=${connectionId}`)
+        const nodesResp = await fetch(`/api/v1/connections/${connectionId}/nodes`)
 
-        if (vmsResp.ok) {
-          const vmsJson = await vmsResp.json()
-          const vms = vmsJson?.data?.vms || []
+        if (nodesResp.ok) {
+          const nodesJson = await nodesResp.json()
+          const nodesData = nodesJson?.data || []
 
-          // Extract unique nodes
-          nodes = [...new Set(vms.map((vm: any) => vm.node).filter(Boolean))] as string[]
+          nodes = nodesData.map((n: any) => n.node || n.name).filter(Boolean)
           setNodesList(nodes)
         }
       } catch {

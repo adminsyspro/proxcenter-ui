@@ -236,7 +236,7 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise, t }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <TypeChip type={job.type} t={t} />
           <Typography variant="h6">{job.name}</Typography>
-          <StatusChip status={job.status} />
+          <StatusChip status={job.status} t={t} />
         </Box>
         <IconButton onClick={onClose} size="small">
           <CloseIcon />

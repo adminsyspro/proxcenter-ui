@@ -179,6 +179,7 @@ interface RollingUpdateWizardProps {
   connectionId: string
   nodes: NodeInfo[]
   nodeUpdates: Record<string, { count: number; updates: any[]; version: string | null }>
+  connectedNode?: string | null
 }
 
 const defaultConfig: RollingUpdateConfig = {
@@ -204,6 +205,7 @@ export default function RollingUpdateWizard({
   connectionId,
   nodes,
   nodeUpdates,
+  connectedNode,
 }: RollingUpdateWizardProps) {
   const t = useTranslations()
   
@@ -227,14 +229,21 @@ export default function RollingUpdateWizard({
   const [executionError, setExecutionError] = useState<string | null>(null)
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
   
-  // Initialize node order from nodes
+  // Initialize node order from nodes — place connectedNode last
   useEffect(() => {
     if (nodes.length > 0 && nodeOrder.length === 0) {
       const onlineNodes = nodes
         .filter(n => n.status === 'online')
         .map(n => n.node)
         .sort()
-      setNodeOrder(onlineNodes)
+
+      if (connectedNode && onlineNodes.includes(connectedNode)) {
+        const filtered = onlineNodes.filter(n => n !== connectedNode)
+        filtered.push(connectedNode)
+        setNodeOrder(filtered)
+      } else {
+        setNodeOrder(onlineNodes)
+      }
     }
   }, [nodes])
   
@@ -525,17 +534,35 @@ export default function RollingUpdateWizard({
                             size="small"
                           />
                         </ListItemIcon>
-                        <ListItemText 
-                          primary={node}
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {node}
+                              {connectedNode === node && (
+                                <Chip label={t('updates.apiNode')} size="small" color="info" sx={{ height: 20, fontSize: 11 }} />
+                              )}
+                            </Box>
+                          }
                           secondary={nodeUpdates[node]?.version || '—'}
                         />
                       </ListItem>
                     )
                   })}
                 </List>
+
+                {(() => {
+                  if (!connectedNode || excludedNodes.includes(connectedNode)) return null
+                  const activeNodes = nodeOrder.filter(n => !excludedNodes.includes(n))
+                  if (activeNodes.length === 0 || activeNodes[activeNodes.length - 1] === connectedNode) return null
+                  return (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      {t('updates.connectedNodeNotLast')}
+                    </Alert>
+                  )
+                })()}
               </CardContent>
             </Card>
-            
+
             {/* Basic options */}
             <Card variant="outlined">
               <CardContent>

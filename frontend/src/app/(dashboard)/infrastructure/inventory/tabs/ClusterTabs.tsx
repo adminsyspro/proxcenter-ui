@@ -2332,6 +2332,7 @@ export default function ClusterTabs(props: any) {
                         status: n.status,
                       })) || []}
                       nodeUpdates={nodeUpdates}
+                      connectedNode={data.connectedNode || null}
                     />
 
                     {/* Dialog pour afficher les mises à jour */}

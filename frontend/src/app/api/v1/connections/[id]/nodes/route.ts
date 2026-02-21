@@ -4,6 +4,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { extractHostFromUrl, extractPortFromUrl } from "@/lib/proxmox/urlUtils"
+import { setNodeIps } from "@/lib/cache/nodeIpCache"
 
 export const runtime = "nodejs"
 
@@ -61,5 +63,33 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     })
   )
 
-  return NextResponse.json({ data: enrichedNodes })
+  // Detect which node is the API endpoint (connectedNode)
+  const baseHost = extractHostFromUrl(conn.baseUrl)
+  let connectedNode: string | null = null
+
+  if (baseHost) {
+    for (const n of enrichedNodes) {
+      if (n.ip && n.ip === baseHost) {
+        connectedNode = n.node || n.name || null
+        break
+      }
+    }
+  }
+
+  // Populate the node IP cache for failover
+  const nodeIps = enrichedNodes
+    .map((n: any) => n.ip)
+    .filter((ip: any): ip is string => typeof ip === "string" && ip.length > 0)
+
+  if (nodeIps.length > 0) {
+    try {
+      const port = extractPortFromUrl(conn.baseUrl)
+      const protocol = new URL(conn.baseUrl).protocol.replace(":", "")
+      setNodeIps(id, nodeIps, port, protocol)
+    } catch {
+      // Invalid baseUrl — skip cache population
+    }
+  }
+
+  return NextResponse.json({ data: enrichedNodes, connectedNode })
 }

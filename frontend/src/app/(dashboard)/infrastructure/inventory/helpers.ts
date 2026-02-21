@@ -303,7 +303,9 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
       } catch {}
     }
 
-    const nodes = asArray<any>(safeJson(await nodesR.json()))
+    const nodesJson = await nodesR.json()
+    const nodes = asArray<any>(safeJson(nodesJson))
+    const connectedNode = nodesJson?.connectedNode || null
     const guests = asArray<any>(safeJson(await resourcesR.json()))
 
     const onlineNodes = nodes.filter((n: any) => n.status === 'online').length
@@ -385,6 +387,7 @@ return {
       },
       properties: [],
       lastUpdated,
+      connectedNode,
       nodesData,
       allVms,
       vmsCount: totalVMs,

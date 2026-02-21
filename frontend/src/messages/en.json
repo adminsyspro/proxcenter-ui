@@ -3584,7 +3584,9 @@
     "verify": "Verify",
     "startRollingUpdateBtn": "Start Rolling Update",
     "pause": "Pause",
-    "resume": "Resume"
+    "resume": "Resume",
+    "apiNode": "API node",
+    "connectedNodeNotLast": "The API node (used by ProxCenter to connect to the cluster) is not last in the update order. When this node reboots, the dashboard will be temporarily unreachable until the node comes back online. It is recommended to place the API node last."
   },
   "replication": {
     "title": "Replication",

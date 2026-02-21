@@ -3584,7 +3584,9 @@
     "verify": "Vérifier",
     "startRollingUpdateBtn": "Démarrer le Rolling Update",
     "pause": "Pause",
-    "resume": "Reprendre"
+    "resume": "Reprendre",
+    "apiNode": "Nœud API",
+    "connectedNodeNotLast": "Le nœud API (utilisé par ProxCenter pour se connecter au cluster) n'est pas en dernière position dans l'ordre de mise à jour. Lorsque ce nœud redémarrera, le tableau de bord sera temporairement inaccessible. Il est recommandé de placer le nœud API en dernier."
   },
   "replication": {
     "title": "Réplication",

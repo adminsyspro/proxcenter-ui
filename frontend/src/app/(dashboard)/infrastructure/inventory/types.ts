@@ -134,6 +134,8 @@ export type DetailsPayload = {
     }
   }
 
+  connectedNode?: string | null
+
   nodesData?: Array<{
     id: string
     connId: string
@@ -145,6 +147,7 @@ export type DetailsPayload = {
     storage: number
     vms?: number
     uptime?: number
+    ip?: string
   }>
   vmsData?: Array<{
     id: string

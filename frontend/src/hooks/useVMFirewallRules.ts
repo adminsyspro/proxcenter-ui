@@ -60,7 +60,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
       const vmsResp = await fetch(`/api/v1/vms?connId=${connectionId}`)
       const vmsData = await vmsResp.json()
       const allGuests = vmsData?.data?.vms || []
-      const guests = allGuests.filter((g: any) => g.template !== 1)
+      const guests = allGuests.filter((g: any) => !g.template)
 
       // Load firewall rules for each VM (limit to avoid too many requests)
       const vmData: VMFirewallInfo[] = []

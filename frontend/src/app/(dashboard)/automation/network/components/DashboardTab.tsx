@@ -81,18 +81,15 @@ export default function DashboardTab({
   const vmsWithFirewall = vmFirewallData.filter(v => v.firewallEnabled).length
   const totalVMs = vmFirewallData.length || 1
   const vmCoverage = (vmsWithFirewall / totalVMs) * 100
-  const vmsWithSG = vmFirewallData.filter(v => v.rules.some(r => r.type === 'group')).length
-  const sgCoverage = totalVMs > 0 ? (vmsWithSG / totalVMs) * 100 : 0
   const hasStrictPolicy = currentOptions?.policy_in === 'DROP' || currentOptions?.policy_out === 'DROP'
   const firewallEnabled = currentOptions?.enable === 1
   const unprotected = vmFirewallData.filter(v => !v.firewallEnabled).length
 
-  // Individual score components for breakdown
-  const scoreFirewall = firewallEnabled ? 20 : 0
-  const scorePolicy = hasStrictPolicy ? 15 : 0
-  const scoreVmCoverage = Math.round(vmCoverage * 0.35)
-  const scoreMicroseg = Math.round(sgCoverage * 0.30)
-  const score = scoreFirewall + scorePolicy + scoreVmCoverage + scoreMicroseg
+  // Individual score components for breakdown (now out of 100 with 3 components)
+  const scoreFirewall = firewallEnabled ? 30 : 0
+  const scorePolicy = hasStrictPolicy ? 25 : 0
+  const scoreVmCoverage = Math.round(vmCoverage * 0.45)
+  const score = scoreFirewall + scorePolicy + scoreVmCoverage
 
   const scoreColor = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
   const scoreLabel = score >= 80 ? t('networkPage.excellent') : score >= 50 ? t('networkPage.moderate') : t('networkPage.toImprove')
@@ -278,12 +275,6 @@ export default function DashboardTab({
                     points={scoreVmCoverage}
                     reason={t('networkPage.coverageReason', { percent: Math.round(vmCoverage) })}
                   />
-                  <BreakdownRow
-                    icon="ri-shield-keyhole-line"
-                    label={t('networkPage.microsegComponent')}
-                    points={scoreMicroseg}
-                    reason={t('networkPage.microsegReason', { percent: Math.round(sgCoverage) })}
-                  />
                 </Box>
               </Collapse>
             </>
@@ -317,12 +308,6 @@ export default function DashboardTab({
                 size="small"
                 sx={{ height: 28, fontWeight: 600, bgcolor: alpha('#22c55e', 0.08), '& .MuiChip-label': { fontSize: 12 } }}
               />
-              <Chip
-                icon={<i className="ri-shield-keyhole-line" style={{ fontSize: 14, color: '#8b5cf6' }} />}
-                label={`${t('networkPage.withSgCount')}: ${vmsWithSG}/${vmFirewallData.length}`}
-                size="small"
-                sx={{ height: 28, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.08), '& .MuiChip-label': { fontSize: 12 } }}
-              />
               {unprotected > 0 && (
                 <Chip
                   icon={<i className="ri-error-warning-line" style={{ fontSize: 14, color: '#ef4444' }} />}
@@ -340,13 +325,6 @@ export default function DashboardTab({
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>{Math.round((vmsWithFirewall / totalVMs) * 100)}%</Typography>
               </Box>
               <LinearProgress variant="determinate" value={(vmsWithFirewall / totalVMs) * 100} sx={{ height: 10, borderRadius: 5, bgcolor: alpha('#ef4444', 0.15), '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 5 } }} />
-            </Box>
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.microSegmentation')}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>{Math.round((vmsWithSG / totalVMs) * 100)}%</Typography>
-              </Box>
-              <LinearProgress variant="determinate" value={(vmsWithSG / totalVMs) * 100} sx={{ height: 10, borderRadius: 5, bgcolor: alpha(theme.palette.divider, 0.2), '& .MuiLinearProgress-bar': { bgcolor: '#8b5cf6', borderRadius: 5 } }} />
             </Box>
           </Stack>
         )}

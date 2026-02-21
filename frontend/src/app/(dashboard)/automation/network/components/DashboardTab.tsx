@@ -44,9 +44,8 @@ export default function DashboardTab({
   const t = useTranslations()
   const [deployWizardOpen, setDeployWizardOpen] = useState(false)
 
-  // Virgin cluster detection
-  const isVirginCluster = firewallMode === 'cluster'
-    && clusterOptions?.enable !== 1
+  // Virgin cluster detection (works for both cluster and standalone — PVE always has cluster-level firewall)
+  const isVirginCluster = clusterOptions?.enable !== 1
     && clusterRules.length === 0
 
   // Compute shared metrics

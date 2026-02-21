@@ -21,8 +21,6 @@ import {
   Typography,
 } from '@mui/material'
 
-import ReportPreview from './ReportPreview'
-
 interface ReportType {
   type: string
   name: string
@@ -121,9 +119,7 @@ export default function ReportGenerator({ reportTypes, languages, onGenerate, lo
         {t('reports.newReport')}
       </Typography>
 
-      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
-      {/* Left side — Form */}
-      <Box sx={{ flex: '1 1 0', minWidth: 0, maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 800 }}>
         {/* Report Type Selection */}
         <FormControl fullWidth>
           <InputLabel>{t('reports.reportType')}</InputLabel>
@@ -250,12 +246,6 @@ export default function ReportGenerator({ reportTypes, languages, onGenerate, lo
             {generating ? t('reports.generating') : t('reports.generate')}
           </Button>
         </Box>
-      </Box>
-
-      {/* Right side — Preview */}
-      <Box sx={{ flex: '1 1 0', minWidth: 0, display: { xs: 'none', md: 'block' } }}>
-        <ReportPreview type={selectedType} />
-      </Box>
       </Box>
     </Box>
   )

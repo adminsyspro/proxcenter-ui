@@ -37,9 +37,10 @@ interface UseVMFirewallRulesReturn {
 export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRulesReturn {
   const [vmFirewallData, setVMFirewallData] = useState<VMFirewallInfo[]>([])
   const [loadingVMRules, setLoadingVMRules] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   const loadVMFirewallData = useCallback(async () => {
-    if (!connectionId) return
+    if (!connectionId || loaded) return
 
     setLoadingVMRules(true)
 
@@ -101,8 +102,9 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
       setVMFirewallData([])
     } finally {
       setLoadingVMRules(false)
+      setLoaded(true)
     }
-  }, [connectionId])
+  }, [connectionId, loaded])
 
   // Reload only one VM's firewall data
   const reloadVMFirewallRules = useCallback(async (vm: VMFirewallInfo) => {
@@ -130,11 +132,16 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
     }
   }, [connectionId])
 
+  const resetVMFirewallData: typeof setVMFirewallData = (value) => {
+    setVMFirewallData(value)
+    setLoaded(false)
+  }
+
   return {
     vmFirewallData,
     loadingVMRules,
     loadVMFirewallData,
     reloadVMFirewallRules,
-    setVMFirewallData,
+    setVMFirewallData: resetVMFirewallData,
   }
 }

@@ -78,6 +78,10 @@ interface PreflightResult {
   can_proceed: boolean
   warnings: string[]
   errors: string[]
+  repo_issues: Array<{
+    node: string
+    message: string
+  }>
   cluster_health: {
     healthy: boolean
     quorum_ok: boolean
@@ -716,6 +720,35 @@ export default function RollingUpdateWizard({
               </Card>
             )}
             
+            {/* Repository Issues */}
+            {preflightResult.repo_issues && preflightResult.repo_issues.length > 0 && (
+              <Card variant="outlined" sx={{ borderColor: 'error.main' }}>
+                <CardContent>
+                  <Typography variant="subtitle2" color="error" fontWeight={700} gutterBottom>
+                    <i className="ri-archive-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'text-bottom' }} />
+                    {t('updates.repoIssuesTitle', { count: preflightResult.repo_issues.length })}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    {t('updates.repoIssuesDescription')}
+                  </Typography>
+                  <List dense>
+                    {preflightResult.repo_issues.map((issue, i) => (
+                      <ListItem key={i}>
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          <i className="ri-server-line" style={{ fontSize: 16 }} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={issue.node}
+                          secondary={issue.message}
+                          primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Warnings */}
             {preflightResult.warnings && preflightResult.warnings.length > 0 && (
               <Card variant="outlined" sx={{ borderColor: 'warning.main' }}>

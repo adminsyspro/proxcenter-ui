@@ -3492,6 +3492,8 @@
     "checksBlockingIssues": "Issues are preventing the rolling update",
     "errorsCount": "Errors ({count})",
     "warningsCount": "Warnings ({count})",
+    "repoIssuesTitle": "Repository Issues ({count})",
+    "repoIssuesDescription": "Enterprise repositories are enabled without a no-subscription alternative. Update commands will fail without a valid Proxmox subscription. Enable the no-subscription repository or disable the enterprise repository on the affected nodes.",
     "clusterHealth": "Cluster Health",
     "quorumOk": "Quorum OK",
     "quorumLost": "Quorum lost",

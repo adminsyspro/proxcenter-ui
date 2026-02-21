@@ -3492,6 +3492,8 @@
     "checksBlockingIssues": "Des problèmes empêchent le rolling update",
     "errorsCount": "Erreurs ({count})",
     "warningsCount": "Avertissements ({count})",
+    "repoIssuesTitle": "Problèmes de dépôts ({count})",
+    "repoIssuesDescription": "Des dépôts enterprise sont activés sans alternative no-subscription. Les commandes de mise à jour échoueront sans un abonnement Proxmox valide. Activez le dépôt no-subscription ou désactivez le dépôt enterprise sur les nœuds concernés.",
     "clusterHealth": "Santé du cluster",
     "quorumOk": "Quorum OK",
     "quorumLost": "Quorum perdu",

@@ -85,8 +85,67 @@ export default function NodeUpdateDialog({
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const logsEndRef = useRef<HTMLDivElement | null>(null)
 
+  // Repository check
+  const [repoIssues, setRepoIssues] = useState<string[]>([])
+  const [repoChecking, setRepoChecking] = useState(false)
+
   const nodeUpdate = nodeUpdates?.[nodeName]
   const pkgCount = nodeUpdate?.count || 0
+
+  // Check repository configuration when dialog opens
+  useEffect(() => {
+    if (!open || !connectionId || !nodeName) return
+
+    let cancelled = false
+    setRepoChecking(true)
+    setRepoIssues([])
+
+    fetch(`/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/apt/repositories`)
+      .then(res => res.json())
+      .then(json => {
+        if (cancelled || !json.data?.standard_repos) return
+
+        const repos = json.data.standard_repos as Array<{ handle: string; status: number; name: string }>
+        const status: Record<string, number> = {}
+        for (const r of repos) {
+          status[r.handle] = r.status
+        }
+
+        const issues: string[] = []
+
+        // PVE enterprise without no-subscription
+        if (status['enterprise'] === 1 && status['no-subscription'] !== 1) {
+          issues.push('PVE Enterprise repository is enabled without a no-subscription alternative. apt update will fail without a valid PVE subscription.')
+        }
+
+        // Ceph enterprise without no-subscription
+        for (const [handle, s] of Object.entries(status)) {
+          if (s === 1 && handle.endsWith('-enterprise') && handle !== 'enterprise') {
+            const base = handle.replace(/-enterprise$/, '')
+            if (status[`${base}-no-subscription`] !== 1) {
+              issues.push(`${base} enterprise repository is enabled without a no-subscription alternative.`)
+            }
+          }
+        }
+
+        // Repo errors from PVE
+        if (json.data.errors?.length) {
+          for (const e of json.data.errors) {
+            issues.push(`Repository error: ${e.message}`)
+          }
+        }
+
+        setRepoIssues(issues)
+      })
+      .catch(() => {
+        // Ignore - repo check is best-effort
+      })
+      .finally(() => {
+        if (!cancelled) setRepoChecking(false)
+      })
+
+    return () => { cancelled = true }
+  }, [open, connectionId, nodeName])
 
   // Cleanup polling
   useEffect(() => {
@@ -242,6 +301,26 @@ export default function NodeUpdateDialog({
         {/* Step 0: Configuration */}
         {activeStep === 0 && (
           <Stack spacing={2.5}>
+            {/* Repository issues warning */}
+            {repoIssues.length > 0 && (
+              <Alert
+                severity="error"
+                icon={<i className="ri-archive-line" style={{ fontSize: 20 }} />}
+              >
+                <Typography variant="body2" fontWeight={600}>
+                  {t('updates.repoIssuesTitle', { count: repoIssues.length })}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  {t('updates.repoIssuesDescription')}
+                </Typography>
+                {repoIssues.map((issue, i) => (
+                  <Typography key={i} variant="caption" sx={{ display: 'block' }}>
+                    &bull; {issue}
+                  </Typography>
+                ))}
+              </Alert>
+            )}
+
             {/* Package summary */}
             <Card variant="outlined">
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -496,7 +575,7 @@ export default function NodeUpdateDialog({
               variant="contained"
               color="warning"
               onClick={startUpdate}
-              disabled={loading || pkgCount === 0}
+              disabled={loading || pkgCount === 0 || repoIssues.length > 0 || repoChecking}
               startIcon={loading ? <CircularProgress size={16} /> : <i className="ri-play-circle-line" style={{ fontSize: 18 }} />}
             >
               {t('updates.startUpdate')}

@@ -1,15 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { Box, CircularProgress, Typography } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
-import { ReactFlowProvider } from '@xyflow/react'
-import { Box, Card, alpha, useTheme } from '@mui/material'
-
-import type { SecurityMapFilters, SelectedMapItem } from './types'
 import { useSecurityMapData } from './hooks/useSecurityMapData'
-import SecurityMapCanvas from './SecurityMapCanvas'
-import SecurityMapToolbar from './SecurityMapToolbar'
-import SecurityMapSidebar from './SecurityMapSidebar'
 import FlowMatrix from './FlowMatrix'
 
 interface SecurityMapTabProps {
@@ -24,55 +18,42 @@ export default function SecurityMapTab({
   connectionId,
   securityGroups,
   aliases,
-  clusterOptions,
   clusterRules,
 }: SecurityMapTabProps) {
-  const theme = useTheme()
-  const [filters, setFilters] = useState<SecurityMapFilters>({
-    hideInfraNetworks: true,
-    hideStoppedVms: false,
-  })
-  const [selected, setSelected] = useState<SelectedMapItem | null>(null)
+  const t = useTranslations('networkPage')
 
-  const { nodes, edges, loading, flowMatrix } = useSecurityMapData({
+  const { loading, flowMatrix } = useSecurityMapData({
     connectionId,
     securityGroups,
     aliases,
-    clusterOptions,
     clusterRules,
-    filters,
   })
 
-  return (
-    <ReactFlowProvider>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 2 }}>
-        <SecurityMapToolbar filters={filters} onChange={setFilters} />
-
-        <Card
-          sx={{
-            position: 'relative',
-            overflow: 'hidden',
-            height: 500,
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-          }}
-        >
-          <SecurityMapCanvas
-            nodes={nodes}
-            edges={edges}
-            isLoading={loading}
-            flowMatrix={flowMatrix}
-            onSelect={setSelected}
-          />
-          {selected && (
-            <SecurityMapSidebar
-              selected={selected}
-              onClose={() => setSelected(null)}
-            />
-          )}
-        </Card>
-
-        <FlowMatrix flowMatrix={flowMatrix} />
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+        <CircularProgress size={32} />
       </Box>
-    </ReactFlowProvider>
+    )
+  }
+
+  if (flowMatrix.labels.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 6, gap: 1 }}>
+        <i className='ri-shield-cross-line' style={{ fontSize: 48, opacity: 0.3 }} />
+        <Typography variant='h6' color='text.secondary'>
+          {t('securityMap.noData')}
+        </Typography>
+        <Typography variant='body2' color='text.secondary'>
+          {t('securityMap.noDataDesc')}
+        </Typography>
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ p: 2 }}>
+      <FlowMatrix flowMatrix={flowMatrix} />
+    </Box>
   )
 }

@@ -3041,6 +3041,8 @@
     "authHeader": "Auth"
   },
   "networkPage": {
+    "devNoticeTitle": "Fonctionnalité en cours de développement",
+    "devNoticeDesc": "Ce module est encore en cours de développement. Certaines fonctionnalités peuvent ne pas fonctionner comme prévu et sont susceptibles de changer.",
     "vmFirewallCoverage": "Couverture Firewall des VMs",
     "noRules": "Aucune règle",
     "potentiallyAffectedInNetwork": "potentiellement affectées dans le même réseau",

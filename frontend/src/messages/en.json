@@ -3036,6 +3036,8 @@
     "authHeader": "Auth"
   },
   "networkPage": {
+    "devNoticeTitle": "Feature under active development",
+    "devNoticeDesc": "This module is still being developed. Some features may not work as expected and are subject to change.",
     "vmFirewallCoverage": "VM Firewall Coverage",
     "noRules": "No rules",
     "potentiallyAffectedInNetwork": "potentially affected in the same network",

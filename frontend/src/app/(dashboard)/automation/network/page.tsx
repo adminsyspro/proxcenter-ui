@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Card, FormControl, IconButton, InputLabel, MenuItem,
-  Select, Tab, Tabs, useTheme, alpha
+  Select, Tab, Tabs, Typography, useTheme, alpha
 } from '@mui/material'
 
 import { usePageTitle } from "@/contexts/PageTitleContext"
@@ -112,6 +112,20 @@ export default function NetworkAutomationPage() {
   return (
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
       <Box sx={{ minHeight: '100vh', p: 3 }}>
+
+        {/* Development notice */}
+        <Alert
+          severity="warning"
+          sx={{ mb: 3, borderRadius: 2 }}
+          icon={<i className="ri-hammer-line" style={{ fontSize: 20 }} />}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t('networkPage.devNoticeTitle')}
+          </Typography>
+          <Typography variant="body2">
+            {t('networkPage.devNoticeDesc')}
+          </Typography>
+        </Alert>
 
         {/* Connection Selector */}
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>

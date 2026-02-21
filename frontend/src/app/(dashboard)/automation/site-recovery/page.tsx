@@ -8,10 +8,9 @@ import {
   Box, Button, Chip, Tab, Tabs
 } from '@mui/material'
 
-import { Alert, Typography } from '@mui/material'
+import { Typography } from '@mui/material'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import EmptyState from '@/components/EmptyState'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 
@@ -279,13 +278,54 @@ export default function SiteRecoveryPage() {
   return (
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
       {connectionsLoaded && !hasCephCluster ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 8 }}>
-          <EmptyState
-            icon="ri-database-2-line"
-            title={t('siteRecovery.noCeph')}
-            description={t('siteRecovery.noCephDesc')}
-            size="large"
-          />
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+          {/* Icon cluster */}
+          <Box sx={{ position: 'relative', width: 120, height: 120, mb: 3 }}>
+            <Box sx={{
+              position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+              width: 80, height: 80, borderRadius: '50%',
+              bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <i className="ri-database-2-line" style={{ fontSize: 36, opacity: 0.25 }} />
+            </Box>
+            <Box sx={{
+              position: 'absolute', top: 0, right: 6,
+              width: 36, height: 36, borderRadius: '50%',
+              bgcolor: 'background.paper', border: '2px solid', borderColor: 'divider',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <i className="ri-shield-star-line" style={{ fontSize: 18, opacity: 0.35 }} />
+            </Box>
+            <Box sx={{
+              position: 'absolute', bottom: 2, left: 4,
+              width: 36, height: 36, borderRadius: '50%',
+              bgcolor: 'background.paper', border: '2px solid', borderColor: 'divider',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <i className="ri-refresh-line" style={{ fontSize: 18, opacity: 0.35 }} />
+            </Box>
+          </Box>
+
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
+            {t('siteRecovery.noCeph')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420, textAlign: 'center', mb: 3 }}>
+            {t('siteRecovery.noCephDesc')}
+          </Typography>
+
+          {/* Feature hints */}
+          <Box sx={{ display: 'flex', gap: 3 }}>
+            {[
+              { icon: 'ri-refresh-line', label: t('siteRecovery.noCephFeatureReplication') },
+              { icon: 'ri-file-shield-2-line', label: t('siteRecovery.noCephFeatureRecovery') },
+              { icon: 'ri-alarm-warning-line', label: t('siteRecovery.noCephFeatureEmergency') },
+            ].map((f) => (
+              <Box key={f.icon} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: 0.5 }}>
+                <i className={f.icon} style={{ fontSize: 16 }} />
+                <Typography variant="caption">{f.label}</Typography>
+              </Box>
+            ))}
+          </Box>
         </Box>
       ) : (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>

@@ -2058,6 +2058,9 @@
     "subtitle": "Ceph RBD cross-cluster replication & disaster recovery",
     "noCeph": "No Ceph cluster detected",
     "noCephDesc": "Site Recovery requires at least one PVE connection with Ceph enabled. Enable Ceph on a connection in Settings > Connections to get started.",
+    "noCephFeatureReplication": "Cross-cluster replication",
+    "noCephFeatureRecovery": "Recovery plans",
+    "noCephFeatureEmergency": "Emergency DR",
     "tabs": {
       "dashboard": "Dashboard",
       "replication": "Replication",

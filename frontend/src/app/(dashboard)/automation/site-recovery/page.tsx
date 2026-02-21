@@ -96,7 +96,8 @@ export default function SiteRecoveryPage() {
     (connectionsData?.data || []).map((c: any) => ({ id: c.id, name: c.name, hasCeph: c.hasCeph }))
   , [connectionsData])
 
-  const hasCephCluster = connections.some(c => c.hasCeph)
+  const cephClusterCount = connections.filter(c => c.hasCeph).length
+  const hasEnoughCephClusters = cephClusterCount >= 2
   const connectionsLoaded = !!connectionsData
 
   // All VMs for create job dialog
@@ -277,7 +278,7 @@ export default function SiteRecoveryPage() {
 
   return (
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
-      {connectionsLoaded && !hasCephCluster ? (
+      {connectionsLoaded && !hasEnoughCephClusters ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
           {/* Icon cluster */}
           <Box sx={{ position: 'relative', width: 120, height: 120, mb: 3 }}>
@@ -307,10 +308,10 @@ export default function SiteRecoveryPage() {
           </Box>
 
           <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
-            {t('siteRecovery.noCeph')}
+            {cephClusterCount === 0 ? t('siteRecovery.noCeph') : t('siteRecovery.oneCeph')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420, textAlign: 'center', mb: 3 }}>
-            {t('siteRecovery.noCephDesc')}
+            {cephClusterCount === 0 ? t('siteRecovery.noCephDesc') : t('siteRecovery.oneCephDesc')}
           </Typography>
 
           {/* Feature hints */}

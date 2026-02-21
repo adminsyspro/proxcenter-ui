@@ -3231,7 +3231,10 @@
     "doneViewRules": "View rules",
     "doneClose": "Close",
     "next": "Next",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "customAdd": "Add",
+    "customComment": "Description",
+    "customCommentPlaceholder": "e.g. HTTPS, Monitoring…"
   },
   "firewall": {
     "type": "Type",

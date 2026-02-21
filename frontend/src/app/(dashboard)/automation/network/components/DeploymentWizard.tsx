@@ -5,10 +5,10 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Avatar, Box, Button, Checkbox, Chip, CircularProgress,
-  Dialog, DialogContent, DialogTitle, FormControlLabel,
-  IconButton, LinearProgress, Step, StepLabel, Stepper,
+  Dialog, DialogContent, DialogTitle, FormControl, FormControlLabel,
+  IconButton, InputLabel, LinearProgress, MenuItem, Select, Step, StepLabel, Stepper,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Typography, useTheme, alpha
+  TextField, Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -59,7 +59,11 @@ export default function DeploymentWizard({
 
   // ── State ──
   const [activeStep, setActiveStep] = useState(0)
-  const [ruleStatuses, setRuleStatuses] = useState<RuleStatus[]>(CLUSTER_RULES.map(() => 'pending'))
+  const [customRules, setCustomRules] = useState<ClusterWhitelistRule[]>([])
+  const [newRuleProto, setNewRuleProto] = useState('tcp')
+  const [newRuleDport, setNewRuleDport] = useState('')
+  const [newRuleComment, setNewRuleComment] = useState('')
+  const [ruleStatuses, setRuleStatuses] = useState<RuleStatus[]>([])
   const [applyDone, setApplyDone] = useState(false)
   const [applyErrors, setApplyErrors] = useState(0)
   const [enableFirewall, setEnableFirewall] = useState(true)
@@ -68,12 +72,19 @@ export default function DeploymentWizard({
   const [activateDone, setActivateDone] = useState(false)
   const [skippedActivation, setSkippedActivation] = useState(false)
 
+  // All rules = predefined + custom
+  const allRules = [...CLUSTER_RULES, ...customRules]
+
   // ── Reset on close ──
   const handleClose = useCallback(() => {
     onClose()
     setTimeout(() => {
       setActiveStep(0)
-      setRuleStatuses(CLUSTER_RULES.map(() => 'pending'))
+      setCustomRules([])
+      setNewRuleProto('tcp')
+      setNewRuleDport('')
+      setNewRuleComment('')
+      setRuleStatuses([])
       setApplyDone(false)
       setApplyErrors(0)
       setEnableFirewall(true)
@@ -84,16 +95,39 @@ export default function DeploymentWizard({
     }, 300)
   }, [onClose])
 
+  // ── Custom rules ──
+  const handleAddCustomRule = () => {
+    if (!newRuleDport.trim()) return
+    setCustomRules(prev => [...prev, {
+      service: newRuleComment.trim() || `Custom (${newRuleProto.toUpperCase()} ${newRuleDport})`,
+      proto: newRuleProto,
+      dport: newRuleDport.trim(),
+      comment: newRuleComment.trim() || `Custom - ${newRuleProto.toUpperCase()} ${newRuleDport.trim()}`,
+    }])
+    setNewRuleDport('')
+    setNewRuleComment('')
+  }
+
+  const handleRemoveCustomRule = (idx: number) => {
+    setCustomRules(prev => prev.filter((_, i) => i !== idx))
+  }
+
   // ── Step 2: Apply rules sequentially ──
   useEffect(() => {
     if (activeStep !== 2 || applyDone) return
+    // Initialize statuses for all rules on first entry
+    if (ruleStatuses.length !== allRules.length) {
+      setRuleStatuses(allRules.map(() => 'pending'))
+      return
+    }
 
     let cancelled = false
+    const rulesToApply = allRules
 
     const applyRules = async () => {
       let errors = 0
 
-      for (let i = 0; i < CLUSTER_RULES.length; i++) {
+      for (let i = 0; i < rulesToApply.length; i++) {
         if (cancelled) return
 
         setRuleStatuses(prev => {
@@ -107,9 +141,9 @@ export default function DeploymentWizard({
             type: 'in',
             action: 'ACCEPT',
             enable: 1,
-            proto: CLUSTER_RULES[i].proto,
-            dport: CLUSTER_RULES[i].dport,
-            comment: CLUSTER_RULES[i].comment,
+            proto: rulesToApply[i].proto,
+            dport: rulesToApply[i].dport,
+            comment: rulesToApply[i].comment,
           })
 
           if (!cancelled) {
@@ -139,7 +173,7 @@ export default function DeploymentWizard({
 
     applyRules()
     return () => { cancelled = true }
-  }, [activeStep, applyDone, selectedConnection])
+  }, [activeStep, applyDone, selectedConnection, ruleStatuses.length, allRules.length])
 
   // ── Step 3: Activate ──
   const handleActivate = async () => {
@@ -208,7 +242,7 @@ export default function DeploymentWizard({
   const renderPreview = () => (
     <Box sx={{ py: 2 }}>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>{t('previewTitle')}</Typography>
-      <Alert severity="info" sx={{ mb: 2 }}>{t('previewDescription', { count: CLUSTER_RULES.length })}</Alert>
+      <Alert severity="info" sx={{ mb: 2 }}>{t('previewDescription', { count: allRules.length })}</Alert>
       <TableContainer sx={{ mb: 2 }}>
         <Table size="small">
           <TableHead>
@@ -218,21 +252,91 @@ export default function DeploymentWizard({
               <TableCell sx={{ fontWeight: 700 }}>{t('previewPorts')}</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>{t('previewDirection')}</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>{t('previewAction')}</TableCell>
+              <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
             {CLUSTER_RULES.map((rule, idx) => (
-              <TableRow key={idx}>
-                <TableCell>{rule.service}</TableCell>
+              <TableRow key={`builtin-${idx}`}>
+                <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <i className="ri-lock-line" style={{ fontSize: 13, color: theme.palette.text.disabled }} />
+                    {rule.service}
+                  </Box>
+                </TableCell>
                 <TableCell><Chip label={rule.proto.toUpperCase()} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
                 <TableCell sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{rule.dport}</TableCell>
                 <TableCell><Chip label="IN" size="small" color="info" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
                 <TableCell><Chip label="ACCEPT" size="small" color="success" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
+                <TableCell />
+              </TableRow>
+            ))}
+            {customRules.map((rule, idx) => (
+              <TableRow key={`custom-${idx}`} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
+                <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <i className="ri-user-line" style={{ fontSize: 13, color: theme.palette.primary.main }} />
+                    {rule.service}
+                  </Box>
+                </TableCell>
+                <TableCell><Chip label={rule.proto.toUpperCase()} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
+                <TableCell sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{rule.dport}</TableCell>
+                <TableCell><Chip label="IN" size="small" color="info" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
+                <TableCell><Chip label="ACCEPT" size="small" color="success" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
+                <TableCell>
+                  <IconButton size="small" onClick={() => handleRemoveCustomRule(idx)}>
+                    <i className="ri-delete-bin-line" style={{ fontSize: 15, color: '#ef4444' }} />
+                  </IconButton>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Add custom rule form */}
+      <Box sx={{
+        display: 'flex', gap: 1, alignItems: 'flex-end', mb: 2, p: 1.5,
+        borderRadius: 1.5, border: `1px dashed ${alpha(theme.palette.divider, 0.3)}`,
+        bgcolor: alpha(theme.palette.divider, 0.02)
+      }}>
+        <FormControl size="small" sx={{ minWidth: 90 }}>
+          <InputLabel>{t('previewProtocol')}</InputLabel>
+          <Select value={newRuleProto} label={t('previewProtocol')} onChange={e => setNewRuleProto(e.target.value)}>
+            <MenuItem value="tcp">TCP</MenuItem>
+            <MenuItem value="udp">UDP</MenuItem>
+          </Select>
+        </FormControl>
+        <TextField
+          size="small"
+          label={t('previewPorts')}
+          placeholder="443 | 8080:8090"
+          value={newRuleDport}
+          onChange={e => setNewRuleDport(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleAddCustomRule() }}
+          sx={{ flex: 1, minWidth: 120 }}
+        />
+        <TextField
+          size="small"
+          label={t('customComment')}
+          placeholder={t('customCommentPlaceholder')}
+          value={newRuleComment}
+          onChange={e => setNewRuleComment(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleAddCustomRule() }}
+          sx={{ flex: 2 }}
+        />
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={handleAddCustomRule}
+          disabled={!newRuleDport.trim()}
+          startIcon={<i className="ri-add-line" />}
+          sx={{ height: 40, flexShrink: 0 }}
+        >
+          {t('customAdd')}
+        </Button>
+      </Box>
+
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
         <Button variant="text" onClick={handleClose}>{t('cancel')}</Button>
         <Button variant="contained" onClick={() => setActiveStep(2)}>{t('next')}</Button>
@@ -244,10 +348,10 @@ export default function DeploymentWizard({
     <Box sx={{ py: 2 }}>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>{t('applyTitle')}</Typography>
       {!applyDone && (
-        <LinearProgress variant="determinate" value={(successCount / CLUSTER_RULES.length) * 100} sx={{ mb: 2, height: 6, borderRadius: 3 }} />
+        <LinearProgress variant="determinate" value={allRules.length > 0 ? (successCount / allRules.length) * 100 : 0} sx={{ mb: 2, height: 6, borderRadius: 3 }} />
       )}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
-        {CLUSTER_RULES.map((rule, idx) => (
+        {allRules.map((rule, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1, bgcolor: alpha(theme.palette.divider, 0.04) }}>
             {ruleStatuses[idx] === 'pending' && (
               <i className="ri-time-line" style={{ fontSize: 18, color: theme.palette.text.disabled }} />
@@ -273,10 +377,10 @@ export default function DeploymentWizard({
         ))}
       </Box>
       {applyDone && applyErrors === 0 && (
-        <Alert severity="success" sx={{ mb: 2 }}>{t('applyComplete', { count: CLUSTER_RULES.length })}</Alert>
+        <Alert severity="success" sx={{ mb: 2 }}>{t('applyComplete', { count: allRules.length })}</Alert>
       )}
       {applyDone && applyErrors > 0 && (
-        <Alert severity="warning" sx={{ mb: 2 }}>{t('applyPartial', { success: successCount, total: CLUSTER_RULES.length, failed: applyErrors })}</Alert>
+        <Alert severity="warning" sx={{ mb: 2 }}>{t('applyPartial', { success: successCount, total: allRules.length, failed: applyErrors })}</Alert>
       )}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button variant="contained" disabled={!applyDone} onClick={() => setActiveStep(3)}>{t('next')}</Button>

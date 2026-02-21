@@ -3236,7 +3236,10 @@
     "doneViewRules": "Voir les règles",
     "doneClose": "Fermer",
     "next": "Suivant",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "customAdd": "Ajouter",
+    "customComment": "Description",
+    "customCommentPlaceholder": "ex. HTTPS, Monitoring…"
   },
   "firewall": {
     "type": "Type",

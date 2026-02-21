@@ -263,33 +263,11 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                             <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</code>
                             <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>({vm.vmid})</Typography>
                             <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{vm.node}</Typography>
-                            <Chip label={vm.type.toUpperCase()} size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700 }} />
-                            <Chip
-                              label={vm.status}
-                              size="small"
-                              sx={{
-                                height: 18, fontSize: 9,
-                                bgcolor: vm.status === 'running' ? alpha('#22c55e', 0.15) : alpha('#ef4444', 0.15),
-                                color: vm.status === 'running' ? '#22c55e' : '#ef4444'
-                              }}
-                            />
                             <Chip
                               label={t('firewall.rulesCount', { count: vm.rules.length })}
                               size="small"
                               sx={{ height: 20, fontSize: 10, ml: 0.5 }}
                             />
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }} onClick={e => e.stopPropagation()}>
-                              <Switch
-                                checked={vm.firewallEnabled}
-                                onChange={() => handleToggleVMFirewall(vm)}
-                                color="success"
-                                size="small"
-                                disabled={!selectedConnection}
-                              />
-                              <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
-                                {vm.firewallEnabled ? 'ON' : 'OFF'}
-                              </Typography>
-                            </Box>
                           </Box>
                           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                             {vm.options && (
@@ -319,6 +297,16 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                 <i className="ri-add-line" style={{ fontSize: 16 }} />
                               </IconButton>
                             </Tooltip>
+                            <Switch
+                              checked={vm.firewallEnabled}
+                              onChange={() => handleToggleVMFirewall(vm)}
+                              color="success"
+                              size="small"
+                              disabled={!selectedConnection}
+                            />
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
+                              {vm.firewallEnabled ? 'ON' : 'OFF'}
+                            </Typography>
                           </Box>
                         </Box>
                       </TableCell>

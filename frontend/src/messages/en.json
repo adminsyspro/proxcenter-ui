@@ -3182,6 +3182,8 @@
     "createSgTitle": "Create Security Group",
     "addRuleToTitle": "Add rule to {name}",
     "tabFirewalling": "Firewalling",
+    "tabAliases": "Aliases",
+    "tabIpSets": "IP Sets",
     "tabRules": "Rules",
     "tabObjects": "Objects",
     "securityPosture": "Security Posture",

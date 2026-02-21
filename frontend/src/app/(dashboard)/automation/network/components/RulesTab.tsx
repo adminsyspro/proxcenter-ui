@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, ToggleButton, ToggleButtonGroup, Badge, useTheme, alpha } from '@mui/material'
+import { Box, Chip, ToggleButton, ToggleButtonGroup, useTheme, alpha } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
@@ -108,17 +108,17 @@ export default function RulesTab({
           <ToggleButton value={0}>
             <i className="ri-shield-flash-line" style={{ marginRight: 6, fontSize: 16 }} />
             {t('networkPage.clusterFirewall')}
-            <Badge badgeContent={policyRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
+            <Chip label={policyRulesCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
           </ToggleButton>
           <ToggleButton value={1}>
             <i className="ri-server-line" style={{ marginRight: 6, fontSize: 16 }} />
             {t('networkPage.hostRules')}
-            <Badge badgeContent={hostRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
+            <Chip label={hostRulesCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
           </ToggleButton>
           <ToggleButton value={2}>
             <i className="ri-computer-line" style={{ marginRight: 6, fontSize: 16 }} />
             {t('networkPage.vmDirectRules')}
-            <Badge badgeContent={vmRulesCount} color="primary" sx={{ ml: 1.5, '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }} />
+            <Chip label={vmRulesCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>

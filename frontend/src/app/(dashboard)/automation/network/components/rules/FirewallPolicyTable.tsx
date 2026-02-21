@@ -590,6 +590,11 @@ export default function FirewallPolicyTable({
               </Select>
             </FormControl>
           </Box>
+          <Tooltip title={t('networkPage.addRule')}>
+            <IconButton size="small" onClick={() => openAddRule({ type: 'cluster' })} disabled={!selectedConnection}>
+              <i className="ri-add-line" style={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
 

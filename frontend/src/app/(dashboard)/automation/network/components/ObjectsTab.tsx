@@ -19,9 +19,10 @@ interface ObjectsTabProps {
   selectedConnection: string
   loading: boolean
   reload: () => void
+  view?: 'aliases' | 'ipsets'
 }
 
-export default function ObjectsTab({ aliases, ipsets, selectedConnection, loading, reload }: ObjectsTabProps) {
+export default function ObjectsTab({ aliases, ipsets, selectedConnection, loading, reload, view }: ObjectsTabProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -140,7 +141,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
   return (
     <Box sx={{ p: 3 }}>
       {/* ── Aliases Section ── */}
-      <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>
+      {(!view || view === 'aliases') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.aliases')}</Typography>
@@ -193,10 +194,10 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             </TableBody>
           </Table>
         </TableContainer>
-      </Paper>
+      </Paper>}
 
       {/* ── IP Sets Section ── */}
-      <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+      {(!view || view === 'ipsets') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.ipSets')}</Typography>
@@ -258,7 +259,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             )}
           </Stack>
         </Box>
-      </Paper>
+      </Paper>}
 
       {/* ══ DIALOGS ══ */}
 

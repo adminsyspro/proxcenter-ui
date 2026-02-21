@@ -93,28 +93,30 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
         })
       } else {
         setFirewallMode('standalone')
-        const standaloneNode = nodes[0] || 'pve'
+        const standaloneNode = nodes[0] || ''
 
         setConnectionInfo({
           mode: 'standalone',
-          node_count: 1,
+          node_count: nodes.length,
           primary_node: standaloneNode,
           has_cluster_fw: false,
-          has_node_fw: true,
+          has_node_fw: !!standaloneNode,
         })
 
-        // In standalone mode, load node-level firewall options
-        try {
-          const nodeOpts = await firewallAPI.getNodeOptions(connectionId, standaloneNode)
+        // In standalone mode, load node-level firewall options (only if we have a real node name)
+        if (standaloneNode) {
+          try {
+            const nodeOpts = await firewallAPI.getNodeOptions(connectionId, standaloneNode)
 
-          setNodeOptions(nodeOpts)
-          const nodeRulesData = await firewallAPI.getNodeRules(connectionId, standaloneNode)
+            setNodeOptions(nodeOpts)
+            const nodeRulesData = await firewallAPI.getNodeRules(connectionId, standaloneNode)
 
-          setNodeRules(Array.isArray(nodeRulesData) ? nodeRulesData : [])
-        } catch {
-          // Node firewall might not be configured
-          setNodeOptions(null)
-          setNodeRules([])
+            setNodeRules(Array.isArray(nodeRulesData) ? nodeRulesData : [])
+          } catch {
+            // Node firewall might not be configured
+            setNodeOptions(null)
+            setNodeRules([])
+          }
         }
       }
     } catch (err: any) {

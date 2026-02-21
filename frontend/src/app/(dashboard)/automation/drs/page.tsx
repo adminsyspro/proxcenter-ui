@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 
-import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
+import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
 
@@ -1211,12 +1211,22 @@ return () => setPageInfo('', '', '')
 
   const { data: migrationsRaw, mutate: mutateMigrations, isLoading: migrationsLoading } = useDRSMigrations(isEnterprise)
 
+  const { data: allMigrationsRaw } = useDRSAllMigrations(isEnterprise)
 
   // Garder toutes les migrations non-null (useMemo pour éviter les re-renders inutiles)
   const migrations = useMemo(() =>
     ensureArray(migrationsRaw as any).filter((m: any) => m != null) as DRSMigration[],
     [migrationsRaw]
   )
+
+  // Recent migrations (completed/failed), sorted by most recent first, limit 5
+  const recentMigrations = useMemo(() => {
+    const all = ensureArray(allMigrationsRaw as any).filter((m: any) => m != null) as DRSMigration[]
+    return all
+      .filter(m => m.status === 'completed' || m.status === 'failed')
+      .sort((a, b) => new Date(b.completed_at || b.started_at).getTime() - new Date(a.completed_at || a.started_at).getTime())
+      .slice(0, 5)
+  }, [allMigrationsRaw])
 
   const { data: metricsData, mutate: mutateMetrics } = useDRSMetrics(isEnterprise)
 
@@ -1853,55 +1863,30 @@ return next
             />
           </Box>
 
-          {/* Load Spread */}
-          {(() => {
-            const threshold = drsSettings?.imbalance_threshold ?? 5
-            const value = globalStats.maxImbalance
-            const ratio = value / threshold
-            const barValue = Math.min(100, (value / Math.max(threshold, 1)) * 100)
-            const spreadColor = ratio > 1 ? theme.palette.error.main
-              : ratio > 0.5 ? theme.palette.warning.main
-              : theme.palette.success.main
-            const spreadLabel = ratio > 1 ? t('drsPage.loadSpreadUnbalanced')
-              : ratio > 0.5 ? t('drsPage.loadSpreadMinor')
-              : t('drsPage.loadSpreadBalanced')
-            const spreadLabelColor = ratio > 1 ? 'error.main'
-              : ratio > 0.5 ? 'warning.main'
-              : 'success.main'
-
-            return (
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Tooltip title={t('drsPage.loadSpreadTooltip')} placement="top" arrow>
-                    <Typography variant="body2" sx={{ fontWeight: 500, cursor: 'help', borderBottom: '1px dashed', borderColor: 'text.disabled' }}>
-                      {t('drsPage.loadSpreadLabel')}
+          {/* Recent Migrations */}
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{t('drsPage.recentMigrations')}</Typography>
+            {recentMigrations.length === 0 ? (
+              <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.noRecentMigrations')}</Typography>
+            ) : (
+              <Stack spacing={0.5}>
+                {recentMigrations.map(m => (
+                  <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <i
+                      className={m.status === 'completed' ? 'ri-checkbox-circle-fill' : 'ri-close-circle-fill'}
+                      style={{ fontSize: 14, color: m.status === 'completed' ? theme.palette.success.main : theme.palette.error.main, flexShrink: 0 }}
+                    />
+                    <Typography variant="caption" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.vm_name || `VM ${m.vmid}`}
                     </Typography>
-                  </Tooltip>
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: spreadLabelColor }}>
-                    {spreadLabel}
-                  </Typography>
-                </Box>
-                <Box sx={{ position: 'relative' }}>
-                  <LinearProgress
-                    variant="determinate"
-                    value={barValue}
-                    sx={{
-                      height: 14,
-                      borderRadius: 0,
-                      bgcolor: alpha(theme.palette.grey[500], 0.15),
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 0,
-                        bgcolor: spreadColor,
-                      }
-                    }}
-                  />
-                  <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                    {value.toFixed(1)} / {threshold.toFixed(1)}
-                  </Typography>
-                </Box>
-              </Box>
-            )
-          })()}
+                    <Typography variant="caption" sx={{ opacity: 0.5, flexShrink: 0, fontSize: '0.65rem' }}>
+                      {m.source_node.split('.')[0]} → {m.target_node.split('.')[0]}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </Box>
         </Paper>
       </Box>
 

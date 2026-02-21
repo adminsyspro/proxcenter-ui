@@ -18,6 +18,10 @@ export function useDRSMigrations(isEnterprise: boolean) {
   return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations?active=true' : null, fetcher, { refreshInterval: 10000 })
 }
 
+export function useDRSAllMigrations(isEnterprise: boolean) {
+  return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations' : null, fetcher, { refreshInterval: 30000 })
+}
+
 export function useDRSMetrics(isEnterprise: boolean) {
   return useSWR(isEnterprise ? '/api/v1/orchestrator/metrics' : null, fetcher, { refreshInterval: 30000 })
 }

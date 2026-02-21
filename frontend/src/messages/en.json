@@ -3184,7 +3184,18 @@
     "noVmsReferencing": "No VMs reference this group",
     "newPolicy": "New Policy",
     "activeRulesCount": "{count} active",
-    "searchPolicies": "Search policies..."
+    "searchPolicies": "Search policies...",
+    "scoreBreakdown": "Score Breakdown",
+    "showBreakdown": "Show breakdown",
+    "hideDetails": "Hide details",
+    "firewallComponent": "Firewall",
+    "policyComponent": "Policy",
+    "vmCoverageComponent": "VM Coverage",
+    "microsegComponent": "Microsegmentation",
+    "policyStrict": "Strict DROP inbound policy",
+    "policyPermissive": "Permissive ACCEPT policy",
+    "coverageReason": "{percent}% of VMs protected",
+    "microsegReason": "{percent}% with Security Groups"
   },
   "deployWizard": {
     "bannerTitle": "Cluster firewall not configured",

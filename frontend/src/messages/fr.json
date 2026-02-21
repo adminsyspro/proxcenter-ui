@@ -3189,7 +3189,18 @@
     "noVmsReferencing": "Aucune VM ne référence ce groupe",
     "newPolicy": "Nouvelle Policy",
     "activeRulesCount": "{count} actives",
-    "searchPolicies": "Rechercher policies..."
+    "searchPolicies": "Rechercher policies...",
+    "scoreBreakdown": "Détail du score",
+    "showBreakdown": "Voir le détail",
+    "hideDetails": "Masquer les détails",
+    "firewallComponent": "Firewall",
+    "policyComponent": "Politique",
+    "vmCoverageComponent": "Couverture VM",
+    "microsegComponent": "Micro-segmentation",
+    "policyStrict": "Politique DROP stricte en entrée",
+    "policyPermissive": "Politique ACCEPT permissive",
+    "coverageReason": "{percent}% des VMs protégées",
+    "microsegReason": "{percent}% avec Security Groups"
   },
   "deployWizard": {
     "bannerTitle": "Firewall du cluster non configuré",

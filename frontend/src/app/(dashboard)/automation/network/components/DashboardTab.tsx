@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Avatar, Box, Button, Chip, LinearProgress, Paper, Stack,
-  Switch, Typography, useTheme, alpha
+  Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
+  Collapse, Divider, IconButton, LinearProgress, Paper, Skeleton,
+  Stack, Switch, Tooltip, Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -35,14 +36,43 @@ interface DashboardTabProps {
   onNavigateRulesSubTab: (subTab: number) => void
 }
 
+const BreakdownRow = ({ icon, label, points, reason }: {
+  icon: string; label: string; points: number; reason: string
+}) => {
+  const color = points > 0 ? '#22c55e' : 'text.secondary'
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75 }}>
+      <Box sx={{ width: 24, textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
+        <i className={icon} />
+      </Box>
+      <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 100 }}>{label}</Typography>
+      <Box sx={{ flex: 1 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>{reason}</Typography>
+      </Box>
+      <Chip
+        size="small"
+        label={points > 0 ? `+${points}` : '0'}
+        sx={{
+          height: 22, minWidth: 44, fontWeight: 700, fontSize: '0.75rem',
+          bgcolor: alpha(points > 0 ? '#22c55e' : '#888', 0.12),
+          color,
+        }}
+      />
+    </Box>
+  )
+}
+
 export default function DashboardTab({
   vmFirewallData, loadingVMRules, firewallMode, currentOptions,
   selectedConnection, clusterOptions, clusterRules, nodesList,
+  securityGroups, totalRules,
   handleToggleClusterFirewall, reload, onNavigateTab, onNavigateRulesSubTab
 }: DashboardTabProps) {
   const theme = useTheme()
   const t = useTranslations()
   const [deployWizardOpen, setDeployWizardOpen] = useState(false)
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   // Virgin cluster detection (works for both cluster and standalone — PVE always has cluster-level firewall)
   const isVirginCluster = clusterOptions?.enable !== 1
@@ -58,11 +88,12 @@ export default function DashboardTab({
   const firewallEnabled = currentOptions?.enable === 1
   const unprotected = vmFirewallData.filter(v => !v.firewallEnabled).length
 
-  let score = 0
-  if (firewallEnabled) score += 20
-  if (hasStrictPolicy) score += 15
-  score += Math.round(vmCoverage * 0.35)
-  score += Math.round(sgCoverage * 0.30)
+  // Individual score components for breakdown
+  const scoreFirewall = firewallEnabled ? 20 : 0
+  const scorePolicy = hasStrictPolicy ? 15 : 0
+  const scoreVmCoverage = Math.round(vmCoverage * 0.35)
+  const scoreMicroseg = Math.round(sgCoverage * 0.30)
+  const score = scoreFirewall + scorePolicy + scoreVmCoverage + scoreMicroseg
 
   const scoreColor = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
   const scoreLabel = score >= 80 ? t('networkPage.excellent') : score >= 50 ? t('networkPage.moderate') : t('networkPage.toImprove')
@@ -112,104 +143,155 @@ export default function DashboardTab({
       />
 
       {/* Section 1: Security Posture (hero) */}
-      <Paper sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary', mb: 2 }}>
-          {t('networkPage.securityPosture')}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Score gauge — larger */}
-          <Box sx={{ textAlign: 'center' }}>
-            <Box sx={{
-              width: 110, height: 110, borderRadius: '50%',
-              background: `conic-gradient(${scoreColor} ${score * 3.6}deg, ${alpha(theme.palette.divider, 0.2)} 0deg)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <Box sx={{
-                width: 88, height: 88, borderRadius: '50%', bgcolor: 'background.paper',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <Typography variant="h3" sx={{ fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{score}</Typography>
-                <Typography variant="caption" sx={{ fontSize: 9, color: 'text.secondary', mt: 0.25 }}>/ 100</Typography>
+      <Card sx={{
+        background: `linear-gradient(135deg, ${alpha(scoreColor, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 50%, ${alpha(scoreColor, 0.03)} 100%)`,
+        border: '1px solid',
+        borderColor: alpha(scoreColor, 0.3),
+        position: 'relative',
+        overflow: 'hidden',
+        mb: 3,
+        '&:hover': { borderColor: alpha(scoreColor, 0.5), boxShadow: `0 8px 32px ${alpha(scoreColor, 0.15)}` },
+      }}>
+        <Box sx={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(scoreColor, 0.1)} 0%, transparent 70%)` }} />
+        <CardContent sx={{ p: 3, position: 'relative' }}>
+          {loadingVMRules ? (
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center">
+              <Skeleton variant="circular" width={140} height={140} />
+              <Box sx={{ flex: 1 }}>
+                <Skeleton variant="text" width="50%" height={36} />
+                <Skeleton variant="text" width="30%" height={28} sx={{ mb: 1 }} />
+                <Skeleton variant="text" width="80%" height={20} />
+                <Skeleton variant="text" width="60%" height={20} />
               </Box>
-            </Box>
-            <Chip label={scoreLabel} size="small" sx={{ bgcolor: alpha(scoreColor, 0.15), color: scoreColor, fontWeight: 700, mt: 1, height: 20, fontSize: 10 }} />
-          </Box>
+            </Stack>
+          ) : (
+            <>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center">
+                {/* Gauge */}
+                <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                  <CircularProgress variant="determinate" value={100} size={140} thickness={3} sx={{ color: alpha(scoreColor, 0.15) }} />
+                  <CircularProgress variant="determinate" value={score} size={140} thickness={3} sx={{ color: scoreColor, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(scoreColor, 0.4)})` }} />
+                  <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                    <Typography variant="h2" fontWeight={800} sx={{ color: scoreColor, lineHeight: 1 }}>{score}</Typography>
+                    <Typography variant="caption" color="text.secondary">/100</Typography>
+                  </Box>
+                </Box>
 
-          {/* 2x2 indicators grid */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, minWidth: 280 }}>
-            {/* Firewall ON/OFF */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 1.5, bgcolor: alpha(firewallEnabled ? '#22c55e' : '#ef4444', 0.05) }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(firewallEnabled ? '#22c55e' : '#ef4444', 0.15) }}>
-                <i className={firewallEnabled ? "ri-shield-check-line" : "ri-shield-cross-line"} style={{ fontSize: 16, color: firewallEnabled ? '#22c55e' : '#ef4444' }} />
-              </Avatar>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('security.firewall')}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: firewallEnabled ? '#22c55e' : '#ef4444', fontSize: 12 }}>
-                  {firewallEnabled ? 'ON' : 'OFF'}
+                {/* Right side */}
+                <Box sx={{ flex: 1 }}>
+                  <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.5 }}>
+                    <Typography variant="h5" fontWeight={700}>{t('networkPage.zeroTrustScore')}</Typography>
+                    <Tooltip title={showBreakdown ? t('networkPage.hideDetails') : t('networkPage.showBreakdown')}>
+                      <IconButton size="small" onClick={() => setShowBreakdown(!showBreakdown)} sx={{ ml: 0.5 }}>
+                        <i className={showBreakdown ? 'ri-arrow-up-s-line' : 'ri-information-line'} style={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                  <Chip label={scoreLabel} sx={{ bgcolor: alpha(scoreColor, 0.15), color: scoreColor, fontWeight: 700, fontSize: '0.85rem', height: 28, mb: 2 }} />
+
+                  {/* KPIs row */}
+                  <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">{t('networkPage.protectedVms')}</Typography>
+                      <Typography variant="h6" fontWeight={700}>{vmsWithFirewall}<Typography component="span" variant="body2" color="text.secondary"> / {vmFirewallData.length}</Typography></Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">{t('networkPage.totalRulesLabel')}</Typography>
+                      <Typography variant="h6" fontWeight={700}>{totalRules}</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">{t('firewall.securityGroups')}</Typography>
+                      <Typography variant="h6" fontWeight={700}>{securityGroups.length}</Typography>
+                    </Box>
+                  </Stack>
+
+                  {/* Cluster indicators */}
+                  <Stack spacing={1}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1.5, bgcolor: alpha(firewallEnabled ? '#22c55e' : '#ef4444', 0.05) }}>
+                      <i className={firewallEnabled ? "ri-shield-check-line" : "ri-shield-cross-line"} style={{ fontSize: 16, color: firewallEnabled ? '#22c55e' : '#ef4444' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
+                        {t('security.firewall')} {firewallEnabled ? 'ON' : 'OFF'}
+                      </Typography>
+                      <Switch checked={firewallEnabled} onChange={handleToggleClusterFirewall} color="success" disabled={!selectedConnection} size="small" />
+                    </Box>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Chip
+                        icon={<i className="ri-arrow-down-line" style={{ fontSize: 14 }} />}
+                        label={`IN: ${currentOptions?.policy_in || 'ACCEPT'}`}
+                        size="small"
+                        sx={{
+                          height: 24, fontSize: 11, fontWeight: 700,
+                          bgcolor: alpha(currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e', 0.12),
+                          color: currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e',
+                          '& .MuiChip-icon': { color: 'inherit' }
+                        }}
+                      />
+                      <Chip
+                        icon={<i className="ri-arrow-up-line" style={{ fontSize: 14 }} />}
+                        label={`OUT: ${currentOptions?.policy_out || 'ACCEPT'}`}
+                        size="small"
+                        sx={{
+                          height: 24, fontSize: 11, fontWeight: 700,
+                          bgcolor: alpha(currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e', 0.12),
+                          color: currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e',
+                          '& .MuiChip-icon': { color: 'inherit' }
+                        }}
+                      />
+                      <Chip
+                        icon={<i className={firewallMode === 'cluster' ? "ri-server-line" : "ri-computer-line"} style={{ fontSize: 14 }} />}
+                        label={firewallMode === 'cluster' ? t('firewall.cluster') : t('firewall.standalone')}
+                        size="small"
+                        sx={{
+                          height: 24, fontSize: 11, fontWeight: 700,
+                          bgcolor: alpha(firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b', 0.12),
+                          color: firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b',
+                          '& .MuiChip-icon': { color: 'inherit' }
+                        }}
+                      />
+                    </Stack>
+                  </Stack>
+                </Box>
+              </Stack>
+
+              {/* Score Breakdown */}
+              <Collapse in={showBreakdown}>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                  {t('networkPage.scoreBreakdown')}
                 </Typography>
-              </Box>
-              <Switch checked={firewallEnabled} onChange={handleToggleClusterFirewall} color="success" disabled={!selectedConnection} size="small" />
-            </Box>
-
-            {/* Policy IN */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 1.5, bgcolor: alpha(theme.palette.divider, 0.04) }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e', 0.15) }}>
-                <i className="ri-arrow-down-line" style={{ fontSize: 16, color: currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e' }} />
-              </Avatar>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('firewall.policyIn')}</Typography>
-                <Chip
-                  label={currentOptions?.policy_in || 'ACCEPT'}
-                  size="small"
-                  sx={{
-                    height: 20, fontSize: 10, fontWeight: 700,
-                    bgcolor: alpha(currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e', 0.15),
-                    color: currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e'
-                  }}
-                />
-              </Box>
-            </Box>
-
-            {/* Policy OUT */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 1.5, bgcolor: alpha(theme.palette.divider, 0.04) }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e', 0.15) }}>
-                <i className="ri-arrow-up-line" style={{ fontSize: 16, color: currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e' }} />
-              </Avatar>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('firewall.policyOut')}</Typography>
-                <Chip
-                  label={currentOptions?.policy_out || 'ACCEPT'}
-                  size="small"
-                  sx={{
-                    height: 20, fontSize: 10, fontWeight: 700,
-                    bgcolor: alpha(currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e', 0.15),
-                    color: currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e'
-                  }}
-                />
-              </Box>
-            </Box>
-
-            {/* Mode */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 1.5, bgcolor: alpha(theme.palette.divider, 0.04) }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b', 0.15) }}>
-                <i className={firewallMode === 'cluster' ? "ri-server-line" : "ri-computer-line"} style={{ fontSize: 16, color: firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b' }} />
-              </Avatar>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 10, display: 'block' }}>{t('firewall.mode')}</Typography>
-                <Chip
-                  label={firewallMode === 'cluster' ? t('firewall.cluster') : t('firewall.standalone')}
-                  size="small"
-                  sx={{
-                    height: 20, fontSize: 10, fontWeight: 700,
-                    bgcolor: alpha(firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b', 0.15),
-                    color: firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b'
-                  }}
-                />
-              </Box>
-            </Box>
-          </Box>
-        </Box>
-      </Paper>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 0.5 }}>
+                  <BreakdownRow
+                    icon="ri-shield-check-line"
+                    label={t('networkPage.firewallComponent')}
+                    points={scoreFirewall}
+                    reason={firewallEnabled ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled')}
+                  />
+                  <BreakdownRow
+                    icon="ri-arrow-down-line"
+                    label={t('networkPage.policyComponent')}
+                    points={scorePolicy}
+                    reason={hasStrictPolicy ? t('networkPage.policyStrict') : t('networkPage.policyPermissive')}
+                  />
+                  <BreakdownRow
+                    icon="ri-computer-line"
+                    label={t('networkPage.vmCoverageComponent')}
+                    points={scoreVmCoverage}
+                    reason={t('networkPage.coverageReason', { percent: Math.round(vmCoverage) })}
+                  />
+                  <BreakdownRow
+                    icon="ri-shield-keyhole-line"
+                    label={t('networkPage.microsegComponent')}
+                    points={scoreMicroseg}
+                    reason={t('networkPage.microsegReason', { percent: Math.round(sgCoverage) })}
+                  />
+                </Box>
+              </Collapse>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Section 2: VM Coverage (simplified) */}
       <Paper sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>

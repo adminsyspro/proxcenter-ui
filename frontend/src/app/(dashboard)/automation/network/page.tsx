@@ -175,7 +175,9 @@ export default function NetworkAutomationPage() {
               selectedConnection={selectedConnection}
               totalRules={totalRules}
               totalIPSetEntries={totalIPSetEntries}
+              nodesList={nodesList}
               handleToggleClusterFirewall={handleToggleClusterFirewall}
+              reload={loadFirewallData}
               onNavigateTab={setActiveTab}
               onNavigateRulesSubTab={setRulesSubTab}
             />

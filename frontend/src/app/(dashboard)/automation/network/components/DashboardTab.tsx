@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -9,6 +10,7 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import DeploymentWizard from './DeploymentWizard'
 
 interface DashboardTabProps {
   // Data
@@ -24,8 +26,10 @@ interface DashboardTabProps {
   selectedConnection: string
   totalRules: number
   totalIPSetEntries: number
+  nodesList: string[]
   // Handlers
   handleToggleClusterFirewall: () => void
+  reload: () => void
   // Navigation
   onNavigateTab: (tab: number) => void
   onNavigateRulesSubTab: (subTab: number) => void
@@ -33,11 +37,17 @@ interface DashboardTabProps {
 
 export default function DashboardTab({
   vmFirewallData, loadingVMRules, firewallMode, currentOptions,
-  selectedConnection,
-  handleToggleClusterFirewall, onNavigateTab, onNavigateRulesSubTab
+  selectedConnection, clusterOptions, clusterRules, nodesList,
+  handleToggleClusterFirewall, reload, onNavigateTab, onNavigateRulesSubTab
 }: DashboardTabProps) {
   const theme = useTheme()
   const t = useTranslations()
+  const [deployWizardOpen, setDeployWizardOpen] = useState(false)
+
+  // Virgin cluster detection
+  const isVirginCluster = firewallMode === 'cluster'
+    && clusterOptions?.enable !== 1
+    && clusterRules.length === 0
 
   // Compute shared metrics
   const vmsWithFirewall = vmFirewallData.filter(v => v.firewallEnabled).length
@@ -60,6 +70,48 @@ export default function DashboardTab({
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* Virgin cluster banner */}
+      {isVirginCluster && selectedConnection && (
+        <Paper sx={{
+          p: 2.5, mb: 3,
+          bgcolor: alpha('#f59e0b', 0.08),
+          border: `1px solid ${alpha('#f59e0b', 0.3)}`,
+          display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap'
+        }}>
+          <Avatar sx={{ width: 40, height: 40, bgcolor: alpha('#f59e0b', 0.15) }}>
+            <i className="ri-shield-flash-line" style={{ fontSize: 20, color: '#f59e0b' }} />
+          </Avatar>
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#f59e0b' }}>
+              {t('deployWizard.bannerTitle')}
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12 }}>
+              {t('deployWizard.bannerDescription')}
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={<i className="ri-shield-flash-line" />}
+            onClick={() => setDeployWizardOpen(true)}
+            sx={{ flexShrink: 0 }}
+          >
+            {t('deployWizard.bannerButton')}
+          </Button>
+        </Paper>
+      )}
+
+      <DeploymentWizard
+        open={deployWizardOpen}
+        onClose={() => setDeployWizardOpen(false)}
+        selectedConnection={selectedConnection}
+        clusterOptions={clusterOptions}
+        clusterRules={clusterRules}
+        nodesList={nodesList}
+        firewallMode={firewallMode}
+        onComplete={reload}
+      />
+
       {/* Section 1: Security Posture (hero) */}
       <Paper sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary', mb: 2 }}>

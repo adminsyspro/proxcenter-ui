@@ -729,7 +729,7 @@ function LicenseTab() {
   }, [features])
 
   const enabledCount = features.filter(f => f.enabled).length
-  const totalCount = features.length || Object.keys(FEATURE_LABELS).length
+  const totalCount = features.length || Object.keys(FEATURE_LABEL_KEYS).length
 
   // Node usage
   const nodeStatus = licenseStatus?.node_status

@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Autocomplete, Avatar, Box, Button, Chip, Collapse, Dialog, DialogTitle, DialogContent, DialogActions,
+  Autocomplete, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
   Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
   Typography, useTheme, alpha
@@ -13,7 +13,7 @@ import {
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
-import { DEFAULT_RULE } from '../../types'
+import { DEFAULT_RULE, monoStyle } from '../../types'
 
 interface VMRulesPanelProps {
   vmFirewallData: VMFirewallInfo[]
@@ -24,6 +24,28 @@ interface VMRulesPanelProps {
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
 }
+
+// ── Helpers ──
+
+const ActionChip = ({ action }: { action: string }) => {
+  const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
+  const color = colors[action] || '#94a3b8'
+  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.15), color, border: `1px solid ${alpha(color, 0.3)}`, minWidth: 70 }} />
+}
+
+function formatService(rule: firewallAPI.FirewallRule): string {
+  if (rule.type === 'group') return '-'
+  if (rule.macro) return rule.macro
+  const proto = rule.proto?.toUpperCase() || ''
+  const port = rule.dport || ''
+  if (!proto && !port) return 'any'
+  if (proto && port) return `${proto}/${port}`
+  return proto || port
+}
+
+const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
+
+// ── Main Component ──
 
 export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedConnection, loadVMFirewallData, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
   const theme = useTheme()
@@ -47,31 +69,18 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
 
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
-    for (const a of aliases) {
-      opts.push({ label: a.name, secondary: a.cidr })
-    }
-    for (const s of ipsets) {
-      opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    }
+    for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
+    for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
     return opts
   }, [aliases, ipsets])
 
-  const toggleVM = (vmid: number) => {
-    setExpandedVMs(prev => {
-      const next = new Set(prev)
-      if (next.has(vmid)) next.delete(vmid)
-      else next.add(vmid)
-      return next
-    })
-  }
-
-  // ── Toggle VM firewall ──
+  // ── Toggle VM firewall (modifies NIC config firewall=0/1) ──
   const handleToggleVMFirewall = async (vm: VMFirewallInfo) => {
     if (!selectedConnection) return
-    const newEnable = vm.firewallEnabled ? 0 : 1
+    const newEnable = !vm.firewallEnabled
     try {
-      await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { enable: newEnable })
-      showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
+      await firewallAPI.toggleVMNICFirewall(selectedConnection, vm.node, vm.type, vm.vmid, newEnable)
+      showToast(newEnable ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
       reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -174,19 +183,31 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     }
   }
 
+  const sectionRowBg = alpha(theme.palette.primary.main, 0.06)
+  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.10)
+
   return (
     <>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('networkPage.firewallRulesPerVm')}</Typography>
-          <Chip label={t('networkPage.vmsProtectedCount', { filtered: filteredVMData.length, total: vmFirewallData.length, protected: vmFirewallData.filter(v => v.firewallEnabled).length })} size="small" />
+      {/* Toolbar */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <TextField
+            size="small" placeholder={t('networkPage.searchVm')} value={vmSearchQuery}
+            onChange={e => setVmSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: <i className="ri-search-line" style={{ marginRight: 6, fontSize: 16, color: theme.palette.text.disabled }} />,
+              sx: { fontSize: 13 }
+            }}
+            sx={{ width: 200 }}
+          />
+          <Button size="small" variant="outlined" onClick={() => setExpandedVMs(new Set(filteredVMData.map(v => v.vmid)))}>{t('common.expandAll')}</Button>
+          <Button size="small" variant="outlined" onClick={() => setExpandedVMs(new Set())}>{t('common.collapseAll')}</Button>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <TextField size="small" placeholder={t('networkPage.searchVm')} value={vmSearchQuery} onChange={(e) => setVmSearchQuery(e.target.value)}
-            InputProps={{ startAdornment: <i className="ri-search-line" style={{ marginRight: 8, opacity: 0.5 }} />, sx: { fontSize: 13 } }} sx={{ width: 200 }} />
-          <Button size="small" variant="outlined" onClick={() => setExpandedVMs(new Set(filteredVMData.map(v => v.vmid)))}>{t('networkPage.expandAllVms')}</Button>
-          <Button size="small" variant="outlined" onClick={() => setExpandedVMs(new Set())}>{t('networkPage.collapseAllVms')}</Button>
-          <Button size="small" variant="contained" startIcon={<i className="ri-refresh-line" />} onClick={loadVMFirewallData} disabled={loadingVMRules}>{t('networkPage.refresh')}</Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Chip label={t('networkPage.vmsProtectedCount', { filtered: filteredVMData.length, total: vmFirewallData.length, protected: vmFirewallData.filter(v => v.firewallEnabled).length })} size="small" />
+          <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={loadVMFirewallData} disabled={loadingVMRules}>
+            {t('networkPage.refresh')}
+          </Button>
         </Box>
       </Box>
 
@@ -195,145 +216,210 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
           <LinearProgress />
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mt: 2 }}>{t('networkPage.loadingFirewallRules')}</Typography>
         </Box>
-      ) : (
-        <Stack spacing={1}>
-          {filteredVMData.map((vm) => (
-            <Paper key={vm.vmid} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
-              <Box
-                sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
-                  bgcolor: expandedVMs.has(vm.vmid) ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
-                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.03) } }}
-                onClick={() => toggleVM(vm.vmid)}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <i className={expandedVMs.has(vm.vmid) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 20 }} />
-                  <Avatar sx={{ width: 32, height: 32, bgcolor: vm.firewallEnabled ? alpha('#22c55e', 0.15) : alpha(theme.palette.divider, 0.3) }}>
-                    <i className={vm.type === 'qemu' ? 'ri-computer-line' : 'ri-instance-line'} style={{ fontSize: 16, color: vm.firewallEnabled ? '#22c55e' : theme.palette.text.secondary }} />
-                  </Avatar>
-                  <Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{vm.name}</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>({vm.vmid})</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{vm.node}</Typography>
-                      <Chip label={vm.type.toUpperCase()} size="small" sx={{ height: 16, fontSize: 9, fontWeight: 700 }} />
-                      <Chip label={vm.status} size="small" sx={{ height: 16, fontSize: 9, bgcolor: vm.status === 'running' ? alpha('#22c55e', 0.15) : alpha('#ef4444', 0.15), color: vm.status === 'running' ? '#22c55e' : '#ef4444' }} />
-                    </Box>
-                  </Box>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={vm.firewallEnabled}
-                    onChange={() => handleToggleVMFirewall(vm)}
-                    color="success"
-                    size="small"
-                    disabled={!selectedConnection}
-                  />
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
-                    {vm.firewallEnabled ? 'ON' : 'OFF'}
-                  </Typography>
-                  <Chip label={t('networkPage.rulesCount', { count: vm.rules.length })} size="small" />
-                  <Tooltip title={t('networkPage.addRule')}>
-                    <IconButton size="small" color="primary" onClick={() => openVMRuleDialog(vm)}>
-                      <i className="ri-add-line" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Box>
+      ) : filteredVMData.length > 0 ? (
+        <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
+                <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
+                <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
+                <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
+                <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
+                <TableCell sx={{ width: 70 }}></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredVMData.map(vm => {
+                const isExpanded = expandedVMs.has(vm.vmid)
 
-              <Collapse in={expandedVMs.has(vm.vmid)}>
-                <Box sx={{ p: 2, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`, bgcolor: alpha(theme.palette.divider, 0.02) }}>
-                  {vm.options && (
-                    <Box sx={{ mb: 2, p: 1.5, bgcolor: alpha(theme.palette.divider, 0.05), borderRadius: 1 }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 1 }}>Options</Typography>
-                      <Stack direction="row" spacing={2}>
-                        <Chip label={`IN: ${vm.options.policy_in || 'ACCEPT'}`} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: vm.options.policy_in === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15), color: vm.options.policy_in === 'DROP' ? '#ef4444' : '#22c55e' }} />
-                        <Chip label={`OUT: ${vm.options.policy_out || 'ACCEPT'}`} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: vm.options.policy_out === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15), color: vm.options.policy_out === 'DROP' ? '#ef4444' : '#22c55e' }} />
-                      </Stack>
-                    </Box>
-                  )}
-                  {vm.rules.length > 0 ? (
-                    <TableContainer>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 30, p: 0.5 }}></TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 35 }}>#</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 50 }}>{t('common.active')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.type')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.action')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.proto')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.source')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.dest')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.port')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.comment')}</TableCell>
-                            <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}>{t('firewall.actions')}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {vm.rules.map((rule, idx) => {
-                            const isDragging = vmDragState.vmid === vm.vmid && vmDragState.draggedPos === rule.pos
-                            const isDragOver = vmDragState.vmid === vm.vmid && vmDragState.dragOverPos === rule.pos
-                            return (
-                              <TableRow key={idx} hover draggable
-                                onDragStart={(e) => handleDragStart(e, vm.vmid, rule.pos)}
-                                onDragEnd={handleDragEnd}
-                                onDragOver={(e) => handleDragOver(e, vm.vmid, rule.pos)}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, vm, rule.pos)}
-                                sx={{ opacity: isDragging ? 0.5 : (rule.enable === 0 ? 0.5 : 1), cursor: 'grab', borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined, '&:active': { cursor: 'grabbing' } }}
-                              >
-                                <TableCell sx={{ p: 0.5, cursor: 'grab' }}><i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} /></TableCell>
-                                <TableCell sx={{ p: 0.5 }}><Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 10 }}>{rule.pos}</Typography></TableCell>
-                                <TableCell sx={{ p: 0.5 }}><Switch checked={rule.enable === 1} onChange={() => handleToggleVMRuleEnable(vm, rule)} size="small" color="success" /></TableCell>
-                                <TableCell sx={{ p: 0.5 }}>
-                                  <Chip label={rule.type?.toUpperCase() || '-'} size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700, bgcolor: rule.type === 'in' ? alpha('#3b82f6', 0.15) : rule.type === 'out' ? alpha('#8b5cf6', 0.15) : alpha('#f59e0b', 0.15), color: rule.type === 'in' ? '#3b82f6' : rule.type === 'out' ? '#8b5cf6' : '#f59e0b' }} />
-                                </TableCell>
-                                <TableCell sx={{ p: 0.5 }}>
-                                  <Chip label={rule.action || '-'} size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700, bgcolor: rule.action === 'ACCEPT' ? alpha('#22c55e', 0.15) : alpha('#ef4444', 0.15), color: rule.action === 'ACCEPT' ? '#22c55e' : '#ef4444' }} />
-                                </TableCell>
-                                <TableCell sx={{ p: 0.5 }}><code style={{ fontSize: 10 }}>{rule.macro || rule.proto || 'any'}</code></TableCell>
-                                <TableCell sx={{ p: 0.5 }}><code style={{ fontSize: 10 }}>{rule.source || '-'}</code></TableCell>
-                                <TableCell sx={{ p: 0.5 }}><code style={{ fontSize: 10 }}>{rule.dest || '-'}</code></TableCell>
-                                <TableCell sx={{ p: 0.5 }}><code style={{ fontSize: 10 }}>{rule.dport || '-'}</code></TableCell>
-                                <TableCell sx={{ p: 0.5 }}>
-                                  <Tooltip title={rule.comment || ''}>
-                                    <Typography variant="caption" sx={{ color: 'text.secondary', maxWidth: 100, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}>
-                                      {rule.comment || '-'}
-                                    </Typography>
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell sx={{ p: 0.5 }}>
-                                  <Box sx={{ display: 'flex', gap: 0 }}>
-                                    <Tooltip title={t('networkPage.edit')}><IconButton size="small" onClick={() => openVMRuleDialog(vm, rule)}><i className="ri-edit-line" style={{ fontSize: 14 }} /></IconButton></Tooltip>
-                                    <Tooltip title={t('networkPage.delete')}><IconButton size="small" color="error" onClick={() => setDeleteVMRuleConfirm({ vm, pos: rule.pos })}><i className="ri-delete-bin-line" style={{ fontSize: 14 }} /></IconButton></Tooltip>
-                                  </Box>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  ) : (
-                    <Box sx={{ py: 2, textAlign: 'center' }}>
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.noRuleConfigured')}</Typography>
-                      <Button size="small" startIcon={<i className="ri-add-line" />} onClick={() => openVMRuleDialog(vm)} sx={{ mt: 1 }}>{t('networkPage.addRule')}</Button>
-                    </Box>
-                  )}
-                </Box>
-              </Collapse>
-            </Paper>
-          ))}
-          {filteredVMData.length === 0 && !loadingVMRules && (
-            <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
-              <i className="ri-computer-line" style={{ fontSize: 48, opacity: 0.3 }} />
-              <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noVmFoundLabel')}</Typography>
-              <Button sx={{ mt: 2 }} onClick={loadVMFirewallData}>{t('common.loadVms')}</Button>
-            </Paper>
-          )}
-        </Stack>
+                return (
+                  <Fragment key={vm.vmid}>
+                    {/* Section header row */}
+                    <TableRow
+                      sx={{
+                        bgcolor: sectionRowBg,
+                        '&:hover': { bgcolor: sectionRowHoverBg },
+                        cursor: 'pointer',
+                        '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
+                      }}
+                      onClick={() => setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })}
+                    >
+                      <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                            <i
+                              className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
+                              style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
+                            />
+                            <i
+                              className={vm.type === 'qemu' ? 'ri-computer-line' : 'ri-instance-line'}
+                              style={{ fontSize: 16, color: vm.firewallEnabled ? '#22c55e' : theme.palette.text.secondary, flexShrink: 0 }}
+                            />
+                            <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</code>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>({vm.vmid})</Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{vm.node}</Typography>
+                            <Chip label={vm.type.toUpperCase()} size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700 }} />
+                            <Chip
+                              label={vm.status}
+                              size="small"
+                              sx={{
+                                height: 18, fontSize: 9,
+                                bgcolor: vm.status === 'running' ? alpha('#22c55e', 0.15) : alpha('#ef4444', 0.15),
+                                color: vm.status === 'running' ? '#22c55e' : '#ef4444'
+                              }}
+                            />
+                            <Chip
+                              label={t('firewall.rulesCount', { count: vm.rules.length })}
+                              size="small"
+                              sx={{ height: 20, fontSize: 10, ml: 0.5 }}
+                            />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }} onClick={e => e.stopPropagation()}>
+                              <Switch
+                                checked={vm.firewallEnabled}
+                                onChange={() => handleToggleVMFirewall(vm)}
+                                color="success"
+                                size="small"
+                                disabled={!selectedConnection}
+                              />
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
+                                {vm.firewallEnabled ? 'ON' : 'OFF'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                            {vm.options && (
+                              <Stack direction="row" spacing={0.5} sx={{ mr: 1 }}>
+                                <Chip
+                                  label={`IN: ${vm.options.policy_in || 'ACCEPT'}`}
+                                  size="small"
+                                  sx={{
+                                    height: 18, fontSize: 9, fontWeight: 600,
+                                    bgcolor: vm.options.policy_in === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15),
+                                    color: vm.options.policy_in === 'DROP' ? '#ef4444' : '#22c55e'
+                                  }}
+                                />
+                                <Chip
+                                  label={`OUT: ${vm.options.policy_out || 'ACCEPT'}`}
+                                  size="small"
+                                  sx={{
+                                    height: 18, fontSize: 9, fontWeight: 600,
+                                    bgcolor: vm.options.policy_out === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#22c55e', 0.15),
+                                    color: vm.options.policy_out === 'DROP' ? '#ef4444' : '#22c55e'
+                                  }}
+                                />
+                              </Stack>
+                            )}
+                            <Tooltip title={t('networkPage.addRule')}>
+                              <IconButton size="small" onClick={() => openVMRuleDialog(vm)}>
+                                <i className="ri-add-line" style={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+
+                    {/* Rule rows when expanded */}
+                    {isExpanded && (vm.rules.length > 0 ? vm.rules.map((rule, idx) => {
+                      const isDragging = vmDragState.vmid === vm.vmid && vmDragState.draggedPos === rule.pos
+                      const isDragOver = vmDragState.vmid === vm.vmid && vmDragState.dragOverPos === rule.pos
+                      const isGroupRule = rule.type === 'group'
+
+                      return (
+                        <TableRow
+                          key={`${vm.vmid}-rule-${idx}`}
+                          hover draggable
+                          onDragStart={e => handleDragStart(e, vm.vmid, rule.pos)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={e => handleDragOver(e, vm.vmid, rule.pos)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={e => handleDrop(e, vm, rule.pos)}
+                          sx={{
+                            cursor: 'grab', opacity: isDragging ? 0.5 : (rule.enable === 0 ? 0.5 : 1),
+                            borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
+                            '&:active': { cursor: 'grabbing' }
+                          }}
+                        >
+                          <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
+                            <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
+                          <TableCell sx={{ p: 0.5, width: 55 }}>
+                            <Switch checked={rule.enable === 1} onChange={() => handleToggleVMRuleEnable(vm, rule)} size="small" color="success" />
+                          </TableCell>
+                          <TableCell sx={{ p: 0.5, width: 65 }}>
+                            <Chip
+                              label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
+                              size="small"
+                              sx={{
+                                height: 20, fontSize: 10, fontWeight: 600,
+                                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15),
+                                color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
+                            {isGroupRule ? '-' : (rule.source || 'any')}
+                          </TableCell>
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
+                            {isGroupRule ? '-' : (rule.dest || 'any')}
+                          </TableCell>
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
+                            {formatService(rule)}
+                          </TableCell>
+                          <TableCell sx={{ p: 0.5, width: 90 }}>
+                            {isGroupRule ? (
+                              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
+                            ) : (
+                              <ActionChip action={rule.action || 'ACCEPT'} />
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
+                            <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
+                          </TableCell>
+                          <TableCell sx={{ p: 0.5, width: 70 }}>
+                            <Box sx={{ display: 'flex', gap: 0 }}>
+                              <Tooltip title={t('networkPage.edit')}>
+                                <IconButton size="small" onClick={() => openVMRuleDialog(vm, rule)}>
+                                  <i className="ri-pencil-line" style={{ fontSize: 14 }} />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={t('networkPage.delete')}>
+                                <IconButton size="small" color="error" onClick={() => setDeleteVMRuleConfirm({ vm, pos: rule.pos })}>
+                                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }) : (
+                      <TableRow key={`empty-${vm.vmid}`}>
+                        <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                          <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
+                          <Button size="small" sx={{ mt: 1 }} startIcon={<i className="ri-add-line" />} onClick={() => openVMRuleDialog(vm)}>
+                            {t('networkPage.addRule')}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
+          <i className="ri-computer-line" style={{ fontSize: 48, opacity: 0.3 }} />
+          <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noVmFoundLabel')}</Typography>
+          <Button sx={{ mt: 2 }} onClick={loadVMFirewallData}>{t('common.loadVms')}</Button>
+        </Paper>
       )}
 
       {/* ══ DIALOGS ══ */}

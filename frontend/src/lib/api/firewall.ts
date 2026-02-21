@@ -362,6 +362,13 @@ export async function updateVMOptions(connectionId: string, node: string, vmType
   })
 }
 
+export async function toggleVMNICFirewall(connectionId: string, node: string, vmType: string, vmid: number, enable: boolean): Promise<void> {
+  await fetchAPI(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/nic-firewall`, {
+    method: 'PUT',
+    body: JSON.stringify({ enable }),
+  })
+}
+
 export async function getVMRules(connectionId: string, node: string, vmType: string, vmid: number): Promise<FirewallRule[]> {
   return fetchAPI<FirewallRule[]>(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}?type=rules`)
 }

@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { Fragment, useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Autocomplete, Avatar, Box, Button, Chip, Collapse, Dialog, DialogTitle, DialogContent, DialogActions,
-  FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack, Switch,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
+  Autocomplete, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
+  Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
   Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
-import { DEFAULT_RULE } from '../../types'
+import { DEFAULT_RULE, monoStyle } from '../../types'
 
 interface HostRulesPanelProps {
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
@@ -25,6 +25,28 @@ interface HostRulesPanelProps {
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
 }
+
+// ── Helpers ──
+
+const ActionChip = ({ action }: { action: string }) => {
+  const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
+  const color = colors[action] || '#94a3b8'
+  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.15), color, border: `1px solid ${alpha(color, 0.3)}`, minWidth: 70 }} />
+}
+
+function formatService(rule: firewallAPI.FirewallRule): string {
+  if (rule.type === 'group') return '-'
+  if (rule.macro) return rule.macro
+  const proto = rule.proto?.toUpperCase() || ''
+  const port = rule.dport || ''
+  if (!proto && !port) return 'any'
+  if (proto && port) return `${proto}/${port}`
+  return proto || port
+}
+
+const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
+
+// ── Main Component ──
 
 export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGroups, loadingHostRules, selectedConnection, loadHostRules, reloadHostRulesForNode, aliases, ipsets }: HostRulesPanelProps) {
   const theme = useTheme()
@@ -70,12 +92,8 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
 
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
-    for (const a of aliases) {
-      opts.push({ label: a.name, secondary: a.cidr })
-    }
-    for (const s of ipsets) {
-      opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    }
+    for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
+    for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
     return opts
   }, [aliases, ipsets])
 
@@ -88,6 +106,21 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
       await firewallAPI.updateNodeOptions(selectedConnection, node, { enable: newEnable })
       showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
       setNodeOptionsByNode(prev => ({ ...prev, [node]: { ...prev[node], enable: newEnable } }))
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    }
+  }
+
+  // ── Toggle rule enable ──
+  const handleToggleHostRuleEnable = async (node: string, rule: firewallAPI.FirewallRule) => {
+    if (!selectedConnection) return
+    const newEnable = rule.enable === 1 ? 0 : 1
+    try {
+      await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${node}/rules/${rule.pos}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
+      })
+      showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
+      reloadHostRulesForNode(node)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -176,19 +209,29 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     }
   }
 
+  const sectionRowBg = alpha(theme.palette.primary.main, 0.06)
+  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.10)
+
   return (
     <>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('network.hostRules')}</Typography>
-          <Chip label={t('networkPage.hostsAndRulesCount', { filtered: filteredHosts.length, total: nodesList.length, rules: Object.values(hostRulesByNode).reduce((acc, r) => acc + r.length, 0) })} size="small" />
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <TextField size="small" placeholder={t('networkPage.searchHost')} value={hostSearchQuery} onChange={(e) => setHostSearchQuery(e.target.value)}
-            InputProps={{ startAdornment: <i className="ri-search-line" style={{ marginRight: 8, opacity: 0.5 }} />, sx: { fontSize: 13 } }} sx={{ width: 180 }} />
+      {/* Toolbar */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <TextField
+            size="small" placeholder={t('networkPage.searchHost')} value={hostSearchQuery}
+            onChange={e => setHostSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: <i className="ri-search-line" style={{ marginRight: 6, fontSize: 16, color: theme.palette.text.disabled }} />,
+              sx: { fontSize: 13 }
+            }}
+            sx={{ width: 200 }}
+          />
           <Button size="small" variant="outlined" onClick={() => setExpandedHosts(new Set(filteredHosts))}>{t('common.expandAll')}</Button>
           <Button size="small" variant="outlined" onClick={() => setExpandedHosts(new Set())}>{t('common.collapseAll')}</Button>
-          <Button size="small" variant="contained" startIcon={<i className={loadingHostRules ? "ri-loader-4-line" : "ri-refresh-line"} />} onClick={() => loadHostRules()} disabled={loadingHostRules}>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Chip label={t('networkPage.hostsAndRulesCount', { filtered: filteredHosts.length, total: nodesList.length, rules: Object.values(hostRulesByNode).reduce((acc, r) => acc + r.length, 0) })} size="small" />
+          <Button size="small" variant="outlined" startIcon={<i className={loadingHostRules ? "ri-loader-4-line" : "ri-refresh-line"} />} onClick={() => loadHostRules()} disabled={loadingHostRules}>
             {t('networkPage.refresh')}
           </Button>
         </Box>
@@ -200,155 +243,190 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', mt: 2 }}>{t('networkPage.loadingHostRules')}</Typography>
         </Box>
       ) : filteredHosts.length > 0 ? (
-        <Stack spacing={1}>
-          {filteredHosts.map((node) => {
-            const rules = hostRulesByNode[node] || []
-            const isExpanded = expandedHosts.has(node)
-            const nodeOpts = nodeOptionsByNode[node]
-            const nodeEnabled = nodeOpts?.enable === 1
-            return (
-              <Paper key={node} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
-                <Box
-                  sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer',
-                    bgcolor: isExpanded ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
-                    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.03) } }}
-                  onClick={() => setExpandedHosts(prev => { const n = new Set(prev); if (n.has(node)) n.delete(node); else n.add(node); return n })}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <i className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 20 }} />
-                    <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#f59e0b', 0.15) }}>
-                      <i className="ri-server-line" style={{ fontSize: 16, color: '#f59e0b' }} />
-                    </Avatar>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{node}</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {rules.length > 1
-                          ? t('networkPage.rulesAndActiveCount', { count: rules.length, active: rules.filter(r => r.enable !== 0).length })
-                          : t('networkPage.ruleAndActiveCount', { count: rules.length, active: rules.filter(r => r.enable !== 0).length })}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={nodeEnabled}
-                      onChange={() => handleToggleNodeFirewall(node)}
-                      color="success"
-                      size="small"
-                      disabled={!selectedConnection}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 600, color: nodeEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
-                      {nodeEnabled ? 'ON' : 'OFF'}
-                    </Typography>
-                    <Chip label={t('networkPage.rulesCount', { count: rules.length })} size="small" />
-                    <Tooltip title={t('networkPage.addRule')}>
-                      <IconButton size="small" color="primary" onClick={() => {
-                        setEditingHostRule({ node, rule: null, isNew: true })
-                        setNewHostRule({ ...DEFAULT_RULE })
-                        setHostRuleDialogOpen(true)
-                      }}>
-                        <i className="ri-add-line" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </Box>
+        <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+                <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
+                <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
+                <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
+                <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
+                <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
+                <TableCell sx={{ width: 70 }}></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredHosts.map(node => {
+                const rules = hostRulesByNode[node] || []
+                const isExpanded = expandedHosts.has(node)
+                const nodeOpts = nodeOptionsByNode[node]
+                const nodeEnabled = nodeOpts?.enable === 1
 
-                <Collapse in={isExpanded}>
-                  <Box sx={{ p: 2, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`, bgcolor: alpha(theme.palette.divider, 0.02) }}>
-                    {rules.length > 0 ? (
-                      <TableContainer>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 30, p: 0.5 }}></TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 35 }}>#</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 50 }}>{t('common.active')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.type')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.action')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.proto')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.source')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.dest')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.port')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('firewall.comment')}</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}>{t('firewall.actions')}</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {rules.map((rule, idx) => {
-                              const isDragging = hostDragState.node === node && hostDragState.draggedPos === rule.pos
-                              const isDragOver = hostDragState.node === node && hostDragState.dragOverPos === rule.pos
-                              const isGroupRule = rule.type === 'group'
-                              return (
-                                <TableRow key={idx} hover draggable
-                                  onDragStart={(e) => handleDragStart(e, node, rule.pos)}
-                                  onDragEnd={handleDragEnd}
-                                  onDragOver={(e) => handleDragOver(e, node, rule.pos)}
-                                  onDragLeave={handleDragLeave}
-                                  onDrop={(e) => handleDrop(e, node, rule.pos)}
-                                  sx={{ opacity: isDragging ? 0.5 : 1, bgcolor: isDragOver ? alpha(theme.palette.primary.main, 0.1) : 'transparent', cursor: 'grab', '&:active': { cursor: 'grabbing' } }}
-                                >
-                                  <TableCell sx={{ p: 0.5 }}><i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled, cursor: 'grab' }} /></TableCell>
-                                  <TableCell sx={{ fontSize: 11 }}>{rule.pos}</TableCell>
-                                  <TableCell><Chip label={rule.enable === 0 ? 'Off' : 'On'} size="small" sx={{ height: 18, fontSize: 9, bgcolor: rule.enable === 0 ? alpha('#888', 0.15) : alpha('#22c55e', 0.15), color: rule.enable === 0 ? '#888' : '#22c55e' }} /></TableCell>
-                                  <TableCell><Chip label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || '-'} size="small" sx={{ height: 18, fontSize: 9, bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15), color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899' }} /></TableCell>
-                                  <TableCell>
-                                    {isGroupRule ? (
-                                      <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
-                                    ) : (
-                                      <Chip label={rule.action || '-'} size="small" sx={{ height: 18, fontSize: 9, bgcolor: rule.action === 'ACCEPT' ? alpha('#22c55e', 0.15) : rule.action === 'DROP' ? alpha('#ef4444', 0.15) : alpha('#f59e0b', 0.15), color: rule.action === 'ACCEPT' ? '#22c55e' : rule.action === 'DROP' ? '#ef4444' : '#f59e0b' }} />
-                                    )}
-                                  </TableCell>
-                                  <TableCell sx={{ fontSize: 11 }}>{isGroupRule ? '-' : (rule.proto || 'any')}</TableCell>
-                                  <TableCell sx={{ fontSize: 11 }}><code>{isGroupRule ? '-' : (rule.source || 'any')}</code></TableCell>
-                                  <TableCell sx={{ fontSize: 11 }}><code>{isGroupRule ? '-' : (rule.dest || 'any')}</code></TableCell>
-                                  <TableCell sx={{ fontSize: 11 }}>{isGroupRule ? '-' : (rule.dport || '-')}</TableCell>
-                                  <TableCell sx={{ fontSize: 11, color: 'text.secondary' }}>{rule.comment || '-'}</TableCell>
-                                  <TableCell>
-                                    <Stack direction="row" spacing={0.5}>
-                                      <Tooltip title={t('networkPage.edit')}>
-                                        <IconButton size="small" onClick={() => {
-                                          setEditingHostRule({ node, rule, isNew: false })
-                                          setNewHostRule({
-                                            type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
-                                            proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
-                                            source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-                                            iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
-                                          })
-                                          setHostRuleDialogOpen(true)
-                                        }}>
-                                          <i className="ri-pencil-line" style={{ fontSize: 14 }} />
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title={t('networkPage.delete')}>
-                                        <IconButton size="small" color="error" onClick={() => setDeleteHostRuleConfirm({ node, pos: rule.pos })}>
-                                          <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-                                        </IconButton>
-                                      </Tooltip>
-                                    </Stack>
-                                  </TableCell>
-                                </TableRow>
-                              )
-                            })}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    ) : (
-                      <Box sx={{ textAlign: 'center', py: 2 }}>
-                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.noRuleConfigured')}</Typography>
-                      </Box>
-                    )}
-                  </Box>
-                </Collapse>
-              </Paper>
-            )
-          })}
-        </Stack>
+                return (
+                  <Fragment key={node}>
+                    {/* Section header row */}
+                    <TableRow
+                      sx={{
+                        bgcolor: sectionRowBg,
+                        '&:hover': { bgcolor: sectionRowHoverBg },
+                        cursor: 'pointer',
+                        '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
+                      }}
+                      onClick={() => setExpandedHosts(prev => { const n = new Set(prev); if (n.has(node)) n.delete(node); else n.add(node); return n })}
+                    >
+                      <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                            <i
+                              className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
+                              style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
+                            />
+                            <i className="ri-server-line" style={{ fontSize: 16, color: '#f59e0b', flexShrink: 0 }} />
+                            <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{node}</code>
+                            <Chip
+                              label={t('firewall.rulesCount', { count: rules.length })}
+                              size="small"
+                              sx={{ height: 20, fontSize: 10, ml: 0.5 }}
+                            />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }} onClick={e => e.stopPropagation()}>
+                              <Switch
+                                checked={nodeEnabled}
+                                onChange={() => handleToggleNodeFirewall(node)}
+                                color="success"
+                                size="small"
+                                disabled={!selectedConnection}
+                              />
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: nodeEnabled ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
+                                {nodeEnabled ? 'ON' : 'OFF'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                            <Tooltip title={t('networkPage.addRule')}>
+                              <IconButton size="small" onClick={() => {
+                                setEditingHostRule({ node, rule: null, isNew: true })
+                                setNewHostRule({ ...DEFAULT_RULE })
+                                setHostRuleDialogOpen(true)
+                              }}>
+                                <i className="ri-add-line" style={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+
+                    {/* Rule rows when expanded */}
+                    {isExpanded && (rules.length > 0 ? rules.map((rule, idx) => {
+                      const isDragging = hostDragState.node === node && hostDragState.draggedPos === rule.pos
+                      const isDragOver = hostDragState.node === node && hostDragState.dragOverPos === rule.pos
+                      const isGroupRule = rule.type === 'group'
+
+                      return (
+                        <TableRow
+                          key={`${node}-rule-${idx}`}
+                          hover draggable
+                          onDragStart={e => handleDragStart(e, node, rule.pos)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={e => handleDragOver(e, node, rule.pos)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={e => handleDrop(e, node, rule.pos)}
+                          sx={{
+                            cursor: 'grab', opacity: isDragging ? 0.5 : 1,
+                            borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
+                            '&:active': { cursor: 'grabbing' }
+                          }}
+                        >
+                          <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
+                            <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
+                          <TableCell sx={{ p: 0.5, width: 55 }}>
+                            <Switch checked={rule.enable !== 0} onChange={() => handleToggleHostRuleEnable(node, rule)} size="small" color="success" />
+                          </TableCell>
+                          <TableCell sx={{ p: 0.5, width: 65 }}>
+                            <Chip
+                              label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
+                              size="small"
+                              sx={{
+                                height: 20, fontSize: 10, fontWeight: 600,
+                                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15),
+                                color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
+                            {isGroupRule ? '-' : (rule.source || 'any')}
+                          </TableCell>
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
+                            {isGroupRule ? '-' : (rule.dest || 'any')}
+                          </TableCell>
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
+                            {formatService(rule)}
+                          </TableCell>
+                          <TableCell sx={{ p: 0.5, width: 90 }}>
+                            {isGroupRule ? (
+                              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
+                            ) : (
+                              <ActionChip action={rule.action || 'ACCEPT'} />
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
+                            <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
+                          </TableCell>
+                          <TableCell sx={{ p: 0.5, width: 70 }}>
+                            <Box sx={{ display: 'flex', gap: 0 }}>
+                              <Tooltip title={t('networkPage.edit')}>
+                                <IconButton size="small" onClick={() => {
+                                  setEditingHostRule({ node, rule, isNew: false })
+                                  setNewHostRule({
+                                    type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
+                                    proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
+                                    source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
+                                    iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
+                                  })
+                                  setHostRuleDialogOpen(true)
+                                }}>
+                                  <i className="ri-pencil-line" style={{ fontSize: 14 }} />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={t('networkPage.delete')}>
+                                <IconButton size="small" color="error" onClick={() => setDeleteHostRuleConfirm({ node, pos: rule.pos })}>
+                                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }) : (
+                      <TableRow key={`empty-${node}`}>
+                        <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                          <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
+                          <Button size="small" sx={{ mt: 1 }} onClick={() => {
+                            setEditingHostRule({ node, rule: null, isNew: true })
+                            setNewHostRule({ ...DEFAULT_RULE })
+                            setHostRuleDialogOpen(true)
+                          }}>
+                            {t('networkPage.addRule')}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
       ) : (
-        <Paper sx={{ p: 4, textAlign: 'center', border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-          <Avatar sx={{ width: 64, height: 64, bgcolor: alpha('#f59e0b', 0.15), mx: 'auto', mb: 2 }}>
-            <i className="ri-server-line" style={{ fontSize: 32, color: '#f59e0b' }} />
-          </Avatar>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>{t('networkPage.noHostFoundTitle')}</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
+          <i className="ri-server-line" style={{ fontSize: 48, opacity: 0.3 }} />
+          <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>
             {hostSearchQuery ? t('networkPage.noResultsForSearch') : t('networkPage.cannotGetNodeList')}
           </Typography>
         </Paper>

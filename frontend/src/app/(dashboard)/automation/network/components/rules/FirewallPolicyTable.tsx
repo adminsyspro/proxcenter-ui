@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-  IconButton, Paper, Stack, Switch,
+  FormControl, IconButton, InputLabel, MenuItem, Paper, Select, Stack, Switch,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Tooltip, Typography, useTheme, alpha
 } from '@mui/material'
@@ -108,10 +108,33 @@ export default function FirewallPolicyTable({
     }
   }
 
-  // ── Build policy sections ──
+  // ── Cluster policy change ──
+  const handlePolicyChange = async (field: 'policy_in' | 'policy_out', value: string) => {
+    if (!selectedConnection) return
+    try {
+      await firewallAPI.updateClusterOptions(selectedConnection, { [field]: value })
+      setClusterOptions(prev => prev ? { ...prev, [field]: value } : { [field]: value })
+      showToast(t('networkPage.policyUpdated'), 'success')
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    }
+  }
+
+  // ── Cluster section (for rule rendering) ──
+  const clusterSection: PolicySection = useMemo(() => ({
+    id: '__cluster__',
+    type: 'cluster',
+    name: t('network.clusterRules'),
+    comment: '',
+    rules: clusterRules,
+    appliedTo: [],
+    ruleCount: clusterRules.length,
+    activeRuleCount: clusterRules.filter(r => r.enable !== 0).length,
+  }), [clusterRules, t])
+
+  // ── Build SG-only sections (no cluster rules) ──
   const sections: PolicySection[] = useMemo(() => {
     const result: PolicySection[] = []
-
     for (const sg of securityGroups) {
       const rules = sg.rules || []
       result.push({
@@ -125,21 +148,8 @@ export default function FirewallPolicyTable({
         activeRuleCount: rules.filter(r => r.enable !== 0).length,
       })
     }
-
-    // Cluster rules → always last
-    result.push({
-      id: '__cluster__',
-      type: 'cluster',
-      name: t('network.clusterRules'),
-      comment: '',
-      rules: clusterRules,
-      appliedTo: [],
-      ruleCount: clusterRules.length,
-      activeRuleCount: clusterRules.filter(r => r.enable !== 0).length,
-    })
-
     return result
-  }, [securityGroups, clusterRules, vmFirewallData, t])
+  }, [securityGroups, vmFirewallData])
 
   // ── Filter by search ──
   const filteredSections = useMemo(() => {
@@ -334,12 +344,113 @@ export default function FirewallPolicyTable({
   const sectionRowBg = alpha(theme.palette.primary.main, 0.06)
   const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.10)
 
-  // ── Render section row ──
-  const renderSectionRow = (section: PolicySection) => {
-    const isExpanded = expandedSections.has(section.id)
+  // ── Render a rule row ──
+  const renderRuleRow = (section: PolicySection, rule: firewallAPI.FirewallRule, idx: number, colSpan: number) => {
+    const isDragging = dragState.sectionId === section.id && dragState.draggedPos === rule.pos
+    const isDragOver = dragState.sectionId === section.id && dragState.dragOverPos === rule.pos
+    const isGroupRule = rule.type === 'group'
     const scope: { type: 'cluster' | 'security-group'; name?: string } = section.type === 'cluster'
       ? { type: 'cluster' }
       : { type: 'security-group', name: section.id }
+
+    return (
+      <TableRow
+        key={`${section.id}-rule-${idx}`}
+        hover draggable
+        onDragStart={e => handleDragStart(e, section.id, rule.pos)}
+        onDragEnd={handleDragEnd}
+        onDragOver={e => handleDragOver(e, section.id, rule.pos)}
+        onDragLeave={handleDragLeave}
+        onDrop={e => handleDrop(e, section, rule.pos)}
+        sx={{
+          cursor: 'grab', opacity: isDragging ? 0.5 : 1,
+          borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
+          '&:active': { cursor: 'grabbing' }
+        }}
+      >
+        <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
+          <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
+        </TableCell>
+        <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
+        <TableCell sx={{ p: 0.5, width: 55 }}>
+          <Switch checked={rule.enable !== 0} onChange={() => handleToggleEnable(section, rule)} size="small" color="success" />
+        </TableCell>
+        <TableCell sx={{ p: 0.5, width: 65 }}>
+          <Chip
+            label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
+            size="small"
+            sx={{
+              height: 20, fontSize: 10, fontWeight: 600,
+              bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15),
+              color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
+            }}
+          />
+        </TableCell>
+        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
+          {isGroupRule ? '-' : (rule.source || 'any')}
+        </TableCell>
+        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
+          {isGroupRule ? '-' : (rule.dest || 'any')}
+        </TableCell>
+        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
+          {formatService(rule)}
+        </TableCell>
+        {colSpan === 11 && (
+          <TableCell sx={{ p: 0.5, width: 90 }}>
+            {section.type === 'security-group' ? (
+              <Tooltip
+                title={section.appliedTo.length > 0
+                  ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
+                  : t('networkPage.noVmsReferencing')
+                }
+              >
+                <Chip
+                  label={t('networkPage.vmCount', { count: section.appliedTo.length })}
+                  size="small" variant="outlined"
+                  sx={{ height: 20, fontSize: 10, cursor: 'help' }}
+                />
+              </Tooltip>
+            ) : (
+              <Chip label={t('common.all')} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+            )}
+          </TableCell>
+        )}
+        <TableCell sx={{ p: 0.5, width: 90 }}>
+          {isGroupRule ? (
+            <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
+          ) : (
+            <ActionChip action={rule.action || 'ACCEPT'} />
+          )}
+        </TableCell>
+        <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
+          <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
+        </TableCell>
+        <TableCell sx={{ p: 0.5, width: 70 }}>
+          <Box sx={{ display: 'flex', gap: 0 }}>
+            <Tooltip title={t('networkPage.edit')}>
+              <IconButton size="small" onClick={() => openEditRule(scope, rule)}>
+                <i className="ri-pencil-line" style={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('networkPage.delete')}>
+              <IconButton size="small" color="error" onClick={() => setDeleteConfirm({
+                scope: section.type === 'cluster' ? 'cluster' : 'security-group',
+                groupName: section.type === 'security-group' ? section.id : undefined,
+                pos: rule.pos
+              })}>
+                <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  // ── Render SG section row ──
+  const renderSectionRow = (section: PolicySection) => {
+    const isExpanded = expandedSections.has(section.id)
+    const scope: { type: 'security-group'; name: string } = { type: 'security-group', name: section.id }
 
     return (
       <TableRow
@@ -370,44 +481,20 @@ export default function FirewallPolicyTable({
                 size="small"
                 sx={{ height: 20, fontSize: 10, ml: 0.5 }}
               />
-              {section.type === 'security-group' && (
-                <Tooltip
-                  title={section.appliedTo.length > 0
-                    ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                    : t('networkPage.noVmsReferencing')
-                  }
-                >
-                  <Chip
-                    icon={<i className="ri-computer-line" style={{ fontSize: 12 }} />}
-                    label={t('networkPage.vmCount', { count: section.appliedTo.length })}
-                    size="small"
-                    variant="outlined"
-                    sx={{ height: 20, fontSize: 10, cursor: 'help' }}
-                  />
-                </Tooltip>
-              )}
-              {section.type === 'cluster' && (
-                <>
-                  <Chip
-                    label={t('common.all')}
-                    size="small"
-                    variant="outlined"
-                    sx={{ height: 20, fontSize: 10 }}
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }} onClick={e => e.stopPropagation()}>
-                    <Switch
-                      checked={clusterOptions?.enable === 1}
-                      onChange={handleToggleClusterFirewall}
-                      color="success"
-                      size="small"
-                      disabled={!selectedConnection}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 600, color: clusterOptions?.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
-                      {clusterOptions?.enable === 1 ? 'ON' : 'OFF'}
-                    </Typography>
-                  </Box>
-                </>
-              )}
+              <Tooltip
+                title={section.appliedTo.length > 0
+                  ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
+                  : t('networkPage.noVmsReferencing')
+                }
+              >
+                <Chip
+                  icon={<i className="ri-computer-line" style={{ fontSize: 12 }} />}
+                  label={t('networkPage.vmCount', { count: section.appliedTo.length })}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 20, fontSize: 10, cursor: 'help' }}
+                />
+              </Tooltip>
             </Box>
 
             <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
@@ -416,13 +503,11 @@ export default function FirewallPolicyTable({
                   <i className="ri-add-line" style={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
-              {section.type === 'security-group' && (
-                <Tooltip title={t('networkPage.delete')}>
-                  <IconButton size="small" color="error" onClick={() => handleDeleteGroup(section.id)}>
-                    <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
+              <Tooltip title={t('networkPage.delete')}>
+                <IconButton size="small" color="error" onClick={() => handleDeleteGroup(section.id)}>
+                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
             </Box>
           </Box>
         </TableCell>
@@ -430,12 +515,10 @@ export default function FirewallPolicyTable({
     )
   }
 
-  // ── Render rule rows for a section ──
-  const renderRuleRows = (section: PolicySection) => {
+  // ── Render rule rows for a SG section ──
+  const renderSGRuleRows = (section: PolicySection) => {
     if (!expandedSections.has(section.id)) return null
-    const scope: { type: 'cluster' | 'security-group'; name?: string } = section.type === 'cluster'
-      ? { type: 'cluster' }
-      : { type: 'security-group', name: section.id }
+    const scope: { type: 'security-group'; name: string } = { type: 'security-group', name: section.id }
 
     if (section.rules.length === 0) {
       return (
@@ -450,107 +533,108 @@ export default function FirewallPolicyTable({
       )
     }
 
-    return section.rules.map((rule, idx) => {
-      const isDragging = dragState.sectionId === section.id && dragState.draggedPos === rule.pos
-      const isDragOver = dragState.sectionId === section.id && dragState.dragOverPos === rule.pos
-      const isGroupRule = rule.type === 'group'
-
-      return (
-        <TableRow
-          key={`${section.id}-rule-${idx}`}
-          hover draggable
-          onDragStart={e => handleDragStart(e, section.id, rule.pos)}
-          onDragEnd={handleDragEnd}
-          onDragOver={e => handleDragOver(e, section.id, rule.pos)}
-          onDragLeave={handleDragLeave}
-          onDrop={e => handleDrop(e, section, rule.pos)}
-          sx={{
-            cursor: 'grab', opacity: isDragging ? 0.5 : 1,
-            borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
-            '&:active': { cursor: 'grabbing' }
-          }}
-        >
-          <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
-            <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
-          </TableCell>
-          <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
-          <TableCell sx={{ p: 0.5, width: 55 }}>
-            <Switch checked={rule.enable !== 0} onChange={() => handleToggleEnable(section, rule)} size="small" color="success" />
-          </TableCell>
-          <TableCell sx={{ p: 0.5, width: 65 }}>
-            <Chip
-              label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
-              size="small"
-              sx={{
-                height: 20, fontSize: 10, fontWeight: 600,
-                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15),
-                color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
-              }}
-            />
-          </TableCell>
-          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
-            {isGroupRule ? '-' : (rule.source || 'any')}
-          </TableCell>
-          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
-            {isGroupRule ? '-' : (rule.dest || 'any')}
-          </TableCell>
-          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
-            {formatService(rule)}
-          </TableCell>
-          <TableCell sx={{ p: 0.5, width: 90 }}>
-            {section.type === 'security-group' ? (
-              <Tooltip
-                title={section.appliedTo.length > 0
-                  ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                  : t('networkPage.noVmsReferencing')
-                }
-              >
-                <Chip
-                  label={t('networkPage.vmCount', { count: section.appliedTo.length })}
-                  size="small" variant="outlined"
-                  sx={{ height: 20, fontSize: 10, cursor: 'help' }}
-                />
-              </Tooltip>
-            ) : (
-              <Chip label={t('common.all')} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
-            )}
-          </TableCell>
-          <TableCell sx={{ p: 0.5, width: 90 }}>
-            {isGroupRule ? (
-              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
-            ) : (
-              <ActionChip action={rule.action || 'ACCEPT'} />
-            )}
-          </TableCell>
-          <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
-            <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
-          </TableCell>
-          <TableCell sx={{ p: 0.5, width: 70 }}>
-            <Box sx={{ display: 'flex', gap: 0 }}>
-              <Tooltip title={t('networkPage.edit')}>
-                <IconButton size="small" onClick={() => openEditRule(scope, rule)}>
-                  <i className="ri-pencil-line" style={{ fontSize: 14 }} />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={t('networkPage.delete')}>
-                <IconButton size="small" color="error" onClick={() => setDeleteConfirm({
-                  scope: section.type === 'cluster' ? 'cluster' : 'security-group',
-                  groupName: section.type === 'security-group' ? section.id : undefined,
-                  pos: rule.pos
-                })}>
-                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </TableCell>
-        </TableRow>
-      )
-    })
+    return section.rules.map((rule, idx) => renderRuleRow(section, rule, idx, 11))
   }
+
+  // ── Cluster Policy Section ──
+  const renderClusterPolicySection = () => (
+    <Paper sx={{ mb: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
+      {/* Header: title + switch + policy selects */}
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className="ri-shield-flash-line" style={{ fontSize: 20, color: theme.palette.primary.main }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Cluster Firewall</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Switch
+              checked={clusterOptions?.enable === 1}
+              onChange={handleToggleClusterFirewall}
+              color="success"
+              size="small"
+              disabled={!selectedConnection}
+            />
+            <Typography variant="caption" sx={{ fontWeight: 600, color: clusterOptions?.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
+              {clusterOptions?.enable === 1 ? 'ON' : 'OFF'}
+            </Typography>
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy IN:</Typography>
+            <FormControl size="small" sx={{ minWidth: 100 }}>
+              <Select
+                value={clusterOptions?.policy_in || 'DROP'}
+                onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
+                sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
+                disabled={!selectedConnection}
+              >
+                <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                <MenuItem value="DROP">DROP</MenuItem>
+                <MenuItem value="REJECT">REJECT</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy OUT:</Typography>
+            <FormControl size="small" sx={{ minWidth: 100 }}>
+              <Select
+                value={clusterOptions?.policy_out || 'ACCEPT'}
+                onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
+                sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
+                disabled={!selectedConnection}
+              >
+                <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                <MenuItem value="DROP">DROP</MenuItem>
+                <MenuItem value="REJECT">REJECT</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Cluster Rules Table */}
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+              <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
+              <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
+              <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
+              <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
+              <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
+              <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
+              <TableCell sx={{ width: 70 }}></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {clusterRules.length > 0 ? (
+              clusterRules.map((rule, idx) => renderRuleRow(clusterSection, rule, idx, 10))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                  <Typography variant="body2">{t('networkPage.noRules')}</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Add Rule button */}
+      <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'flex-end', borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
+        <Button size="small" startIcon={<i className="ri-add-line" />} onClick={() => openAddRule({ type: 'cluster' })} disabled={!selectedConnection}>
+          {t('networkPage.addRule')}
+        </Button>
+      </Box>
+    </Paper>
+  )
 
   // ── Standalone warning ──
   if (firewallMode === 'standalone') {
-    const clusterSection = filteredSections.find(s => s.type === 'cluster')
     return (
       <Box>
         <Box sx={{ mb: 3, p: 2, bgcolor: alpha('#f59e0b', 0.08), borderRadius: 2, border: `1px solid ${alpha('#f59e0b', 0.2)}` }}>
@@ -559,37 +643,18 @@ export default function FirewallPolicyTable({
             {t('networkPage.sgNotAvailableStandalone')}
           </Typography>
         </Box>
-        {clusterSection && (
-          <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                  <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
-                  <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
-                  <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
-                  <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
-                  <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
-                  <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
-                  <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-                  <TableCell sx={{ ...headCellSx, width: 90 }}>{t('networkPage.appliedTo')}</TableCell>
-                  <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-                  <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-                  <TableCell sx={{ width: 70 }}></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {renderSectionRow(clusterSection)}
-                {renderRuleRows(clusterSection)}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
+        {renderClusterPolicySection()}
       </Box>
     )
   }
 
   return (
     <>
+      {/* ═══ Cluster Firewall Policy + Rules ═══ */}
+      {renderClusterPolicySection()}
+
+      {/* ═══ Security Groups ═══ */}
+
       {/* Toolbar */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -615,7 +680,7 @@ export default function FirewallPolicyTable({
         </Box>
       </Box>
 
-      {/* Single flat table */}
+      {/* SG flat table */}
       {filteredSections.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
@@ -636,7 +701,7 @@ export default function FirewallPolicyTable({
             </TableHead>
             <TableBody>
               {filteredSections.map(section => (
-                <Fragment key={section.id}>{renderSectionRow(section)}{renderRuleRows(section)}</Fragment>
+                <Fragment key={section.id}>{renderSectionRow(section)}{renderSGRuleRows(section)}</Fragment>
               ))}
             </TableBody>
           </Table>

@@ -3089,6 +3089,7 @@
     "securityGroupDeleted": "Security Group supprimé",
     "firewallEnabled": "Firewall activé",
     "firewallDisabled": "Firewall désactivé",
+    "policyUpdated": "Policy mise à jour",
     "deleteRuleConfirm": "Supprimer cette règle ?",
     "deleteRuleWarning": "Cette action est irréversible. La règle #{pos} sur {node} sera définitivement supprimée.",
     "deleteClusterRuleWarning": "Cette action est irréversible. La règle #{pos} sera définitivement supprimée du cluster.",

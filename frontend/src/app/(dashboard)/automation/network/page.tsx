@@ -21,6 +21,7 @@ import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
 import StatCard from './components/StatCard'
 import DashboardTab from './components/DashboardTab'
+import SecurityMapTab from './components/security-map/SecurityMapTab'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 
@@ -83,7 +84,7 @@ export default function NetworkAutomationPage() {
 
   // If standalone mode detected, switch away from Cluster sub-tab
   useEffect(() => {
-    if (firewallMode === 'standalone' && activeTab === 2 && rulesSubTab === 0) {
+    if (firewallMode === 'standalone' && activeTab === 3 && rulesSubTab === 0) {
       setRulesSubTab(1)
     }
   }, [firewallMode, activeTab, rulesSubTab])
@@ -91,7 +92,7 @@ export default function NetworkAutomationPage() {
   // Load VM rules when on Dashboard (tab 0) or Rules > VMs (tab 2, subTab 2)
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 0 || (activeTab === 2 && (rulesSubTab === 0 || rulesSubTab === 2))) {
+      if (activeTab === 0 || (activeTab === 3 && (rulesSubTab === 0 || rulesSubTab === 2))) {
         loadVMFirewallData()
       }
     }
@@ -159,10 +160,10 @@ export default function NetworkAutomationPage() {
           gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
           gap: 2, mb: 3, width: '100%'
         }}>
-          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => { setActiveTab(2); setRulesSubTab(3) }} />
-          <StatCard icon="ri-database-2-line" label={t('firewall.ipSets')} value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(3)} />
-          <StatCard icon="ri-price-tag-3-line" label={t('firewall.aliases')} value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(3)} />
-          <StatCard icon="ri-cloud-line" label={t('network.clusterRules')} value={clusterRules.length} subvalue={clusterOptions?.enable === 1 ? t('network.firewallActive') : t('network.firewallInactive')} color={clusterOptions?.enable === 1 ? '#06b6d4' : '#94a3b8'} loading={loading} onClick={() => { setActiveTab(2); setRulesSubTab(0) }} />
+          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => { setActiveTab(3); setRulesSubTab(3) }} />
+          <StatCard icon="ri-database-2-line" label={t('firewall.ipSets')} value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(4)} />
+          <StatCard icon="ri-price-tag-3-line" label={t('firewall.aliases')} value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(4)} />
+          <StatCard icon="ri-cloud-line" label={t('network.clusterRules')} value={clusterRules.length} subvalue={clusterOptions?.enable === 1 ? t('network.firewallActive') : t('network.firewallInactive')} color={clusterOptions?.enable === 1 ? '#06b6d4' : '#94a3b8'} loading={loading} onClick={() => { setActiveTab(3); setRulesSubTab(0) }} />
         </Box>
 
         {/* Main Content Card */}
@@ -170,6 +171,7 @@ export default function NetworkAutomationPage() {
           <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
             <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('firewall.microsegmentation')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-map-2-line" />} iconPosition="start" label={t('networkPage.tabMap')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-list-check-3" />} iconPosition="start" label={t('networkPage.tabRules')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-archive-2-line" />} iconPosition="start" label={t('networkPage.tabObjects')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
@@ -207,8 +209,24 @@ export default function NetworkAutomationPage() {
             </Box>
           )}
 
-          {/* Tab 2: Rules */}
-          {activeTab === 2 && (
+          {/* Tab 2: Map */}
+          {activeTab === 2 && selectedConnection && (
+            <SecurityMapTab
+              connectionId={selectedConnection}
+              securityGroups={securityGroups}
+              aliases={aliases}
+              clusterOptions={clusterOptions}
+              clusterRules={clusterRules}
+            />
+          )}
+          {activeTab === 2 && !selectedConnection && (
+            <Box sx={{ p: 3, textAlign: 'center' }}>
+              <span style={{ color: theme.palette.text.secondary }}>{t('network.selectConnectionMicroseg')}</span>
+            </Box>
+          )}
+
+          {/* Tab 3: Rules */}
+          {activeTab === 3 && (
             <RulesTab
               activeSubTab={rulesSubTab}
               onSubTabChange={setRulesSubTab}
@@ -231,8 +249,8 @@ export default function NetworkAutomationPage() {
             />
           )}
 
-          {/* Tab 3: Objects */}
-          {activeTab === 3 && (
+          {/* Tab 4: Objects */}
+          {activeTab === 4 && (
             <ObjectsTab
               aliases={aliases}
               ipsets={ipsets}

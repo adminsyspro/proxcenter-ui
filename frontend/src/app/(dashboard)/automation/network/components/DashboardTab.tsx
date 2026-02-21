@@ -302,7 +302,7 @@ export default function DashboardTab({
             </Typography>
             {loadingVMRules && <Chip label={t('networkPage.loading')} size="small" sx={{ height: 20, fontSize: 10 }} />}
           </Box>
-          <Button size="small" onClick={() => { onNavigateTab(2); onNavigateRulesSubTab(2) }} endIcon={<i className="ri-arrow-right-line" />}>
+          <Button size="small" onClick={() => { onNavigateTab(3); onNavigateRulesSubTab(2) }} endIcon={<i className="ri-arrow-right-line" />}>
             {t('networkPage.viewDetails')}
           </Button>
         </Box>
@@ -374,7 +374,7 @@ export default function DashboardTab({
               recommendations.push({
                 severity: 'warning', icon: 'ri-arrow-down-line',
                 title: t('firewall.policyInPermissive'),
-                description: t('network.switchToDropZeroTrust'), action: t('microseg.configure'), onClick: () => { onNavigateTab(2); onNavigateRulesSubTab(1) }
+                description: t('network.switchToDropZeroTrust'), action: t('microseg.configure'), onClick: () => { onNavigateTab(3); onNavigateRulesSubTab(1) }
               })
             }
             const unprotectedVMs = vmFirewallData.filter(v => !v.firewallEnabled)
@@ -382,7 +382,7 @@ export default function DashboardTab({
               recommendations.push({
                 severity: 'warning', icon: 'ri-computer-line',
                 title: t('network.vmsWithDisabledFirewall', { count: unprotectedVMs.length }),
-                description: t('network.enableFirewallVms'), action: t('firewall.viewVms'), onClick: () => { onNavigateTab(2); onNavigateRulesSubTab(2) }
+                description: t('network.enableFirewallVms'), action: t('firewall.viewVms'), onClick: () => { onNavigateTab(3); onNavigateRulesSubTab(2) }
               })
             }
             const vmsWithoutSG = vmFirewallData.filter(v => v.firewallEnabled && !v.rules.some(r => r.type === 'group'))

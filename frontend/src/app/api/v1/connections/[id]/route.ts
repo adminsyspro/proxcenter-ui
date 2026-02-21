@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
+import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { updateConnectionSchema } from "@/lib/schemas"
 
 export const runtime = "nodejs"
@@ -171,8 +172,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       },
     })
 
-    // Invalidate connection cache after update
+    // Invalidate caches after update
     invalidateConnectionCache(id)
+    invalidateInventoryCache()
 
     // Audit
     const { audit } = await import("@/lib/audit")
@@ -243,8 +245,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
     await prisma.connection.delete({ where: { id } })
 
-    // Invalidate connection cache after deletion
+    // Invalidate caches after deletion
     invalidateConnectionCache(id)
+    invalidateInventoryCache()
 
     // Audit
     const { audit } = await import("@/lib/audit")

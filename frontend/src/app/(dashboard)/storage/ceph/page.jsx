@@ -49,7 +49,6 @@ import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
-import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* -----------------------------
@@ -645,50 +644,58 @@ return updated.slice(-30)
   // No Ceph clusters found
   if (cephConnections.length === 0) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box>
-            <Typography variant='h5' sx={{ fontWeight: 900 }}>{t('storage.ceph')}</Typography>
-            <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('storage.distributed')}</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        {/* Icon cluster */}
+        <Box sx={{ position: 'relative', width: 120, height: 120, mb: 3 }}>
+          <Box sx={{
+            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            width: 80, height: 80, borderRadius: '50%',
+            bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <i className='ri-stack-line' style={{ fontSize: 36, opacity: 0.25 }} />
           </Box>
-          <Button variant='outlined' size='small' component={Link} href='/storage/overview'>
-            {t('storage.storages')}
-          </Button>
+          <Box sx={{
+            position: 'absolute', top: 0, right: 6,
+            width: 36, height: 36, borderRadius: '50%',
+            bgcolor: 'background.paper', border: '2px solid', borderColor: 'divider',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <i className='ri-hard-drive-2-line' style={{ fontSize: 18, opacity: 0.35 }} />
+          </Box>
+          <Box sx={{
+            position: 'absolute', bottom: 2, left: 4,
+            width: 36, height: 36, borderRadius: '50%',
+            bgcolor: 'background.paper', border: '2px solid', borderColor: 'divider',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <i className='ri-speed-line' style={{ fontSize: 18, opacity: 0.35 }} />
+          </Box>
         </Box>
-        <EmptyState
-          icon="ri-stack-line"
-          title={t('emptyState.noCeph')}
-          description={t('emptyState.noCephDesc')}
-          size="large"
-        />
 
-        {connections.length > 0 && (
-          <Card variant='outlined'>
-            <CardContent>
-              <Typography variant='subtitle2' sx={{ fontWeight: 700, mb: 2 }}>
-                {t('storage.scannedConnections')} ({connections.length})
-              </Typography>
-              <Stack spacing={1}>
-                {connections.map(conn => (
-                  <Box
-                    key={conn.id}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      p: 1.5,
-                      borderRadius: 1,
-                      bgcolor: 'action.hover'
-                    }}
-                  >
-                    <Typography variant='body2' sx={{ fontWeight: 600 }}>{conn.name}</Typography>
-                    <Chip size='small' label={t('common.notAvailable')} variant='outlined' sx={{ fontSize: 11 }} />
-                  </Box>
-                ))}
-              </Stack>
-            </CardContent>
-          </Card>
-        )}
+        <Typography variant='h6' fontWeight={700} sx={{ mb: 0.5 }}>
+          {t('emptyState.noCeph')}
+        </Typography>
+        <Typography variant='body2' color='text.secondary' sx={{ maxWidth: 420, textAlign: 'center', mb: 3 }}>
+          {t('emptyState.noCephDesc')}
+        </Typography>
+
+        {/* Feature hints */}
+        <Box sx={{ display: 'flex', gap: 3, mb: 4 }}>
+          {[
+            { icon: 'ri-pie-chart-line', label: t('cephPage.osdsAndPools') },
+            { icon: 'ri-line-chart-line', label: t('cephPage.livePerformance') },
+            { icon: 'ri-eye-line', label: t('cephPage.monitorHealth') },
+          ].map((f) => (
+            <Box key={f.icon} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: 0.5 }}>
+              <i className={f.icon} style={{ fontSize: 16 }} />
+              <Typography variant='caption'>{f.label}</Typography>
+            </Box>
+          ))}
+        </Box>
+
+        <Button variant='outlined' size='small' component={Link} href='/storage/overview'>
+          {t('storage.storages')}
+        </Button>
       </Box>
     )
   }

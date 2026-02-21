@@ -2773,7 +2773,10 @@
     "rShort": "L",
     "wShort": "É",
     "live": "LIVE",
-    "iopsCeph": "IOPS Ceph"
+    "iopsCeph": "IOPS Ceph",
+    "osdsAndPools": "OSDs & Pools",
+    "livePerformance": "Performance live",
+    "monitorHealth": "Surveillance santé"
   },
   "storageOverview": {
     "scope": "Portée",

@@ -2768,7 +2768,10 @@
     "rShort": "R",
     "wShort": "W",
     "live": "LIVE",
-    "iopsCeph": "IOPS Ceph"
+    "iopsCeph": "IOPS Ceph",
+    "osdsAndPools": "OSDs & Pools",
+    "livePerformance": "Live performance",
+    "monitorHealth": "Health monitoring"
   },
   "storageOverview": {
     "scope": "Scope",

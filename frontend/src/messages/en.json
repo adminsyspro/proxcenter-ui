@@ -3761,6 +3761,9 @@
       "protection_coverage": "Protection Coverage",
       "replication_jobs": "Replication Jobs"
     },
+    "previewTitle": "Report Preview",
+    "previewHint": "Select a report type to see a preview",
+    "previewSample": "SAMPLE",
     "days": {
       "sunday": "Sunday",
       "monday": "Monday",

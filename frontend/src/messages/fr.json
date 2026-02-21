@@ -2058,6 +2058,8 @@
   "siteRecovery": {
     "title": "Site Recovery",
     "subtitle": "Réplication Ceph RBD inter-clusters et reprise d'activité",
+    "noCeph": "Aucun cluster Ceph détecté",
+    "noCephDesc": "Site Recovery nécessite au moins une connexion PVE avec Ceph activé. Activez Ceph sur une connexion dans Paramètres > Connexions pour commencer.",
     "tabs": {
       "dashboard": "Tableau de bord",
       "replication": "Réplication",

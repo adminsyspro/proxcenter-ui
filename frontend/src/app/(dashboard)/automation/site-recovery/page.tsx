@@ -8,7 +8,10 @@ import {
   Box, Button, Chip, Tab, Tabs
 } from '@mui/material'
 
+import { Alert, Typography } from '@mui/material'
+
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import EmptyState from '@/components/EmptyState'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 
@@ -93,6 +96,9 @@ export default function SiteRecoveryPage() {
   const connections = useMemo(() =>
     (connectionsData?.data || []).map((c: any) => ({ id: c.id, name: c.name, hasCeph: c.hasCeph }))
   , [connectionsData])
+
+  const hasCephCluster = connections.some(c => c.hasCeph)
+  const connectionsLoaded = !!connectionsData
 
   // All VMs for create job dialog
   const allVMs = useMemo(() =>
@@ -272,6 +278,16 @@ export default function SiteRecoveryPage() {
 
   return (
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
+      {connectionsLoaded && !hasCephCluster ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 8 }}>
+          <EmptyState
+            icon="ri-database-2-line"
+            title={t('siteRecovery.noCeph')}
+            description={t('siteRecovery.noCephDesc')}
+            size="large"
+          />
+        </Box>
+      ) : (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Tabs + Actions */}
         <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
@@ -429,6 +445,7 @@ export default function SiteRecoveryPage() {
           connections={connections}
         />
       </Box>
+      )}
     </EnterpriseGuard>
   )
 }

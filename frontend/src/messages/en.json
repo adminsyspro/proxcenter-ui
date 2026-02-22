@@ -876,7 +876,9 @@
     "notesPlaceholder": "Write your notes here...",
     "state": "State",
     "group": "Group",
-    "node": "Node"
+    "node": "Node",
+    "drsStatusTitle": "DRS Status",
+    "drsGoToDrs": "Manage DRS"
   },
   "inventoryPage": {
     "newTag": "New tag...",

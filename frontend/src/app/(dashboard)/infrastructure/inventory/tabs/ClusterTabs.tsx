@@ -1,7 +1,8 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 
 import {
   Alert,
@@ -56,9 +57,17 @@ import VCenterSummary from '../components/VCenterSummary'
 import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 import { AddIcon } from '../components/IconWrappers'
+import { useLicense, Features } from '@/contexts/LicenseContext'
+import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
+import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 
 export default function ClusterTabs(props: any) {
   const t = useTranslations()
+  const router = useRouter()
+  const { hasFeature, loading: licenseLoading } = useLicense()
+  const isEnterprise = !licenseLoading && hasFeature(Features.DRS)
+  const { data: drsStatus } = useDRSStatus(isEnterprise)
+  const { data: metricsData } = useDRSMetrics(isEnterprise)
 
   const {
     allVms,
@@ -144,6 +153,14 @@ export default function ClusterTabs(props: any) {
     updatesDialogNode,
     updatesDialogOpen,
   } = props
+
+  const drsHealth = useMemo(() => {
+    if (!isEnterprise || !(drsStatus as any)?.enabled || !metricsData) return null
+    const connId = selection?.type === 'cluster' ? selection.id : ''
+    const clusterMetrics = (metricsData as any)?.[connId]
+    if (!clusterMetrics?.summary) return null
+    return computeDrsHealthScore(clusterMetrics.summary)
+  }, [isEnterprise, drsStatus, metricsData, selection])
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />
@@ -546,6 +563,57 @@ export default function ClusterTabs(props: any) {
                           </CardContent>
                         </Card>
                     </Box>
+
+                    {/* DRS Status */}
+                    {drsHealth !== null && (
+                      <Card variant="outlined" sx={{ mb: 2 }}>
+                        <CardContent sx={{ py: 1.5, px: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                            {/* Score ring */}
+                            <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                              <CircularProgress
+                                variant="determinate"
+                                value={drsHealth.score}
+                                size={48}
+                                thickness={5}
+                                sx={{ color: drsHealth.score >= 80 ? 'success.main' : drsHealth.score >= 50 ? 'warning.main' : 'error.main' }}
+                              />
+                              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Typography variant="caption" fontWeight={700} sx={{ fontSize: 11 }}>{drsHealth.score}</Typography>
+                              </Box>
+                            </Box>
+                            {/* Title + status */}
+                            <Box sx={{ minWidth: 120 }}>
+                              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.drsStatusTitle')}</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {drsHealth.score} / 100 — {drsHealth.score >= 80 ? t('drsPage.balanced') : drsHealth.score >= 50 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')}
+                              </Typography>
+                            </Box>
+                            {/* Penalty chips */}
+                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', flex: 1 }}>
+                              {drsHealth.cpuPenalty !== 0 && (
+                                <Chip size="small" label={`CPU ${drsHealth.cpuPenalty}`} color="warning" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
+                              )}
+                              {drsHealth.memPenalty !== 0 && (
+                                <Chip size="small" label={`Memory ${drsHealth.memPenalty}`} color="warning" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
+                              )}
+                              {drsHealth.imbalancePenalty !== 0 && (
+                                <Chip size="small" label={`Imbalance ${drsHealth.imbalancePenalty}`} color="warning" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
+                              )}
+                            </Box>
+                            {/* Manage DRS button */}
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => router.push('/automation/drs')}
+                              startIcon={<i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
+                            >
+                              {t('inventory.drsGoToDrs')}
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {/* Section Nodes Table */}
                     <Card variant="outlined">

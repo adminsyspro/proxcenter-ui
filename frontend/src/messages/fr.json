@@ -881,7 +881,9 @@
     "notesPlaceholder": "Écrivez vos notes ici...",
     "state": "État",
     "group": "Groupe",
-    "node": "Nœud"
+    "node": "Nœud",
+    "drsStatusTitle": "Statut DRS",
+    "drsGoToDrs": "Gérer le DRS"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",

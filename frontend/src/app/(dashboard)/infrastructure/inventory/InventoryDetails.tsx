@@ -257,7 +257,12 @@ export default function InventoryDetails({
   const [deleteVmConfirmText, setDeleteVmConfirmText] = useState('')
   const [deletingVm, setDeletingVm] = useState(false)
   const [deleteVmPurge, setDeleteVmPurge] = useState(true) // Supprimer aussi les disques
-  
+
+  // Convert to template
+  const convertTemplateDialogOpen = activeDialog === 'convertTemplate'
+  const setConvertTemplateDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'convertTemplate' : 'none'), [])
+  const [convertingTemplate, setConvertingTemplate] = useState(false)
+
   // État pour l'édition d'option VM
   const [editOptionDialog, setEditOptionDialog] = useState<{ 
     key: string; 
@@ -834,7 +839,7 @@ return next
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          newvmid: params.newVmid,
+          newid: params.newVmid,
           name: params.name || undefined,
           target: params.targetNode !== node ? params.targetNode : undefined,
           storage: params.targetStorage || undefined,
@@ -3885,7 +3890,43 @@ return
   }
 
   const onClone = () => setCloneDialogOpen(true)
-  const onConvertTemplate = () => handleNotImplemented(t('templates.fromVm'))
+  const onConvertTemplate = () => {
+    const status = data?.vmRealStatus || data?.status
+    if (status === 'running') {
+      alert(t('inventory.vmRunningWarning'))
+      return
+    }
+    setConvertTemplateDialogOpen(true)
+  }
+
+  const handleConvertTemplate = async () => {
+    if (!selection || selection.type !== 'vm') return
+
+    const { connId, node, type, vmid } = parseVmId(selection.id)
+
+    setConvertingTemplate(true)
+
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/template`,
+        { method: 'POST' }
+      )
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `HTTP ${res.status}`)
+      }
+
+      setConvertTemplateDialogOpen(false)
+      toast.success(t('templates.convertSuccess'))
+
+      setTimeout(() => { onRefresh?.() }, 2000)
+    } catch (e: any) {
+      alert(`${t('errors.genericError')}: ${e?.message || e}`)
+    } finally {
+      setConvertingTemplate(false)
+    }
+  }
 
   const onDelete = () => {
     // Vérifier que la VM est arrêtée
@@ -3943,10 +3984,13 @@ return
       }
       
       setDeleteVmDialogOpen(false)
-      
+
       // Retourner à la vue globale et rafraîchir
       onSelect?.(null as any) // Désélectionner
-      
+
+      // Rafraîchir l'arbre après un court délai (la suppression PVE est async)
+      setTimeout(() => { onRefresh?.() }, 2000)
+
       // Afficher un message de succès
       setConfirmAction({
         action: 'info',
@@ -3955,12 +3999,6 @@ return
         vmName: undefined,
         onConfirm: async () => {
           setConfirmAction(null)
-
-
-          // Rafraîchir l'arbre après un court délai
-          if (onRefresh) {
-            await onRefresh()
-          }
         }
       })
     } catch (e: any) {
@@ -6097,6 +6135,45 @@ return
             startIcon={deletingVm ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
           >
             {deletingVm ? t('common.deleting') : t('common.delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog de conversion en template */}
+      <Dialog
+        open={convertTemplateDialogOpen}
+        onClose={() => !convertingTemplate && setConvertTemplateDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className="ri-file-text-line" style={{ fontSize: 24 }} />
+          {t('templates.convertToTemplate')}
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight={600}>
+              {t('templates.convertWarning')}
+            </Typography>
+          </Alert>
+          <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>VM:</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              {data?.title || 'VM'} <Typography component="span" variant="body2" sx={{ opacity: 0.6 }}>(ID: {selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''})</Typography>
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConvertTemplateDialogOpen(false)} disabled={convertingTemplate}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConvertTemplate}
+            disabled={convertingTemplate}
+            startIcon={convertingTemplate ? <CircularProgress size={16} /> : <i className="ri-file-text-line" />}
+          >
+            {convertingTemplate ? t('common.loading') : t('templates.convert')}
           </Button>
         </DialogActions>
       </Dialog>

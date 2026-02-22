@@ -46,6 +46,7 @@ const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={
 const DescriptionIcon = (props: any) => <i className="ri-file-text-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
+import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 
 /* ------------------------------------------------------------------ */
 /* Status Icon Component                                              */
@@ -525,6 +526,68 @@ return next
   const [actionBusy, setActionBusy] = useState(false)
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false)
   const [cloneTarget, setCloneTarget] = useState<VmContextMenu>(null)
+
+  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
+    if (!cloneTarget) throw new Error('No VM selected for cloning')
+
+    const payload: Record<string, any> = {
+      newid: params.newVmid,
+      target: params.targetNode,
+      name: params.name || undefined,
+      storage: params.targetStorage || undefined,
+      format: params.format || undefined,
+      pool: params.pool || undefined,
+      full: params.full ? 1 : 0,
+    }
+
+    const res = await fetch(
+      `/api/v1/connections/${encodeURIComponent(cloneTarget.connId)}/guests/${cloneTarget.type}/${encodeURIComponent(cloneTarget.node)}/${encodeURIComponent(cloneTarget.vmid)}/clone`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }
+    )
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.error || `HTTP ${res.status}`)
+    }
+
+    setTimeout(() => { onRefresh?.() }, 2000)
+  }, [cloneTarget, onRefresh])
+
+  // Convert to template
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [templateTarget, setTemplateTarget] = useState<VmContextMenu>(null)
+  const [convertingTemplate, setConvertingTemplate] = useState(false)
+
+  const handleConvertToTemplate = useCallback(async () => {
+    if (!templateTarget) return
+
+    setConvertingTemplate(true)
+
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(templateTarget.connId)}/guests/${templateTarget.type}/${encodeURIComponent(templateTarget.node)}/${encodeURIComponent(templateTarget.vmid)}/template`,
+        { method: 'POST' }
+      )
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `HTTP ${res.status}`)
+      }
+
+      setTemplateDialogOpen(false)
+      setTemplateTarget(null)
+      setTimeout(() => { onRefresh?.() }, 2000)
+    } catch (e: any) {
+      alert(`Error: ${e?.message || e}`)
+    } finally {
+      setConvertingTemplate(false)
+    }
+  }, [templateTarget, onRefresh])
+
   const [migrateDialogOpen, setMigrateDialogOpen] = useState(false)
   const [migrateTarget, setMigrateTarget] = useState<VmContextMenu>(null)
   // Menu contextuel Node (maintenance + bulk actions + shell)
@@ -2569,11 +2632,15 @@ return (
             <ListItemText>{t('audit.actions.clone')}</ListItemText>
           </MenuItem>,
 
-          <MenuItem key="template" onClick={() => handleNotImplemented(t('inventory.convertToTemplate'))} disabled={actionBusy}>
+          <MenuItem key="template" onClick={() => {
+            setTemplateTarget(contextMenu)
+            setTemplateDialogOpen(true)
+            handleCloseContextMenu()
+          }} disabled={actionBusy || contextMenu?.status === 'running'}>
             <ListItemIcon>
               <DescriptionIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>{t('templates.create')}</ListItemText>
+            <ListItemText>{t('templates.convertToTemplate')}</ListItemText>
           </MenuItem>
         ]}
       </Menu>
@@ -2764,15 +2831,62 @@ return (
       </Dialog>
 
       {/* Dialog de clonage */}
-      <CloneVmDialog
-        open={cloneDialogOpen}
-        onClose={() => {
-          setCloneDialogOpen(false)
-          setCloneTarget(null)
-        }}
-        source={cloneTarget}
-        allVms={allVms.map(vm => ({ ...vm, type: vm.type as 'qemu' | 'lxc', tags: vm.tags?.split(';').filter(Boolean) }))}
-      />
+      {cloneTarget && (
+        <CloneVmDialog
+          open={cloneDialogOpen}
+          onClose={() => {
+            setCloneDialogOpen(false)
+            setCloneTarget(null)
+          }}
+          onClone={handleCloneVm}
+          connId={cloneTarget.connId}
+          currentNode={cloneTarget.node}
+          vmName={cloneTarget.name || `VM ${cloneTarget.vmid}`}
+          vmid={cloneTarget.vmid}
+          nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
+          existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
+          pools={[]}
+        />
+      )}
+
+      {/* Dialog de conversion en template */}
+      <Dialog
+        open={templateDialogOpen}
+        onClose={() => !convertingTemplate && setTemplateDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DescriptionIcon sx={{ fontSize: 24 }} />
+          {t('templates.convertToTemplate')}
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {t('templates.convertWarning')}
+          </Alert>
+          {templateTarget && (
+            <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+              <Typography variant="body2" sx={{ opacity: 0.7 }}>VM:</Typography>
+              <Typography variant="subtitle1" fontWeight={700}>
+                {templateTarget.name} <Typography component="span" variant="body2" sx={{ opacity: 0.6 }}>(ID: {templateTarget.vmid})</Typography>
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setTemplateDialogOpen(false); setTemplateTarget(null) }} disabled={convertingTemplate}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConvertToTemplate}
+            disabled={convertingTemplate}
+            startIcon={convertingTemplate ? <CircularProgress size={16} /> : null}
+          >
+            {convertingTemplate ? t('common.loading') : t('templates.convert')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de migration */}
       {migrateTarget && (
@@ -2878,259 +2992,3 @@ return (
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* CloneVmDialog - Dialog de clonage de VM/Template                   */
-/* ------------------------------------------------------------------ */
-
-function CloneVmDialog({
-  open,
-  onClose,
-  source,
-  allVms
-}: {
-  open: boolean
-  onClose: () => void
-  source: VmContextMenu
-  allVms: AllVmItem[]
-}) {
-  const t = useTranslations()
-  const theme = useTheme()
-
-  const [cloning, setCloning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  
-  // Formulaire
-  const [targetNode, setTargetNode] = useState('')
-  const [newVmid, setNewVmid] = useState('')
-  const [vmidError, setVmidError] = useState<string | null>(null)
-  const [newName, setNewName] = useState('')
-  const [cloneMode, setCloneMode] = useState<'linked' | 'full'>('linked')
-  const [targetStorage, setTargetStorage] = useState('')
-  
-  // Données dynamiques
-  const [nodes, setNodes] = useState<any[]>([])
-  const [storages, setStorages] = useState<any[]>([])
-  const [loadingData, setLoadingData] = useState(false)
-
-  // Reset et charger les données à l'ouverture
-  useEffect(() => {
-    if (open && source) {
-      setError(null)
-      setTargetNode(source.node)
-      setNewName('')
-      setCloneMode('linked')
-      setTargetStorage('')
-      loadData()
-      calculateNextVmid()
-    }
-  }, [open, source])
-
-  const loadData = async () => {
-    if (!source) return
-    setLoadingData(true)
-
-    try {
-      // Charger les nodes
-      const nodesRes = await fetch(`/api/v1/connections/${encodeURIComponent(source.connId)}/nodes`)
-      const nodesJson = await nodesRes.json()
-
-      setNodes(nodesJson.data || [])
-      
-      // Charger les storages
-      const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(source.connId)}/storage`)
-      const storagesJson = await storagesRes.json()
-
-      const diskStorages = (storagesJson.data || []).filter((s: any) => 
-        s.content?.includes('images') || s.content?.includes('rootdir')
-      )
-
-      setStorages(diskStorages)
-    } catch (e) {
-      console.error('Error loading data:', e)
-    } finally {
-      setLoadingData(false)
-    }
-  }
-
-  const calculateNextVmid = () => {
-    const usedVmids = allVms.map(vm => parseInt(String(vm.vmid), 10))
-    let nextId = 100
-
-    while (usedVmids.includes(nextId)) {
-      nextId++
-    }
-
-    setNewVmid(String(nextId))
-    setVmidError(null)
-  }
-
-  const handleVmidChange = (value: string) => {
-    const numericValue = value.replace(/[^0-9]/g, '')
-
-    setNewVmid(numericValue)
-    
-    if (!numericValue) {
-      setVmidError(null)
-      
-return
-    }
-    
-    const vmidNum = parseInt(numericValue, 10)
-
-    if (vmidNum < 100) {
-      setVmidError('VM ID must be >= 100')
-      
-return
-    }
-    
-    const isUsed = allVms.some(vm => parseInt(String(vm.vmid), 10) === vmidNum)
-
-    if (isUsed) {
-      setVmidError(`VM ID ${vmidNum} is already in use`)
-      
-return
-    }
-    
-    setVmidError(null)
-  }
-
-  const handleClone = async () => {
-    if (!source || !newVmid) return
-    
-    setCloning(true)
-    setError(null)
-    
-    try {
-      const payload: any = {
-        newid: parseInt(newVmid, 10),
-        target: targetNode,
-      }
-      
-      if (newName) payload.name = newName
-
-      if (cloneMode === 'full') {
-        payload.full = 1
-        if (targetStorage) payload.storage = targetStorage
-      }
-      
-      // POST /api/v1/connections/{connId}/guests/{type}/{node}/{vmid}/clone
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(source.connId)}/guests/${source.type}/${encodeURIComponent(source.node)}/${encodeURIComponent(source.vmid)}/clone`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }
-      )
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-
-        throw new Error(err?.error || `HTTP ${res.status}`)
-      }
-      
-      onClose()
-    } catch (e: any) {
-      setError(e?.message || t('inventory.errorCloningVm'))
-    } finally {
-      setCloning(false)
-    }
-  }
-
-  if (!source) return null
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ 
-        bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,150,200,0.15)' : 'primary.light',
-        color: theme.palette.mode === 'dark' ? 'primary.light' : 'primary.contrastText',
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 1,
-        py: 1.5
-      }}>
-        <ContentCopyIcon sx={{ fontSize: 20 }} />
-        {source.template ? t('inventoryPage.cloneVmTemplate') : t('inventoryPage.cloneVm')} {source.vmid}
-      </DialogTitle>
-      
-      <DialogContent sx={{ pt: 3 }}>
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        
-        {loadingData ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>{t('inventoryPage.targetNode')}</InputLabel>
-              <Select value={targetNode} onChange={(e) => setTargetNode(e.target.value)} label={t('inventoryPage.targetNode')}>
-                {nodes.map(n => (
-                  <MenuItem key={n.node} value={n.node}>{n.node}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth size="small">
-              <InputLabel>{t('inventoryPage.mode')}</InputLabel>
-              <Select value={cloneMode} onChange={(e) => setCloneMode(e.target.value as 'linked' | 'full')} label={t('inventoryPage.mode')}>
-                <MenuItem value="linked">{t('inventoryPage.linkedClone')}</MenuItem>
-                <MenuItem value="full">{t('inventoryPage.fullClone')}</MenuItem>
-              </Select>
-            </FormControl>
-
-            <TextField
-              label={t('inventoryPage.vmId')}
-              value={newVmid}
-              onChange={(e) => handleVmidChange(e.target.value)}
-              size="small"
-              error={!!vmidError}
-              helperText={vmidError}
-              inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
-            />
-
-            {cloneMode === 'full' && (
-              <FormControl fullWidth size="small">
-                <InputLabel>{t('inventoryPage.targetStorage')}</InputLabel>
-                <Select value={targetStorage} onChange={(e) => setTargetStorage(e.target.value)} label={t('inventoryPage.targetStorage')}>
-                  <MenuItem value="">{t('inventoryPage.sameAsSource')}</MenuItem>
-                  {storages.map(s => (
-                    <MenuItem key={s.storage} value={s.storage}>{s.storage}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-
-            {cloneMode === 'linked' && <Box />}
-
-            <TextField
-              label={t('common.name')}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              size="small"
-              placeholder={t('inventoryPage.cloneOf', { name: source.name })}
-            />
-
-            {cloneMode === 'full' && (
-              <Typography variant="caption" sx={{ opacity: 0.7, gridColumn: '1 / -1' }}>
-                {t('inventoryPage.formatSameAsSource')}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </DialogContent>
-      
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={cloning}>{t('common.cancel')}</Button>
-        <Button
-          onClick={handleClone}
-          variant="contained"
-          disabled={cloning || !newVmid || !!vmidError || loadingData}
-          startIcon={cloning ? <CircularProgress size={16} /> : null}
-        >
-          {t('audit.actions.clone')}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}

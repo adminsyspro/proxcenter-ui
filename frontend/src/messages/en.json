@@ -2298,7 +2298,11 @@
     "versioningApproval": "Versioning & approval",
     "create": "Create template",
     "fromVm": "From VM",
-    "fromIso": "From ISO"
+    "fromIso": "From ISO",
+    "convertToTemplate": "Convert to Template",
+    "convertWarning": "This operation is irreversible. The VM will be converted to a template and can no longer be started directly.",
+    "convertSuccess": "VM successfully converted to template",
+    "convert": "Convert"
   },
   "console": {
     "title": "Console",

@@ -142,7 +142,7 @@ function VmActions({
       </MuiTooltip>
 
       {/* Convert to Template */}
-      <MuiTooltip title={t('templates.fromVm')}>
+      <MuiTooltip title={t('templates.convertToTemplate')}>
         <span>
           <IconButton
             size="small"

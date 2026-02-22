@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react'
 
 // Features disponibles
 export const Features = {
@@ -23,6 +23,46 @@ export const Features = {
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]
+
+// Edition → features mapping (single source of truth, mirrors backend EditionFeatures)
+const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
+  enterprise: [
+    Features.DRS,
+    Features.FIREWALL,
+    Features.MICROSEGMENTATION,
+    Features.ROLLING_UPDATES,
+    Features.AI_INSIGHTS,
+    Features.PREDICTIVE_ALERTS,
+    Features.ALERTS,
+    Features.GREEN_METRICS,
+    Features.CROSS_CLUSTER_MIGRATION,
+    Features.CEPH_REPLICATION,
+    Features.LDAP,
+    Features.REPORTS,
+    Features.RBAC,
+    Features.TASK_CENTER,
+    Features.NOTIFICATIONS,
+    Features.CVE_SCANNER,
+  ],
+  enterprise_plus: [
+    Features.DRS,
+    Features.FIREWALL,
+    Features.MICROSEGMENTATION,
+    Features.ROLLING_UPDATES,
+    Features.AI_INSIGHTS,
+    Features.PREDICTIVE_ALERTS,
+    Features.ALERTS,
+    Features.GREEN_METRICS,
+    Features.CROSS_CLUSTER_MIGRATION,
+    Features.CEPH_REPLICATION,
+    Features.LDAP,
+    Features.REPORTS,
+    Features.RBAC,
+    Features.TASK_CENTER,
+    Features.NOTIFICATIONS,
+    Features.CVE_SCANNER,
+  ],
+}
 
 interface LicenseStatus {
   licensed: boolean
@@ -62,7 +102,6 @@ const LicenseContext = createContext<LicenseContextValue>({
 
 export function LicenseProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<LicenseStatus | null>(null)
-  const [features, setFeatures] = useState<Feature[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -82,47 +121,33 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const loadFeatures = useCallback(async () => {
-    try {
-      const res = await fetch('/api/v1/license/features')
-      if (res.ok) {
-        const data = await res.json()
-        setFeatures(data.features || [])
-      }
-    } catch (e) {
-      console.error('Failed to load features:', e)
-    }
-  }, [])
-
   const refresh = useCallback(async () => {
     setLoading(true)
-    await Promise.all([loadLicenseStatus(), loadFeatures()])
+    await loadLicenseStatus()
     setLoading(false)
-  }, [loadLicenseStatus, loadFeatures])
+  }, [loadLicenseStatus])
 
   useEffect(() => {
     refresh()
   }, [refresh])
 
   const isLicensed = Boolean(status?.licensed && !status?.expired)
-  const isEnterprise = status?.edition === 'enterprise'
+  const isEnterprise = status?.edition === 'enterprise' || status?.edition === 'enterprise_plus'
+
+  // Derive features from edition
+  const features: Feature[] = useMemo(() => {
+    const edition = status?.edition || ''
+    const editionFeatures = EDITION_FEATURES[edition] || []
+    return editionFeatures.map(id => ({ id, enabled: isLicensed }))
+  }, [status?.edition, isLicensed])
 
   const hasFeature = useCallback((featureId: FeatureId | string): boolean => {
     if (!isLicensed) return false
-
-    // Core Enterprise features — always available with any Enterprise license
-    if (isEnterprise && featureId === Features.ALERTS) return true
-    if (isEnterprise && featureId === Features.TASK_CENTER) return true
-
-    // Si pas de features dans le statut, vérifier dans la liste des features
-    if (status?.features && Array.isArray(status.features)) {
-      return status.features.includes(featureId)
-    }
-
-    // Fallback: vérifier dans la liste des features chargées
-    const feature = features.find(f => f.id === featureId)
-    return feature?.enabled === true
-  }, [isLicensed, isEnterprise, status, features])
+    const edition = status?.edition || ''
+    const editionFeatures = EDITION_FEATURES[edition]
+    if (!editionFeatures) return false
+    return editionFeatures.includes(featureId as FeatureId)
+  }, [isLicensed, status?.edition])
 
   return (
     <LicenseContext.Provider value={{

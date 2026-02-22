@@ -718,7 +718,7 @@ function LicenseTab() {
     }
   }
 
-  const isEnterprise = licenseStatus?.edition === 'enterprise'
+  const isEnterprise = licenseStatus?.edition === 'enterprise' || licenseStatus?.edition === 'enterprise_plus'
   const isLicensed = licenseStatus?.licensed && !licenseStatus?.expired
 
   // Build feature lookup from features array

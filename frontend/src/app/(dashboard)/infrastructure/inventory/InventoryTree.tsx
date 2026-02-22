@@ -45,6 +45,7 @@ const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ font
 const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const DescriptionIcon = (props: any) => <i className="ri-file-text-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
+import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 
@@ -460,6 +461,7 @@ function safeJson<T>(x: any): T {
 export default function InventoryTree({ selected, onSelect, onRefreshRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed }: Props) {
   const t = useTranslations()
   const theme = useTheme()
+  const { trackTask } = useTaskTracker()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
@@ -554,8 +556,20 @@ return next
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
-    setTimeout(() => { onRefresh?.() }, 2000)
-  }, [cloneTarget, onRefresh])
+    const json = await res.json()
+    const upid = json.data
+    if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+      trackTask({
+        upid,
+        connId: cloneTarget.connId,
+        node: cloneTarget.node,
+        description: `${params.name || `VM ${cloneTarget.vmid}`}: ${t('vmActions.clone')}`,
+        onSuccess: () => { onRefresh?.() },
+      })
+    } else {
+      onRefresh?.()
+    }
+  }, [cloneTarget, onRefresh, trackTask, t])
 
   // Convert to template
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
@@ -578,15 +592,29 @@ return next
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
+      const json = await res.json()
+      const upid = json.data
+
       setTemplateDialogOpen(false)
       setTemplateTarget(null)
-      setTimeout(() => { onRefresh?.() }, 2000)
+
+      if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+        trackTask({
+          upid,
+          connId: templateTarget.connId,
+          node: templateTarget.node,
+          description: `VM ${templateTarget.vmid}: ${t('templates.convertToTemplate')}`,
+          onSuccess: () => { onRefresh?.() },
+        })
+      } else {
+        onRefresh?.()
+      }
     } catch (e: any) {
       alert(`Error: ${e?.message || e}`)
     } finally {
       setConvertingTemplate(false)
     }
-  }, [templateTarget, onRefresh])
+  }, [templateTarget, onRefresh, trackTask, t])
 
   const [migrateDialogOpen, setMigrateDialogOpen] = useState(false)
   const [migrateTarget, setMigrateTarget] = useState<VmContextMenu>(null)

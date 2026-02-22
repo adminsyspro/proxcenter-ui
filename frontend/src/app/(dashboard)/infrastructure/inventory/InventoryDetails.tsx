@@ -856,15 +856,21 @@ return next
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
-    toast.success(t('vmActions.cloneSuccess'))
-
-    // Attendre un peu puis rafraîchir
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    if (onRefresh) {
-      await onRefresh()
+    const json = await res.json()
+    const upid = json.data
+    if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+      trackTask({
+        upid,
+        connId,
+        node,
+        description: `${params.name || `VM ${vmid}`}: ${t('vmActions.clone')}`,
+        onSuccess: () => { onRefresh?.() },
+      })
+    } else {
+      toast.success(t('vmActions.cloneSuccess'))
+      onRefresh?.()
     }
-  }, [selection, onRefresh, toast, t])
+  }, [selection, onRefresh, toast, t, trackTask])
 
   // Handler pour ouvrir le dialog de migration depuis la table
   const handleTableMigrate = useCallback((vm: any) => {
@@ -1003,17 +1009,22 @@ return next
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
-    toast.success(t('vmActions.cloneSuccess'))
-
-    // Attendre un peu puis rafraîchir
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    if (onRefresh) {
-      await onRefresh()
+    const json = await res.json()
+    const upid = json.data
+    if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+      trackTask({
+        upid,
+        connId,
+        node,
+        description: `${params.name || `VM ${vmid}`}: ${t('vmActions.clone')}`,
+        onSuccess: () => { onRefresh?.(); setTableCloneVm(null) },
+      })
+    } else {
+      toast.success(t('vmActions.cloneSuccess'))
+      onRefresh?.()
+      setTableCloneVm(null)
     }
-
-    setTableCloneVm(null)
-  }, [tableCloneVm, onRefresh, toast, t])
+  }, [tableCloneVm, onRefresh, toast, t, trackTask])
 
   // États pour le bulk action dialog
   const [bulkActionDialog, setBulkActionDialog] = useState<{
@@ -3917,10 +3928,23 @@ return
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
-      setConvertTemplateDialogOpen(false)
-      toast.success(t('templates.convertSuccess'))
+      const json = await res.json()
+      const upid = json.data
 
-      setTimeout(() => { onRefresh?.() }, 2000)
+      setConvertTemplateDialogOpen(false)
+
+      if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+        trackTask({
+          upid,
+          connId,
+          node,
+          description: `${data?.title || `VM ${vmid}`}: ${t('templates.convertToTemplate')}`,
+          onSuccess: () => { onRefresh?.() },
+        })
+      } else {
+        toast.success(t('templates.convertSuccess'))
+        onRefresh?.()
+      }
     } catch (e: any) {
       alert(`${t('errors.genericError')}: ${e?.message || e}`)
     } finally {
@@ -3982,14 +4006,26 @@ return
 
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
-      
+
+      const json = await res.json()
+      const upid = json.data
+
       setDeleteVmDialogOpen(false)
 
-      // Retourner à la vue globale et rafraîchir
+      // Retourner à la vue globale
       onSelect?.(null as any) // Désélectionner
 
-      // Rafraîchir l'arbre après un court délai (la suppression PVE est async)
-      setTimeout(() => { onRefresh?.() }, 2000)
+      if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+        trackTask({
+          upid,
+          connId,
+          node,
+          description: `${vmName}: ${t('common.delete')}`,
+          onSuccess: () => { onRefresh?.() },
+        })
+      } else {
+        onRefresh?.()
+      }
 
       // Afficher un message de succès
       setConfirmAction({

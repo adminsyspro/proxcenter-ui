@@ -15,6 +15,7 @@ const defaultSettings = {
   maintenance_nodes: [],
   ignore_nodes: [],
   excluded_clusters: [],
+  cluster_modes: {},
   cpu_high_threshold: 80,
   cpu_low_threshold: 20,
   memory_high_threshold: 85,
@@ -55,11 +56,12 @@ export async function GET() {
       ...defaultSettings,
       ...response.data,
 
-      // Ensure arrays are never undefined/null
+      // Ensure arrays/objects are never undefined/null
       balance_types: response.data?.balance_types ?? defaultSettings.balance_types,
       maintenance_nodes: response.data?.maintenance_nodes ?? defaultSettings.maintenance_nodes,
       ignore_nodes: response.data?.ignore_nodes ?? defaultSettings.ignore_nodes,
       excluded_clusters: response.data?.excluded_clusters ?? defaultSettings.excluded_clusters,
+      cluster_modes: response.data?.cluster_modes ?? defaultSettings.cluster_modes,
     }
 
     return NextResponse.json(mergedSettings)
@@ -94,6 +96,7 @@ export async function PUT(request: NextRequest) {
       maintenance_nodes: response.data?.maintenance_nodes ?? defaultSettings.maintenance_nodes,
       ignore_nodes: response.data?.ignore_nodes ?? defaultSettings.ignore_nodes,
       excluded_clusters: response.data?.excluded_clusters ?? defaultSettings.excluded_clusters,
+      cluster_modes: response.data?.cluster_modes ?? defaultSettings.cluster_modes,
     }
 
     return NextResponse.json(mergedSettings)

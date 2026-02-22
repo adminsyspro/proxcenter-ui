@@ -51,6 +51,7 @@ export interface DRSSettings {
   maintenance_nodes: string[]
   ignore_nodes: string[]
   excluded_clusters: string[]
+  cluster_modes: Record<string, string>
   cpu_high_threshold: number
   cpu_low_threshold: number
   memory_high_threshold: number
@@ -101,6 +102,7 @@ export const defaultDRSSettings: DRSSettings = {
   maintenance_nodes: [],
   ignore_nodes: [],
   excluded_clusters: [],
+  cluster_modes: {},
   cpu_high_threshold: 80,
   cpu_low_threshold: 20,
   memory_high_threshold: 85,
@@ -298,6 +300,54 @@ export default function DRSSettingsPanel({
           />
         </Grid>
       )}
+
+      {/* Per-cluster mode overrides */}
+      {clusters.length > 0 && (() => {
+        const activeClusters = clusters.filter(c => !settings.excluded_clusters.includes(c.id))
+        if (activeClusters.length === 0) return null
+        return (
+          <Grid size={{ xs: 12 }}>
+            <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+              {t('drsPage.clusterModeOverrides')}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              {t('drsPage.clusterModeOverridesDesc')}
+            </Typography>
+            <Stack spacing={1}>
+              {activeClusters.map(cluster => (
+                <Box key={cluster.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Typography variant="body2" sx={{ minWidth: 140, fontWeight: 500 }}>{cluster.name}</Typography>
+                  <FormControl size="small" sx={{ minWidth: 220 }}>
+                    <Select
+                      value={settings.cluster_modes[cluster.id] || ''}
+                      displayEmpty
+                      onChange={(e) => {
+                        const val = e.target.value as string
+                        const newModes = { ...settings.cluster_modes }
+                        if (val === '') {
+                          delete newModes[cluster.id]
+                        } else {
+                          newModes[cluster.id] = val
+                        }
+                        handleChange('cluster_modes', newModes)
+                      }}
+                    >
+                      <MenuItem value="">
+                        <Typography variant="body2" color="text.secondary">
+                          {t('drsPage.clusterModeGlobalDefault', { mode: t(`drsPage.mode${settings.mode.charAt(0).toUpperCase() + settings.mode.slice(1)}`) })}
+                        </Typography>
+                      </MenuItem>
+                      <MenuItem value="manual">{t('drsPage.modeManual')}</MenuItem>
+                      <MenuItem value="partial">{t('drsPage.modePartial')}</MenuItem>
+                      <MenuItem value="automatic">{t('drsPage.modeAutomatic')}</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              ))}
+            </Stack>
+          </Grid>
+        )
+      })()}
 
       {/* Rebalance scheduling — only shown for non-manual modes */}
       {settings.mode !== 'manual' && (

@@ -608,7 +608,16 @@ export default function ClusterTabs(props: any) {
                               </Box>
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 120 }}>
-                              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.drsStatusTitle')}</Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="subtitle2" fontWeight={700}>{t('inventory.drsStatusTitle')}</Typography>
+                                {(() => {
+                                  const connId = selection?.type === 'cluster' ? selection.id : ''
+                                  const effectiveMode = (drsSettings as any)?.cluster_modes?.[connId] || (drsSettings as any)?.mode || 'manual'
+                                  const modeColor = effectiveMode === 'automatic' ? 'success' : effectiveMode === 'partial' ? 'warning' : 'info'
+                                  const modeLabel = effectiveMode.charAt(0).toUpperCase() + effectiveMode.slice(1)
+                                  return <Chip size="small" label={modeLabel} color={modeColor as any} variant="outlined" />
+                                })()}
+                              </Box>
                               <Typography variant="body2" color="text.secondary">
                                 {drsHealth.score} / 100 — {drsHealth.score >= 80 ? t('drsPage.balanced') : drsHealth.score >= 50 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')}
                               </Typography>

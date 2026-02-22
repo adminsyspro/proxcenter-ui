@@ -3039,7 +3039,10 @@
     "scheduleSummaryDaily": "Migrations will run daily at {time}",
     "activeClusters": "Active clusters",
     "activeClustersHelp": "Select which clusters DRS should manage. Leave empty for all clusters.",
-    "allClustersDefault": "All clusters (default)"
+    "allClustersDefault": "All clusters (default)",
+    "clusterModeOverrides": "Per-cluster mode",
+    "clusterModeOverridesDesc": "Override the global DRS mode for individual clusters.",
+    "clusterModeGlobalDefault": "Global default ({mode})"
   },
   "usersPage": {
     "rbacRoles": "RBAC Roles",

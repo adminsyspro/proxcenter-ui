@@ -3342,6 +3342,7 @@
     "policyOut": "Policy OUT",
     "mode": "Mode",
     "cluster": "Cluster",
+    "connection": "Connexion",
     "standalone": "Standalone",
     "aliases": "Aliases",
     "aliasesCount": "{count} aliases",

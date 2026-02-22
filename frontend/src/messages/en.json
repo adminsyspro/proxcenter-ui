@@ -3337,6 +3337,7 @@
     "policyOut": "Policy OUT",
     "mode": "Mode",
     "cluster": "Cluster",
+    "connection": "Connection",
     "standalone": "Standalone",
     "aliases": "Aliases",
     "aliasesCount": "{count} aliases",

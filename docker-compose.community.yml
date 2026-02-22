@@ -46,3 +46,4 @@ networks:
 volumes:
   proxcenter_data:
     name: proxcenter_data
+    external: true

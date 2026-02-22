@@ -75,5 +75,7 @@ networks:
 volumes:
   proxcenter_data:
     name: proxcenter_data
+    external: true
   orchestrator_data:
     name: orchestrator_data
+    external: true

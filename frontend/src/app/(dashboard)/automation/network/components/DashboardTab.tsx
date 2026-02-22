@@ -54,7 +54,7 @@ const BreakdownRow = ({ icon, label, points, reason }: {
         label={points > 0 ? `+${points}` : '0'}
         sx={{
           height: 22, minWidth: 44, fontWeight: 700, fontSize: '0.75rem',
-          bgcolor: alpha(points > 0 ? '#22c55e' : '#888', 0.12),
+          bgcolor: alpha(points > 0 ? '#22c55e' : '#888', 0.18),
           color,
         }}
       />
@@ -100,11 +100,11 @@ export default function DashboardTab({
       {isVirginCluster && selectedConnection && (
         <Paper sx={{
           p: 2.5, mb: 3,
-          bgcolor: alpha('#f59e0b', 0.08),
-          border: `1px solid ${alpha('#f59e0b', 0.3)}`,
+          bgcolor: alpha('#f59e0b', 0.14),
+          border: `1px solid ${alpha('#f59e0b', 0.4)}`,
           display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap'
         }}>
-          <Avatar sx={{ width: 40, height: 40, bgcolor: alpha('#f59e0b', 0.15) }}>
+          <Avatar sx={{ width: 40, height: 40, bgcolor: alpha('#f59e0b', 0.22) }}>
             <i className="ri-shield-flash-line" style={{ fontSize: 20, color: '#f59e0b' }} />
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 200 }}>
@@ -140,15 +140,15 @@ export default function DashboardTab({
 
       {/* Section 1: Security Posture (hero) */}
       <Card sx={{
-        background: `linear-gradient(135deg, ${alpha(scoreColor, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 50%, ${alpha(scoreColor, 0.03)} 100%)`,
+        background: `linear-gradient(135deg, ${alpha(scoreColor, 0.14)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 50%, ${alpha(scoreColor, 0.08)} 100%)`,
         border: '1px solid',
         borderColor: alpha(scoreColor, 0.3),
         position: 'relative',
         overflow: 'hidden',
         mb: 3,
-        '&:hover': { borderColor: alpha(scoreColor, 0.5), boxShadow: `0 8px 32px ${alpha(scoreColor, 0.15)}` },
+        '&:hover': { borderColor: alpha(scoreColor, 0.5), boxShadow: `0 8px 32px ${alpha(scoreColor, 0.2)}` },
       }}>
-        <Box sx={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(scoreColor, 0.1)} 0%, transparent 70%)` }} />
+        <Box sx={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(scoreColor, 0.15)} 0%, transparent 70%)` }} />
         <CardContent sx={{ p: 3, position: 'relative' }}>
           {loadingVMRules ? (
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center">
@@ -165,7 +165,7 @@ export default function DashboardTab({
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center">
                 {/* Gauge */}
                 <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-                  <CircularProgress variant="determinate" value={100} size={140} thickness={3} sx={{ color: alpha(scoreColor, 0.15) }} />
+                  <CircularProgress variant="determinate" value={100} size={140} thickness={3} sx={{ color: alpha(scoreColor, 0.22) }} />
                   <CircularProgress variant="determinate" value={score} size={140} thickness={3} sx={{ color: scoreColor, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(scoreColor, 0.4)})` }} />
                   <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
                     <Typography variant="h2" fontWeight={800} sx={{ color: scoreColor, lineHeight: 1 }}>{score}</Typography>
@@ -183,7 +183,7 @@ export default function DashboardTab({
                       </IconButton>
                     </Tooltip>
                   </Stack>
-                  <Chip label={scoreLabel} sx={{ bgcolor: alpha(scoreColor, 0.15), color: scoreColor, fontWeight: 700, fontSize: '0.85rem', height: 28, mb: 2 }} />
+                  <Chip label={scoreLabel} sx={{ bgcolor: alpha(scoreColor, 0.2), color: scoreColor, fontWeight: 700, fontSize: '0.85rem', height: 28, mb: 2 }} />
 
                   {/* KPIs row */}
                   <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
@@ -205,7 +205,7 @@ export default function DashboardTab({
 
                   {/* Cluster indicators */}
                   <Stack spacing={1}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1.5, bgcolor: alpha(firewallEnabled ? '#22c55e' : '#ef4444', 0.05) }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1.5, bgcolor: alpha(firewallEnabled ? '#22c55e' : '#ef4444', 0.12) }}>
                       <i className={firewallEnabled ? "ri-shield-check-line" : "ri-shield-cross-line"} style={{ fontSize: 16, color: firewallEnabled ? '#22c55e' : '#ef4444' }} />
                       <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
                         {t('security.firewall')} {firewallEnabled ? 'ON' : 'OFF'}
@@ -218,7 +218,7 @@ export default function DashboardTab({
                         size="small"
                         sx={{
                           height: 24, fontSize: 11, fontWeight: 700,
-                          bgcolor: alpha(currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e', 0.12),
+                          bgcolor: alpha(currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e', 0.18),
                           color: currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e',
                           '& .MuiChip-icon': { color: 'inherit' }
                         }}
@@ -229,7 +229,7 @@ export default function DashboardTab({
                         size="small"
                         sx={{
                           height: 24, fontSize: 11, fontWeight: 700,
-                          bgcolor: alpha(currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e', 0.12),
+                          bgcolor: alpha(currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e', 0.18),
                           color: currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e',
                           '& .MuiChip-icon': { color: 'inherit' }
                         }}
@@ -240,7 +240,7 @@ export default function DashboardTab({
                         size="small"
                         sx={{
                           height: 24, fontSize: 11, fontWeight: 700,
-                          bgcolor: alpha(firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b', 0.12),
+                          bgcolor: alpha(firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b', 0.18),
                           color: firewallMode === 'cluster' ? '#3b82f6' : '#f59e0b',
                           '& .MuiChip-icon': { color: 'inherit' }
                         }}
@@ -306,14 +306,14 @@ export default function DashboardTab({
                 icon={<i className="ri-shield-check-line" style={{ fontSize: 14, color: '#22c55e' }} />}
                 label={`${t('networkPage.protectedCount')}: ${vmsWithFirewall}/${vmFirewallData.length}`}
                 size="small"
-                sx={{ height: 28, fontWeight: 600, bgcolor: alpha('#22c55e', 0.08), '& .MuiChip-label': { fontSize: 12 } }}
+                sx={{ height: 28, fontWeight: 600, bgcolor: alpha('#22c55e', 0.15), '& .MuiChip-label': { fontSize: 12 } }}
               />
               {unprotected > 0 && (
                 <Chip
                   icon={<i className="ri-error-warning-line" style={{ fontSize: 14, color: '#ef4444' }} />}
                   label={`${t('networkPage.unprotectedCount')}: ${unprotected}`}
                   size="small"
-                  sx={{ height: 28, fontWeight: 600, bgcolor: alpha('#ef4444', 0.08), color: '#ef4444', '& .MuiChip-label': { fontSize: 12 } }}
+                  sx={{ height: 28, fontWeight: 600, bgcolor: alpha('#ef4444', 0.15), color: '#ef4444', '& .MuiChip-label': { fontSize: 12 } }}
                 />
               )}
             </Stack>
@@ -324,7 +324,7 @@ export default function DashboardTab({
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.protectionRate')}</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>{Math.round((vmsWithFirewall / totalVMs) * 100)}%</Typography>
               </Box>
-              <LinearProgress variant="determinate" value={(vmsWithFirewall / totalVMs) * 100} sx={{ height: 10, borderRadius: 5, bgcolor: alpha('#ef4444', 0.15), '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 5 } }} />
+              <LinearProgress variant="determinate" value={(vmsWithFirewall / totalVMs) * 100} sx={{ height: 10, borderRadius: 5, bgcolor: alpha('#ef4444', 0.2), '& .MuiLinearProgress-bar': { bgcolor: '#22c55e', borderRadius: 5 } }} />
             </Box>
           </Stack>
         )}
@@ -371,8 +371,8 @@ export default function DashboardTab({
             return recommendations.map((rec, idx) => {
               const severityColor = rec.severity === 'error' ? '#ef4444' : rec.severity === 'warning' ? '#f59e0b' : rec.severity === 'success' ? '#22c55e' : '#3b82f6'
               return (
-                <Box key={idx} sx={{ p: 1.5, borderRadius: 1.5, flex: '1 1 280px', bgcolor: alpha(severityColor, 0.05), border: `1px solid ${alpha(severityColor, 0.2)}`, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(severityColor, 0.15) }}>
+                <Box key={idx} sx={{ p: 1.5, borderRadius: 1.5, flex: '1 1 280px', bgcolor: alpha(severityColor, 0.1), border: `1px solid ${alpha(severityColor, 0.3)}`, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(severityColor, 0.22) }}>
                     <i className={rec.icon} style={{ fontSize: 16, color: severityColor }} />
                   </Avatar>
                   <Box sx={{ flex: 1, minWidth: 0 }}>

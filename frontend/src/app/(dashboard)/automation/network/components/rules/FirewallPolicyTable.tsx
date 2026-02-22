@@ -37,7 +37,7 @@ interface FirewallPolicyTableProps {
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.15), color, border: `1px solid ${alpha(color, 0.3)}`, minWidth: 70 }} />
+  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
 }
 
 function formatService(rule: firewallAPI.FirewallRule): string {
@@ -341,8 +341,8 @@ export default function FirewallPolicyTable({
   }
 
   // ── Section row color ──
-  const sectionRowBg = alpha(theme.palette.primary.main, 0.06)
-  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.10)
+  const sectionRowBg = alpha(theme.palette.primary.main, 0.1)
+  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.16)
 
   // ── Render a rule row ──
   const renderRuleRow = (section: PolicySection, rule: firewallAPI.FirewallRule, idx: number, colSpan: number) => {
@@ -381,7 +381,7 @@ export default function FirewallPolicyTable({
             size="small"
             sx={{
               height: 20, fontSize: 10, fontWeight: 600,
-              bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15),
+              bgcolor: isGroupRule ? alpha('#8b5cf6', 0.22) : rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
               color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
             }}
           />
@@ -417,7 +417,7 @@ export default function FirewallPolicyTable({
         )}
         <TableCell sx={{ p: 0.5, width: 90 }}>
           {isGroupRule ? (
-            <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
+            <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
           ) : (
             <ActionChip action={rule.action || 'ACCEPT'} />
           )}
@@ -642,7 +642,7 @@ export default function FirewallPolicyTable({
   if (firewallMode === 'standalone') {
     return (
       <Box>
-        <Box sx={{ mb: 3, p: 2, bgcolor: alpha('#f59e0b', 0.08), borderRadius: 2, border: `1px solid ${alpha('#f59e0b', 0.2)}` }}>
+        <Box sx={{ mb: 3, p: 2, bgcolor: alpha('#f59e0b', 0.14), borderRadius: 2, border: `1px solid ${alpha('#f59e0b', 0.3)}` }}>
           <Typography variant="body2" sx={{ color: '#f59e0b', fontWeight: 600 }}>
             <i className="ri-information-line" style={{ marginRight: 6 }} />
             {t('networkPage.sgNotAvailableStandalone')}

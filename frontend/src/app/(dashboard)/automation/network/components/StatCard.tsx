@@ -21,9 +21,9 @@ export default function StatCard({ icon, label, value, subvalue, color, loading,
       sx={{
         height: '100%',
         background: theme.palette.mode === 'dark'
-          ? `linear-gradient(135deg, ${alpha(color, 0.1)} 0%, ${alpha(color, 0.05)} 100%)`
-          : `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(color, 0.03)} 100%)`,
-        border: `1px solid ${alpha(color, 0.2)}`,
+          ? `linear-gradient(135deg, ${alpha(color, 0.12)} 0%, ${alpha(color, 0.06)} 100%)`
+          : `linear-gradient(135deg, ${alpha(color, 0.14)} 0%, ${alpha(color, 0.06)} 100%)`,
+        border: `1px solid ${alpha(color, 0.3)}`,
         position: 'relative',
         overflow: 'hidden',
         cursor: onClick ? 'pointer' : 'default',
@@ -42,7 +42,7 @@ export default function StatCard({ icon, label, value, subvalue, color, loading,
           )}
           {subvalue && <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{subvalue}</Typography>}
         </Box>
-        <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: alpha(color, 0.15), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: alpha(color, 0.2), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <i className={icon} style={{ fontSize: 22, color }} />
         </Box>
       </CardContent>

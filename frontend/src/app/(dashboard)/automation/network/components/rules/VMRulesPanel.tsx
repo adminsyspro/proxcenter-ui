@@ -30,7 +30,7 @@ interface VMRulesPanelProps {
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.15), color, border: `1px solid ${alpha(color, 0.3)}`, minWidth: 70 }} />
+  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
 }
 
 function formatService(rule: firewallAPI.FirewallRule): string {
@@ -282,8 +282,8 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     }
   }
 
-  const sectionRowBg = alpha(theme.palette.primary.main, 0.06)
-  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.10)
+  const sectionRowBg = alpha(theme.palette.primary.main, 0.1)
+  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.16)
 
   return (
     <>
@@ -346,8 +346,8 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                     {/* VLAN group header */}
                     <TableRow
                       sx={{
-                        bgcolor: alpha(vlanColor, 0.06),
-                        '&:hover': { bgcolor: alpha(vlanColor, 0.10) },
+                        bgcolor: alpha(vlanColor, 0.1),
+                        '&:hover': { bgcolor: alpha(vlanColor, 0.16) },
                         cursor: 'pointer',
                         '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.2)}` }
                       }}
@@ -361,8 +361,8 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                           />
                           <i className={isUntagged ? 'ri-ethernet-line' : 'ri-git-branch-line'} style={{ fontSize: 16, color: vlanColor }} />
                           <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13, color: vlanColor }}>{vlanLabel}</Typography>
-                          <Chip label={`${vlanVmCount} VM${vlanVmCount > 1 ? 's' : ''}`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.12), color: vlanColor }} />
-                          <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10, bgcolor: alpha(vlanColor, 0.08) }} />
+                          <Chip label={`${vlanVmCount} VM${vlanVmCount > 1 ? 's' : ''}`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.18), color: vlanColor }} />
+                          <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10, bgcolor: alpha(vlanColor, 0.12) }} />
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -432,32 +432,6 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                       </Select>
                                     </FormControl>
                                   </Box>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
-                                    <Tooltip title="Log IN">
-                                      <FormControl size="small">
-                                        <Select
-                                          value={vm.options?.log_level_in || 'nolog'}
-                                          onChange={(e) => handleVMLogLevelChange(vm, 'log_level_in', e.target.value)}
-                                          sx={{ fontSize: 9, height: 22, minWidth: 62, '& .MuiSelect-select': { py: 0.1 } }}
-                                          disabled={!selectedConnection}
-                                        >
-                                          {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
-                                        </Select>
-                                      </FormControl>
-                                    </Tooltip>
-                                    <Tooltip title="Log OUT">
-                                      <FormControl size="small">
-                                        <Select
-                                          value={vm.options?.log_level_out || 'nolog'}
-                                          onChange={(e) => handleVMLogLevelChange(vm, 'log_level_out', e.target.value)}
-                                          sx={{ fontSize: 9, height: 22, minWidth: 62, '& .MuiSelect-select': { py: 0.1 } }}
-                                          disabled={!selectedConnection}
-                                        >
-                                          {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
-                                        </Select>
-                                      </FormControl>
-                                    </Tooltip>
-                                  </Box>
                                   <Tooltip title={t('networkPage.addRule')}>
                                     <IconButton size="small" onClick={() => openVMRuleDialog(vm)}>
                                       <i className="ri-add-line" style={{ fontSize: 16 }} />
@@ -517,7 +491,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                               size="small"
                               sx={{
                                 height: 20, fontSize: 10, fontWeight: 600,
-                                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15),
+                                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.22) : rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
                                 color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
                               }}
                             />
@@ -533,7 +507,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                           </TableCell>
                           <TableCell sx={{ p: 0.5, width: 90 }}>
                             {isGroupRule ? (
-                              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.15), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
+                              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
                             ) : (
                               <ActionChip action={rule.action || 'ACCEPT'} />
                             )}
@@ -774,6 +748,37 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
           </Box>
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>
+          {/* Log level controls */}
+          {logDialog.vm && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log IN:</Typography>
+                <FormControl size="small">
+                  <Select
+                    value={logDialog.vm.options?.log_level_in || 'nolog'}
+                    onChange={(e) => { if (logDialog.vm) handleVMLogLevelChange(logDialog.vm, 'log_level_in', e.target.value) }}
+                    sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                    disabled={!selectedConnection}
+                  >
+                    {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log OUT:</Typography>
+                <FormControl size="small">
+                  <Select
+                    value={logDialog.vm.options?.log_level_out || 'nolog'}
+                    onChange={(e) => { if (logDialog.vm) handleVMLogLevelChange(logDialog.vm, 'log_level_out', e.target.value) }}
+                    sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                    disabled={!selectedConnection}
+                  >
+                    {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
+          )}
           <Box sx={{
             bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: '"JetBrains Mono", monospace',
             fontSize: 12, lineHeight: 1.6, p: 2, minHeight: 300, maxHeight: 500, overflow: 'auto',

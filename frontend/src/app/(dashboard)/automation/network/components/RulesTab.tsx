@@ -96,11 +96,11 @@ export default function RulesTab({
               fontSize: 13,
               px: 2.5,
               py: 0.8,
-              borderColor: alpha(theme.palette.divider, 0.2),
+              borderColor: alpha(theme.palette.divider, 0.3),
               '&.Mui-selected': {
-                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                bgcolor: alpha(theme.palette.primary.main, 0.15),
                 color: theme.palette.primary.main,
-                borderColor: alpha(theme.palette.primary.main, 0.3),
+                borderColor: alpha(theme.palette.primary.main, 0.4),
               }
             }
           }}

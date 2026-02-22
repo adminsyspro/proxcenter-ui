@@ -141,8 +141,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
   return (
     <Box sx={{ p: 3 }}>
       {/* ── Aliases Section ── */}
-      {(!view || view === 'aliases') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+      {(!view || view === 'aliases') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, mb: 3 }}>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.aliases')}</Typography>
             <Chip label={t('firewall.aliasesCount', { count: aliases.length })} size="small" />
@@ -155,7 +155,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.6) }}>
                 <TableCell sx={{ fontWeight: 700 }}>{t('common.name')}</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>{t('firewall.cidr')}</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>{t('firewall.description')}</TableCell>
@@ -197,8 +197,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       </Paper>}
 
       {/* ── IP Sets Section ── */}
-      {(!view || view === 'ipsets') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+      {(!view || view === 'ipsets') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.ipSets')}</Typography>
             <Chip label={t('networkPage.setsAndEntries', { sets: ipsets.length, entries: totalIPSetEntries })} size="small" />
@@ -211,8 +211,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <Box sx={{ p: 2 }}>
           <Stack spacing={2}>
             {ipsets.map((ipset) => (
-              <Paper key={ipset.name} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
-                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.background.default, 0.3) }}>
+              <Paper key={ipset.name} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, overflow: 'hidden' }}>
+                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.background.default, 0.5) }}>
                   <Box>
                     <code style={{ background: 'transparent', fontSize: 14, fontWeight: 600, color: 'inherit' }}>{ipset.name}</code>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 12, display: 'block' }}>{ipset.comment || t('networkPage.noDescription')}</Typography>
@@ -253,7 +253,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
               </Paper>
             ))}
             {ipsets.length === 0 && !loading && (
-              <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
+              <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.4)}` }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.noIpSetConfigured')}</Typography>
               </Paper>
             )}

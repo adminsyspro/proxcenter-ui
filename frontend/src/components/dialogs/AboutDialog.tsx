@@ -25,13 +25,15 @@ import { VERSION, VERSION_NAME, GIT_SHA, GITHUB_URL, CHANGELOG } from '@/config/
 
 interface VersionInfo {
   currentVersion: string
-  latestVersion: string | null
+  currentSha: string | null
+  latestSha: string | null
   updateAvailable: boolean
-  releaseUrl: string | null
-  releaseNotes: string | null
-  releaseName?: string
-  publishedAt: string | null
-  error?: string
+  commitsBehind: number
+  latestMessage: string | null
+  latestDate: string | null
+  latestAuthor: string | null
+  compareUrl: string | null
+  error: string | null
 }
 
 interface AboutDialogProps {
@@ -60,11 +62,14 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
       console.error('Failed to check version:', e)
       setVersionInfo({
         currentVersion: VERSION,
-        latestVersion: null,
+        currentSha: GIT_SHA || null,
+        latestSha: null,
         updateAvailable: false,
-        releaseUrl: null,
-        releaseNotes: null,
-        publishedAt: null,
+        commitsBehind: 0,
+        latestMessage: null,
+        latestDate: null,
+        latestAuthor: null,
+        compareUrl: null,
         error: 'Failed to check for updates'
       })
     } finally {
@@ -169,14 +174,38 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
             </Box>
           </Box>
 
-          {versionInfo?.updateAvailable && versionInfo?.latestVersion && (
+          {versionInfo?.updateAvailable && versionInfo?.latestSha && (
             <Box sx={{ textAlign: 'right' }}>
               <Typography variant="caption" sx={{ opacity: 0.6, display: 'block' }}>
-                {t('about.latestVersion')}
+                {t('about.latestCommit')}
               </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'warning.main' }}>
-                v{versionInfo.latestVersion}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
+                <Chip
+                  label={versionInfo.latestSha.substring(0, 7)}
+                  size="small"
+                  variant="outlined"
+                  component="a"
+                  href={`${GITHUB_URL}/commit/${versionInfo.latestSha}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  clickable
+                  sx={{
+                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    color: 'warning.main',
+                    borderColor: 'warning.main'
+                  }}
+                />
+                {versionInfo.commitsBehind > 0 && (
+                  <Chip
+                    label={t('about.commitsBehind', { count: versionInfo.commitsBehind })}
+                    color="warning"
+                    size="small"
+                    sx={{ fontWeight: 600, fontSize: '0.65rem' }}
+                  />
+                )}
+              </Box>
             </Box>
           )}
         </Box>
@@ -187,29 +216,29 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
             severity="info"
             sx={{ mb: 2 }}
             action={
-              versionInfo.releaseUrl && (
+              versionInfo.compareUrl && (
                 <Button
                   component={Link}
-                  href={versionInfo.releaseUrl}
+                  href={versionInfo.compareUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   size="small"
                   variant="contained"
                   sx={{ whiteSpace: 'nowrap' }}
                 >
-                  {t('about.viewRelease')}
+                  {t('about.viewChanges')}
                 </Button>
               )
             }
           >
             <Typography variant="body2">
-              {t('about.newVersionAvailable', { version: versionInfo.latestVersion })}
+              {t('about.newCommitAvailable', { count: versionInfo.commitsBehind })}
             </Typography>
-            {versionInfo.publishedAt && (
-              <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                {t('about.publishedOn', {
-                  date: new Date(versionInfo.publishedAt).toLocaleDateString()
-                })}
+            {versionInfo.latestMessage && (
+              <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 0.5 }}>
+                {versionInfo.latestMessage}
+                {versionInfo.latestAuthor && ` — ${versionInfo.latestAuthor}`}
+                {versionInfo.latestDate && ` (${new Date(versionInfo.latestDate).toLocaleDateString()})`}
               </Typography>
             )}
           </Alert>
@@ -309,7 +338,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
             <Typography variant="caption">{t('about.reportBug')}</Typography>
           </Link>
           <Link
-            href={`${GITHUB_URL}/releases`}
+            href={`${GITHUB_URL}/commits/main`}
             target="_blank"
             rel="noopener noreferrer"
             sx={{
@@ -321,8 +350,8 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
               '&:hover': { opacity: 1 }
             }}
           >
-            <i className="ri-download-line" style={{ fontSize: 18 }} />
-            <Typography variant="caption">{t('about.allReleases')}</Typography>
+            <i className="ri-git-commit-line" style={{ fontSize: 18 }} />
+            <Typography variant="caption">{t('about.commitHistory')}</Typography>
           </Link>
         </Box>
 

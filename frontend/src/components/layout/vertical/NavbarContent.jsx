@@ -215,11 +215,13 @@ const NavbarContent = () => {
   // Update available notification
   const updateNotif = updateInfo?.updateAvailable ? {
     id: 'version-update',
-    message: t('about.newVersionAvailable', { version: updateInfo.latestVersion }),
+    message: updateInfo.commitsBehind > 0
+      ? t('about.commitsBehind', { count: updateInfo.commitsBehind })
+      : t('about.newCommitAvailable', { count: 0 }),
     severity: 'info',
     source: 'ProxCenter',
     isUpdateNotif: true,
-    releaseUrl: updateInfo.releaseUrl
+    compareUrl: updateInfo.compareUrl
   } : null
 
   // DRS recommendations as notifications (only pending ones)
@@ -795,19 +797,21 @@ return () => window.removeEventListener('keydown', onKeyDown)
                           color='info'
                           sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
                         />
-                        <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem' }}>
-                          v{updateInfo?.latestVersion}
-                        </Typography>
+                        {updateInfo?.latestSha && (
+                          <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem', fontFamily: 'JetBrains Mono, monospace' }}>
+                            {updateInfo.latestSha.substring(0, 7)}
+                          </Typography>
+                        )}
                       </Box>
                     </Box>
                     <Box sx={{ display: 'flex', ml: 1 }}>
-                      {notif.releaseUrl && (
-                        <Tooltip title={t('about.viewRelease')}>
+                      {notif.compareUrl && (
+                        <Tooltip title={t('about.viewChanges')}>
                           <IconButton
                             size='small'
                             onClick={(e) => {
                               e.stopPropagation()
-                              window.open(notif.releaseUrl, '_blank')
+                              window.open(notif.compareUrl, '_blank')
                             }}
                             sx={{
                               opacity: 0.7,

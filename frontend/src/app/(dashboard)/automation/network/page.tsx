@@ -13,7 +13,7 @@ import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import * as firewallAPI from '@/lib/api/firewall'
-import { useClusterConnections } from '@/hooks/useConnections'
+import { usePVEConnections } from '@/hooks/useConnections'
 import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
@@ -22,9 +22,10 @@ import StatCard from './components/StatCard'
 import DashboardTab from './components/DashboardTab'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
+import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE — 4 tabs: Dashboard, Firewalling, Aliases, IP Sets
+   MAIN PAGE — 5 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -40,7 +41,7 @@ export default function NetworkAutomationPage() {
   const [selectedConnection, setSelectedConnection] = useState<string>('')
 
   // ── Connections ──
-  const { data: connectionsData } = useClusterConnections()
+  const { data: connectionsData } = usePVEConnections()
   const connections: Connection[] = isEnterprise ? (connectionsData?.data || []) : []
 
   // ── Data hooks ──
@@ -118,8 +119,8 @@ export default function NetworkAutomationPage() {
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>{t('firewall.cluster')}</InputLabel>
-              <Select value={selectedConnection} label={t('firewall.cluster')} onChange={(e) => {
+              <InputLabel>{t('firewall.connection')}</InputLabel>
+              <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
                 setSelectedConnection(e.target.value)
                 setVMFirewallData([])
               }}>
@@ -146,7 +147,7 @@ export default function NetworkAutomationPage() {
           gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
           gap: 2, mb: 3, width: '100%'
         }}>
-          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => { setActiveTab(1); setRulesSubTab(3) }} />
+          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => setActiveTab(4)} />
           <StatCard icon="ri-database-2-line" label={t('firewall.ipSets')} value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(3)} />
           <StatCard icon="ri-price-tag-3-line" label={t('firewall.aliases')} value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(2)} />
           <StatCard icon="ri-cloud-line" label={t('network.clusterRules')} value={clusterRules.length} subvalue={clusterOptions?.enable === 1 ? t('network.firewallActive') : t('network.firewallInactive')} color={clusterOptions?.enable === 1 ? '#06b6d4' : '#94a3b8'} loading={loading} onClick={() => { setActiveTab(1); setRulesSubTab(0) }} />
@@ -159,6 +160,7 @@ export default function NetworkAutomationPage() {
             <Tab icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
 
           {/* Tab 0: Dashboard */}
@@ -232,6 +234,17 @@ export default function NetworkAutomationPage() {
               loading={loading}
               reload={loadFirewallData}
               view="ipsets"
+            />
+          )}
+
+          {/* Tab 4: Security Groups */}
+          {activeTab === 4 && (
+            <SecurityGroupsPanel
+              securityGroups={securityGroups}
+              firewallMode={firewallMode}
+              selectedConnection={selectedConnection}
+              totalRules={totalRules}
+              reload={loadFirewallData}
             />
           )}
         </Card>

@@ -3189,6 +3189,7 @@
     "tabFirewalling": "Firewalling",
     "tabAliases": "Aliases",
     "tabIpSets": "IP Sets",
+    "tabSecurityGroups": "Groupes de sécurité",
     "untagged": "Non taggé",
     "viewLogs": "Logs du pare-feu",
     "firewallLogs": "Logs du pare-feu",

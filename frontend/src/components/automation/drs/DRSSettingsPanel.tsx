@@ -28,6 +28,7 @@ import {
   ListItemText,
   Tabs,
   Tab,
+  Autocomplete,
   useMediaQuery,
   useTheme,
   alpha,
@@ -49,6 +50,7 @@ export interface DRSSettings {
   balance_types: ('vm' | 'ct')[]
   maintenance_nodes: string[]
   ignore_nodes: string[]
+  excluded_clusters: string[]
   cpu_high_threshold: number
   cpu_low_threshold: number
   memory_high_threshold: number
@@ -80,6 +82,7 @@ export interface ClusterVersionInfo {
 interface DRSSettingsPanelProps {
   settings: DRSSettings
   nodes: string[]
+  clusters?: { id: string; name: string }[]
   clusterVersions?: ClusterVersionInfo[]
   onSave: (settings: DRSSettings) => Promise<void>
   loading?: boolean
@@ -97,6 +100,7 @@ export const defaultDRSSettings: DRSSettings = {
   balance_types: ['vm', 'ct'],
   maintenance_nodes: [],
   ignore_nodes: [],
+  excluded_clusters: [],
   cpu_high_threshold: 80,
   cpu_low_threshold: 20,
   memory_high_threshold: 85,
@@ -139,6 +143,7 @@ const SECTIONS: { key: SectionKey; icon: string; colorKey: string }[] = [
 export default function DRSSettingsPanel({
   settings: initialSettings,
   nodes,
+  clusters = [],
   clusterVersions = [],
   onSave,
   loading = false
@@ -253,6 +258,46 @@ export default function DRSSettingsPanel({
           </Select>
         </FormControl>
       </Grid>
+
+      {/* Active clusters selector */}
+      {clusters.length > 0 && (
+        <Grid size={{ xs: 12 }}>
+          <Autocomplete
+            multiple
+            options={clusters}
+            getOptionLabel={(option) => option.name}
+            value={clusters.filter(c => !settings.excluded_clusters.includes(c.id))}
+            onChange={(_, selected) => {
+              const selectedIds = selected.map(c => c.id)
+              const excluded = clusters.filter(c => !selectedIds.includes(c.id)).map(c => c.id)
+              handleChange('excluded_clusters', excluded)
+            }}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                size="small"
+                label={t('drsPage.activeClusters')}
+                helperText={
+                  settings.excluded_clusters.length === 0
+                    ? t('drsPage.allClustersDefault')
+                    : t('drsPage.activeClustersHelp')
+                }
+              />
+            )}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip
+                  {...getTagProps({ index })}
+                  key={option.id}
+                  label={option.name}
+                  size="small"
+                />
+              ))
+            }
+          />
+        </Grid>
+      )}
 
       {/* Rebalance scheduling — only shown for non-manual modes */}
       {settings.mode !== 'manual' && (

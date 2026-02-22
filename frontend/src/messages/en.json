@@ -3029,7 +3029,10 @@
     "rebalanceEvery": "Run every",
     "rebalanceAt": "Run at",
     "scheduleSummaryInterval": "Migrations will run every {interval}",
-    "scheduleSummaryDaily": "Migrations will run daily at {time}"
+    "scheduleSummaryDaily": "Migrations will run daily at {time}",
+    "activeClusters": "Active clusters",
+    "activeClustersHelp": "Select which clusters DRS should manage. Leave empty for all clusters.",
+    "allClustersDefault": "All clusters (default)"
   },
   "usersPage": {
     "rbacRoles": "RBAC Roles",

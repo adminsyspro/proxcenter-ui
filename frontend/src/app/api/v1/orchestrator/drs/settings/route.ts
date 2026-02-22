@@ -14,6 +14,7 @@ const defaultSettings = {
   balance_types: ['vm', 'ct'],
   maintenance_nodes: [],
   ignore_nodes: [],
+  excluded_clusters: [],
   cpu_high_threshold: 80,
   cpu_low_threshold: 20,
   memory_high_threshold: 85,
@@ -58,8 +59,9 @@ export async function GET() {
       balance_types: response.data?.balance_types ?? defaultSettings.balance_types,
       maintenance_nodes: response.data?.maintenance_nodes ?? defaultSettings.maintenance_nodes,
       ignore_nodes: response.data?.ignore_nodes ?? defaultSettings.ignore_nodes,
+      excluded_clusters: response.data?.excluded_clusters ?? defaultSettings.excluded_clusters,
     }
-    
+
     return NextResponse.json(mergedSettings)
   } catch (error: any) {
     console.error('Failed to fetch DRS settings:', error)
@@ -91,8 +93,9 @@ export async function PUT(request: NextRequest) {
       balance_types: response.data?.balance_types ?? defaultSettings.balance_types,
       maintenance_nodes: response.data?.maintenance_nodes ?? defaultSettings.maintenance_nodes,
       ignore_nodes: response.data?.ignore_nodes ?? defaultSettings.ignore_nodes,
+      excluded_clusters: response.data?.excluded_clusters ?? defaultSettings.excluded_clusters,
     }
-    
+
     return NextResponse.json(mergedSettings)
   } catch (error: any) {
     console.error('Failed to update DRS settings:', error)

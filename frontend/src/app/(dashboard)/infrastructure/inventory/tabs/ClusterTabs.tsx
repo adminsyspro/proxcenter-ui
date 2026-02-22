@@ -58,7 +58,7 @@ import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 import { AddIcon } from '../components/IconWrappers'
 import { useLicense, Features } from '@/contexts/LicenseContext'
-import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
+import { useDRSStatus, useDRSMetrics, useDRSSettings } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 
 export default function ClusterTabs(props: any) {
@@ -68,6 +68,7 @@ export default function ClusterTabs(props: any) {
   const isEnterprise = !licenseLoading && hasFeature(Features.DRS)
   const { data: drsStatus } = useDRSStatus(isEnterprise)
   const { data: metricsData } = useDRSMetrics(isEnterprise)
+  const { data: drsSettings } = useDRSSettings(isEnterprise)
 
   const {
     allVms,
@@ -157,10 +158,12 @@ export default function ClusterTabs(props: any) {
   const drsHealth = useMemo(() => {
     if (!isEnterprise || !(drsStatus as any)?.enabled || !metricsData) return null
     const connId = selection?.type === 'cluster' ? selection.id : ''
+    // Hide DRS status for clusters excluded from DRS
+    if ((drsSettings as any)?.excluded_clusters?.includes(connId)) return null
     const clusterMetrics = (metricsData as any)?.[connId]
     if (!clusterMetrics?.summary) return null
     return computeDrsHealthScore(clusterMetrics.summary)
-  }, [isEnterprise, drsStatus, metricsData, selection])
+  }, [isEnterprise, drsStatus, drsSettings, metricsData, selection])
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />

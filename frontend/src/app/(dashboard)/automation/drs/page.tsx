@@ -2070,6 +2070,7 @@ return next
             <DRSSettingsPanel
               settings={drsSettings || defaultDRSSettings}
               nodes={allNodes}
+              clusters={clusters.map(c => ({ id: c.id, name: c.name }))}
               clusterVersions={clusterVersions}
               onSave={handleSaveSettings}
               loading={!drsSettings}

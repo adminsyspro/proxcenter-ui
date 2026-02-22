@@ -80,6 +80,8 @@ export interface VMOptions {
   enable?: number
   policy_in?: string
   policy_out?: string
+  log_level_in?: string
+  log_level_out?: string
   digest?: string
 }
 
@@ -140,6 +142,8 @@ export interface UpdateOptionsRequest {
   enable?: number
   policy_in?: string
   policy_out?: string
+  log_level_in?: string
+  log_level_out?: string
 }
 
 // ================================================================================
@@ -367,6 +371,19 @@ export async function toggleVMNICFirewall(connectionId: string, node: string, vm
     method: 'PUT',
     body: JSON.stringify({ enable }),
   })
+}
+
+// ================================================================================
+// VM FIREWALL LOGS
+// ================================================================================
+
+export interface FirewallLogEntry {
+  n: number
+  t: string
+}
+
+export async function getVMFirewallLog(connectionId: string, node: string, vmType: string, vmid: number, limit = 50): Promise<FirewallLogEntry[]> {
+  return fetchAPI<FirewallLogEntry[]>(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?limit=${limit}`)
 }
 
 export async function getVMRules(connectionId: string, node: string, vmType: string, vmid: number): Promise<FirewallRule[]> {

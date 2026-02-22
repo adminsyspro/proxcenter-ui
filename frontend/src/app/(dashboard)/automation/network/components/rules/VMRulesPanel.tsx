@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -44,6 +44,8 @@ function formatService(rule: firewallAPI.FirewallRule): string {
 }
 
 const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
+
+const LOG_LEVELS = ['nolog', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug'] as const
 
 const VLAN_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981', '#f97316', '#6366f1', '#14b8a6', '#e11d48']
 function getVlanColor(vlanKey: string, index: number): string {
@@ -114,6 +116,66 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
 
   // ── Change VM policy (policy_in / policy_out) ──
   const handleVMPolicyChange = async (vm: VMFirewallInfo, field: 'policy_in' | 'policy_out', value: string) => {
+    if (!selectedConnection) return
+    try {
+      await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { [field]: value })
+      showToast(t('networkPage.policyUpdated'), 'success')
+      reloadVMFirewallRules(vm)
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    }
+  }
+
+  // ── Log viewer state ──
+  const [logDialog, setLogDialog] = useState<{ open: boolean; vm: VMFirewallInfo | null }>({ open: false, vm: null })
+  const [logEntries, setLogEntries] = useState<firewallAPI.FirewallLogEntry[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
+  const logEndRef = useRef<HTMLDivElement>(null)
+  const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchLogs = useCallback(async (vm: VMFirewallInfo) => {
+    if (!selectedConnection) return
+    try {
+      const logs = await firewallAPI.getVMFirewallLog(selectedConnection, vm.node, vm.type, vm.vmid, 200)
+      setLogEntries(logs)
+    } catch { /* silently fail on auto-refresh */ }
+  }, [selectedConnection])
+
+  const openLogDialog = async (vm: VMFirewallInfo) => {
+    setLogDialog({ open: true, vm })
+    setLogEntries([])
+    setLoadingLogs(true)
+    try {
+      const logs = await firewallAPI.getVMFirewallLog(selectedConnection, vm.node, vm.type, vm.vmid, 200)
+      setLogEntries(logs)
+    } catch (err: any) {
+      showToast(err.message || t('networkPage.error'), 'error')
+    } finally {
+      setLoadingLogs(false)
+    }
+  }
+
+  const closeLogDialog = () => {
+    setLogDialog({ open: false, vm: null })
+    setLogEntries([])
+    if (logIntervalRef.current) { clearInterval(logIntervalRef.current); logIntervalRef.current = null }
+  }
+
+  // Auto-refresh logs every 5s while dialog is open
+  useEffect(() => {
+    if (logDialog.open && logDialog.vm) {
+      logIntervalRef.current = setInterval(() => fetchLogs(logDialog.vm!), 5000)
+      return () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current) }
+    }
+  }, [logDialog.open, logDialog.vm, fetchLogs])
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logEntries])
+
+  // ── Log level change ──
+  const handleVMLogLevelChange = async (vm: VMFirewallInfo, field: 'log_level_in' | 'log_level_out', value: string) => {
     if (!selectedConnection) return
     try {
       await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { [field]: value })
@@ -342,13 +404,13 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                   />
                                 </Box>
                                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>IN:</Typography>
                                     <FormControl size="small">
                                       <Select
                                         value={vm.options?.policy_in || 'ACCEPT'}
                                         onChange={(e) => handleVMPolicyChange(vm, 'policy_in', e.target.value)}
-                                        sx={{ fontSize: 11, height: 24, minWidth: 80, '& .MuiSelect-select': { py: 0.2 } }}
+                                        sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
                                         disabled={!selectedConnection}
                                       >
                                         <MenuItem value="ACCEPT">ACCEPT</MenuItem>
@@ -361,7 +423,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                       <Select
                                         value={vm.options?.policy_out || 'ACCEPT'}
                                         onChange={(e) => handleVMPolicyChange(vm, 'policy_out', e.target.value)}
-                                        sx={{ fontSize: 11, height: 24, minWidth: 80, '& .MuiSelect-select': { py: 0.2 } }}
+                                        sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
                                         disabled={!selectedConnection}
                                       >
                                         <MenuItem value="ACCEPT">ACCEPT</MenuItem>
@@ -369,6 +431,32 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                         <MenuItem value="REJECT">REJECT</MenuItem>
                                       </Select>
                                     </FormControl>
+                                  </Box>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
+                                    <Tooltip title="Log IN">
+                                      <FormControl size="small">
+                                        <Select
+                                          value={vm.options?.log_level_in || 'nolog'}
+                                          onChange={(e) => handleVMLogLevelChange(vm, 'log_level_in', e.target.value)}
+                                          sx={{ fontSize: 9, height: 22, minWidth: 62, '& .MuiSelect-select': { py: 0.1 } }}
+                                          disabled={!selectedConnection}
+                                        >
+                                          {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                                        </Select>
+                                      </FormControl>
+                                    </Tooltip>
+                                    <Tooltip title="Log OUT">
+                                      <FormControl size="small">
+                                        <Select
+                                          value={vm.options?.log_level_out || 'nolog'}
+                                          onChange={(e) => handleVMLogLevelChange(vm, 'log_level_out', e.target.value)}
+                                          sx={{ fontSize: 9, height: 22, minWidth: 62, '& .MuiSelect-select': { py: 0.1 } }}
+                                          disabled={!selectedConnection}
+                                        >
+                                          {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                                        </Select>
+                                      </FormControl>
+                                    </Tooltip>
                                   </Box>
                                   <Tooltip title={t('networkPage.addRule')}>
                                     <IconButton size="small" onClick={() => openVMRuleDialog(vm)}>
@@ -385,6 +473,11 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                   <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
                                     {vm.firewallEnabled ? 'ON' : 'OFF'}
                                   </Typography>
+                                  <Tooltip title={t('networkPage.viewLogs')}>
+                                    <IconButton size="small" onClick={() => openLogDialog(vm)}>
+                                      <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
+                                    </IconButton>
+                                  </Tooltip>
                                 </Box>
                               </Box>
                             </TableCell>
@@ -661,6 +754,51 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
           <Button onClick={() => setDeleteVMRuleConfirm(null)}>{t('common.cancel')}</Button>
           <Button variant="contained" color="error" onClick={handleDeleteVMRule} startIcon={<i className="ri-delete-bin-line" />}>{t('common.delete')}</Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Firewall Log Dialog */}
+      <Dialog open={logDialog.open} onClose={closeLogDialog} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className="ri-terminal-box-line" style={{ color: theme.palette.primary.main }} />
+            {t('networkPage.firewallLogs')}
+            {logDialog.vm && <Chip label={`${logDialog.vm.name} (${logDialog.vm.vmid})`} size="small" sx={{ ml: 1 }} />}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title={t('networkPage.refresh')}>
+              <IconButton size="small" onClick={() => logDialog.vm && fetchLogs(logDialog.vm)} disabled={loadingLogs}>
+                <i className={`ri-refresh-line ${loadingLogs ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <IconButton onClick={closeLogDialog} size="small"><i className="ri-close-line" /></IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <Box sx={{
+            bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 12, lineHeight: 1.6, p: 2, minHeight: 300, maxHeight: 500, overflow: 'auto',
+          }}>
+            {loadingLogs ? (
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <LinearProgress sx={{ mb: 2 }} />
+                <Typography variant="body2" sx={{ color: '#888' }}>{t('networkPage.loadingFirewallRules')}</Typography>
+              </Box>
+            ) : logEntries.length > 0 ? (
+              logEntries.map((entry) => (
+                <Box key={entry.n} sx={{ py: 0.2, '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
+                  <span style={{ color: '#888', marginRight: 8, userSelect: 'none' }}>{String(entry.n).padStart(4, ' ')}</span>
+                  <span>{entry.t}</span>
+                </Box>
+              ))
+            ) : (
+              <Box sx={{ py: 6, textAlign: 'center' }}>
+                <i className="ri-file-list-line" style={{ fontSize: 32, opacity: 0.3 }} />
+                <Typography variant="body2" sx={{ color: '#888', mt: 1 }}>{t('networkPage.noLogs')}</Typography>
+              </Box>
+            )}
+            <div ref={logEndRef} />
+          </Box>
+        </DialogContent>
       </Dialog>
     </>
   )

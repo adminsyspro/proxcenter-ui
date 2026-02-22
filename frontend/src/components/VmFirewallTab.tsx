@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -21,6 +21,7 @@ import {
   Grid,
   IconButton,
   InputLabel,
+  LinearProgress,
   MenuItem,
   Paper,
   Select,
@@ -145,6 +146,8 @@ function cleanSourceDest(value: string | undefined): string {
   return value.trim()
 }
 
+const LOG_LEVELS = ['nolog', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug']
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -182,6 +185,11 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   const [editingRule, setEditingRule] = useState<FirewallRule | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [ruleToDelete, setRuleToDelete] = useState<number | null>(null)
+  const [logDialogOpen, setLogDialogOpen] = useState(false)
+
+  // Refs for log auto-scroll and auto-refresh
+  const logEndRef = useRef<HTMLDivElement>(null)
+  const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Form state
   const [newRule, setNewRule] = useState<Partial<FirewallRule>>({
@@ -313,8 +321,36 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     if (!isEnterprise) return
 
     loadFirewallData()
-    loadLogs()
-  }, [loadFirewallData, loadLogs, isEnterprise])
+  }, [loadFirewallData, isEnterprise])
+
+  // Auto-refresh logs every 5s when log dialog is open
+  useEffect(() => {
+    if (logDialogOpen) {
+      loadLogs()
+      logIntervalRef.current = setInterval(() => {
+        loadLogs()
+      }, 5000)
+    } else {
+      if (logIntervalRef.current) {
+        clearInterval(logIntervalRef.current)
+        logIntervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (logIntervalRef.current) {
+        clearInterval(logIntervalRef.current)
+        logIntervalRef.current = null
+      }
+    }
+  }, [logDialogOpen, loadLogs])
+
+  // Auto-scroll logs to bottom when new entries arrive
+  useEffect(() => {
+    if (logDialogOpen && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [logs, logDialogOpen])
 
   // Toggle firewall enable
   const handleToggleFirewall = async () => {
@@ -341,6 +377,21 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       await firewallAPI.updateVMOptions(connectionId, node, vmType, vmid, { [field]: value })
       setOptions(prev => ({ ...prev, [field]: value }))
       setSnackbar({ open: true, message: 'Policy updated', severity: 'success' })
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Change log level IN or OUT
+  const handleLogLevelChange = async (field: 'log_level_in' | 'log_level_out', value: string) => {
+    setSaving(true)
+
+    try {
+      await firewallAPI.updateVMOptions(connectionId, node, vmType, vmid, { [field]: value })
+      setOptions(prev => ({ ...prev, [field]: value }))
+      setSnackbar({ open: true, message: 'Log level updated', severity: 'success' })
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -566,102 +617,6 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   return (
     <Box sx={{ py: 2 }}>
       <Stack spacing={3}>
-        {/* Options Card */}
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-shield-keyhole-line" style={{ fontSize: 20 }} />
-                Firewall
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {options.enable === 1 ? t('common.active') : t('common.inactive')}
-                </Typography>
-                <Switch
-                  checked={options.enable === 1}
-                  onChange={handleToggleFirewall}
-                  disabled={saving}
-                  color="success"
-                />
-              </Box>
-            </Box>
-
-            {options.enable !== 1 && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                {t('security.firewall')} {t('common.disabled')}
-              </Alert>
-            )}
-
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 6, sm: 3 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    Policy IN
-                  </Typography>
-                  <FormControl size="small">
-                    <Select
-                      value={options.policy_in || 'ACCEPT'}
-                      onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
-                      sx={{ fontSize: 12, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
-                      disabled={saving}
-                    >
-                      <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                      <MenuItem value="DROP">DROP</MenuItem>
-                      <MenuItem value="REJECT">REJECT</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 6, sm: 3 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    Policy OUT
-                  </Typography>
-                  <FormControl size="small">
-                    <Select
-                      value={options.policy_out || 'ACCEPT'}
-                      onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
-                      sx={{ fontSize: 12, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
-                      disabled={saving}
-                    >
-                      <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                      <MenuItem value="DROP">DROP</MenuItem>
-                      <MenuItem value="REJECT">REJECT</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 6, sm: 3 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    MAC Filter
-                  </Typography>
-                  <Chip
-                    size="small"
-                    label={options.macfilter === 1 ? t('common.enabled') : t('common.disabled')}
-                    color={options.macfilter === 1 ? 'success' : 'default'}
-                    sx={{ height: 26 }}
-                  />
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 6, sm: 3 }}>
-                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    IP Filter
-                  </Typography>
-                  <Chip
-                    size="small"
-                    label={options.ipfilter === 1 ? t('common.enabled') : t('common.disabled')}
-                    color={options.ipfilter === 1 ? 'success' : 'default'}
-                    sx={{ height: 26 }}
-                  />
-                </Paper>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-
         {/* NICs Card */}
         {nics.length > 0 && (
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -709,21 +664,50 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
         {/* Unified Rules Card - like Proxmox */}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
               <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-shield-line" style={{ fontSize: 20 }} />
+                <i className="ri-shield-keyhole-line" style={{ fontSize: 20 }} />
                 {t('security.firewall')}
                 {rules.length > 0 && (
-                  <Chip size="small" label={rules.length} sx={{ ml: 1, height: 20, fontSize: 11 }} />
+                  <Chip size="small" label={rules.length} sx={{ ml: 0.5, height: 20, fontSize: 11 }} />
                 )}
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>IN:</Typography>
+                  <FormControl size="small">
+                    <Select
+                      value={options.policy_in || 'ACCEPT'}
+                      onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
+                      sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
+                      disabled={saving}
+                    >
+                      <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                      <MenuItem value="DROP">DROP</MenuItem>
+                      <MenuItem value="REJECT">REJECT</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>OUT:</Typography>
+                  <FormControl size="small">
+                    <Select
+                      value={options.policy_out || 'ACCEPT'}
+                      onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
+                      sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
+                      disabled={saving}
+                    >
+                      <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                      <MenuItem value="DROP">DROP</MenuItem>
+                      <MenuItem value="REJECT">REJECT</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
                 <Button
                   size="small"
                   variant="outlined"
                   startIcon={<i className="ri-shield-check-line" />}
                   onClick={() => setAddGroupOpen(true)}
                   disabled={availableGroups.length === 0}
+                  sx={{ fontSize: 11 }}
                 >
                   Security Group
                 </Button>
@@ -732,9 +716,25 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   variant="contained"
                   startIcon={<i className="ri-add-line" />}
                   onClick={() => setAddRuleOpen(true)}
+                  sx={{ fontSize: 11 }}
                 >
                   {t('network.addRule')}
                 </Button>
+                <Switch
+                  checked={options.enable === 1}
+                  onChange={handleToggleFirewall}
+                  color="success"
+                  size="small"
+                  disabled={saving}
+                />
+                <Typography variant="caption" sx={{ fontWeight: 600, color: options.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
+                  {options.enable === 1 ? 'ON' : 'OFF'}
+                </Typography>
+                <Tooltip title="Firewall Logs">
+                  <IconButton size="small" onClick={() => setLogDialogOpen(true)}>
+                    <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
             </Box>
 
@@ -900,73 +900,6 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           </CardContent>
         </Card>
 
-        {/* Logs Card */}
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-file-text-line" style={{ fontSize: 20 }} />
-                Logs {t('security.firewall')}
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<i className="ri-refresh-line" />}
-                onClick={loadLogs}
-                disabled={logsLoading}
-              >
-                {t('common.refresh')}
-              </Button>
-            </Box>
-
-            {logsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress size={24} />
-              </Box>
-            ) : logs.length === 0 ? (
-              <Box sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
-                <i className="ri-file-text-line" style={{ fontSize: 40, opacity: 0.3 }} />
-                <Typography variant="body2" sx={{ mt: 1 }}>{t('common.noData')}</Typography>
-              </Box>
-            ) : (
-              <Paper
-                sx={{
-                  p: 1.5,
-                  bgcolor: '#0d1117',
-                  borderRadius: 1,
-                  maxHeight: 300,
-                  overflow: 'auto'
-                }}
-              >
-                <Box component="pre" sx={{
-                  m: 0,
-                  fontSize: 11,
-                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                  color: '#c9d1d9',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all'
-                }}>
-                  {logs.map((log, idx) => (
-                    <Box key={idx} sx={{
-                      py: 0.25,
-                      borderBottom: idx < logs.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' }
-                    }}>
-                      <Box component="span" sx={{ color: '#8b949e', mr: 1 }}>{log.n}.</Box>
-                      <Box component="span" sx={{
-                        color: log.t.includes('DROP') ? '#f85149' :
-                               log.t.includes('REJECT') ? '#d29922' :
-                               log.t.includes('ACCEPT') ? '#3fb950' : '#c9d1d9'
-                      }}>
-                        {log.t}
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </Paper>
-            )}
-          </CardContent>
-        </Card>
       </Stack>
 
       {/* Add Rule Dialog */}
@@ -1296,6 +1229,86 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
             {t('common.delete')}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Firewall Log Dialog */}
+      <Dialog open={logDialogOpen} onClose={() => setLogDialogOpen(false)} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className="ri-terminal-box-line" style={{ color: theme.palette.primary.main }} />
+            Firewall Logs
+            {vmName && <Chip label={vmName} size="small" sx={{ ml: 1 }} />}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title={t('common.refresh')}>
+              <IconButton size="small" onClick={loadLogs} disabled={logsLoading}>
+                <i className={`ri-refresh-line ${logsLoading ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <IconButton onClick={() => setLogDialogOpen(false)} size="small"><i className="ri-close-line" /></IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {/* Log level controls */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log IN:</Typography>
+              <FormControl size="small">
+                <Select
+                  value={options.log_level_in || 'nolog'}
+                  onChange={(e) => handleLogLevelChange('log_level_in', e.target.value)}
+                  sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                  disabled={saving}
+                >
+                  {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log OUT:</Typography>
+              <FormControl size="small">
+                <Select
+                  value={options.log_level_out || 'nolog'}
+                  onChange={(e) => handleLogLevelChange('log_level_out', e.target.value)}
+                  sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                  disabled={saving}
+                >
+                  {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Box>
+          </Box>
+          <Box sx={{
+            bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            fontSize: 12, lineHeight: 1.6, p: 2, minHeight: 300, maxHeight: 500, overflow: 'auto',
+          }}>
+            {logsLoading && logs.length === 0 ? (
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <LinearProgress sx={{ mb: 2 }} />
+                <Typography variant="body2" sx={{ color: '#888' }}>Loading logs...</Typography>
+              </Box>
+            ) : logs.length > 0 ? (
+              logs.map((entry) => (
+                <Box key={entry.n} sx={{ py: 0.2, '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
+                  <span style={{ color: '#888', marginRight: 8, userSelect: 'none' }}>{String(entry.n).padStart(4, ' ')}</span>
+                  <span style={{
+                    color: entry.t.includes('DROP') ? '#f85149' :
+                           entry.t.includes('REJECT') ? '#d29922' :
+                           entry.t.includes('ACCEPT') ? '#3fb950' : '#d4d4d4'
+                  }}>
+                    {entry.t}
+                  </span>
+                </Box>
+              ))
+            ) : (
+              <Box sx={{ py: 6, textAlign: 'center' }}>
+                <i className="ri-file-list-line" style={{ fontSize: 32, opacity: 0.3 }} />
+                <Typography variant="body2" sx={{ color: '#888', mt: 1 }}>{t('common.noData')}</Typography>
+              </Box>
+            )}
+            <div ref={logEndRef} />
+          </Box>
+        </DialogContent>
       </Dialog>
 
       {/* Snackbar */}

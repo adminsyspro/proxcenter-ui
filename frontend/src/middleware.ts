@@ -8,7 +8,7 @@ const AUTH_SECRET = process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-pr
 
 // i18n configuration
 const locales = ['fr', 'en']
-const defaultLocale = 'fr'
+const defaultLocale = 'en'
 
 // Routes publiques (pas besoin d'être connecté)
 const publicRoutes = [

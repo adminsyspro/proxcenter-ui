@@ -241,9 +241,12 @@ export default function NetworkAutomationPage() {
           {activeTab === 4 && (
             <SecurityGroupsPanel
               securityGroups={securityGroups}
+              vmFirewallData={vmFirewallData}
               firewallMode={firewallMode}
               selectedConnection={selectedConnection}
               totalRules={totalRules}
+              aliases={aliases}
+              ipsets={ipsets}
               reload={loadFirewallData}
             />
           )}

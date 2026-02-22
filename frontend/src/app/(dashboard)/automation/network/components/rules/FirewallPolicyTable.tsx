@@ -1,17 +1,16 @@
 'use client'
 
-import { Fragment, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
   Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-  FormControl, IconButton, InputLabel, MenuItem, Paper, Select, Stack, Switch,
+  FormControl, IconButton, InputLabel, MenuItem, Paper, Select, Switch,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Tooltip, Typography, useTheme, alpha
+  Tooltip, Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
-import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection, monoStyle } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
@@ -21,8 +20,6 @@ import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 interface FirewallPolicyTableProps {
   clusterRules: firewallAPI.FirewallRule[]
   securityGroups: firewallAPI.SecurityGroup[]
-  vmFirewallData: VMFirewallInfo[]
-  firewallMode: firewallAPI.FirewallMode
   selectedConnection: string
   setClusterRules: React.Dispatch<React.SetStateAction<firewallAPI.FirewallRule[]>>
   clusterOptions: firewallAPI.ClusterOptions | null
@@ -50,49 +47,32 @@ function formatService(rule: firewallAPI.FirewallRule): string {
   return proto || port
 }
 
-function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { vmid: number; name: string; node: string }[] {
-  const vms: { vmid: number; name: string; node: string }[] = []
-  for (const vm of vmFirewallData) {
-    const hasRef = vm.rules.some(r => r.type === 'group' && r.action === sgName)
-    if (hasRef) vms.push({ vmid: vm.vmid, name: vm.name, node: vm.node })
-  }
-  return vms
-}
-
 // ── Column header style ──
 const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
 
 // ── Main Component ──
 
 export default function FirewallPolicyTable({
-  clusterRules, securityGroups, vmFirewallData, firewallMode,
-  selectedConnection, setClusterRules, clusterOptions, setClusterOptions,
-  aliases, ipsets, reload
+  clusterRules, securityGroups, selectedConnection, setClusterRules,
+  clusterOptions, setClusterOptions, aliases, ipsets, reload
 }: FirewallPolicyTableProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
 
   // ── State ──
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-  const [search, setSearch] = useState('')
 
   // Rule CRUD
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false)
-  const [ruleDialogScope, setRuleDialogScope] = useState<{ type: 'cluster' | 'security-group'; name?: string }>({ type: 'cluster' })
   const [ruleDialogIsNew, setRuleDialogIsNew] = useState(true)
   const [ruleDialogEditPos, setRuleDialogEditPos] = useState<number | null>(null)
   const [ruleForm, setRuleForm] = useState<RuleFormData>({ type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '', source: '', dest: '', macro: '', iface: '', log: 'nolog', comment: '' })
 
-  // SG create dialog
-  const [groupDialogOpen, setGroupDialogOpen] = useState(false)
-  const [newGroup, setNewGroup] = useState({ group: '', comment: '' })
-
   // Delete confirm
-  const [deleteConfirm, setDeleteConfirm] = useState<{ scope: 'cluster' | 'security-group'; groupName?: string; pos: number } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ pos: number } | null>(null)
 
   // Drag & drop
-  const [dragState, setDragState] = useState<{ sectionId: string; draggedPos: number | null; dragOverPos: number | null }>({ sectionId: '', draggedPos: null, dragOverPos: null })
+  const [dragState, setDragState] = useState<{ draggedPos: number | null; dragOverPos: number | null }>({ draggedPos: null, dragOverPos: null })
 
   // ── Cluster firewall toggle ──
   const handleToggleClusterFirewall = async () => {
@@ -132,48 +112,6 @@ export default function FirewallPolicyTable({
     activeRuleCount: clusterRules.filter(r => r.enable !== 0).length,
   }), [clusterRules, t])
 
-  // ── Build SG-only sections (no cluster rules) ──
-  const sections: PolicySection[] = useMemo(() => {
-    const result: PolicySection[] = []
-    for (const sg of securityGroups) {
-      const rules = sg.rules || []
-      result.push({
-        id: sg.group,
-        type: 'security-group',
-        name: sg.group,
-        comment: sg.comment,
-        rules,
-        appliedTo: computeAppliedTo(sg.group, vmFirewallData),
-        ruleCount: rules.length,
-        activeRuleCount: rules.filter(r => r.enable !== 0).length,
-      })
-    }
-    return result
-  }, [securityGroups, vmFirewallData])
-
-  // ── Filter by search ──
-  const filteredSections = useMemo(() => {
-    if (!search.trim()) return sections
-    const q = search.toLowerCase()
-    return sections.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.comment?.toLowerCase().includes(q) ||
-      s.rules.some(r => r.comment?.toLowerCase().includes(q) || r.source?.toLowerCase().includes(q) || r.dest?.toLowerCase().includes(q))
-    )
-  }, [sections, search])
-
-  // ── Section expand/collapse ──
-  const toggleSection = (id: string) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  const expandAll = () => setExpandedSections(new Set(filteredSections.map(s => s.id)))
-  const collapseAll = () => setExpandedSections(new Set())
-
   // ── Cluster rule reload ──
   const reloadClusterRules = async () => {
     if (!selectedConnection) return
@@ -186,16 +124,14 @@ export default function FirewallPolicyTable({
   }
 
   // ── Open rule dialog ──
-  const openAddRule = (scope: { type: 'cluster' | 'security-group'; name?: string }) => {
-    setRuleDialogScope(scope)
+  const openAddRule = () => {
     setRuleDialogIsNew(true)
     setRuleDialogEditPos(null)
     setRuleForm({ type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '', source: '', dest: '', macro: '', iface: '', log: 'nolog', comment: '' })
     setRuleDialogOpen(true)
   }
 
-  const openEditRule = (scope: { type: 'cluster' | 'security-group'; name?: string }, rule: firewallAPI.FirewallRule) => {
-    setRuleDialogScope(scope)
+  const openEditRule = (rule: firewallAPI.FirewallRule) => {
     setRuleDialogIsNew(false)
     setRuleDialogEditPos(rule.pos)
     setRuleForm({
@@ -211,26 +147,15 @@ export default function FirewallPolicyTable({
   const handleRuleSubmit = async () => {
     if (!selectedConnection) return
     try {
-      if (ruleDialogScope.type === 'cluster') {
-        if (ruleDialogIsNew) {
-          await firewallAPI.addClusterRule(selectedConnection, ruleForm)
-        } else if (ruleDialogEditPos !== null) {
-          await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${ruleDialogEditPos}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ruleForm)
-          })
-        }
-        showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleModified'), 'success')
-        reloadClusterRules()
-      } else {
-        const sgName = ruleDialogScope.name!
-        if (ruleDialogIsNew) {
-          await firewallAPI.addSecurityGroupRule(selectedConnection, sgName, ruleForm)
-        } else if (ruleDialogEditPos !== null) {
-          await firewallAPI.updateSecurityGroupRule(selectedConnection, sgName, ruleDialogEditPos, ruleForm)
-        }
-        showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleUpdated'), 'success')
-        reload()
+      if (ruleDialogIsNew) {
+        await firewallAPI.addClusterRule(selectedConnection, ruleForm)
+      } else if (ruleDialogEditPos !== null) {
+        await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${ruleDialogEditPos}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ruleForm)
+        })
       }
+      showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleModified'), 'success')
+      reloadClusterRules()
       setRuleDialogOpen(false)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -238,19 +163,14 @@ export default function FirewallPolicyTable({
   }
 
   // ── Toggle enable ──
-  const handleToggleEnable = async (section: PolicySection, rule: firewallAPI.FirewallRule) => {
+  const handleToggleEnable = async (rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
     const newEnable = rule.enable === 1 ? 0 : 1
     try {
-      if (section.type === 'cluster') {
-        await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${rule.pos}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
-        })
-        reloadClusterRules()
-      } else {
-        await firewallAPI.updateSecurityGroupRule(selectedConnection, section.id, rule.pos, { ...rule, enable: newEnable })
-        reload()
-      }
+      await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${rule.pos}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
+      })
+      reloadClusterRules()
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -261,13 +181,8 @@ export default function FirewallPolicyTable({
   const handleDeleteRule = async () => {
     if (!deleteConfirm || !selectedConnection) return
     try {
-      if (deleteConfirm.scope === 'cluster') {
-        await firewallAPI.deleteClusterRule(selectedConnection, deleteConfirm.pos)
-        reloadClusterRules()
-      } else {
-        await firewallAPI.deleteSecurityGroupRule(selectedConnection, deleteConfirm.groupName!, deleteConfirm.pos)
-        reload()
-      }
+      await firewallAPI.deleteClusterRule(selectedConnection, deleteConfirm.pos)
+      reloadClusterRules()
       showToast(t('network.ruleDeleted'), 'success')
       setDeleteConfirm(null)
     } catch (err: any) {
@@ -275,93 +190,56 @@ export default function FirewallPolicyTable({
     }
   }
 
-  // ── Delete SG ──
-  const handleDeleteGroup = async (name: string) => {
-    if (!confirm(t('networkPage.deleteSgConfirm', { name }))) return
-    try {
-      await firewallAPI.deleteSecurityGroup(selectedConnection, name)
-      showToast(t('networkPage.securityGroupDeleted'), 'success')
-      reload()
-    } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
-    }
-  }
-
-  // ── Create SG ──
-  const handleCreateGroup = async () => {
-    try {
-      await firewallAPI.createSecurityGroup(selectedConnection, newGroup)
-      showToast(t('networkPage.securityGroupCreated'), 'success')
-      setGroupDialogOpen(false)
-      setNewGroup({ group: '', comment: '' })
-      reload()
-    } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
-    }
-  }
-
   // ── Drag & drop ──
-  const handleDragStart = (e: React.DragEvent, sectionId: string, pos: number) => {
-    setDragState({ sectionId, draggedPos: pos, dragOverPos: null })
+  const handleDragStart = (e: React.DragEvent, pos: number) => {
+    setDragState({ draggedPos: pos, dragOverPos: null })
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', pos.toString())
     setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
   }
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
-    setDragState({ sectionId: '', draggedPos: null, dragOverPos: null })
+    setDragState({ draggedPos: null, dragOverPos: null })
   }
-  const handleDragOver = (e: React.DragEvent, sectionId: string, pos: number) => {
+  const handleDragOver = (e: React.DragEvent, pos: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    if (dragState.sectionId === sectionId && dragState.draggedPos !== null && dragState.draggedPos !== pos) {
+    if (dragState.draggedPos !== null && dragState.draggedPos !== pos) {
       setDragState(prev => ({ ...prev, dragOverPos: pos }))
     }
   }
   const handleDragLeave = () => setDragState(prev => ({ ...prev, dragOverPos: null }))
-  const handleDrop = async (e: React.DragEvent, section: PolicySection, toPos: number) => {
+  const handleDrop = async (e: React.DragEvent, toPos: number) => {
     e.preventDefault()
     const fromPos = dragState.draggedPos
-    setDragState({ sectionId: '', draggedPos: null, dragOverPos: null })
-    if (fromPos === null || fromPos === toPos || dragState.sectionId !== section.id) return
+    setDragState({ draggedPos: null, dragOverPos: null })
+    if (fromPos === null || fromPos === toPos) return
     try {
-      if (section.type === 'cluster') {
-        await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${fromPos}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moveto: toPos })
-        })
-        reloadClusterRules()
-      } else {
-        await firewallAPI.updateSecurityGroupRule(selectedConnection, section.id, fromPos, { moveto: toPos })
-        reload()
-      }
+      await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${fromPos}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moveto: toPos })
+      })
+      reloadClusterRules()
       showToast(t('network.ruleMoved'), 'success')
     } catch (err: any) {
       showToast(err.message || t('networkPage.moveError'), 'error')
     }
   }
 
-  // ── Section row color ──
-  const sectionRowBg = alpha(theme.palette.primary.main, 0.1)
-  const sectionRowHoverBg = alpha(theme.palette.primary.main, 0.16)
-
   // ── Render a rule row ──
-  const renderRuleRow = (section: PolicySection, rule: firewallAPI.FirewallRule, idx: number, colSpan: number) => {
-    const isDragging = dragState.sectionId === section.id && dragState.draggedPos === rule.pos
-    const isDragOver = dragState.sectionId === section.id && dragState.dragOverPos === rule.pos
+  const renderRuleRow = (rule: firewallAPI.FirewallRule, idx: number) => {
+    const isDragging = dragState.draggedPos === rule.pos
+    const isDragOver = dragState.dragOverPos === rule.pos
     const isGroupRule = rule.type === 'group'
-    const scope: { type: 'cluster' | 'security-group'; name?: string } = section.type === 'cluster'
-      ? { type: 'cluster' }
-      : { type: 'security-group', name: section.id }
 
     return (
       <TableRow
-        key={`${section.id}-rule-${idx}`}
+        key={`cluster-rule-${idx}`}
         hover draggable
-        onDragStart={e => handleDragStart(e, section.id, rule.pos)}
+        onDragStart={e => handleDragStart(e, rule.pos)}
         onDragEnd={handleDragEnd}
-        onDragOver={e => handleDragOver(e, section.id, rule.pos)}
+        onDragOver={e => handleDragOver(e, rule.pos)}
         onDragLeave={handleDragLeave}
-        onDrop={e => handleDrop(e, section, rule.pos)}
+        onDrop={e => handleDrop(e, rule.pos)}
         sx={{
           cursor: 'grab', opacity: isDragging ? 0.5 : 1,
           borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
@@ -373,7 +251,7 @@ export default function FirewallPolicyTable({
         </TableCell>
         <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
         <TableCell sx={{ p: 0.5, width: 55 }}>
-          <Switch checked={rule.enable !== 0} onChange={() => handleToggleEnable(section, rule)} size="small" color="success" />
+          <Switch checked={rule.enable !== 0} onChange={() => handleToggleEnable(rule)} size="small" color="success" />
         </TableCell>
         <TableCell sx={{ p: 0.5, width: 65 }}>
           <Chip
@@ -395,26 +273,6 @@ export default function FirewallPolicyTable({
         <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
           {formatService(rule)}
         </TableCell>
-        {colSpan === 11 && (
-          <TableCell sx={{ p: 0.5, width: 90 }}>
-            {section.type === 'security-group' ? (
-              <Tooltip
-                title={section.appliedTo.length > 0
-                  ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                  : t('networkPage.noVmsReferencing')
-                }
-              >
-                <Chip
-                  label={t('networkPage.vmCount', { count: section.appliedTo.length })}
-                  size="small" variant="outlined"
-                  sx={{ height: 20, fontSize: 10, cursor: 'help' }}
-                />
-              </Tooltip>
-            ) : (
-              <Chip label={t('common.all')} size="small" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
-            )}
-          </TableCell>
-        )}
         <TableCell sx={{ p: 0.5, width: 90 }}>
           {isGroupRule ? (
             <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
@@ -428,16 +286,12 @@ export default function FirewallPolicyTable({
         <TableCell sx={{ p: 0.5, width: 70 }}>
           <Box sx={{ display: 'flex', gap: 0 }}>
             <Tooltip title={t('networkPage.edit')}>
-              <IconButton size="small" onClick={() => openEditRule(scope, rule)}>
+              <IconButton size="small" onClick={() => openEditRule(rule)}>
                 <i className="ri-pencil-line" style={{ fontSize: 14 }} />
               </IconButton>
             </Tooltip>
             <Tooltip title={t('networkPage.delete')}>
-              <IconButton size="small" color="error" onClick={() => setDeleteConfirm({
-                scope: section.type === 'cluster' ? 'cluster' : 'security-group',
-                groupName: section.type === 'security-group' ? section.id : undefined,
-                pos: rule.pos
-              })}>
+              <IconButton size="small" color="error" onClick={() => setDeleteConfirm({ pos: rule.pos })}>
                 <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
               </IconButton>
             </Tooltip>
@@ -447,247 +301,71 @@ export default function FirewallPolicyTable({
     )
   }
 
-  // ── Render SG section row ──
-  const renderSectionRow = (section: PolicySection) => {
-    const isExpanded = expandedSections.has(section.id)
-    const scope: { type: 'security-group'; name: string } = { type: 'security-group', name: section.id }
-
-    return (
-      <TableRow
-        key={`section-${section.id}`}
-        sx={{
-          bgcolor: sectionRowBg,
-          '&:hover': { bgcolor: sectionRowHoverBg },
-          cursor: 'pointer',
-          '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
-        }}
-        onClick={() => toggleSection(section.id)}
-      >
-        <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-              <i
-                className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
-                style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
-              />
-              <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{section.name}</code>
-              {section.comment && (
-                <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  — {section.comment}
-                </Typography>
-              )}
-              <Chip
-                label={t('firewall.rulesCount', { count: section.ruleCount })}
-                size="small"
-                sx={{ height: 20, fontSize: 10, ml: 0.5 }}
-              />
-              <Tooltip
-                title={section.appliedTo.length > 0
-                  ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                  : t('networkPage.noVmsReferencing')
-                }
-              >
-                <Chip
-                  icon={<i className="ri-computer-line" style={{ fontSize: 12 }} />}
-                  label={t('networkPage.vmCount', { count: section.appliedTo.length })}
-                  size="small"
-                  variant="outlined"
-                  sx={{ height: 20, fontSize: 10, cursor: 'help' }}
-                />
-              </Tooltip>
-            </Box>
-
-            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-              <Tooltip title={t('networkPage.addRule')}>
-                <IconButton size="small" onClick={() => openAddRule(scope)}>
-                  <i className="ri-add-line" style={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={t('networkPage.delete')}>
-                <IconButton size="small" color="error" onClick={() => handleDeleteGroup(section.id)}>
-                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Box>
-        </TableCell>
-      </TableRow>
-    )
-  }
-
-  // ── Render rule rows for a SG section ──
-  const renderSGRuleRows = (section: PolicySection) => {
-    if (!expandedSections.has(section.id)) return null
-    const scope: { type: 'security-group'; name: string } = { type: 'security-group', name: section.id }
-
-    if (section.rules.length === 0) {
-      return (
-        <TableRow key={`empty-${section.id}`}>
-          <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
-            <Typography variant="body2">{t('networkPage.noRules')}</Typography>
-            <Button size="small" sx={{ mt: 1 }} onClick={() => openAddRule(scope)}>
-              {t('networkPage.addRule')}
-            </Button>
-          </TableCell>
-        </TableRow>
-      )
-    }
-
-    return section.rules.map((rule, idx) => renderRuleRow(section, rule, idx, 11))
-  }
-
-  // ── Cluster Policy Section ──
-  const renderClusterPolicySection = () => (
-    <Paper sx={{ mb: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
-      {/* Header: title + switch + policy selects */}
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className="ri-shield-flash-line" style={{ fontSize: 20, color: theme.palette.primary.main }} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Cluster Firewall</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Switch
-              checked={clusterOptions?.enable === 1}
-              onChange={handleToggleClusterFirewall}
-              color="success"
-              size="small"
-              disabled={!selectedConnection}
-            />
-            <Typography variant="caption" sx={{ fontWeight: 600, color: clusterOptions?.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
-              {clusterOptions?.enable === 1 ? 'ON' : 'OFF'}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy IN:</Typography>
-            <FormControl size="small" sx={{ minWidth: 100 }}>
-              <Select
-                value={clusterOptions?.policy_in || 'DROP'}
-                onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
-                sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
-                disabled={!selectedConnection}
-              >
-                <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                <MenuItem value="DROP">DROP</MenuItem>
-                <MenuItem value="REJECT">REJECT</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy OUT:</Typography>
-            <FormControl size="small" sx={{ minWidth: 100 }}>
-              <Select
-                value={clusterOptions?.policy_out || 'ACCEPT'}
-                onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
-                sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
-                disabled={!selectedConnection}
-              >
-                <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                <MenuItem value="DROP">DROP</MenuItem>
-                <MenuItem value="REJECT">REJECT</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-          <Tooltip title={t('networkPage.addRule')}>
-            <IconButton size="small" onClick={() => openAddRule({ type: 'cluster' })} disabled={!selectedConnection}>
-              <i className="ri-add-line" style={{ fontSize: 18 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Box>
-
-      {/* Cluster Rules Table */}
-      <TableContainer>
-        <Table size="small">
-          <TableHead>
-            <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-              <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
-              <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
-              <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
-              <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
-              <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
-              <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
-              <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-              <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-              <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-              <TableCell sx={{ width: 70 }}></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {clusterRules.length > 0 ? (
-              clusterRules.map((rule, idx) => renderRuleRow(clusterSection, rule, idx, 10))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
-                  <Typography variant="body2">{t('networkPage.noRules')}</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Add Rule button */}
-      <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'flex-end', borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
-        <Button size="small" startIcon={<i className="ri-add-line" />} onClick={() => openAddRule({ type: 'cluster' })} disabled={!selectedConnection}>
-          {t('networkPage.addRule')}
-        </Button>
-      </Box>
-    </Paper>
-  )
-
-  // ── Standalone warning ──
-  if (firewallMode === 'standalone') {
-    return (
-      <Box>
-        <Box sx={{ mb: 3, p: 2, bgcolor: alpha('#f59e0b', 0.14), borderRadius: 2, border: `1px solid ${alpha('#f59e0b', 0.3)}` }}>
-          <Typography variant="body2" sx={{ color: '#f59e0b', fontWeight: 600 }}>
-            <i className="ri-information-line" style={{ marginRight: 6 }} />
-            {t('networkPage.sgNotAvailableStandalone')}
-          </Typography>
-        </Box>
-        {renderClusterPolicySection()}
-      </Box>
-    )
-  }
-
   return (
     <>
       {/* ═══ Cluster Firewall Policy + Rules ═══ */}
-      {renderClusterPolicySection()}
-
-      {/* ═══ Security Groups ═══ */}
-
-      {/* Toolbar */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <TextField
-            size="small" placeholder={t('networkPage.searchPolicies')} value={search}
-            onChange={e => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: <i className="ri-search-line" style={{ marginRight: 6, fontSize: 16, color: theme.palette.text.disabled }} />,
-              sx: { fontSize: 13 }
-            }}
-            sx={{ width: 240 }}
-          />
-          <Button size="small" variant="outlined" onClick={expandAll}>{t('common.expandAll')}</Button>
-          <Button size="small" variant="outlined" onClick={collapseAll}>{t('common.collapseAll')}</Button>
+      <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, overflow: 'hidden' }}>
+        {/* Header: title + switch + policy selects */}
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-shield-flash-line" style={{ fontSize: 20, color: theme.palette.primary.main }} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Cluster Firewall</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Switch
+                checked={clusterOptions?.enable === 1}
+                onChange={handleToggleClusterFirewall}
+                color="success"
+                size="small"
+                disabled={!selectedConnection}
+              />
+              <Typography variant="caption" sx={{ fontWeight: 600, color: clusterOptions?.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
+                {clusterOptions?.enable === 1 ? 'ON' : 'OFF'}
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy IN:</Typography>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <Select
+                  value={clusterOptions?.policy_in || 'DROP'}
+                  onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
+                  sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
+                  disabled={!selectedConnection}
+                >
+                  <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                  <MenuItem value="DROP">DROP</MenuItem>
+                  <MenuItem value="REJECT">REJECT</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy OUT:</Typography>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <Select
+                  value={clusterOptions?.policy_out || 'ACCEPT'}
+                  onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
+                  sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
+                  disabled={!selectedConnection}
+                >
+                  <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                  <MenuItem value="DROP">DROP</MenuItem>
+                  <MenuItem value="REJECT">REJECT</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Tooltip title={t('networkPage.addRule')}>
+              <IconButton size="small" onClick={openAddRule} disabled={!selectedConnection}>
+                <i className="ri-add-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setGroupDialogOpen(true)} disabled={!selectedConnection}>
-            {t('networkPage.newPolicy')}
-          </Button>
-          <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={() => { reload(); reloadClusterRules() }}>
-            {t('networkPage.refresh')}
-          </Button>
-        </Box>
-      </Box>
 
-      {/* SG flat table */}
-      {filteredSections.length > 0 ? (
-        <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+        {/* Cluster Rules Table */}
+        <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
@@ -698,26 +376,32 @@ export default function FirewallPolicyTable({
                 <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
                 <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('networkPage.appliedTo')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
                 <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
                 <TableCell sx={{ width: 70 }}></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredSections.map(section => (
-                <Fragment key={section.id}>{renderSectionRow(section)}{renderSGRuleRows(section)}</Fragment>
-              ))}
+              {clusterRules.length > 0 ? (
+                clusterRules.map((rule, idx) => renderRuleRow(rule, idx))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                    <Typography variant="body2">{t('networkPage.noRules')}</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
-      ) : (
-        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
-          <i className="ri-shield-line" style={{ fontSize: 48, opacity: 0.3 }} />
-          <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noSecurityGroup')}</Typography>
-          <Button sx={{ mt: 2 }} onClick={() => setGroupDialogOpen(true)}>{t('networkPage.createGroup')}</Button>
-        </Paper>
-      )}
+
+        {/* Add Rule button */}
+        <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'flex-end', borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
+          <Button size="small" startIcon={<i className="ri-add-line" />} onClick={openAddRule} disabled={!selectedConnection}>
+            {t('networkPage.addRule')}
+          </Button>
+        </Box>
+      </Paper>
 
       {/* ══ DIALOGS ══ */}
 
@@ -727,28 +411,13 @@ export default function FirewallPolicyTable({
         onClose={() => setRuleDialogOpen(false)}
         onSubmit={handleRuleSubmit}
         isNew={ruleDialogIsNew}
-        scope={ruleDialogScope}
+        scope={{ type: 'cluster' }}
         rule={ruleForm}
         onRuleChange={setRuleForm}
         securityGroups={securityGroups}
         aliases={aliases}
         ipsets={ipsets}
       />
-
-      {/* Create Security Group */}
-      <Dialog open={groupDialogOpen} onClose={() => setGroupDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{t('networkPage.createSgTitle')}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('common.name')} value={newGroup.group} onChange={e => setNewGroup({ ...newGroup, group: e.target.value })} placeholder="sg-web" fullWidth size="small" InputProps={{ sx: monoStyle }} />
-            <TextField label={t('common.description')} value={newGroup.comment} onChange={e => setNewGroup({ ...newGroup, comment: e.target.value })} fullWidth size="small" />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setGroupDialogOpen(false)}>{t('common.cancel')}</Button>
-          <Button variant="contained" onClick={handleCreateGroup} disabled={!newGroup.group}>{t('networkPage.createButton')}</Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Delete Rule Confirmation */}
       <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth>

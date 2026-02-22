@@ -70,7 +70,7 @@ export default function RulesTab({
 
   const hostRulesCount = Object.values(hostRulesByNode).reduce((acc, r) => acc + r.length, 0)
   const vmRulesCount = vmFirewallData.reduce((acc, v) => acc + v.rules.length, 0)
-  const policyRulesCount = clusterRules.length + securityGroups.reduce((acc, g) => acc + (g.rules?.length || 0), 0)
+  const policyRulesCount = clusterRules.length
 
   // Remap legacy sub-tab values on mount / when changed from outside
   useEffect(() => {
@@ -127,8 +127,6 @@ export default function RulesTab({
         <FirewallPolicyTable
           clusterRules={clusterRules}
           securityGroups={securityGroups}
-          vmFirewallData={vmFirewallData}
-          firewallMode={firewallMode}
           selectedConnection={selectedConnection}
           setClusterRules={setClusterRules}
           clusterOptions={clusterOptions}

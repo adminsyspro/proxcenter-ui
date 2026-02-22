@@ -883,7 +883,14 @@
     "group": "Groupe",
     "node": "Nœud",
     "drsStatusTitle": "Statut DRS",
-    "drsGoToDrs": "Gérer le DRS"
+    "drsGoToDrs": "Gérer le DRS",
+    "drsEvaluate": "Évaluer",
+    "drsAvgMemory": "Mémoire moy.",
+    "drsAvgCpu": "CPU moy.",
+    "drsImbalance": "Déséquilibre",
+    "drsPendingRecs": "{count, plural, one {# recommandation en attente} other {# recommandations en attente}}",
+    "drsMoreRecs": "+{count} de plus...",
+    "drsClusterBalanced": "Le cluster est équilibré — aucune action requise"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",

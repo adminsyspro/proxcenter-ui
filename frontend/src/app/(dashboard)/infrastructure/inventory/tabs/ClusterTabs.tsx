@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 
@@ -37,7 +37,9 @@ import {
   TextField,
   Typography,
   Tooltip as MuiTooltip,
+  Divider,
   useTheme,
+  alpha,
 } from '@mui/material'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
@@ -58,7 +60,7 @@ import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 import { AddIcon } from '../components/IconWrappers'
 import { useLicense, Features } from '@/contexts/LicenseContext'
-import { useDRSStatus, useDRSMetrics, useDRSSettings } from '@/hooks/useDRS'
+import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 
 export default function ClusterTabs(props: any) {
@@ -69,6 +71,9 @@ export default function ClusterTabs(props: any) {
   const { data: drsStatus } = useDRSStatus(isEnterprise)
   const { data: metricsData } = useDRSMetrics(isEnterprise)
   const { data: drsSettings } = useDRSSettings(isEnterprise)
+  const { data: drsRecommendations, mutate: mutateRecs } = useDRSRecommendations(isEnterprise)
+  const [evaluating, setEvaluating] = useState(false)
+  const theme = useTheme()
 
   const {
     allVms,
@@ -164,6 +169,23 @@ export default function ClusterTabs(props: any) {
     if (!clusterMetrics?.summary) return null
     return computeDrsHealthScore(clusterMetrics.summary)
   }, [isEnterprise, drsStatus, drsSettings, metricsData, selection])
+
+  const clusterRecs = useMemo(() => {
+    if (!drsRecommendations || !Array.isArray(drsRecommendations)) return []
+    const connId = selection?.type === 'cluster' ? selection.id : ''
+    return drsRecommendations.filter((r: any) => r.connection_id === connId && r.status === 'pending')
+  }, [drsRecommendations, selection])
+
+  const handleEvaluate = useCallback(async () => {
+    setEvaluating(true)
+    try {
+      await fetch('/api/v1/orchestrator/drs/evaluate', { method: 'POST' })
+      // Wait briefly for evaluation to produce results
+      setTimeout(() => mutateRecs(), 3000)
+    } catch { /* ignore */ } finally {
+      setEvaluating(false)
+    }
+  }, [mutateRecs])
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />
@@ -571,8 +593,8 @@ export default function ClusterTabs(props: any) {
                     {drsHealth !== null && (
                       <Card variant="outlined" sx={{ mb: 2 }}>
                         <CardContent sx={{ py: 1.5, px: 2 }}>
+                          {/* Header row: score ring + title + actions */}
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            {/* Score ring */}
                             <Box sx={{ position: 'relative', display: 'inline-flex' }}>
                               <CircularProgress
                                 variant="determinate"
@@ -585,35 +607,145 @@ export default function ClusterTabs(props: any) {
                                 <Typography variant="caption" fontWeight={700} sx={{ fontSize: 11 }}>{drsHealth.score}</Typography>
                               </Box>
                             </Box>
-                            {/* Title + status */}
-                            <Box sx={{ minWidth: 120 }}>
+                            <Box sx={{ flex: 1, minWidth: 120 }}>
                               <Typography variant="subtitle2" fontWeight={700}>{t('inventory.drsStatusTitle')}</Typography>
                               <Typography variant="body2" color="text.secondary">
                                 {drsHealth.score} / 100 — {drsHealth.score >= 80 ? t('drsPage.balanced') : drsHealth.score >= 50 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')}
                               </Typography>
                             </Box>
-                            {/* Penalty chips */}
-                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', flex: 1 }}>
-                              {drsHealth.cpuPenalty !== 0 && (
-                                <Chip size="small" label={`CPU ${drsHealth.cpuPenalty}`} color="warning" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
-                              )}
-                              {drsHealth.memPenalty !== 0 && (
-                                <Chip size="small" label={`Memory ${drsHealth.memPenalty}`} color="warning" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
-                              )}
-                              {drsHealth.imbalancePenalty !== 0 && (
-                                <Chip size="small" label={`Imbalance ${drsHealth.imbalancePenalty}`} color="warning" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
-                              )}
-                            </Box>
-                            {/* Manage DRS button */}
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={() => router.push('/automation/drs')}
-                              startIcon={<i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
-                            >
-                              {t('inventory.drsGoToDrs')}
-                            </Button>
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={handleEvaluate}
+                                disabled={evaluating}
+                                startIcon={evaluating ? <CircularProgress size={14} /> : <i className="ri-refresh-line" style={{ fontSize: 14 }} />}
+                              >
+                                {t('inventory.drsEvaluate')}
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => router.push('/automation/drs')}
+                                startIcon={<i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
+                              >
+                                {t('inventory.drsGoToDrs')}
+                              </Button>
+                            </Stack>
                           </Box>
+
+                          {/* Score breakdown */}
+                          <Box sx={{ display: 'flex', gap: 2, mt: 1.5, flexWrap: 'wrap' }}>
+                            {[
+                              { label: t('inventory.drsAvgMemory'), value: drsHealth.avgMem, penalty: drsHealth.memPenalty, color: 'info.main' },
+                              { label: t('inventory.drsAvgCpu'), value: drsHealth.avgCpu, penalty: drsHealth.cpuPenalty, color: 'warning.main' },
+                              { label: t('inventory.drsImbalance'), value: drsHealth.imbalance, penalty: drsHealth.imbalancePenalty, color: 'secondary.main' },
+                            ].map((item) => (
+                              <Box
+                                key={item.label}
+                                sx={{
+                                  flex: 1,
+                                  minWidth: 130,
+                                  px: 1.5,
+                                  py: 1,
+                                  borderRadius: 1,
+                                  bgcolor: (t) => alpha(t.palette.divider, 0.3),
+                                }}
+                              >
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2, mb: 0.25 }}>
+                                  {item.label}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+                                  <Typography variant="body2" fontWeight={600}>
+                                    {item.value.toFixed(1)}%
+                                  </Typography>
+                                  {item.penalty !== 0 && (
+                                    <Typography variant="caption" color="error.main" fontWeight={600}>
+                                      {item.penalty}
+                                    </Typography>
+                                  )}
+                                  {item.penalty === 0 && (
+                                    <Typography variant="caption" color="success.main" fontWeight={600}>
+                                      OK
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          {/* Recommendations for this cluster */}
+                          {clusterRecs.length > 0 && (
+                            <>
+                              <Divider sx={{ my: 1.5 }} />
+                              <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                {t('inventory.drsPendingRecs', { count: clusterRecs.length })}
+                              </Typography>
+                              <Stack spacing={0.75}>
+                                {clusterRecs.slice(0, 5).map((rec: any) => {
+                                  const pColor = rec.priority === 'critical' || rec.priority === 3 ? 'error'
+                                    : rec.priority === 'high' || rec.priority === 2 ? 'warning'
+                                    : rec.priority === 'medium' || rec.priority === 1 ? 'info' : 'default'
+                                  return (
+                                    <Box
+                                      key={rec.id}
+                                      sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1.5,
+                                        py: 0.75,
+                                        px: 1.5,
+                                        borderRadius: 1,
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        cursor: 'pointer',
+                                        '&:hover': { borderColor: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
+                                      }}
+                                      onClick={() => router.push('/automation/drs')}
+                                    >
+                                      <i className="ri-swap-line" style={{ fontSize: 16, opacity: 0.5 }} />
+                                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                                        <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8rem' }}>
+                                          {rec.vm_name || `VM ${rec.vmid}`}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
+                                          {rec.reason}
+                                        </Typography>
+                                      </Box>
+                                      <Chip
+                                        size="small"
+                                        label={rec.source_node}
+                                        sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.error.main, 0.1), color: 'error.main', fontWeight: 500 }}
+                                      />
+                                      <Typography variant="caption" sx={{ opacity: 0.4 }}>→</Typography>
+                                      <Chip
+                                        size="small"
+                                        label={rec.target_node}
+                                        sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.success.main, 0.1), color: 'success.main', fontWeight: 500 }}
+                                      />
+                                      <Chip size="small" color={pColor as any} label={(typeof rec.priority === 'number' ? ['low', 'medium', 'high', 'critical'][rec.priority] : rec.priority).toUpperCase()} sx={{ height: 20, fontSize: 10, minWidth: 50 }} />
+                                    </Box>
+                                  )
+                                })}
+                                {clusterRecs.length > 5 && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ pl: 1 }}>
+                                    {t('inventory.drsMoreRecs', { count: clusterRecs.length - 5 })}
+                                  </Typography>
+                                )}
+                              </Stack>
+                            </>
+                          )}
+                          {clusterRecs.length === 0 && drsHealth.score >= 80 && (
+                            <>
+                              <Divider sx={{ my: 1.5 }} />
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+                                <i className="ri-checkbox-circle-line" style={{ fontSize: 16, color: theme.palette.success.main }} />
+                                <Typography variant="caption" color="success.main" fontWeight={500}>
+                                  {t('inventory.drsClusterBalanced')}
+                                </Typography>
+                              </Box>
+                            </>
+                          )}
                         </CardContent>
                       </Card>
                     )}

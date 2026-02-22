@@ -878,7 +878,14 @@
     "group": "Group",
     "node": "Node",
     "drsStatusTitle": "DRS Status",
-    "drsGoToDrs": "Manage DRS"
+    "drsGoToDrs": "Manage DRS",
+    "drsEvaluate": "Evaluate",
+    "drsAvgMemory": "Avg Memory",
+    "drsAvgCpu": "Avg CPU",
+    "drsImbalance": "Imbalance",
+    "drsPendingRecs": "{count, plural, one {# pending recommendation} other {# pending recommendations}}",
+    "drsMoreRecs": "+{count} more...",
+    "drsClusterBalanced": "Cluster is balanced — no action needed"
   },
   "inventoryPage": {
     "newTag": "New tag...",

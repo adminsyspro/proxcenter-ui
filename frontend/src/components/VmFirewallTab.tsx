@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -39,6 +40,7 @@ import {
   useTheme,
 } from '@mui/material'
 import { useLicense } from '@/contexts/LicenseContext'
+import * as firewallAPI from '@/lib/api/firewall'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -102,48 +104,45 @@ interface Props {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HELPER COMPONENTS
+   HELPER COMPONENTS & FUNCTIONS
 ═══════════════════════════════════════════════════════════════════════════ */
 
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
 
-  
+
 return (
-    <Chip 
-      size="small" 
-      label={action} 
-      sx={{ 
-        height: 22, 
-        fontSize: 11, 
-        fontWeight: 700, 
-        bgcolor: alpha(color, 0.15), 
-        color, 
+    <Chip
+      size="small"
+      label={action}
+      sx={{
+        height: 22,
+        fontSize: 11,
+        fontWeight: 700,
+        bgcolor: alpha(color, 0.15),
+        color,
         border: `1px solid ${alpha(color, 0.3)}`,
-        minWidth: 70 
-      }} 
+        minWidth: 70
+      }}
     />
   )
 }
 
-const PolicyChip = ({ policy }: { policy: string }) => {
-  const color = policy === 'DROP' ? '#ef4444' : policy === 'REJECT' ? '#f59e0b' : '#22c55e'
+function formatService(rule: FirewallRule): string {
+  if (rule.type === 'group') return '-'
+  if (rule.macro) return rule.macro
+  const proto = rule.proto?.toUpperCase() || ''
+  const port = rule.dport || ''
+  if (!proto && !port) return 'any'
+  if (proto && port) return `${proto}/${port}`
+  return proto || port
+}
 
-  
-return (
-    <Chip 
-      size="small" 
-      label={policy} 
-      sx={{ 
-        height: 26, 
-        fontSize: 12, 
-        fontWeight: 700, 
-        bgcolor: alpha(color, 0.15), 
-        color 
-      }} 
-    />
-  )
+/** Clean source/dest before sending to Proxmox: "any" is not a valid alias */
+function cleanSourceDest(value: string | undefined): string {
+  if (!value || value.trim().toLowerCase() === 'any') return ''
+  return value.trim()
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -161,19 +160,21 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
-  
+
   // Firewall data
   const [options, setOptions] = useState<FirewallOptions>({})
   const [rules, setRules] = useState<FirewallRule[]>([])
   const [availableGroups, setAvailableGroups] = useState<SecurityGroup[]>([])
+  const [aliases, setAliases] = useState<firewallAPI.Alias[]>([])
+  const [ipsets, setIpsets] = useState<firewallAPI.IPSet[]>([])
   const [nics, setNics] = useState<NicInfo[]>([])
   const [logs, setLogs] = useState<FirewallLogEntry[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
-  
+
   // Drag & drop state
   const [draggedRule, setDraggedRule] = useState<number | null>(null)
   const [dragOverRule, setDragOverRule] = useState<number | null>(null)
-  
+
   // Dialogs
   const [addRuleOpen, setAddRuleOpen] = useState(false)
   const [addGroupOpen, setAddGroupOpen] = useState(false)
@@ -181,7 +182,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   const [editingRule, setEditingRule] = useState<FirewallRule | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [ruleToDelete, setRuleToDelete] = useState<number | null>(null)
-  
+
   // Form state
   const [newRule, setNewRule] = useState<Partial<FirewallRule>>({
     type: 'in',
@@ -196,47 +197,42 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
 
   const [selectedGroup, setSelectedGroup] = useState('')
 
+  // Autocomplete options for source/dest (aliases + ipsets)
+  const autocompleteOptions = useMemo(() => {
+    const opts: { label: string; secondary?: string }[] = []
+    for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
+    for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
+    return opts
+  }, [aliases, ipsets])
+
+  // Normalize rules helper
+  const normalizeRules = (rulesData: any[]): FirewallRule[] =>
+    (Array.isArray(rulesData) ? rulesData : []).map((rule: any) => ({
+      ...rule,
+      enable: rule.enable === 1 || rule.enable === '1' ? 1 : 0
+    }))
+
   // Load firewall data
   const loadFirewallData = useCallback(async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
-      // Load options
-      const optRes = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}?type=options`)
+      // Load options, rules, security groups, aliases, ipsets in parallel
+      const [optData, rulesData, groupsData, aliasesData, ipsetsData] = await Promise.all([
+        firewallAPI.getVMOptions(connectionId, node, vmType, vmid).catch(() => ({} as firewallAPI.VMOptions)),
+        firewallAPI.getVMRules(connectionId, node, vmType, vmid).catch(() => [] as firewallAPI.FirewallRule[]),
+        firewallAPI.getSecurityGroups(connectionId).catch(() => [] as firewallAPI.SecurityGroup[]),
+        firewallAPI.getAliases(connectionId).catch(() => [] as firewallAPI.Alias[]),
+        firewallAPI.getIPSets(connectionId).catch(() => [] as firewallAPI.IPSet[]),
+      ])
 
-      if (optRes.ok) {
-        const optData = await optRes.json()
+      setOptions(optData || {})
+      setRules(normalizeRules(rulesData))
+      setAvailableGroups(Array.isArray(groupsData) ? groupsData : [])
+      setAliases(Array.isArray(aliasesData) ? aliasesData : [])
+      setIpsets(Array.isArray(ipsetsData) ? ipsetsData : [])
 
-        setOptions(optData || {})
-      }
-      
-      // Load rules
-      const rulesRes = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}?type=rules`)
-
-      if (rulesRes.ok) {
-        const rulesData = await rulesRes.json()
-
-
-        // Normalize rules - ensure enable is always a number
-        // Proxmox: enable=1 means enabled, enable=0 or missing means disabled
-        const normalizedRules = (Array.isArray(rulesData) ? rulesData : []).map((rule: any) => ({
-          ...rule,
-          enable: rule.enable === 1 || rule.enable === '1' ? 1 : 0
-        }))
-
-        setRules(normalizedRules)
-      }
-      
-      // Load available security groups
-      const groupsRes = await fetch(`/api/v1/firewall/groups/${connectionId}`)
-
-      if (groupsRes.ok) {
-        const groupsData = await groupsRes.json()
-
-        setAvailableGroups(Array.isArray(groupsData) ? groupsData : [])
-      }
-      
       // Load VM config to get NICs
       const configRes = await fetch(`/api/v1/connections/${connectionId}/guests/${vmType}/${node}/${vmid}/config`)
 
@@ -291,42 +287,27 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   // Load only rules (for quick refresh after move/toggle/delete)
   const loadRulesOnly = useCallback(async () => {
     try {
-      const rulesRes = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}?type=rules`)
-
-      if (rulesRes.ok) {
-        const rulesData = await rulesRes.json()
-
-        const normalizedRules = (Array.isArray(rulesData) ? rulesData : []).map((rule: any) => ({
-          ...rule,
-          enable: rule.enable === 1 || rule.enable === '1' ? 1 : 0
-        }))
-
-        setRules(normalizedRules)
-      }
+      const rulesData = await firewallAPI.getVMRules(connectionId, node, vmType, vmid)
+      setRules(normalizeRules(rulesData))
     } catch (err) {
       // Silently fail, user can refresh manually
     }
   }, [connectionId, node, vmType, vmid])
-  
+
   // Load logs
   const loadLogs = useCallback(async () => {
     setLogsLoading(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}?type=log&limit=50`)
-
-      if (res.ok) {
-        const data = await res.json()
-
-        setLogs(Array.isArray(data) ? data : [])
-      }
+      const data = await firewallAPI.getVMFirewallLog(connectionId, node, vmType, vmid, 50)
+      setLogs(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to load firewall logs:', err)
     } finally {
       setLogsLoading(false)
     }
   }, [connectionId, node, vmType, vmid])
-  
+
   useEffect(() => {
     // En mode Community, pas d'orchestrator pour le firewall
     if (!isEnterprise) return
@@ -334,7 +315,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     loadFirewallData()
     loadLogs()
   }, [loadFirewallData, loadLogs, isEnterprise])
-  
+
   // Toggle firewall enable
   const handleToggleFirewall = async () => {
     setSaving(true)
@@ -342,13 +323,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     try {
       const newEnable = options.enable === 1 ? 0 : 1
 
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enable: newEnable })
-      })
-
-      if (!res.ok) throw new Error(t('errors.updateError'))
+      await firewallAPI.updateVMOptions(connectionId, node, vmType, vmid, { enable: newEnable })
       setSnackbar({ open: true, message: `Firewall ${newEnable === 1 ? t('common.enabled') : t('common.disabled')}`, severity: 'success' })
       loadFirewallData()
     } catch (err: any) {
@@ -357,19 +332,39 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       setSaving(false)
     }
   }
-  
+
+  // Change policy IN or OUT
+  const handlePolicyChange = async (field: 'policy_in' | 'policy_out', value: string) => {
+    setSaving(true)
+
+    try {
+      await firewallAPI.updateVMOptions(connectionId, node, vmType, vmid, { [field]: value })
+      setOptions(prev => ({ ...prev, [field]: value }))
+      setSnackbar({ open: true, message: 'Policy updated', severity: 'success' })
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // Add rule
   const handleAddRule = async () => {
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRule)
-      })
+      const payload: firewallAPI.CreateRuleRequest = {
+        type: newRule.type,
+        action: newRule.action,
+        enable: newRule.enable,
+        proto: newRule.proto || undefined,
+        dport: newRule.dport || undefined,
+        source: cleanSourceDest(newRule.source) || undefined,
+        dest: cleanSourceDest(newRule.dest) || undefined,
+        comment: newRule.comment || undefined,
+      }
 
-      if (!res.ok) throw new Error(t('errors.addError'))
+      await firewallAPI.addVMRule(connectionId, node, vmType, vmid, payload)
       setSnackbar({ open: true, message: t('network.addRule'), severity: 'success' })
       setAddRuleOpen(false)
       setNewRule({ type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', source: '', dest: '', comment: '' })
@@ -380,20 +375,14 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       setSaving(false)
     }
   }
-  
+
   // Add security group
   const handleAddSecurityGroup = async () => {
     if (!selectedGroup) return
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'group', action: selectedGroup, enable: 1 })
-      })
-
-      if (!res.ok) throw new Error(t('errors.addError'))
+      await firewallAPI.addVMRule(connectionId, node, vmType, vmid, { type: 'group', action: selectedGroup, enable: 1 })
       setSnackbar({ open: true, message: t('network.addSecurityGroup'), severity: 'success' })
       setAddGroupOpen(false)
       setSelectedGroup('')
@@ -404,7 +393,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       setSaving(false)
     }
   }
-  
+
   // Toggle rule enable
   const handleToggleRule = async (rule: FirewallRule) => {
     setSaving(true)
@@ -413,16 +402,8 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       // Handle enable being undefined, string, or number
       const currentEnable = rule.enable === undefined ? 1 : (typeof rule.enable === 'string' ? parseInt(rule.enable, 10) : rule.enable)
       const newEnable = currentEnable === 1 ? 0 : 1
-      
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${rule.pos}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enable: newEnable })
-      })
-      
-      const data = await res.json()
-      
-      if (!res.ok) throw new Error(data.error || t('common.error'))
+
+      await firewallAPI.updateVMRule(connectionId, node, vmType, vmid, rule.pos, { enable: newEnable })
       setSnackbar({ open: true, message: `${t('network.editRule')} ${newEnable === 0 ? t('common.disabled') : t('common.enabled')}`, severity: 'success' })
       loadRulesOnly()
     } catch (err: any) {
@@ -431,13 +412,13 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       setSaving(false)
     }
   }
-  
+
   // Confirm delete rule
   const confirmDeleteRule = (pos: number) => {
     setRuleToDelete(pos)
     setDeleteConfirmOpen(true)
   }
-  
+
   // Delete rule
   const handleDeleteRule = async () => {
     if (ruleToDelete === null) return
@@ -445,11 +426,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     setDeleteConfirmOpen(false)
 
     try {
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${ruleToDelete}`, {
-        method: 'DELETE'
-      })
-
-      if (!res.ok) throw new Error(t('errors.deleteError'))
+      await firewallAPI.deleteVMRule(connectionId, node, vmType, vmid, ruleToDelete)
       setSnackbar({ open: true, message: t('common.delete'), severity: 'success' })
       setRuleToDelete(null)
       loadRulesOnly()
@@ -459,20 +436,14 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       setSaving(false)
     }
   }
-  
+
   // Move rule to new position
   const handleMoveRule = async (fromPos: number, toPos: number) => {
     if (fromPos === toPos) return
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${fromPos}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moveto: toPos })
-      })
-
-      if (!res.ok) throw new Error(t('errors.moveError'))
+      await firewallAPI.updateVMRule(connectionId, node, vmType, vmid, fromPos, { moveto: toPos })
       setSnackbar({ open: true, message: t('network.editRule'), severity: 'success' })
       loadRulesOnly()
     } catch (err: any) {
@@ -523,25 +494,25 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
 
     setDraggedRule(null)
     setDragOverRule(null)
-    
+
     if (fromPos !== null && fromPos !== toPos) {
       handleMoveRule(fromPos, toPos)
     }
   }
-  
+
   // Update rule
   const handleUpdateRule = async () => {
     if (!editingRule) return
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${editingRule.pos}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingRule)
-      })
+      const payload: firewallAPI.CreateRuleRequest = {
+        ...editingRule,
+        source: cleanSourceDest(editingRule.source) || undefined,
+        dest: cleanSourceDest(editingRule.dest) || undefined,
+      }
 
-      if (!res.ok) throw new Error(t('errors.updateError'))
+      await firewallAPI.updateVMRule(connectionId, node, vmType, vmid, editingRule.pos, payload)
       setSnackbar({ open: true, message: t('network.editRule'), severity: 'success' })
       setEditRuleOpen(false)
       setEditingRule(null)
@@ -553,8 +524,17 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     }
   }
 
-  // All rules are displayed together (like Proxmox)
-  // rules is already sorted by pos
+  // Autocomplete renderOption helper
+  const renderAutocompleteOption = (props: React.HTMLAttributes<HTMLLIElement>, opt: string | { label: string; secondary?: string }) => (
+    <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+        <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+        {typeof opt !== 'string' && opt.secondary && (
+          <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
+        )}
+      </Box>
+    </li>
+  )
 
   // En mode Community, afficher un message
   if (!isEnterprise) {
@@ -606,20 +586,31 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 />
               </Box>
             </Box>
-            
+
             {options.enable !== 1 && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 {t('security.firewall')} {t('common.disabled')}
               </Alert>
             )}
-            
+
             <Grid container spacing={2}>
               <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy IN
                   </Typography>
-                  <PolicyChip policy={options.policy_in || 'ACCEPT'} />
+                  <FormControl size="small">
+                    <Select
+                      value={options.policy_in || 'ACCEPT'}
+                      onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
+                      sx={{ fontSize: 12, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                      disabled={saving}
+                    >
+                      <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                      <MenuItem value="DROP">DROP</MenuItem>
+                      <MenuItem value="REJECT">REJECT</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -627,7 +618,18 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy OUT
                   </Typography>
-                  <PolicyChip policy={options.policy_out || 'ACCEPT'} />
+                  <FormControl size="small">
+                    <Select
+                      value={options.policy_out || 'ACCEPT'}
+                      onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
+                      sx={{ fontSize: 12, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                      disabled={saving}
+                    >
+                      <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                      <MenuItem value="DROP">DROP</MenuItem>
+                      <MenuItem value="REJECT">REJECT</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -635,9 +637,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     MAC Filter
                   </Typography>
-                  <Chip 
-                    size="small" 
-                    label={options.macfilter === 1 ? t('common.enabled') : t('common.disabled')} 
+                  <Chip
+                    size="small"
+                    label={options.macfilter === 1 ? t('common.enabled') : t('common.disabled')}
                     color={options.macfilter === 1 ? 'success' : 'default'}
                     sx={{ height: 26 }}
                   />
@@ -648,9 +650,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     IP Filter
                   </Typography>
-                  <Chip 
-                    size="small" 
-                    label={options.ipfilter === 1 ? t('common.enabled') : t('common.disabled')} 
+                  <Chip
+                    size="small"
+                    label={options.ipfilter === 1 ? t('common.enabled') : t('common.disabled')}
                     color={options.ipfilter === 1 ? 'success' : 'default'}
                     sx={{ height: 26 }}
                   />
@@ -659,7 +661,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
             </Grid>
           </CardContent>
         </Card>
-        
+
         {/* NICs Card */}
         {nics.length > 0 && (
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -685,9 +687,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                         <TableCell sx={monoStyle}>{nic.bridge}</TableCell>
                         <TableCell sx={monoStyle}>{nic.mac || '-'}</TableCell>
                         <TableCell>
-                          <Chip 
-                            size="small" 
-                            label={nic.firewall ? t('common.enabled') : t('common.disabled')} 
+                          <Chip
+                            size="small"
+                            label={nic.firewall ? t('common.enabled') : t('common.disabled')}
                             color={nic.firewall ? 'success' : 'default'}
                             sx={{ height: 22, fontSize: 11 }}
                           />
@@ -703,7 +705,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
             </CardContent>
           </Card>
         )}
-        
+
         {/* Unified Rules Card - like Proxmox */}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent>
@@ -735,7 +737,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 </Button>
               </Box>
             </Box>
-            
+
             {rules.length === 0 ? (
               <Box sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>
                 <i className="ri-shield-line" style={{ fontSize: 48, opacity: 0.3 }} />
@@ -752,12 +754,11 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                       <TableCell sx={{ fontWeight: 700, width: 30, p: 0.5 }}></TableCell>
                       <TableCell sx={{ fontWeight: 700, width: 35 }}>#</TableCell>
                       <TableCell sx={{ fontWeight: 700, width: 55 }}>Active</TableCell>
-                      <TableCell sx={{ fontWeight: 700, width: 70 }}>Type</TableCell>
-                      <TableCell sx={{ fontWeight: 700, width: 180 }}>Action</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 70 }}>{t('firewall.direction')}</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Dest</TableCell>
-                      <TableCell sx={{ fontWeight: 700, width: 60 }}>Proto</TableCell>
-                      <TableCell sx={{ fontWeight: 700, width: 70 }}>Port</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 100 }}>{t('firewall.service')}</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 90 }}>{t('firewall.action')}</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>{t('network.comment')}</TableCell>
                       <TableCell sx={{ width: 90 }}></TableCell>
                     </TableRow>
@@ -768,10 +769,10 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                       const groupName = isGroup ? (rule.action || 'Unknown') : null
                       const isDragging = draggedRule === rule.pos
                       const isDragOver = dragOverRule === rule.pos
-                      
+
                       return (
-                        <TableRow 
-                          key={rule.pos} 
+                        <TableRow
+                          key={rule.pos}
                           hover
                           draggable
                           onDragStart={(e) => handleDragStart(e, rule.pos)}
@@ -779,7 +780,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                           onDragOver={(e) => handleDragOver(e, rule.pos)}
                           onDragLeave={handleDragLeave}
                           onDrop={(e) => handleDrop(e, rule.pos)}
-                          sx={{ 
+                          sx={{
                             bgcolor: isGroup ? alpha(theme.palette.primary.main, 0.03) : 'transparent',
                             cursor: 'grab',
                             opacity: isDragging ? 0.5 : 1,
@@ -797,12 +798,12 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                           <TableCell sx={{ p: 0.5, textAlign: 'center', cursor: 'grab' }}>
                             <i className="ri-draggable" style={{ fontSize: 16, color: theme.palette.text.disabled }} />
                           </TableCell>
-                          
+
                           {/* Position */}
                           <TableCell sx={{ color: 'text.secondary', fontSize: 11, p: 0.5 }}>
                             {rule.pos}
                           </TableCell>
-                          
+
                           {/* Active switch */}
                           <TableCell sx={{ p: 0.5 }}>
                             <Switch
@@ -813,72 +814,60 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                               color="success"
                             />
                           </TableCell>
-                          
-                          {/* Type */}
+
+                          {/* Direction - colored chips like VMRulesPanel */}
                           <TableCell sx={{ p: 0.5 }}>
-                            {isGroup ? (
-                              <Chip 
-                                label="GROUP" 
-                                size="small" 
-                                sx={{ 
-                                  fontSize: 10, 
-                                  height: 20, 
-                                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                                  color: theme.palette.primary.main,
-                                  fontWeight: 600
-                                }} 
-                              />
-                            ) : (
-                              <Chip 
-                                label={rule.type?.toUpperCase()} 
-                                size="small" 
-                                variant="outlined" 
-                                sx={{ fontSize: 10, height: 20 }} 
-                              />
-                            )}
+                            <Chip
+                              label={isGroup ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
+                              size="small"
+                              sx={{
+                                height: 20, fontSize: 10, fontWeight: 600,
+                                bgcolor: isGroup ? alpha('#8b5cf6', 0.22) : rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
+                                color: isGroup ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
+                              }}
+                            />
                           </TableCell>
-                          
+
+                          {/* Source */}
+                          <TableCell sx={{ ...monoStyle, color: (isGroup || !rule.source) ? 'text.disabled' : 'text.primary', fontSize: 11, p: 0.5 }}>
+                            {isGroup ? '-' : (rule.source || 'any')}
+                          </TableCell>
+
+                          {/* Dest */}
+                          <TableCell sx={{ ...monoStyle, color: (isGroup || !rule.dest) ? 'text.disabled' : 'text.primary', fontSize: 11, p: 0.5 }}>
+                            {isGroup ? '-' : (rule.dest || 'any')}
+                          </TableCell>
+
+                          {/* Service (proto+port merged) */}
+                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5 }}>
+                            {formatService(rule)}
+                          </TableCell>
+
                           {/* Action / Security Group name */}
                           <TableCell sx={{ p: 0.5 }}>
                             {isGroup ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <i className="ri-shield-check-line" style={{ fontSize: 14, color: theme.palette.primary.main, flexShrink: 0 }} />
-                                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
-                                  {groupName}
-                                </Typography>
-                              </Box>
+                              <Chip
+                                icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />}
+                                label={groupName}
+                                size="small"
+                                sx={{
+                                  height: 22, fontSize: 10, fontWeight: 600,
+                                  bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6',
+                                  '& .MuiChip-icon': { color: '#8b5cf6' }
+                                }}
+                              />
                             ) : (
                               <ActionChip action={rule.action || 'ACCEPT'} />
                             )}
                           </TableCell>
-                          
-                          {/* Source */}
-                          <TableCell sx={{ ...monoStyle, color: rule.source ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
-                            {isGroup ? '-' : (rule.source || 'any')}
-                          </TableCell>
-                          
-                          {/* Dest */}
-                          <TableCell sx={{ ...monoStyle, color: rule.dest ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
-                            {isGroup ? '-' : (rule.dest || 'any')}
-                          </TableCell>
-                          
-                          {/* Proto */}
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5 }}>
-                            {isGroup ? '-' : (rule.proto || 'any')}
-                          </TableCell>
-                          
-                          {/* Port */}
-                          <TableCell sx={{ ...monoStyle, color: rule.dport ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
-                            {isGroup ? '-' : (rule.dport || '-')}
-                          </TableCell>
-                          
+
                           {/* Comment */}
                           <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
                             <Tooltip title={rule.comment || ''}>
                               <span style={{ fontSize: 11 }}>{rule.comment || '-'}</span>
                             </Tooltip>
                           </TableCell>
-                          
+
                           {/* Actions */}
                           <TableCell sx={{ p: 0.5 }}>
                             <Box sx={{ display: 'flex', gap: 0 }}>
@@ -888,7 +877,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                                   <i className="ri-edit-line" style={{ fontSize: 14 }} />
                                 </IconButton>
                               </Tooltip>
-                              
+
                               {/* Delete */}
                               <Tooltip title={t('common.delete')}>
                                 <IconButton size="small" color="error" onClick={() => confirmDeleteRule(rule.pos)}>
@@ -904,13 +893,13 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 </Table>
               </TableContainer>
             )}
-            
+
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
               {t('network.rulesEvaluatedTopBottom')}
             </Typography>
           </CardContent>
         </Card>
-        
+
         {/* Logs Card */}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent>
@@ -929,7 +918,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 {t('common.refresh')}
               </Button>
             </Box>
-            
+
             {logsLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <CircularProgress size={24} />
@@ -940,33 +929,33 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 <Typography variant="body2" sx={{ mt: 1 }}>{t('common.noData')}</Typography>
               </Box>
             ) : (
-              <Paper 
-                sx={{ 
-                  p: 1.5, 
-                  bgcolor: '#0d1117', 
+              <Paper
+                sx={{
+                  p: 1.5,
+                  bgcolor: '#0d1117',
                   borderRadius: 1,
                   maxHeight: 300,
                   overflow: 'auto'
                 }}
               >
-                <Box component="pre" sx={{ 
-                  m: 0, 
-                  fontSize: 11, 
+                <Box component="pre" sx={{
+                  m: 0,
+                  fontSize: 11,
                   fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
                   color: '#c9d1d9',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-all'
                 }}>
                   {logs.map((log, idx) => (
-                    <Box key={idx} sx={{ 
+                    <Box key={idx} sx={{
                       py: 0.25,
                       borderBottom: idx < logs.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                       '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' }
                     }}>
                       <Box component="span" sx={{ color: '#8b949e', mr: 1 }}>{log.n}.</Box>
-                      <Box component="span" sx={{ 
-                        color: log.t.includes('DROP') ? '#f85149' : 
-                               log.t.includes('REJECT') ? '#d29922' : 
+                      <Box component="span" sx={{
+                        color: log.t.includes('DROP') ? '#f85149' :
+                               log.t.includes('REJECT') ? '#d29922' :
                                log.t.includes('ACCEPT') ? '#3fb950' : '#c9d1d9'
                       }}>
                         {log.t}
@@ -979,7 +968,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           </CardContent>
         </Card>
       </Stack>
-      
+
       {/* Add Rule Dialog */}
       <Dialog open={addRuleOpen} onClose={() => setAddRuleOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>{t('network.addRule')}</DialogTitle>
@@ -987,10 +976,10 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid size={{ xs: 6, sm: 3 }}>
               <FormControl fullWidth size="small">
-                <InputLabel>Type</InputLabel>
+                <InputLabel>Direction</InputLabel>
                 <Select
                   value={newRule.type || 'in'}
-                  label="Type"
+                  label="Direction"
                   onChange={(e) => setNewRule({ ...newRule, type: e.target.value })}
                 >
                   <MenuItem value="in">IN</MenuItem>
@@ -1039,27 +1028,45 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
               />
             </Grid>
             <Grid size={{ xs: 6 }}>
-              <TextField
-                label="Source"
-                value={newRule.source || ''}
-                onChange={(e) => setNewRule({ ...newRule, source: e.target.value })}
-                placeholder="any, 10.0.0.0/8, alias"
-                fullWidth
-                size="small"
-                helperText="CIDR, alias, ou +ipset"
-                InputProps={{ sx: monoStyle }}
+              <Autocomplete
+                freeSolo
+                options={autocompleteOptions}
+                getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                inputValue={newRule.source || ''}
+                onInputChange={(_, v) => setNewRule(prev => ({ ...prev, source: v }))}
+                renderOption={renderAutocompleteOption}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Source"
+                    fullWidth
+                    size="small"
+                    placeholder="IP, CIDR, alias, +ipset"
+                    helperText="CIDR, alias, ou +ipset"
+                    InputProps={{ ...params.InputProps, sx: monoStyle }}
+                  />
+                )}
               />
             </Grid>
             <Grid size={{ xs: 6 }}>
-              <TextField
-                label="Destination"
-                value={newRule.dest || ''}
-                onChange={(e) => setNewRule({ ...newRule, dest: e.target.value })}
-                placeholder="any, 10.0.0.0/8, alias"
-                fullWidth
-                size="small"
-                helperText="CIDR, alias, ou +ipset"
-                InputProps={{ sx: monoStyle }}
+              <Autocomplete
+                freeSolo
+                options={autocompleteOptions}
+                getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                inputValue={newRule.dest || ''}
+                onInputChange={(_, v) => setNewRule(prev => ({ ...prev, dest: v }))}
+                renderOption={renderAutocompleteOption}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Destination"
+                    fullWidth
+                    size="small"
+                    placeholder="IP, CIDR, alias, +ipset"
+                    helperText="CIDR, alias, ou +ipset"
+                    InputProps={{ ...params.InputProps, sx: monoStyle }}
+                  />
+                )}
               />
             </Grid>
             <Grid size={{ xs: 12 }}>
@@ -1078,7 +1085,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           <Button variant="contained" onClick={handleAddRule} disabled={saving}>{t('common.add')}</Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Add Security Group Dialog */}
       <Dialog open={addGroupOpen} onClose={() => { setAddGroupOpen(false); setSelectedGroup(''); }} maxWidth="sm" fullWidth>
         <DialogTitle>{t('network.addSecurityGroup')}</DialogTitle>
@@ -1116,7 +1123,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           <Button variant="contained" onClick={handleAddSecurityGroup} disabled={saving || !selectedGroup}>{t('common.add')}</Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Edit Rule Dialog */}
       <Dialog open={editRuleOpen} onClose={() => setEditRuleOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
@@ -1134,7 +1141,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   fullWidth
                   size="small"
                   disabled
-                  InputProps={{ 
+                  InputProps={{
                     sx: monoStyle,
                     startAdornment: <i className="ri-shield-check-line" style={{ marginRight: 8, color: theme.palette.primary.main }} />
                   }}
@@ -1169,10 +1176,10 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid size={{ xs: 6, sm: 3 }}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Type</InputLabel>
+                  <InputLabel>Direction</InputLabel>
                   <Select
                     value={editingRule?.type || 'in'}
-                    label="Type"
+                    label="Direction"
                     onChange={(e) => setEditingRule(prev => prev ? { ...prev, type: e.target.value } : null)}
                   >
                     <MenuItem value="in">IN</MenuItem>
@@ -1220,23 +1227,43 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 />
               </Grid>
               <Grid size={{ xs: 6 }}>
-                <TextField
-                  label="Source"
-                  value={editingRule?.source || ''}
-                  onChange={(e) => setEditingRule(prev => prev ? { ...prev, source: e.target.value } : null)}
-                  fullWidth
-                  size="small"
-                  InputProps={{ sx: monoStyle }}
+                <Autocomplete
+                  freeSolo
+                  options={autocompleteOptions}
+                  getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                  inputValue={editingRule?.source || ''}
+                  onInputChange={(_, v) => setEditingRule(prev => prev ? { ...prev, source: v } : null)}
+                  renderOption={renderAutocompleteOption}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Source"
+                      fullWidth
+                      size="small"
+                      placeholder="IP, CIDR, alias, +ipset"
+                      InputProps={{ ...params.InputProps, sx: monoStyle }}
+                    />
+                  )}
                 />
               </Grid>
               <Grid size={{ xs: 6 }}>
-                <TextField
-                  label="Destination"
-                  value={editingRule?.dest || ''}
-                  onChange={(e) => setEditingRule(prev => prev ? { ...prev, dest: e.target.value } : null)}
-                  fullWidth
-                  size="small"
-                  InputProps={{ sx: monoStyle }}
+                <Autocomplete
+                  freeSolo
+                  options={autocompleteOptions}
+                  getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
+                  inputValue={editingRule?.dest || ''}
+                  onInputChange={(_, v) => setEditingRule(prev => prev ? { ...prev, dest: v } : null)}
+                  renderOption={renderAutocompleteOption}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Destination"
+                      fullWidth
+                      size="small"
+                      placeholder="IP, CIDR, alias, +ipset"
+                      InputProps={{ ...params.InputProps, sx: monoStyle }}
+                    />
+                  )}
                 />
               </Grid>
               <Grid size={{ xs: 12 }}>
@@ -1256,7 +1283,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           <Button variant="contained" onClick={handleUpdateRule} disabled={saving}>{t('common.save')}</Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>{t('common.confirmDelete')}</DialogTitle>
@@ -1270,11 +1297,11 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           </Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Snackbar */}
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={4000} 
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >

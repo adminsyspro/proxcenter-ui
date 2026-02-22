@@ -49,6 +49,7 @@ import CveTab from '@/components/CveTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
+import NodeFirewallTab from '@/components/NodeFirewallTab'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
 import { formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
@@ -277,6 +278,15 @@ export default function NodeTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabSystem')}
+                    </Box>
+                  }
+                />
+                {/* Onglet Firewall pour tous les nodes */}
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabFirewall')}
                     </Box>
                   }
                 />
@@ -1712,8 +1722,15 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Ceph (cluster nodes only) - Index 7 */}
-                {nodeTab === 7 && data.clusterName && (
+                {/* Onglet Firewall - Index 7 */}
+                {nodeTab === 7 && (
+                  <Box sx={{ p: 2 }}>
+                    <NodeFirewallTab connectionId={parseNodeId(selection?.id || '').connId} node={parseNodeId(selection?.id || '').node} />
+                  </Box>
+                )}
+
+                {/* Onglet Ceph (cluster nodes only) - Index 8 */}
+                {nodeTab === 8 && data.clusterName && (
                   <Box sx={{ p: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {nodeCephLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2309,13 +2326,13 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Backups (standalone only) - Index 7 */}
-                {nodeTab === 7 && !data.clusterName && (
+                {/* Onglet Backups (standalone only) - Index 8 */}
+                {nodeTab === 8 && !data.clusterName && (
                   <BackupJobsPanel connectionId={parseNodeId(selection.id).connId} />
                 )}
 
-                {/* Onglet Cluster (standalone only) - Index 8 */}
-                {nodeTab === 8 && !data.clusterName && (
+                {/* Onglet Cluster (standalone only) - Index 9 */}
+                {nodeTab === 9 && !data.clusterName && (
                   <Box sx={{ p: 2 }}>
                     {clusterConfigLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2387,8 +2404,8 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Replication - Index 8 pour cluster, Index 9 pour standalone */}
-                {((nodeTab === 8 && data.clusterName) || (nodeTab === 9 && !data.clusterName)) && (
+                {/* Onglet Replication - Index 9 pour cluster, Index 10 pour standalone */}
+                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeReplicationLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2821,8 +2838,8 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Updates - Index 8 pour cluster, Index 9 pour standalone */}
-                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (() => {
+                {/* Onglet Updates - Index 10 pour cluster, Index 11 pour standalone */}
+                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (() => {
                   const nodeName = data.nodeName || selection?.id?.split(':').pop() || ''
                   const nodeUpdate = nodeUpdates?.[nodeName]
                   const pkgCount = nodeUpdate?.count || 0
@@ -3154,15 +3171,15 @@ export default function NodeTabs(props: any) {
                   )
                 })()}
 
-                {/* Onglet CVE - Index 10 pour cluster, Index 11 pour standalone */}
-                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
+                {/* Onglet CVE - Index 11 pour cluster, Index 12 pour standalone */}
+                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Subscription - Index 11 pour cluster, Index 12 pour standalone */}
-                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
+                {/* Onglet Subscription - Index 12 pour cluster, Index 13 pour standalone */}
+                {((nodeTab === 12 && data.clusterName) || (nodeTab === 13 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

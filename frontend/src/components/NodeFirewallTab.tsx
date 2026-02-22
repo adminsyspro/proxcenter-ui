@@ -62,10 +62,17 @@ interface FirewallRule {
 
 interface FirewallOptions {
   enable?: number
+  log_level_in?: string
+  log_level_out?: string
+  log_nf_conntrack?: number
+  nf_conntrack_max?: number
+  nosmurfs?: number
   policy_in?: string
   policy_out?: string
-  log_ratelimit?: string
-  ebtables?: number
+  protection_synflood?: number
+  smurf_log_level?: string
+  tcp_flags_log_level?: string
+  tcpflags?: number
 }
 
 interface SecurityGroup {
@@ -77,6 +84,7 @@ interface SecurityGroup {
 
 interface Props {
   connectionId: string
+  node: string
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -128,7 +136,7 @@ return (
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════════════════════ */
 
-export default function ClusterFirewallTab({ connectionId }: Props) {
+export default function NodeFirewallTab({ connectionId, node }: Props) {
   const theme = useTheme()
   const t = useTranslations()
   const { isEnterprise } = useLicense()
@@ -178,7 +186,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
 
     try {
       // Load options
-      const optRes = await fetch(`/api/v1/firewall/cluster/${connectionId}?type=options`)
+      const optRes = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}?type=options`)
 
       if (optRes.ok) {
         const optData = await optRes.json()
@@ -187,7 +195,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
       }
 
       // Load rules
-      const rulesRes = await fetch(`/api/v1/firewall/cluster/${connectionId}?type=rules`)
+      const rulesRes = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}?type=rules`)
 
       if (rulesRes.ok) {
         const rulesData = await rulesRes.json()
@@ -213,12 +221,12 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [connectionId])
+  }, [connectionId, node])
 
   // Load only rules (for quick refresh after move/toggle/delete)
   const loadRulesOnly = useCallback(async () => {
     try {
-      const rulesRes = await fetch(`/api/v1/firewall/cluster/${connectionId}?type=rules`)
+      const rulesRes = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}?type=rules`)
 
       if (rulesRes.ok) {
         const rulesData = await rulesRes.json()
@@ -233,7 +241,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     } catch (err) {
       // Silently fail, user can refresh manually
     }
-  }, [connectionId])
+  }, [connectionId, node])
 
   useEffect(() => {
     if (!isEnterprise) return
@@ -248,7 +256,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     try {
       const newEnable = options.enable === 1 ? 0 : 1
 
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enable: newEnable })
@@ -269,7 +277,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRule)
@@ -293,7 +301,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'group', action: selectedGroup, enable: 1 })
@@ -319,7 +327,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
       const currentEnable = rule.enable === undefined ? 1 : (typeof rule.enable === 'string' ? parseInt(rule.enable, 10) : rule.enable)
       const newEnable = currentEnable === 1 ? 0 : 1
 
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}/rules/${rule.pos}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}/rules/${rule.pos}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enable: newEnable })
@@ -350,7 +358,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     setDeleteConfirmOpen(false)
 
     try {
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}/rules/${ruleToDelete}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}/rules/${ruleToDelete}`, {
         method: 'DELETE'
       })
 
@@ -371,7 +379,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}/rules/${fromPos}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}/rules/${fromPos}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ moveto: toPos })
@@ -439,7 +447,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     setSaving(true)
 
     try {
-      const res = await fetch(`/api/v1/firewall/cluster/${connectionId}/rules/${editingRule.pos}`, {
+      const res = await fetch(`/api/v1/firewall/nodes/${connectionId}/${node}/rules/${editingRule.pos}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingRule)
@@ -464,7 +472,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
         <i className='ri-vip-crown-fill' style={{ fontSize: 48, color: 'var(--mui-palette-warning-main)', marginBottom: 16 }} />
         <Typography variant='h6' sx={{ mb: 1 }}>Enterprise Feature</Typography>
         <Typography variant='body2' sx={{ opacity: 0.6 }}>
-          Cluster Firewall management requires an Enterprise license.
+          Node Firewall management requires an Enterprise license.
         </Typography>
       </Box>
     )
@@ -520,7 +528,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy IN
                   </Typography>
-                  <PolicyChip policy={options.policy_in || 'DROP'} />
+                  <PolicyChip policy={options.policy_in || 'ACCEPT'} />
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -534,12 +542,11 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
               <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    ebtables
+                    NF Conntrack
                   </Typography>
                   <Chip
                     size="small"
-                    label={options.ebtables === 1 ? t('common.enabled') : t('common.disabled')}
-                    color={options.ebtables === 1 ? 'success' : 'default'}
+                    label={options.nf_conntrack_max ? String(options.nf_conntrack_max) : 'Default'}
                     sx={{ height: 26 }}
                   />
                 </Paper>
@@ -547,11 +554,12 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
               <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5), textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    Log Rate Limit
+                    TCP Flags
                   </Typography>
                   <Chip
                     size="small"
-                    label={options.log_ratelimit || 'Default'}
+                    label={options.tcpflags === 1 ? t('common.enabled') : t('common.disabled')}
+                    color={options.tcpflags === 1 ? 'success' : 'default'}
                     sx={{ height: 26 }}
                   />
                 </Paper>

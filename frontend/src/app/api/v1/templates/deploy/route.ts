@@ -128,11 +128,18 @@ export async function POST(req: Request) {
         }
       }
 
+      // Get storage filesystem path for import-from (PVE needs absolute path, not iso: volume ID)
+      const storageConfig = await pveFetch<any>(
+        conn,
+        `/storage/${encodeURIComponent(body.storage)}`
+      )
+      const storagePath = storageConfig?.path || "/var/lib/vz"
+      const imageAbsPath = `${storagePath}/template/iso/${urlFilename}`
+
       // Step 2: Create VM with imported disk
       await updateDeployment(deployment.id, "creating")
 
       const hw = body.hardware
-      const diskFile = `${body.storage}:iso/${urlFilename}`
 
       const createParams = new URLSearchParams({
         vmid: String(body.vmid),
@@ -143,7 +150,7 @@ export async function POST(req: Request) {
         memory: String(hw.memory),
         cpu: hw.cpu,
         scsihw: hw.scsihw,
-        scsi0: `${body.storage}:0,import-from=${diskFile}`,
+        scsi0: `${body.storage}:0,import-from=${imageAbsPath}`,
         net0: `${hw.networkModel},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`,
         ide2: `${body.storage}:cloudinit`,
         boot: "order=scsi0",

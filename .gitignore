@@ -1,6 +1,8 @@
 # OS files
 .DS_Store
 Thumbs.db
+*_Zone.Identifier
+*Zone.Identifier
 
 # Editor files
 *.swp

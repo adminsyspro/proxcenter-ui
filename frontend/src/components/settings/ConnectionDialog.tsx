@@ -309,19 +309,6 @@ export default function ConnectionDialog({
           label={t('settings.ignoreTlsErrors')}
         />
 
-        {!isPbs && (
-          <FormControlLabel
-            sx={{ mt: 1, display: 'block' }}
-            control={
-              <Switch
-                checked={form.hasCeph}
-                onChange={e => handleChange('hasCeph', e.target.checked)}
-              />
-            }
-            label={t('settings.clusterUsesCeph')}
-          />
-        )}
-
         <Divider sx={{ my: 3 }} />
 
         {/* Section: Authentification API */}

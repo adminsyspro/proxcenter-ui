@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       baseUrl,
       uiUrl,
       insecureTLS,
-      hasCeph: type === 'pve' ? hasCeph : false, // Ceph uniquement pour PVE
+      hasCeph: false, // Auto-detected below for PVE connections
       latitude: latitude ?? null,
       longitude: longitude ?? null,
       locationLabel: locationLabel ?? null,
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
       data.sshPassEnc = encryptSecret(sshPassword)
     }
 
-    // Validate PVE credentials before saving
+    // Validate PVE credentials before saving + auto-detect Ceph
     if (type === 'pve') {
       try {
         await pveFetch({ baseUrl, apiToken, insecureDev: insecureTLS }, "/version")
@@ -141,6 +141,24 @@ export async function POST(req: Request) {
           { error: `PVE authentication failed: ${e?.message || 'Unable to connect'}` },
           { status: 400 }
         )
+      }
+
+      // Auto-detect Ceph: probe the first online node
+      try {
+        const nodes = await pveFetch<any[]>({ baseUrl, apiToken, insecureDev: insecureTLS }, "/nodes")
+        const onlineNode = nodes?.find((n: any) => n.status === 'online') || nodes?.[0]
+
+        if (onlineNode) {
+          const cephStatus = await pveFetch<any>(
+            { baseUrl, apiToken, insecureDev: insecureTLS },
+            `/nodes/${encodeURIComponent(onlineNode.node)}/ceph/status`
+          ).catch(() => null)
+
+          data.hasCeph = !!(cephStatus?.health)
+        }
+      } catch {
+        // If probe fails, leave hasCeph as false
+        data.hasCeph = false
       }
     }
 

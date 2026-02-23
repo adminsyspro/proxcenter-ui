@@ -1413,6 +1413,7 @@
     "errorSshPasswordRequired": "SSH password is required",
     "urlApi": "URL API",
     "cephHeader": "Ceph",
+    "detectCeph": "Re-detect Ceph",
     "sshHeader": "SSH",
     "proxmoxVe": "Proxmox VE",
     "proxmoxBackupServer": "Proxmox Backup Server",
@@ -2126,7 +2127,9 @@
       "recentActivity": "Recent Activity",
       "events": "events",
       "noRecentActivity": "No recent activity",
-      "noSitesConfigured": "No replication sites configured. Add cluster connections with Ceph to get started."
+      "noSitesConfigured": "No replication sites configured. Add cluster connections with Ceph to get started.",
+      "noSitesTitle": "No replication job configured",
+      "noSitesDesc": "Site Recovery requires at least one replication job between two Proxmox clusters with Ceph. Configure a replication job to enable disaster recovery, failover plans, and cross-site protection."
     },
     "protection": {
       "volume": "Volume",

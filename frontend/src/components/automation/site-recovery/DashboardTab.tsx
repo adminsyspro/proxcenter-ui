@@ -8,6 +8,9 @@ import {
   Skeleton, Stack, Typography, alpha, useTheme
 } from '@mui/material'
 
+import EmptyState from '@/components/EmptyState'
+import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
+
 import type {
   ReplicationHealthStatus, ReplicationActivity, JobStatusSummary
 } from '@/lib/orchestrator/site-recovery.types'
@@ -326,9 +329,12 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
 
   if (!health || health.sites.length === 0) {
     return (
-      <Alert severity='info' icon={<i className='ri-information-line' />}>
-        {t('siteRecovery.dashboard.noSitesConfigured')}
-      </Alert>
+      <EmptyState
+        illustration={<SiteRecoveryIllustration />}
+        title={t('siteRecovery.dashboard.noSitesTitle')}
+        description={t('siteRecovery.dashboard.noSitesDesc')}
+        size='large'
+      />
     )
   }
 

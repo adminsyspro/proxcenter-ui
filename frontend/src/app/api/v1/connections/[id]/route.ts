@@ -2,12 +2,13 @@
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db/prisma"
-import { encryptSecret } from "@/lib/crypto/secret"
+import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
+import { pveFetch } from "@/lib/proxmox/client"
 
 export const runtime = "nodejs"
 
@@ -103,7 +104,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl
     if (body.uiUrl !== undefined) data.uiUrl = body.uiUrl || null
     if (body.insecureTLS !== undefined) data.insecureTLS = body.insecureTLS
-    if (body.hasCeph !== undefined) data.hasCeph = body.hasCeph
     if (body.latitude !== undefined) data.latitude = body.latitude
     if (body.longitude !== undefined) data.longitude = body.longitude
     if (body.locationLabel !== undefined) data.locationLabel = body.locationLabel || null
@@ -145,6 +145,36 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         data.sshPassEnc = encryptSecret(secret)
       } else {
         data.sshPassEnc = null
+      }
+    }
+
+    // Re-detect Ceph when connection details change (baseUrl, apiToken, insecureTLS)
+    if (data.baseUrl !== undefined || data.apiTokenEnc !== undefined || data.insecureTLS !== undefined) {
+      const existing = await prisma.connection.findUnique({
+        where: { id },
+        select: { type: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+      })
+
+      if (existing?.type === 'pve') {
+        const baseUrl = data.baseUrl || existing.baseUrl
+        const apiToken = data.apiTokenEnc ? decryptSecret(data.apiTokenEnc) : decryptSecret(existing.apiTokenEnc!)
+        const insecureTLS = data.insecureTLS ?? existing.insecureTLS
+
+        try {
+          const nodes = await pveFetch<any[]>({ baseUrl, apiToken, insecureDev: insecureTLS }, "/nodes")
+          const onlineNode = nodes?.find((n: any) => n.status === 'online') || nodes?.[0]
+
+          if (onlineNode) {
+            const cephStatus = await pveFetch<any>(
+              { baseUrl, apiToken, insecureDev: insecureTLS },
+              `/nodes/${encodeURIComponent(onlineNode.node)}/ceph/status`
+            ).catch(() => null)
+
+            data.hasCeph = !!(cephStatus?.health)
+          }
+        } catch {
+          // If probe fails, don't change hasCeph
+        }
       }
     }
 

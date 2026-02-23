@@ -191,6 +191,16 @@ function ConnectionsTab() {
   const [addConnOpen, setAddConnOpen] = useState(false)
   const [addConnType, setAddConnType] = useState('pve')
   const [editingConn, setEditingConn] = useState(null)
+  const [detectingCephId, setDetectingCephId] = useState(null)
+
+  const handleDetectCeph = async (connId) => {
+    setDetectingCephId(connId)
+    try {
+      await fetch(`/api/v1/connections/${connId}/detect-ceph`, { method: 'POST' })
+      await loadPveConnections()
+    } catch { /* ignore */ }
+    setDetectingCephId(null)
+  }
 
   const openAddDialog = (type) => {
     setAddConnType(type)
@@ -211,7 +221,6 @@ function ConnectionsTab() {
       baseUrl: formData.baseUrl.trim(),
       uiUrl: (formData.uiUrl || '').trim() || null,
       insecureTLS: !!formData.insecureTLS,
-      hasCeph: addConnType === 'pve' ? !!formData.hasCeph : false,
       // Location fields
       latitude: formData.latitude !== '' && !isNaN(parseFloat(formData.latitude)) ? parseFloat(formData.latitude) : null,
       longitude: formData.longitude !== '' && !isNaN(parseFloat(formData.longitude)) ? parseFloat(formData.longitude) : null,
@@ -269,7 +278,6 @@ function ConnectionsTab() {
       baseUrl: addConn.baseUrl.trim(),
       uiUrl: (addConn.uiUrl || '').trim() || null,
       insecureTLS: !!addConn.insecureTLS,
-      hasCeph: addConnType === 'pve' ? !!addConn.hasCeph : false,
       apiToken: addConn.apiToken.trim()
     }
 
@@ -280,7 +288,7 @@ function ConnectionsTab() {
     })
 
     setAddConnOpen(false)
-    setAddConn({ name: '', baseUrl: '', uiUrl: '', insecureTLS: true, hasCeph: false, apiToken: '' })
+    setAddConn({ name: '', baseUrl: '', uiUrl: '', insecureTLS: true, apiToken: '' })
 
     if (addConnType === 'pve') {
       await loadPveConnections()
@@ -342,16 +350,31 @@ function ConnectionsTab() {
       {
         field: 'hasCeph',
         headerName: t('settings.cephHeader'),
-        width: 80,
-        renderCell: params => (
-          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-            {params.value ? (
-              <Chip size='small' label={t('common.yes')} color='info' variant='outlined' />
-            ) : (
-              <Typography variant='caption' sx={{ opacity: 0.4 }}>{t('common.no')}</Typography>
-            )}
-          </Box>
-        )
+        width: 110,
+        renderCell: params => {
+          const isDetecting = detectingCephId === params.row.id
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
+              {params.value ? (
+                <Chip size='small' label={t('common.yes')} color='info' variant='outlined' />
+              ) : (
+                <Typography variant='caption' sx={{ opacity: 0.4 }}>{t('common.no')}</Typography>
+              )}
+              {params.row.type === 'pve' && (
+                <Tooltip title={t('settings.detectCeph')}>
+                  <IconButton
+                    size='small'
+                    disabled={isDetecting}
+                    onClick={(e) => { e.stopPropagation(); handleDetectCeph(params.row.id) }}
+                    sx={{ width: 24, height: 24 }}
+                  >
+                    <i className={isDetecting ? 'ri-loader-4-line' : 'ri-refresh-line'} style={{ fontSize: 14, animation: isDetecting ? 'spin 1s linear infinite' : 'none' }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+          )
+        }
       },
       {
         field: 'sshEnabled',

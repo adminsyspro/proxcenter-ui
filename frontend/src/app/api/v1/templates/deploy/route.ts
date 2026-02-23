@@ -186,19 +186,30 @@ export async function POST(req: Request) {
         await updateDeployment(deployment.id, "configuring", { taskUpid: null })
 
         if (body.cloudInit) {
-          const ciParams = new URLSearchParams()
           const ci = body.cloudInit
-          if (ci.ciuser) ciParams.set("ciuser", ci.ciuser)
-          if (ci.sshKeys) ciParams.set("sshkeys", encodeURIComponent(ci.sshKeys))
-          if (ci.ipconfig0) ciParams.set("ipconfig0", ci.ipconfig0)
-          if (ci.nameserver) ciParams.set("nameserver", ci.nameserver)
-          if (ci.searchdomain) ciParams.set("searchdomain", ci.searchdomain)
+          // Build body manually — PVE expects ipconfig values with raw "=" signs,
+          // and sshkeys to be URL-encoded once (PVE decodes internally).
+          // URLSearchParams double-encodes "=" in values which breaks ipconfig parsing.
+          const ciParts: string[] = []
+          if (ci.ciuser) ciParts.push(`ciuser=${encodeURIComponent(ci.ciuser)}`)
+          if (ci.sshKeys) ciParts.push(`sshkeys=${encodeURIComponent(ci.sshKeys)}`)
+          if (ci.ipconfig0) {
+            // Sanitize: trim spaces around commas (PVE rejects " ip" vs "ip")
+            const sanitized = ci.ipconfig0.split(',').map((s: string) => s.trim()).filter(Boolean).join(',')
+            ciParts.push(`ipconfig0=${encodeURIComponent(sanitized)}`)
+          }
+          if (ci.nameserver) ciParts.push(`nameserver=${encodeURIComponent(ci.nameserver)}`)
+          if (ci.searchdomain) ciParts.push(`searchdomain=${encodeURIComponent(ci.searchdomain)}`)
 
-          if (ciParams.toString()) {
+          if (ciParts.length > 0) {
             await pveFetch<any>(
               conn,
               `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/config`,
-              { method: "PUT", body: ciParams }
+              {
+                method: "PUT",
+                body: ciParts.join('&'),
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              } as any
             )
           }
         }

@@ -76,7 +76,7 @@
     "concurrently": "^9.2.1",
     "esbuild": "^0.27.2",
     "eslint": "8.57.1",
-    "eslint-config-next": "15.1.2",
+    "eslint-config-next": "16.1.6",
     "eslint-config-prettier": "9.1.0",
     "eslint-plugin-import": "2.31.0",
     "postcss": "8.5.6",
@@ -97,7 +97,7 @@
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "eslint": "8.57.1",
-    "eslint-config-next": "15.1.2",
+    "eslint-config-next": "16.1.6",
     "confbox": "0.2.4"
   },
   "overrides": {

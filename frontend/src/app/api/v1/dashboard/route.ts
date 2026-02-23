@@ -341,9 +341,9 @@ return null
     const globalRamPct = totalMemMax > 0 ? round1((totalMemUsed / totalMemMax) * 100) : 0
     const globalStoragePct = totalStorageMax > 0 ? round1((totalStorageUsed / totalStorageMax) * 100) : 0
 
-    const vmsRunning = allVms.filter(v => v.status === "running").length
-    const vmsStopped = allVms.filter(v => v.status === "stopped").length
     const vmsTemplates = allVms.filter(v => v.template === 1).length
+    const vmsRunning = allVms.filter(v => v.status === "running" && v.template !== 1).length
+    const vmsStopped = allVms.filter(v => v.status === "stopped" && v.template !== 1).length
     const lxcRunning = allLxcs.filter(l => l.status === "running").length
     const lxcStopped = allLxcs.filter(l => l.status === "stopped").length
 
@@ -531,13 +531,13 @@ return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max 
         summary: {
           clusters: totalClusters, standalones: pveConnections.length - totalClusters,
           nodes: totalNodes, nodesOnline: onlineNodes, nodesOffline: totalNodes - onlineNodes,
-          vmsRunning, vmsTotal: allVms.length, lxcRunning, lxcTotal: allLxcs.length,
+          vmsRunning, vmsTotal: allVms.length - vmsTemplates, lxcRunning, lxcTotal: allLxcs.length,
           cpuPct: globalCpuPct, ramPct: globalRamPct,
         },
         clusters: clusterInfos,
         nodes: allNodes,
         guests: {
-          vms: { total: allVms.length, running: vmsRunning, stopped: vmsStopped, templates: vmsTemplates },
+          vms: { total: allVms.length - vmsTemplates, running: vmsRunning, stopped: vmsStopped, templates: vmsTemplates },
           lxc: { total: allLxcs.length, running: lxcRunning, stopped: lxcStopped },
         },
         // Full VM list for waffle chart widget

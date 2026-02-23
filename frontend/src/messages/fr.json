@@ -80,7 +80,10 @@
     "comingSoon": "Fonctionnalité à venir",
     "loadVms": "Charger les VMs",
     "default": "Par défaut",
-    "node": "Nœud"
+    "node": "Nœud",
+    "done": "Terminé",
+    "tags": "Tags",
+    "created": "Créé"
   },
   "license": {
     "enterpriseRequired": "Licence Enterprise requise",
@@ -2327,7 +2330,106 @@
     "convertToTemplate": "Convertir en Template",
     "convertWarning": "Cette opération est irréversible. La VM sera convertie en template et ne pourra plus être démarrée directement.",
     "convertSuccess": "VM convertie en template avec succès",
-    "convert": "Convertir"
+    "convert": "Convertir",
+    "tabs": {
+      "catalog": "Catalogue d'images",
+      "blueprints": "Mes Blueprints",
+      "deployments": "Déploiements"
+    },
+    "catalog": {
+      "search": "Rechercher des images...",
+      "deploy": "Déployer",
+      "deployTooltip": "Déployer cette image en tant que nouvelle VM",
+      "noImages": "Aucune image trouvée",
+      "noImagesDesc": "Aucune image cloud ne correspond à vos filtres.",
+      "cores": "cœurs",
+      "recommendedSpecs": "Recommandé",
+      "minimumSpecs": "Minimum"
+    },
+    "blueprints": {
+      "image": "Image",
+      "create": "Créer un Blueprint",
+      "edit": "Modifier le Blueprint",
+      "noBlueprints": "Aucun blueprint",
+      "noBlueprintsDesc": "Créez un blueprint pour sauvegarder vos configurations VM préférées.",
+      "created": "Blueprint créé",
+      "updated": "Blueprint mis à jour",
+      "deleted": "Blueprint supprimé",
+      "tagsHelp": "Séparez les tags par des points-virgules (ex: prod;web;linux)",
+      "public": "Public (visible par tous les utilisateurs)"
+    },
+    "deploy": {
+      "title": "Déployer une VM",
+      "steps": {
+        "image": "Image",
+        "target": "Cible",
+        "hardware": "Matériel",
+        "cloudInit": "Cloud-Init",
+        "review": "Récapitulatif",
+        "progress": "Progression"
+      },
+      "target": {
+        "connection": "Connexion",
+        "node": "Nœud",
+        "storage": "Stockage",
+        "vmid": "ID de la VM",
+        "vmName": "Nom de la VM",
+        "available": "disponible"
+      },
+      "hardware": {
+        "title": "Matériel",
+        "cores": "Cœurs CPU",
+        "sockets": "Sockets",
+        "memory": "Mémoire (Mo)",
+        "diskSize": "Taille du disque",
+        "disk": "disque",
+        "scsiController": "Contrôleur SCSI",
+        "cpuType": "Type de CPU",
+        "bridge": "Bridge réseau",
+        "vlan": "Tag VLAN",
+        "vlanPlaceholder": "Aucun",
+        "qemuAgent": "Agent QEMU invité"
+      },
+      "cloudInit": {
+        "user": "Nom d'utilisateur",
+        "sshKeys": "Clés publiques SSH",
+        "ipConfig": "Configuration IP",
+        "ipConfigHelp": "Utilisez ip=dhcp pour le DHCP, ou ip=x.x.x.x/24,gw=y.y.y.y pour une IP statique",
+        "nameserver": "Serveur DNS",
+        "searchdomain": "Domaine de recherche",
+        "noUser": "Aucun utilisateur configuré"
+      },
+      "review": {
+        "deployNow": "Déployer maintenant",
+        "saveBlueprint": "Sauvegarder en Blueprint",
+        "blueprintName": "Nom du Blueprint"
+      },
+      "progress": {
+        "downloading": "Téléchargement de l'image",
+        "creating": "Création de la VM",
+        "configuring": "Configuration cloud-init",
+        "starting": "Démarrage de la VM",
+        "completed": "Déploiement terminé"
+      }
+    },
+    "deployments": {
+      "vm": "Machine Virtuelle",
+      "image": "Image",
+      "error": "Erreur",
+      "started": "Démarré",
+      "completed": "Terminé",
+      "noDeployments": "Aucun déploiement",
+      "noDeploymentsDesc": "Déployez une VM depuis le catalogue d'images pour la voir ici.",
+      "status": {
+        "pending": "En attente",
+        "downloading": "Téléchargement",
+        "creating": "Création",
+        "configuring": "Configuration",
+        "starting": "Démarrage",
+        "completed": "Terminé",
+        "failed": "Échoué"
+      }
+    }
   },
   "console": {
     "title": "Console",

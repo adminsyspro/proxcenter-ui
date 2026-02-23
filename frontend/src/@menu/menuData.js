@@ -43,6 +43,12 @@ export const menuData = (t = (key) => key) => [
         icon: 'ri-file-copy-fill',
         href: '/operations/backups',
         permissions: ['backup.view', 'backup.job.view']
+      },
+      {
+        label: t('navigation.templates'),
+        icon: 'ri-cloud-line',
+        href: '/automation/templates',
+        permissions: ['vm.create', 'vm.clone']
       }
     ]
   },

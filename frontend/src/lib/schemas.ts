@@ -155,3 +155,67 @@ export const moveDiskSchema = z.object({
   deleteSource: z.boolean().default(true),
   format: z.string().optional(),
 })
+
+// ─── Templates / Blueprints ──────────────────────────────────────────────────
+
+/** POST /api/v1/templates/blueprints — create a blueprint */
+export const createBlueprintSchema = z.object({
+  name: z.string().min(1, 'name is required').max(100).transform(s => s.trim()),
+  description: z.string().max(500).nullable().optional(),
+  imageSlug: z.string().min(1, 'imageSlug is required'),
+  hardware: z.object({
+    cores: z.number().int().min(1).max(128).default(2),
+    sockets: z.number().int().min(1).max(4).default(1),
+    memory: z.number().int().min(128).max(1048576).default(2048),
+    diskSize: z.string().regex(/^\d+G$/, 'diskSize must be like "20G"').default('20G'),
+    scsihw: z.string().default('virtio-scsi-single'),
+    networkModel: z.string().default('virtio'),
+    networkBridge: z.string().default('vmbr0'),
+    vlanTag: z.number().int().min(1).max(4094).nullable().optional(),
+    ostype: z.string().default('l26'),
+    agent: z.boolean().default(true),
+    cpu: z.string().default('host'),
+  }),
+  cloudInit: z.object({
+    ciuser: z.string().optional(),
+    sshKeys: z.string().optional(),
+    ipconfig0: z.string().default('ip=dhcp'),
+    nameserver: z.string().optional(),
+    searchdomain: z.string().optional(),
+  }).nullable().optional(),
+  tags: z.string().max(200).nullable().optional(),
+  isPublic: z.boolean().default(true),
+})
+
+/** POST /api/v1/templates/deploy — deploy a VM from image/blueprint */
+export const deploySchema = z.object({
+  connectionId: z.string().min(1, 'connectionId is required'),
+  node: z.string().min(1, 'node is required'),
+  storage: z.string().min(1, 'storage is required'),
+  vmid: z.number().int().min(100).max(999999999),
+  vmName: z.string().max(63).regex(/^[a-zA-Z][a-zA-Z0-9._-]*$/, 'Invalid VM name').optional(),
+  imageSlug: z.string().min(1, 'imageSlug is required'),
+  blueprintId: z.string().optional(),
+  hardware: z.object({
+    cores: z.number().int().min(1).max(128).default(2),
+    sockets: z.number().int().min(1).max(4).default(1),
+    memory: z.number().int().min(128).max(1048576).default(2048),
+    diskSize: z.string().regex(/^\d+G$/, 'diskSize must be like "20G"').default('20G'),
+    scsihw: z.string().default('virtio-scsi-single'),
+    networkModel: z.string().default('virtio'),
+    networkBridge: z.string().default('vmbr0'),
+    vlanTag: z.number().int().min(1).max(4094).nullable().optional(),
+    ostype: z.string().default('l26'),
+    agent: z.boolean().default(true),
+    cpu: z.string().default('host'),
+  }),
+  cloudInit: z.object({
+    ciuser: z.string().optional(),
+    sshKeys: z.string().optional(),
+    ipconfig0: z.string().default('ip=dhcp'),
+    nameserver: z.string().optional(),
+    searchdomain: z.string().optional(),
+  }).optional(),
+  saveAsBlueprint: z.boolean().default(false),
+  blueprintName: z.string().max(100).optional(),
+})

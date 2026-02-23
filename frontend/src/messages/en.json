@@ -80,7 +80,10 @@
     "comingSoon": "Coming soon",
     "loadVms": "Load VMs",
     "default": "Default",
-    "node": "Node"
+    "node": "Node",
+    "done": "Done",
+    "tags": "Tags",
+    "created": "Created"
   },
   "license": {
     "enterpriseRequired": "Enterprise license required",
@@ -2322,7 +2325,106 @@
     "convertToTemplate": "Convert to Template",
     "convertWarning": "This operation is irreversible. The VM will be converted to a template and can no longer be started directly.",
     "convertSuccess": "VM successfully converted to template",
-    "convert": "Convert"
+    "convert": "Convert",
+    "tabs": {
+      "catalog": "Image Catalog",
+      "blueprints": "My Blueprints",
+      "deployments": "Deployments"
+    },
+    "catalog": {
+      "search": "Search images...",
+      "deploy": "Deploy",
+      "deployTooltip": "Deploy this image as a new VM",
+      "noImages": "No images found",
+      "noImagesDesc": "No cloud images match your filters.",
+      "cores": "cores",
+      "recommendedSpecs": "Recommended",
+      "minimumSpecs": "Minimum"
+    },
+    "blueprints": {
+      "image": "Image",
+      "create": "Create Blueprint",
+      "edit": "Edit Blueprint",
+      "noBlueprints": "No blueprints yet",
+      "noBlueprintsDesc": "Create a blueprint to save your favorite VM configurations.",
+      "created": "Blueprint created",
+      "updated": "Blueprint updated",
+      "deleted": "Blueprint deleted",
+      "tagsHelp": "Separate tags with semicolons (e.g. prod;web;linux)",
+      "public": "Public (visible to all users)"
+    },
+    "deploy": {
+      "title": "Deploy VM",
+      "steps": {
+        "image": "Image",
+        "target": "Target",
+        "hardware": "Hardware",
+        "cloudInit": "Cloud-Init",
+        "review": "Review",
+        "progress": "Progress"
+      },
+      "target": {
+        "connection": "Connection",
+        "node": "Node",
+        "storage": "Storage",
+        "vmid": "VM ID",
+        "vmName": "VM Name",
+        "available": "available"
+      },
+      "hardware": {
+        "title": "Hardware",
+        "cores": "CPU Cores",
+        "sockets": "Sockets",
+        "memory": "Memory (MB)",
+        "diskSize": "Disk Size",
+        "disk": "disk",
+        "scsiController": "SCSI Controller",
+        "cpuType": "CPU Type",
+        "bridge": "Network Bridge",
+        "vlan": "VLAN Tag",
+        "vlanPlaceholder": "None",
+        "qemuAgent": "QEMU Guest Agent"
+      },
+      "cloudInit": {
+        "user": "Username",
+        "sshKeys": "SSH Public Keys",
+        "ipConfig": "IP Configuration",
+        "ipConfigHelp": "Use ip=dhcp for DHCP, or ip=x.x.x.x/24,gw=y.y.y.y for static",
+        "nameserver": "DNS Server",
+        "searchdomain": "Search Domain",
+        "noUser": "No user configured"
+      },
+      "review": {
+        "deployNow": "Deploy Now",
+        "saveBlueprint": "Save as Blueprint",
+        "blueprintName": "Blueprint Name"
+      },
+      "progress": {
+        "downloading": "Downloading image",
+        "creating": "Creating VM",
+        "configuring": "Configuring cloud-init",
+        "starting": "Starting VM",
+        "completed": "Deployment complete"
+      }
+    },
+    "deployments": {
+      "vm": "Virtual Machine",
+      "image": "Image",
+      "error": "Error",
+      "started": "Started",
+      "completed": "Completed",
+      "noDeployments": "No deployments yet",
+      "noDeploymentsDesc": "Deploy a VM from the image catalog to see it here.",
+      "status": {
+        "pending": "Pending",
+        "downloading": "Downloading",
+        "creating": "Creating",
+        "configuring": "Configuring",
+        "starting": "Starting",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    }
   },
   "console": {
     "title": "Console",

@@ -19,6 +19,7 @@ export type AuditCategory =
   | "settings"       // Modifications de configuration
   | "system"         // Actions système
   | "security"       // Actions de sécurité (RBAC, permissions)
+  | "templates"      // Actions cloud-init templates / blueprints
 
 export type AuditAction =
 

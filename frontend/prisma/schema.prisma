@@ -106,3 +106,40 @@ model Alert {
   @@index([status, severity, lastSeenAt])
   @@map("alerts")
 }
+
+model Blueprint {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  imageSlug   String   @map("image_slug")
+  hardware    String   // JSON: { cores, sockets, memory, diskSize, scsihw, networkModel, networkBridge, vlanTag, ostype, agent, cpu }
+  cloudInit   String?  @map("cloud_init") // JSON: { ciuser, sshKeys, ipconfig0, nameserver, searchdomain }
+  tags        String?
+  isPublic    Boolean  @default(true) @map("is_public")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  @@map("blueprints")
+}
+
+model Deployment {
+  id            String    @id @default(cuid())
+  blueprintId   String?   @map("blueprint_id")
+  blueprintName String?   @map("blueprint_name")
+  connectionId  String    @map("connection_id")
+  node          String
+  vmid          Int
+  vmName        String?   @map("vm_name")
+  imageSlug     String?   @map("image_slug")
+  status        String    @default("pending") // pending|downloading|creating|configuring|starting|completed|failed
+  currentStep   String?   @map("current_step")
+  error         String?
+  taskUpid      String?   @map("task_upid")
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  @@index([status])
+  @@index([connectionId])
+  @@map("deployments")
+}

@@ -275,12 +275,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
       })
 
       const data = await res.json()
-      if (data.data?.deploymentId) {
-        setDeploymentId(data.data.deploymentId)
-      }
       if (data.error) {
+        // Validation / permission errors from the sync part
         setDeployError(data.error)
         setDeploying(false)
+        return
+      }
+      if (data.data?.deploymentId) {
+        setDeploymentId(data.data.deploymentId)
       }
     } catch (err: any) {
       setDeployError(err.message || 'Deploy failed')

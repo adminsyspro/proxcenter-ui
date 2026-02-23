@@ -2409,7 +2409,11 @@
         "creating": "Création de la VM",
         "configuring": "Configuration cloud-init",
         "starting": "Démarrage de la VM",
-        "completed": "Déploiement terminé"
+        "completed": "Déploiement terminé",
+        "showLogs": "Afficher les logs",
+        "hideLogs": "Masquer les logs",
+        "speed": "Vitesse",
+        "eta": "Temps restant"
       }
     },
     "deployments": {
@@ -2419,6 +2423,7 @@
       "started": "Démarré",
       "completed": "Terminé",
       "retry": "Relancer le déploiement",
+      "viewDetails": "Voir les détails",
       "noDeployments": "Aucun déploiement",
       "noDeploymentsDesc": "Déployez une VM depuis le catalogue d'images pour la voir ici.",
       "status": {

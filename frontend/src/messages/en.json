@@ -2404,7 +2404,11 @@
         "creating": "Creating VM",
         "configuring": "Configuring cloud-init",
         "starting": "Starting VM",
-        "completed": "Deployment complete"
+        "completed": "Deployment complete",
+        "showLogs": "Show logs",
+        "hideLogs": "Hide logs",
+        "speed": "Speed",
+        "eta": "ETA"
       }
     },
     "deployments": {
@@ -2414,6 +2418,7 @@
       "started": "Started",
       "completed": "Completed",
       "retry": "Retry deployment",
+      "viewDetails": "View details",
       "noDeployments": "No deployments yet",
       "noDeploymentsDesc": "Deploy a VM from the image catalog to see it here.",
       "status": {

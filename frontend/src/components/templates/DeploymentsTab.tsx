@@ -7,6 +7,7 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { useToast } from '@/contexts/ToastContext'
 import EmptyState from '@/components/EmptyState'
+import DeploymentDetailDialog from './DeploymentDetailDialog'
 
 interface Deployment {
   id: string
@@ -20,6 +21,8 @@ interface Deployment {
   status: string
   currentStep: string | null
   error: string | null
+  taskUpid: string | null
+  config: string | null
   startedAt: string | null
   completedAt: string | null
   createdAt: string
@@ -44,6 +47,8 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
   const { showToast } = useToast()
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [loading, setLoading] = useState(true)
+  const [detailDeployment, setDetailDeployment] = useState<Deployment | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const fetchDeployments = useCallback(() => {
     fetch('/api/v1/templates/deployments')
@@ -77,6 +82,16 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
       showToast(t('errors.generic'), 'error')
     }
   }, [fetchDeployments, showToast, t])
+
+  const handleViewDetail = useCallback((deployment: Deployment) => {
+    setDetailDeployment(deployment)
+    setDetailOpen(true)
+  }, [])
+
+  const handleCloseDetail = useCallback(() => {
+    setDetailOpen(false)
+    setDetailDeployment(null)
+  }, [])
 
   const columns: GridColDef[] = useMemo(() => [
     {
@@ -149,10 +164,15 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
     {
       field: 'actions',
       headerName: t('common.actions'),
-      width: 100,
+      width: 130,
       sortable: false,
       renderCell: (p) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title={t('templates.deployments.viewDetails' as any)}>
+            <IconButton size="small" onClick={() => handleViewDetail(p.row)}>
+              <i className="ri-eye-line" style={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
           {p.row.status === 'failed' && onRetry && (
             <Tooltip title={t('templates.deployments.retry')}>
               <IconButton size="small" color="primary" onClick={() => onRetry(p.row)}>
@@ -170,7 +190,7 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
         </Box>
       ),
     },
-  ], [t, onRetry, handleDelete])
+  ], [t, onRetry, handleDelete, handleViewDetail])
 
   if (!loading && deployments.length === 0) {
     return (
@@ -211,6 +231,12 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
           },
         }}
         localeText={{ noRowsLabel: t('common.noData') }}
+      />
+
+      <DeploymentDetailDialog
+        open={detailOpen}
+        deployment={detailDeployment}
+        onClose={handleCloseDetail}
       />
     </Box>
   )

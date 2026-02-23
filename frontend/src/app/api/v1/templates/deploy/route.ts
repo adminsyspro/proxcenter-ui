@@ -1,5 +1,5 @@
 // src/app/api/v1/templates/deploy/route.ts
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { prisma } from "@/lib/db/prisma"
@@ -11,7 +11,6 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getImageBySlug } from "@/lib/templates/cloudImages"
 
 export const runtime = "nodejs"
-export const maxDuration = 300 // 5 min timeout for long downloads
 
 type DeploymentStatus = "pending" | "downloading" | "creating" | "configuring" | "starting" | "completed" | "failed"
 
@@ -87,167 +86,166 @@ export async function POST(req: Request) {
       }).catch(() => {}) // Non-blocking
     }
 
-    // Execute deployment steps sequentially
-    try {
-      // Step 1: Download image to storage (skip if already present)
-      await updateDeployment(deployment.id, "downloading")
+    // Run the deployment pipeline asynchronously after the response is sent
+    after(async () => {
+      try {
+        // Step 1: Download image to storage (skip if already present)
+        await updateDeployment(deployment.id, "downloading")
 
-      const rawFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
-      // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
-      const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
+        const rawFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
+        // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
+        const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
 
-      // Ensure storage has 'import' content type enabled (required for import-from)
-      const storageConfig = await pveFetch<any>(
-        conn,
-        `/storage/${encodeURIComponent(body.storage)}`
-      )
-      const currentContent = String(storageConfig?.content || "")
-      if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
-        const newContent = currentContent ? `${currentContent},import` : "import"
-        await pveFetch<any>(
+        // Ensure storage has 'import' content type enabled (required for import-from)
+        const storageConfig = await pveFetch<any>(
           conn,
-          `/storage/${encodeURIComponent(body.storage)}`,
-          { method: "PUT", body: new URLSearchParams({ content: newContent }) }
+          `/storage/${encodeURIComponent(body.storage)}`
         )
-      }
-
-      // Check if image already exists on PVE storage (import content type)
-      const storageContents = await pveFetch<any[]>(
-        conn,
-        `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/content?content=import`
-      ).catch(() => [])
-
-      const imageAlreadyExists = (storageContents || []).some(
-        (item: any) => item.volid?.endsWith(`/${urlFilename}`) || item.volid?.endsWith(`:import/${urlFilename}`)
-      )
-
-      if (!imageAlreadyExists) {
-        const downloadParams = new URLSearchParams({
-          url: image.downloadUrl,
-          content: "import",
-          filename: urlFilename,
-          node: body.node,
-          storage: body.storage,
-          "verify-certificates": "0",
-        })
-
-        const downloadResult = await pveFetch<any>(
-          conn,
-          `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/download-url`,
-          { method: "POST", body: downloadParams }
-        )
-
-        // If download returned a task UPID, wait for it to complete
-        if (downloadResult) {
-          const upid = typeof downloadResult === "string" ? downloadResult : downloadResult
-          await updateDeployment(deployment.id, "downloading", { taskUpid: String(upid) })
-          await waitForTask(conn, body.node, String(upid))
-        }
-      }
-
-      const importVolume = `${body.storage}:import/${urlFilename}`
-
-      // Step 2: Create VM with imported disk
-      await updateDeployment(deployment.id, "creating")
-
-      const hw = body.hardware
-
-      const createParams = new URLSearchParams({
-        vmid: String(body.vmid),
-        name: body.vmName || `${image.slug}-${body.vmid}`,
-        ostype: hw.ostype,
-        cores: String(hw.cores),
-        sockets: String(hw.sockets),
-        memory: String(hw.memory),
-        cpu: hw.cpu,
-        scsihw: hw.scsihw,
-        scsi0: `${body.storage}:0,import-from=${importVolume}`,
-        net0: `${hw.networkModel},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`,
-        ide2: `${body.storage}:cloudinit`,
-        boot: "order=scsi0",
-        serial0: "socket",
-        vga: "serial0",
-        agent: hw.agent ? "1" : "0",
-      })
-
-      const createResult = await pveFetch<any>(
-        conn,
-        `/nodes/${encodeURIComponent(body.node)}/qemu`,
-        { method: "POST", body: createParams }
-      )
-
-      // Wait for VM creation task
-      if (createResult) {
-        await waitForTask(conn, body.node, String(createResult))
-      }
-
-      // Step 3: Configure cloud-init
-      await updateDeployment(deployment.id, "configuring")
-
-      if (body.cloudInit) {
-        const ciParams = new URLSearchParams()
-        const ci = body.cloudInit
-        if (ci.ciuser) ciParams.set("ciuser", ci.ciuser)
-        if (ci.sshKeys) ciParams.set("sshkeys", encodeURIComponent(ci.sshKeys))
-        if (ci.ipconfig0) ciParams.set("ipconfig0", ci.ipconfig0)
-        if (ci.nameserver) ciParams.set("nameserver", ci.nameserver)
-        if (ci.searchdomain) ciParams.set("searchdomain", ci.searchdomain)
-
-        if (ciParams.toString()) {
+        const currentContent = String(storageConfig?.content || "")
+        if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
+          const newContent = currentContent ? `${currentContent},import` : "import"
           await pveFetch<any>(
             conn,
-            `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/config`,
-            { method: "PUT", body: ciParams }
+            `/storage/${encodeURIComponent(body.storage)}`,
+            { method: "PUT", body: new URLSearchParams({ content: newContent }) }
           )
         }
-      }
 
-      // Step 4: Resize disk if needed
-      const diskSizeNum = parseInt(hw.diskSize)
-      if (diskSizeNum > 0) {
+        // Check if image already exists on PVE storage (import content type)
+        const storageContents = await pveFetch<any[]>(
+          conn,
+          `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/content?content=import`
+        ).catch(() => [])
+
+        const imageAlreadyExists = (storageContents || []).some(
+          (item: any) => item.volid?.endsWith(`/${urlFilename}`) || item.volid?.endsWith(`:import/${urlFilename}`)
+        )
+
+        if (!imageAlreadyExists) {
+          const downloadParams = new URLSearchParams({
+            url: image.downloadUrl,
+            content: "import",
+            filename: urlFilename,
+            node: body.node,
+            storage: body.storage,
+            "verify-certificates": "0",
+          })
+
+          const downloadResult = await pveFetch<any>(
+            conn,
+            `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/download-url`,
+            { method: "POST", body: downloadParams }
+          )
+
+          // If download returned a task UPID, wait for it to complete
+          if (downloadResult) {
+            const upid = typeof downloadResult === "string" ? downloadResult : downloadResult
+            await updateDeployment(deployment.id, "downloading", { taskUpid: String(upid) })
+            await waitForTask(conn, body.node, String(upid))
+          }
+        }
+
+        const importVolume = `${body.storage}:import/${urlFilename}`
+
+        // Step 2: Create VM with imported disk
+        await updateDeployment(deployment.id, "creating")
+
+        const hw = body.hardware
+
+        const createParams = new URLSearchParams({
+          vmid: String(body.vmid),
+          name: body.vmName || `${image.slug}-${body.vmid}`,
+          ostype: hw.ostype,
+          cores: String(hw.cores),
+          sockets: String(hw.sockets),
+          memory: String(hw.memory),
+          cpu: hw.cpu,
+          scsihw: hw.scsihw,
+          scsi0: `${body.storage}:0,import-from=${importVolume}`,
+          net0: `${hw.networkModel},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`,
+          ide2: `${body.storage}:cloudinit`,
+          boot: "order=scsi0",
+          serial0: "socket",
+          vga: "serial0",
+          agent: hw.agent ? "1" : "0",
+        })
+
+        const createResult = await pveFetch<any>(
+          conn,
+          `/nodes/${encodeURIComponent(body.node)}/qemu`,
+          { method: "POST", body: createParams }
+        )
+
+        // Wait for VM creation task — store its UPID for live tracking
+        if (createResult) {
+          await updateDeployment(deployment.id, "creating", { taskUpid: String(createResult) })
+          await waitForTask(conn, body.node, String(createResult))
+        }
+
+        // Step 3: Configure cloud-init
+        await updateDeployment(deployment.id, "configuring", { taskUpid: null })
+
+        if (body.cloudInit) {
+          const ciParams = new URLSearchParams()
+          const ci = body.cloudInit
+          if (ci.ciuser) ciParams.set("ciuser", ci.ciuser)
+          if (ci.sshKeys) ciParams.set("sshkeys", encodeURIComponent(ci.sshKeys))
+          if (ci.ipconfig0) ciParams.set("ipconfig0", ci.ipconfig0)
+          if (ci.nameserver) ciParams.set("nameserver", ci.nameserver)
+          if (ci.searchdomain) ciParams.set("searchdomain", ci.searchdomain)
+
+          if (ciParams.toString()) {
+            await pveFetch<any>(
+              conn,
+              `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/config`,
+              { method: "PUT", body: ciParams }
+            )
+          }
+        }
+
+        // Step 4: Resize disk if needed
+        const diskSizeNum = parseInt(hw.diskSize)
+        if (diskSizeNum > 0) {
+          await pveFetch<any>(
+            conn,
+            `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/resize`,
+            {
+              method: "PUT",
+              body: new URLSearchParams({ disk: "scsi0", size: hw.diskSize }),
+            }
+          )
+        }
+
+        // Step 5: Start VM
+        await updateDeployment(deployment.id, "starting", { taskUpid: null })
+
         await pveFetch<any>(
           conn,
-          `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/resize`,
-          {
-            method: "PUT",
-            body: new URLSearchParams({ disk: "scsi0", size: hw.diskSize }),
-          }
+          `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/status/start`,
+          { method: "POST" }
         )
+
+        // Done!
+        await updateDeployment(deployment.id, "completed")
+
+        // Audit
+        const { audit } = await import("@/lib/audit")
+        await audit({
+          action: "create",
+          category: "templates",
+          resourceType: "vm",
+          resourceId: String(body.vmid),
+          resourceName: body.vmName || `${image.slug}-${body.vmid}`,
+          details: { imageSlug: body.imageSlug, node: body.node, connectionId: body.connectionId },
+          status: "success",
+        })
+      } catch (err: any) {
+        await updateDeployment(deployment.id, "failed", { error: err?.message || String(err) })
       }
+    })
 
-      // Step 5: Start VM
-      await updateDeployment(deployment.id, "starting")
-
-      await pveFetch<any>(
-        conn,
-        `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/status/start`,
-        { method: "POST" }
-      )
-
-      // Done!
-      await updateDeployment(deployment.id, "completed")
-
-      // Audit
-      const { audit } = await import("@/lib/audit")
-      await audit({
-        action: "create",
-        category: "templates",
-        resourceType: "vm",
-        resourceId: String(body.vmid),
-        resourceName: body.vmName || `${image.slug}-${body.vmid}`,
-        details: { imageSlug: body.imageSlug, node: body.node, connectionId: body.connectionId },
-        status: "success",
-      })
-
-      return NextResponse.json({ data: { deploymentId: deployment.id, status: "completed", vmid: body.vmid } })
-    } catch (err: any) {
-      await updateDeployment(deployment.id, "failed", { error: err?.message || String(err) })
-
-      return NextResponse.json(
-        { data: { deploymentId: deployment.id, status: "failed", error: err?.message || String(err) } },
-        { status: 200 } // Return 200 with failure info, not 500 — the deployment record exists
-      )
-    }
+    // Return immediately — the pipeline runs in after()
+    return NextResponse.json({ data: { deploymentId: deployment.id, status: "pending", vmid: body.vmid } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

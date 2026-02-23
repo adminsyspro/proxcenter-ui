@@ -94,6 +94,21 @@ export async function POST(req: Request) {
 
       const urlFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
 
+      // Ensure storage has 'import' content type enabled (required for import-from)
+      const storageConfig = await pveFetch<any>(
+        conn,
+        `/storage/${encodeURIComponent(body.storage)}`
+      )
+      const currentContent = String(storageConfig?.content || "")
+      if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
+        const newContent = currentContent ? `${currentContent},import` : "import"
+        await pveFetch<any>(
+          conn,
+          `/storage/${encodeURIComponent(body.storage)}`,
+          { method: "PUT", body: new URLSearchParams({ content: newContent }) }
+        )
+      }
+
       // Check if image already exists on PVE storage (import content type)
       const storageContents = await pveFetch<any[]>(
         conn,

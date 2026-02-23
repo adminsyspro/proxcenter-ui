@@ -23,3 +23,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  try {
+    const params = await Promise.resolve(ctx.params)
+    const id = (params as any)?.id
+    if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
+
+    const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+    if (denied) return denied
+
+    await prisma.deployment.delete({ where: { id } }).catch(() => {})
+
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}

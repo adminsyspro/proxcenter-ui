@@ -2413,6 +2413,7 @@
       "error": "Error",
       "started": "Started",
       "completed": "Completed",
+      "retry": "Retry deployment",
       "noDeployments": "No deployments yet",
       "noDeploymentsDesc": "Deploy a VM from the image catalog to see it here.",
       "status": {

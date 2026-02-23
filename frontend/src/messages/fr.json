@@ -2418,6 +2418,7 @@
       "error": "Erreur",
       "started": "Démarré",
       "completed": "Terminé",
+      "retry": "Relancer le déploiement",
       "noDeployments": "Aucun déploiement",
       "noDeploymentsDesc": "Déployez une VM depuis le catalogue d'images pour la voir ici.",
       "status": {

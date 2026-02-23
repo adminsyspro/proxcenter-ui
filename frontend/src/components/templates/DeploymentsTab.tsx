@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Box, Chip, Typography } from '@mui/material'
+import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
+import { useToast } from '@/contexts/ToastContext'
 import EmptyState from '@/components/EmptyState'
 
 interface Deployment {
   id: string
+  blueprintId: string | null
   blueprintName: string | null
   connectionId: string
   node: string
@@ -33,8 +35,13 @@ const STATUS_COLORS: Record<string, 'success' | 'error' | 'warning' | 'info' | '
   starting: 'warning',
 }
 
-export default function DeploymentsTab() {
+interface DeploymentsTabProps {
+  onRetry?: (deployment: Deployment) => void
+}
+
+export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
   const t = useTranslations()
+  const { showToast } = useToast()
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -60,6 +67,16 @@ export default function DeploymentsTab() {
     const interval = setInterval(fetchDeployments, 5000)
     return () => clearInterval(interval)
   }, [deployments, fetchDeployments])
+
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/templates/deployments/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      fetchDeployments()
+    } catch {
+      showToast(t('errors.generic'), 'error')
+    }
+  }, [fetchDeployments, showToast, t])
 
   const columns: GridColDef[] = useMemo(() => [
     {
@@ -130,16 +147,30 @@ export default function DeploymentsTab() {
       ),
     },
     {
-      field: 'completedAt',
-      headerName: t('templates.deployments.completed'),
-      width: 160,
+      field: 'actions',
+      headerName: t('common.actions'),
+      width: 100,
+      sortable: false,
       renderCell: (p) => (
-        <Typography variant="caption" sx={{ opacity: 0.7 }}>
-          {p.value ? new Date(p.value).toLocaleString() : '—'}
-        </Typography>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {p.row.status === 'failed' && onRetry && (
+            <Tooltip title={t('templates.deployments.retry')}>
+              <IconButton size="small" color="primary" onClick={() => onRetry(p.row)}>
+                <i className="ri-restart-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {['failed', 'completed'].includes(p.row.status) && (
+            <Tooltip title={t('common.delete')}>
+              <IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)}>
+                <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       ),
     },
-  ], [t])
+  ], [t, onRetry, handleDelete])
 
   if (!loading && deployments.length === 0) {
     return (

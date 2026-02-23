@@ -47,6 +47,13 @@ export default function TemplatesPage() {
     setSelectedBlueprint(null)
   }, [])
 
+  const handleRetryDeployment = useCallback((deployment: any) => {
+    const image = deployment.imageSlug ? getImageBySlug(deployment.imageSlug) : null
+    setSelectedImage(image || null)
+    setSelectedBlueprint(null)
+    setWizardOpen(true)
+  }, [])
+
   if (!mounted) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
@@ -84,7 +91,7 @@ export default function TemplatesPage() {
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
           {tab === 0 && <ImageCatalogTab onDeploy={handleDeployImage} />}
           {tab === 1 && <BlueprintsTab onDeploy={handleDeployBlueprint} />}
-          {tab === 2 && <DeploymentsTab />}
+          {tab === 2 && <DeploymentsTab onRetry={handleRetryDeployment} />}
         </Box>
       </Card>
 

@@ -94,11 +94,8 @@ export async function POST(req: Request) {
         filename: urlFilename,
         node: body.node,
         storage: body.storage,
+        "verify-certificates": "0",
       })
-      if (image.checksumUrl) {
-        downloadParams.set("checksum-algorithm", "sha256")
-        downloadParams.set("verify-certificates", "1")
-      }
 
       const downloadResult = await pveFetch<any>(
         conn,

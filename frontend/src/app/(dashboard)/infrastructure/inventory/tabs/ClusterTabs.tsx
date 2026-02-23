@@ -79,6 +79,9 @@ export default function ClusterTabs(props: any) {
   const [executingRecId, setExecutingRecId] = useState<string | null>(null)
   const [executingAll, setExecutingAll] = useState(false)
   const [executedRecIds, setExecutedRecIds] = useState<Set<string>>(new Set())
+  const [expandedRecId, setExpandedRecId] = useState<string | null>(null)
+  const [recSeries, setRecSeries] = useState<SeriesPoint[]>([])
+  const [recRrdLoading, setRecRrdLoading] = useState(false)
   const theme = useTheme()
   const toast = useToast()
 
@@ -782,55 +785,97 @@ export default function ClusterTabs(props: any) {
                                       : rec.priority === 'high' || rec.priority === 2 ? 'warning'
                                       : rec.priority === 'medium' || rec.priority === 1 ? 'info' : 'default'
                                     const isExecuting = executingRecId === rec.id
+                                    const isExpanded = expandedRecId === rec.id
                                     return (
-                                      <Box
-                                        key={rec.id}
-                                        sx={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 1.5,
-                                          py: 0.75,
-                                          px: 1.5,
-                                          borderRadius: 1,
-                                          border: '1px solid',
-                                          borderColor: 'divider',
-                                          '&:hover': { borderColor: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
-                                        }}
-                                      >
-                                        <i className="ri-swap-line" style={{ fontSize: 16, opacity: 0.5 }} />
-                                        <Box sx={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => router.push('/automation/drs')}>
-                                          <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8rem' }}>
-                                            {rec.vm_name || `VM ${rec.vmid}`}
+                                      <Box key={rec.id}>
+                                        <Box
+                                          sx={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 1.5,
+                                            py: 0.75,
+                                            px: 1.5,
+                                            borderRadius: 1,
+                                            border: '1px solid',
+                                            borderColor: isExpanded ? 'primary.main' : 'divider',
+                                            cursor: 'pointer',
+                                            '&:hover': { borderColor: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
+                                          }}
+                                          onClick={async () => {
+                                            if (isExpanded) {
+                                              setExpandedRecId(null)
+                                              setRecSeries([])
+                                              return
+                                            }
+                                            setExpandedRecId(rec.id)
+                                            setRecSeries([])
+                                            setRecRrdLoading(true)
+                                            try {
+                                              const guestType = rec.guest_type || 'qemu'
+                                              const data = await fetchRrd(rec.connection_id, `/nodes/${rec.source_node}/${guestType}/${rec.vmid}`, 'hour')
+                                              setRecSeries(buildSeriesFromRrd(data))
+                                            } catch {
+                                              setRecSeries([])
+                                            } finally {
+                                              setRecRrdLoading(false)
+                                            }
+                                          }}
+                                        >
+                                          <i className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-swap-line'} style={{ fontSize: 16, opacity: 0.5 }} />
+                                          <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0, fontSize: '0.8rem' }}>
+                                            {rec.vm_name || `VM ${rec.vmid}`}{' '}
+                                            <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
+                                              ({rec.reason})
+                                            </Typography>
                                           </Typography>
-                                          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
-                                            {rec.reason}
-                                          </Typography>
+                                          <Chip
+                                            size="small"
+                                            label={rec.source_node}
+                                            sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.error.main, 0.1), color: 'error.main', fontWeight: 500 }}
+                                          />
+                                          <Typography variant="caption" sx={{ opacity: 0.4 }}>→</Typography>
+                                          <Chip
+                                            size="small"
+                                            label={rec.target_node}
+                                            sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.success.main, 0.1), color: 'success.main', fontWeight: 500 }}
+                                          />
+                                          <Chip size="small" color={pColor as any} label={(typeof rec.priority === 'number' ? ['low', 'medium', 'high', 'critical'][rec.priority] : rec.priority).toUpperCase()} sx={{ height: 20, fontSize: 10, minWidth: 50 }} />
+                                          <MuiTooltip title={t('inventory.drsExecOne')}>
+                                            <span>
+                                              <IconButton
+                                                size="small"
+                                                color="primary"
+                                                disabled={isExecuting || executingAll || (executingRecId !== null && !isExecuting)}
+                                                onClick={(e) => { e.stopPropagation(); handleExecuteRec(rec.id, rec.vm_name || `VM ${rec.vmid}`) }}
+                                                sx={{ width: 28, height: 28 }}
+                                              >
+                                                {isExecuting ? <CircularProgress size={14} /> : <i className="ri-play-line" style={{ fontSize: 16 }} />}
+                                              </IconButton>
+                                            </span>
+                                          </MuiTooltip>
                                         </Box>
-                                        <Chip
-                                          size="small"
-                                          label={rec.source_node}
-                                          sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.error.main, 0.1), color: 'error.main', fontWeight: 500 }}
-                                        />
-                                        <Typography variant="caption" sx={{ opacity: 0.4 }}>→</Typography>
-                                        <Chip
-                                          size="small"
-                                          label={rec.target_node}
-                                          sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.success.main, 0.1), color: 'success.main', fontWeight: 500 }}
-                                        />
-                                        <Chip size="small" color={pColor as any} label={(typeof rec.priority === 'number' ? ['low', 'medium', 'high', 'critical'][rec.priority] : rec.priority).toUpperCase()} sx={{ height: 20, fontSize: 10, minWidth: 50 }} />
-                                        <MuiTooltip title={t('inventory.drsExecOne')}>
-                                          <span>
-                                            <IconButton
-                                              size="small"
-                                              color="primary"
-                                              disabled={isExecuting || executingAll || (executingRecId !== null && !isExecuting)}
-                                              onClick={(e) => { e.stopPropagation(); handleExecuteRec(rec.id, rec.vm_name || `VM ${rec.vmid}`) }}
-                                              sx={{ width: 28, height: 28 }}
-                                            >
-                                              {isExecuting ? <CircularProgress size={14} /> : <i className="ri-play-line" style={{ fontSize: 16 }} />}
-                                            </IconButton>
-                                          </span>
-                                        </MuiTooltip>
+                                        <Collapse in={isExpanded} timeout="auto">
+                                          <Box sx={{ px: 1.5, py: 1.5 }}>
+                                            {recRrdLoading ? (
+                                              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                                                <CircularProgress size={20} />
+                                              </Box>
+                                            ) : recSeries.length > 0 ? (
+                                              <Grid container spacing={2}>
+                                                <Grid size={{ xs: 6 }}>
+                                                  <AreaPctChart title="CPU" data={recSeries} dataKey="cpuPct" height={140} />
+                                                </Grid>
+                                                <Grid size={{ xs: 6 }}>
+                                                  <AreaPctChart title="RAM" data={recSeries} dataKey="ramPct" height={140} />
+                                                </Grid>
+                                              </Grid>
+                                            ) : (
+                                              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                                No RRD data available
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                        </Collapse>
                                       </Box>
                                     )
                                   })}

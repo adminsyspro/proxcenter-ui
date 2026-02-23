@@ -336,9 +336,11 @@ export default function ConnectionDialog({
           </Alert>
         )}
 
+        {!isPbs && (
+          <>
         <Divider sx={{ my: 3 }} />
 
-        {/* Section: Accès SSH (optionnel) */}
+        {/* Section: Accès SSH (optionnel, PVE only) */}
         <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className="ri-terminal-line" />
           {t('settings.sshAccess')}
@@ -525,6 +527,8 @@ export default function ConnectionDialog({
             )}
           </Box>
         </Collapse>
+          </>
+        )}
 
         <Divider sx={{ my: 3 }} />
 

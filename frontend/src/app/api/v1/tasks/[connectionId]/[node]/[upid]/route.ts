@@ -325,10 +325,13 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   let progress = 0
   let message = 'En cours...'
   let speed = ''
+  let eta = ''
 
   const progressRegex = /(\d+(?:\.\d+)?)\s*%/
   const transferRegex = /transferred\s+([\d.]+)\s*(\w+)\s+of\s+([\d.]+)\s*(\w+)/i
   const speedRegex = /([\d.]+)\s*(\w+)\/s/
+  // wget-style: "  5% 2.22M 4m16s" or "12% 15.3M 1m02s"
+  const wgetProgressRegex = /(\d+)%\s+([\d.]+)([KMG])\s+(\d+[hm]\d+[ms]|\d+[hms])/
 
   for (const entry of logs) {
     const text = entry?.t || ''
@@ -355,13 +358,22 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
       speed = `${speedMatch[1]} ${speedMatch[2]}/s`
     }
 
+    // Parse wget-style speed + ETA (e.g., "5% 2.22M 4m16s")
+    const wgetMatch = text.match(wgetProgressRegex)
+
+    if (wgetMatch) {
+      const unitMap: Record<string, string> = { K: 'KiB/s', M: 'MiB/s', G: 'GiB/s' }
+      speed = `${wgetMatch[2]} ${unitMap[wgetMatch[3]] || wgetMatch[3] + '/s'}`
+      eta = wgetMatch[4]
+    }
+
     if (text.includes('TASK OK')) {
       progress = 100
       message = 'Terminé avec succès'
     }
   }
 
-  return { progress, message, speed, eta: '' }
+  return { progress, message, speed, eta }
 }
 
 export async function GET(

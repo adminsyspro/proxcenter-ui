@@ -7,7 +7,6 @@ import {
   Chip,
   CircularProgress,
   Collapse,
-  IconButton,
   LinearProgress,
   Typography,
 } from '@mui/material'
@@ -20,16 +19,6 @@ interface DeploymentProgressProps {
 }
 
 const STEPS = ['pending', 'downloading', 'creating', 'configuring', 'starting', 'completed'] as const
-
-// Weighted progress per step (for the overall progress bar)
-const STEP_WEIGHTS: Record<string, [number, number]> = {
-  pending:      [0, 0],
-  downloading:  [0, 50],
-  creating:     [50, 80],
-  configuring:  [80, 90],
-  starting:     [90, 100],
-  completed:    [100, 100],
-}
 
 function getLogType(text: string) {
   const t = text.toLowerCase()
@@ -95,7 +84,6 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
           return
         }
 
-        // Continue polling
         setTimeout(poll, 2000)
       } catch {
         if (active) setTimeout(poll, 5000)
@@ -121,39 +109,28 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
 
   const currentStepIndex = STEPS.indexOf(status as any)
 
-  // Calculate weighted overall progress
-  const calcOverallProgress = () => {
-    if (status === 'completed') return 100
-    if (status === 'failed') return 0
+  // Step-based progress (same logic as before, always visible)
+  const stepProgress = status === 'completed'
+    ? 100
+    : status === 'failed'
+      ? 0
+      : Math.max(0, (currentStepIndex / (STEPS.length - 1)) * 100)
 
-    const weights = STEP_WEIGHTS[status]
-    if (!weights) return 0
-    const [stepStart, stepEnd] = weights
-
-    // If we have PVE task progress data for this step, interpolate within the step's range
-    const taskProgress = (isTaskActive && taskData?.progress != null) ? taskData.progress : 0
-    if (isTaskActive && taskProgress > 0) {
-      return stepStart + ((stepEnd - stepStart) * taskProgress) / 100
-    }
-
-    // Otherwise just show the start of the step range
-    return stepStart
-  }
-
-  const overallProgress = calcOverallProgress()
+  // PVE task data (may be null if not available)
   const pveProgress = (isTaskActive && taskData?.progress != null) ? taskData.progress : null
-  const pveSpeed = isTaskActive ? taskData?.speed : null
-  const pveEta = isTaskActive ? taskData?.eta : null
+  const pveSpeed = (isTaskActive && taskData?.speed) ? taskData.speed : null
+  const pveEta = (isTaskActive && taskData?.eta) ? taskData.eta : null
   const pveLogs = isTaskActive ? (taskData?.logs || []) : []
+  const pveMessage = (isTaskActive && taskData?.message) ? taskData.message : null
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 2 }}>
-      {/* Overall progress bar */}
+      {/* Overall progress bar — always step-based */}
       <Box>
         <LinearProgress
           variant={status === 'completed' || status === 'failed' ? 'determinate' : 'buffer'}
-          value={overallProgress}
-          valueBuffer={Math.min(overallProgress + 10, 100)}
+          value={stepProgress}
+          valueBuffer={Math.min(stepProgress + 15, 100)}
           color={status === 'failed' ? 'error' : status === 'completed' ? 'success' : 'primary'}
           sx={{ height: 8, borderRadius: 4 }}
         />
@@ -166,6 +143,7 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
           const isActive = status === step
           const isDone = currentStepIndex > stepIndex || status === 'completed'
           const isFailed = status === 'failed' && currentStepIndex === stepIndex
+          const showPveDetail = isActive && ['downloading', 'creating'].includes(step)
 
           return (
             <Box key={step}>
@@ -220,10 +198,10 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
                 </Box>
               </Box>
 
-              {/* PVE task detail for active step */}
-              {isActive && isTaskActive && (
+              {/* PVE task detail — shown during downloading/creating steps */}
+              {showPveDetail && (
                 <Box sx={{ ml: 5.5, mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {/* Determinate progress bar for PVE task */}
+                  {/* Sub-progress bar: determinate when PVE data available, indeterminate otherwise */}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <LinearProgress
                       variant={pveProgress != null && pveProgress > 0 ? 'determinate' : 'indeterminate'}
@@ -242,6 +220,13 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
                       </Typography>
                     )}
                   </Box>
+
+                  {/* Status message from PVE task */}
+                  {pveMessage && (
+                    <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.7rem' }}>
+                      {pveMessage}
+                    </Typography>
+                  )}
 
                   {/* Speed and ETA badges */}
                   {(pveSpeed || pveEta) && (
@@ -268,94 +253,98 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
                   )}
 
                   {/* Show/Hide logs toggle */}
-                  <Box
-                    onClick={() => setShowLogs(!showLogs)}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      '&:hover': { opacity: 0.8 },
-                    }}
-                  >
-                    <i
-                      className={showLogs ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
-                      style={{ fontSize: 16, opacity: 0.6 }}
-                    />
-                    <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                      {showLogs
-                        ? t('templates.deploy.progress.hideLogs' as any)
-                        : t('templates.deploy.progress.showLogs' as any)}
-                    </Typography>
-                  </Box>
+                  {isTaskActive && (
+                    <>
+                      <Box
+                        onClick={() => setShowLogs(!showLogs)}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          '&:hover': { opacity: 0.8 },
+                        }}
+                      >
+                        <i
+                          className={showLogs ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
+                          style={{ fontSize: 16, opacity: 0.6 }}
+                        />
+                        <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                          {showLogs
+                            ? t('templates.deploy.progress.hideLogs' as any)
+                            : t('templates.deploy.progress.showLogs' as any)}
+                        </Typography>
+                      </Box>
 
-                  {/* Collapsible log viewer */}
-                  <Collapse in={showLogs}>
-                    <Box
-                      ref={logsContainerRef}
-                      onScroll={handleScroll}
-                      sx={{
-                        maxHeight: 200,
-                        overflow: 'auto',
-                        bgcolor: '#0d1117',
-                        borderRadius: 1,
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      {pveLogs.length > 0 ? (
-                        <Box sx={{ p: 1 }}>
-                          {pveLogs.map((log: any, idx: number) => {
-                            const logType = getLogType(log.t || '')
-                            const logColor = getLogColor(logType)
-                            return (
-                              <Box
-                                key={`${log.n}-${idx}`}
-                                sx={{
-                                  display: 'flex',
-                                  py: 0.125,
-                                  '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
-                                }}
-                              >
-                                <Typography
-                                  component="span"
-                                  sx={{
-                                    color: 'grey.600',
-                                    minWidth: 32,
-                                    textAlign: 'right',
-                                    pr: 1,
-                                    userSelect: 'none',
-                                    fontFamily: 'inherit',
-                                    fontSize: 'inherit',
-                                  }}
-                                >
-                                  {log.n}
-                                </Typography>
-                                <Typography
-                                  component="span"
-                                  sx={{
-                                    color: logColor,
-                                    fontFamily: 'inherit',
-                                    fontSize: 'inherit',
-                                    wordBreak: 'break-all',
-                                  }}
-                                >
-                                  {log.t}
-                                </Typography>
-                              </Box>
-                            )
-                          })}
-                          <div ref={logsEndRef} />
+                      {/* Collapsible log viewer */}
+                      <Collapse in={showLogs}>
+                        <Box
+                          ref={logsContainerRef}
+                          onScroll={handleScroll}
+                          sx={{
+                            maxHeight: 200,
+                            overflow: 'auto',
+                            bgcolor: '#0d1117',
+                            borderRadius: 1,
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            lineHeight: 1.6,
+                          }}
+                        >
+                          {pveLogs.length > 0 ? (
+                            <Box sx={{ p: 1 }}>
+                              {pveLogs.map((log: any, idx: number) => {
+                                const logType = getLogType(log.t || '')
+                                const logColor = getLogColor(logType)
+                                return (
+                                  <Box
+                                    key={`${log.n}-${idx}`}
+                                    sx={{
+                                      display: 'flex',
+                                      py: 0.125,
+                                      '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
+                                    }}
+                                  >
+                                    <Typography
+                                      component="span"
+                                      sx={{
+                                        color: 'grey.600',
+                                        minWidth: 32,
+                                        textAlign: 'right',
+                                        pr: 1,
+                                        userSelect: 'none',
+                                        fontFamily: 'inherit',
+                                        fontSize: 'inherit',
+                                      }}
+                                    >
+                                      {log.n}
+                                    </Typography>
+                                    <Typography
+                                      component="span"
+                                      sx={{
+                                        color: logColor,
+                                        fontFamily: 'inherit',
+                                        fontSize: 'inherit',
+                                        wordBreak: 'break-all',
+                                      }}
+                                    >
+                                      {log.t}
+                                    </Typography>
+                                  </Box>
+                                )
+                              })}
+                              <div ref={logsEndRef} />
+                            </Box>
+                          ) : (
+                            <Box sx={{ p: 2, textAlign: 'center', color: 'grey.500', fontSize: 11 }}>
+                              Waiting for logs...
+                            </Box>
+                          )}
                         </Box>
-                      ) : (
-                        <Box sx={{ p: 2, textAlign: 'center', color: 'grey.500', fontSize: 11 }}>
-                          Waiting for logs...
-                        </Box>
-                      )}
-                    </Box>
-                  </Collapse>
+                      </Collapse>
+                    </>
+                  )}
                 </Box>
               )}
             </Box>

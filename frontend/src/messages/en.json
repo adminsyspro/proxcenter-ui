@@ -885,7 +885,16 @@
     "drsImbalance": "Imbalance",
     "drsPendingRecs": "{count, plural, one {# pending recommendation} other {# pending recommendations}}",
     "drsMoreRecs": "+{count} more...",
-    "drsClusterBalanced": "Cluster is balanced — no action needed"
+    "drsClusterBalanced": "Cluster is balanced — no action needed",
+    "drsExecOne": "Execute this migration",
+    "drsExecAll": "Execute all",
+    "drsExecSuccess": "Migration started for {vm}",
+    "drsExecError": "Migration failed: {error}",
+    "drsExecAllSuccess": "{count, plural, one {# migration started} other {# migrations started}}",
+    "drsExecAllPartial": "{success} started, {errors} failed",
+    "drsRecStale": "Recommendation is stale — data has been refreshed",
+    "drsRecExpired": "Recommendation no longer exists",
+    "drsAlreadyOnTarget": "VM is already on the target node"
   },
   "inventoryPage": {
     "newTag": "New tag...",

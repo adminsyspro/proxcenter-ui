@@ -12,6 +12,7 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -60,6 +61,7 @@ import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 import { AddIcon } from '../components/IconWrappers'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import { useToast } from '@/contexts/ToastContext'
 import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 
@@ -73,7 +75,12 @@ export default function ClusterTabs(props: any) {
   const { data: drsSettings } = useDRSSettings(isEnterprise)
   const { data: drsRecommendations, mutate: mutateRecs } = useDRSRecommendations(isEnterprise)
   const [evaluating, setEvaluating] = useState(false)
+  const [recsExpanded, setRecsExpanded] = useState(false)
+  const [executingRecId, setExecutingRecId] = useState<string | null>(null)
+  const [executingAll, setExecutingAll] = useState(false)
+  const [executedRecIds, setExecutedRecIds] = useState<Set<string>>(new Set())
   const theme = useTheme()
+  const toast = useToast()
 
   const {
     allVms,
@@ -173,8 +180,8 @@ export default function ClusterTabs(props: any) {
   const clusterRecs = useMemo(() => {
     if (!drsRecommendations || !Array.isArray(drsRecommendations)) return []
     const connId = selection?.type === 'cluster' ? selection.id : ''
-    return drsRecommendations.filter((r: any) => r.connection_id === connId && r.status === 'pending')
-  }, [drsRecommendations, selection])
+    return drsRecommendations.filter((r: any) => r.connection_id === connId && r.status === 'pending' && !executedRecIds.has(r.id))
+  }, [drsRecommendations, selection, executedRecIds])
 
   const handleEvaluate = useCallback(async () => {
     setEvaluating(true)
@@ -186,6 +193,65 @@ export default function ClusterTabs(props: any) {
       setEvaluating(false)
     }
   }, [mutateRecs])
+
+  const handleExecuteRec = useCallback(async (id: string, vmName: string) => {
+    setExecutingRecId(id)
+    try {
+      const res = await fetch(`/api/v1/orchestrator/drs/recommendations/${id}/execute`, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Action failed')
+      }
+      setExecutedRecIds(prev => new Set(prev).add(id))
+      toast.success(t('inventory.drsExecSuccess', { vm: vmName }))
+      setTimeout(() => mutateRecs(), 2000)
+    } catch (e: any) {
+      const msg = e.message || ''
+      if (msg.includes('has moved') || msg.includes('stale')) {
+        toast.warning(t('inventory.drsRecStale'))
+        mutateRecs()
+      } else if (msg.includes('not found')) {
+        setExecutedRecIds(prev => new Set(prev).add(id))
+        toast.warning(t('inventory.drsRecExpired'))
+        mutateRecs()
+      } else if (msg.includes('already on target')) {
+        setExecutedRecIds(prev => new Set(prev).add(id))
+        toast.info(t('inventory.drsAlreadyOnTarget'))
+        mutateRecs()
+      } else {
+        toast.error(t('inventory.drsExecError', { error: msg }))
+      }
+    } finally {
+      setExecutingRecId(null)
+    }
+  }, [mutateRecs, toast, t])
+
+  const handleExecuteAll = useCallback(async () => {
+    setExecutingAll(true)
+    const recsToExecute = [...clusterRecs]
+    let success = 0
+    let errors = 0
+    for (const rec of recsToExecute) {
+      try {
+        const res = await fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/execute`, { method: 'POST' })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || 'Action failed')
+        }
+        setExecutedRecIds(prev => new Set(prev).add(rec.id))
+        success++
+      } catch {
+        errors++
+      }
+    }
+    if (errors === 0) {
+      toast.success(t('inventory.drsExecAllSuccess', { count: success }))
+    } else {
+      toast.warning(t('inventory.drsExecAllPartial', { success, errors }))
+    }
+    setTimeout(() => mutateRecs(), 2000)
+    setExecutingAll(false)
+  }, [clusterRecs, mutateRecs, toast, t])
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />
@@ -687,61 +753,94 @@ export default function ClusterTabs(props: any) {
                           {clusterRecs.length > 0 && (
                             <>
                               <Divider sx={{ my: 1.5 }} />
-                              <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
-                                {t('inventory.drsPendingRecs', { count: clusterRecs.length })}
-                              </Typography>
-                              <Stack spacing={0.75}>
-                                {clusterRecs.slice(0, 5).map((rec: any) => {
-                                  const pColor = rec.priority === 'critical' || rec.priority === 3 ? 'error'
-                                    : rec.priority === 'high' || rec.priority === 2 ? 'warning'
-                                    : rec.priority === 'medium' || rec.priority === 1 ? 'info' : 'default'
-                                  return (
-                                    <Box
-                                      key={rec.id}
-                                      sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 1.5,
-                                        py: 0.75,
-                                        px: 1.5,
-                                        borderRadius: 1,
-                                        border: '1px solid',
-                                        borderColor: 'divider',
-                                        cursor: 'pointer',
-                                        '&:hover': { borderColor: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
-                                      }}
-                                      onClick={() => router.push('/automation/drs')}
-                                    >
-                                      <i className="ri-swap-line" style={{ fontSize: 16, opacity: 0.5 }} />
-                                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                                        <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8rem' }}>
-                                          {rec.vm_name || `VM ${rec.vmid}`}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
-                                          {rec.reason}
-                                        </Typography>
-                                      </Box>
-                                      <Chip
-                                        size="small"
-                                        label={rec.source_node}
-                                        sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.error.main, 0.1), color: 'error.main', fontWeight: 500 }}
-                                      />
-                                      <Typography variant="caption" sx={{ opacity: 0.4 }}>→</Typography>
-                                      <Chip
-                                        size="small"
-                                        label={rec.target_node}
-                                        sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.success.main, 0.1), color: 'success.main', fontWeight: 500 }}
-                                      />
-                                      <Chip size="small" color={pColor as any} label={(typeof rec.priority === 'number' ? ['low', 'medium', 'high', 'critical'][rec.priority] : rec.priority).toUpperCase()} sx={{ height: 20, fontSize: 10, minWidth: 50 }} />
-                                    </Box>
-                                  )
-                                })}
-                                {clusterRecs.length > 5 && (
-                                  <Typography variant="caption" color="text.secondary" sx={{ pl: 1 }}>
-                                    {t('inventory.drsMoreRecs', { count: clusterRecs.length - 5 })}
+                              <Box
+                                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => setRecsExpanded(prev => !prev)}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <i
+                                    className={recsExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
+                                    style={{ fontSize: 18, opacity: 0.6 }}
+                                  />
+                                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                    {t('inventory.drsPendingRecs', { count: clusterRecs.length })}
                                   </Typography>
+                                </Box>
+                                {recsExpanded && (
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    color="primary"
+                                    disabled={executingAll || executingRecId !== null}
+                                    startIcon={executingAll ? <CircularProgress size={14} /> : <i className="ri-play-circle-line" style={{ fontSize: 14 }} />}
+                                    onClick={(e) => { e.stopPropagation(); handleExecuteAll() }}
+                                    sx={{ textTransform: 'none', fontSize: '0.7rem', height: 26, px: 1.5 }}
+                                  >
+                                    {t('inventory.drsExecAll')}
+                                  </Button>
                                 )}
-                              </Stack>
+                              </Box>
+                              <Collapse in={recsExpanded} timeout="auto">
+                                <Stack spacing={0.75} sx={{ mt: 1 }}>
+                                  {clusterRecs.map((rec: any) => {
+                                    const pColor = rec.priority === 'critical' || rec.priority === 3 ? 'error'
+                                      : rec.priority === 'high' || rec.priority === 2 ? 'warning'
+                                      : rec.priority === 'medium' || rec.priority === 1 ? 'info' : 'default'
+                                    const isExecuting = executingRecId === rec.id
+                                    return (
+                                      <Box
+                                        key={rec.id}
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 1.5,
+                                          py: 0.75,
+                                          px: 1.5,
+                                          borderRadius: 1,
+                                          border: '1px solid',
+                                          borderColor: 'divider',
+                                          '&:hover': { borderColor: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
+                                        }}
+                                      >
+                                        <i className="ri-swap-line" style={{ fontSize: 16, opacity: 0.5 }} />
+                                        <Box sx={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => router.push('/automation/drs')}>
+                                          <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8rem' }}>
+                                            {rec.vm_name || `VM ${rec.vmid}`}
+                                          </Typography>
+                                          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.2 }}>
+                                            {rec.reason}
+                                          </Typography>
+                                        </Box>
+                                        <Chip
+                                          size="small"
+                                          label={rec.source_node}
+                                          sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.error.main, 0.1), color: 'error.main', fontWeight: 500 }}
+                                        />
+                                        <Typography variant="caption" sx={{ opacity: 0.4 }}>→</Typography>
+                                        <Chip
+                                          size="small"
+                                          label={rec.target_node}
+                                          sx={{ height: 20, fontSize: 10, bgcolor: (t) => alpha(t.palette.success.main, 0.1), color: 'success.main', fontWeight: 500 }}
+                                        />
+                                        <Chip size="small" color={pColor as any} label={(typeof rec.priority === 'number' ? ['low', 'medium', 'high', 'critical'][rec.priority] : rec.priority).toUpperCase()} sx={{ height: 20, fontSize: 10, minWidth: 50 }} />
+                                        <MuiTooltip title={t('inventory.drsExecOne')}>
+                                          <span>
+                                            <IconButton
+                                              size="small"
+                                              color="primary"
+                                              disabled={isExecuting || executingAll || (executingRecId !== null && !isExecuting)}
+                                              onClick={(e) => { e.stopPropagation(); handleExecuteRec(rec.id, rec.vm_name || `VM ${rec.vmid}`) }}
+                                              sx={{ width: 28, height: 28 }}
+                                            >
+                                              {isExecuting ? <CircularProgress size={14} /> : <i className="ri-play-line" style={{ fontSize: 16 }} />}
+                                            </IconButton>
+                                          </span>
+                                        </MuiTooltip>
+                                      </Box>
+                                    )
+                                  })}
+                                </Stack>
+                              </Collapse>
                             </>
                           )}
                           {clusterRecs.length === 0 && drsHealth.score >= 80 && (

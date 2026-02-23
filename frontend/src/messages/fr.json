@@ -890,7 +890,16 @@
     "drsImbalance": "Déséquilibre",
     "drsPendingRecs": "{count, plural, one {# recommandation en attente} other {# recommandations en attente}}",
     "drsMoreRecs": "+{count} de plus...",
-    "drsClusterBalanced": "Le cluster est équilibré — aucune action requise"
+    "drsClusterBalanced": "Le cluster est équilibré — aucune action requise",
+    "drsExecOne": "Exécuter cette migration",
+    "drsExecAll": "Tout exécuter",
+    "drsExecSuccess": "Migration lancée pour {vm}",
+    "drsExecError": "Échec de la migration : {error}",
+    "drsExecAllSuccess": "{count, plural, one {# migration lancée} other {# migrations lancées}}",
+    "drsExecAllPartial": "{success} lancée(s), {errors} en erreur",
+    "drsRecStale": "Recommandation obsolète — les données ont été rafraîchies",
+    "drsRecExpired": "La recommandation n'existe plus",
+    "drsAlreadyOnTarget": "La VM est déjà sur le nœud cible"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",

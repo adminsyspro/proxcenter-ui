@@ -349,16 +349,6 @@ export default function ConnectionDialog({
           <Typography variant="body2">
             {t('settings.sshInfo')}
           </Typography>
-          <Box sx={{ mt: 1 }}>
-            <Typography variant="caption" color="text.secondary">
-              {t('settings.sshFeatures')}:
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-              <Chip label="Rolling Upgrade" size="small" icon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />} />
-              <Chip label="Node Shell" size="small" icon={<i className="ri-terminal-box-line" style={{ fontSize: 14 }} />} />
-              <Chip label="SMBIOS Config" size="small" icon={<i className="ri-settings-3-line" style={{ fontSize: 14 }} />} />
-            </Box>
-          </Box>
         </Alert>
 
         <FormControlLabel

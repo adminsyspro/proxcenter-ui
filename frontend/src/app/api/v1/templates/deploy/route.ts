@@ -89,46 +89,43 @@ export async function POST(req: Request) {
 
     // Execute deployment steps sequentially
     try {
-      // Step 1: Download image to storage via PVE download-url API
+      // Step 1: Download image to storage (skip if already present)
       await updateDeployment(deployment.id, "downloading")
 
       const urlFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
 
-      const downloadParams = new URLSearchParams({
-        url: image.downloadUrl,
-        content: "iso",
-        filename: urlFilename,
-        node: body.node,
-        storage: body.storage,
-        "verify-certificates": "0",
-      })
-
-      const downloadResult = await pveFetch<any>(
+      // Check if image already exists on PVE storage before downloading
+      const storageContents = await pveFetch<any[]>(
         conn,
-        `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/download-url`,
-        { method: "POST", body: downloadParams }
-      ).catch(async (err: any) => {
-        // Image might already exist — PVE can return different error messages
-        const errMsg = String(err?.message || err)
-        if (errMsg.includes("already exists") || errMsg.includes("refusing to override") || errMsg.includes("existing file")) {
-          return null // Skip download, image already present
-        }
-        throw err
-      })
+        `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/content?content=iso`
+      ).catch(() => [])
 
-      // If download returned a task UPID, wait for it to complete
-      if (downloadResult) {
-        const upid = typeof downloadResult === "string" ? downloadResult : downloadResult
-        await updateDeployment(deployment.id, "downloading", { taskUpid: String(upid) })
+      const imageAlreadyExists = (storageContents || []).some(
+        (item: any) => item.volid?.endsWith(`/${urlFilename}`) || item.volid?.endsWith(`:iso/${urlFilename}`)
+      )
 
-        // Poll task status until done — the task itself may fail if image already exists
-        await waitForTask(conn, body.node, String(upid)).catch((err: any) => {
-          const errMsg = String(err?.message || err)
-          if (errMsg.includes("refusing to override") || errMsg.includes("existing file") || errMsg.includes("already exists")) {
-            return // Skip — image already present on storage
-          }
-          throw err
+      if (!imageAlreadyExists) {
+        const downloadParams = new URLSearchParams({
+          url: image.downloadUrl,
+          content: "iso",
+          filename: urlFilename,
+          node: body.node,
+          storage: body.storage,
+          "verify-certificates": "0",
         })
+
+        const downloadResult = await pveFetch<any>(
+          conn,
+          `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/download-url`,
+          { method: "POST", body: downloadParams }
+        )
+
+        // If download returned a task UPID, wait for it to complete
+        if (downloadResult) {
+          const upid = typeof downloadResult === "string" ? downloadResult : downloadResult
+          await updateDeployment(deployment.id, "downloading", { taskUpid: String(upid) })
+          await waitForTask(conn, body.node, String(upid))
+        }
       }
 
       // Step 2: Create VM with imported disk

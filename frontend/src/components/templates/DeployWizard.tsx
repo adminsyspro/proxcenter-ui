@@ -29,6 +29,7 @@ import {
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import DeploymentProgress from './DeploymentProgress'
+import VendorLogo from './VendorLogo'
 
 interface DeployWizardProps {
   open: boolean
@@ -308,11 +309,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box
             sx={{
-              width: 56, height: 56, borderRadius: 2, bgcolor: 'action.hover',
+              width: 56, height: 56, borderRadius: 2,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
-            <i className={image.logoIcon} style={{ fontSize: 28 }} />
+            <VendorLogo vendor={image.vendor} size={48} />
           </Box>
           <Box>
             <Typography variant="h6">{image.name}</Typography>

@@ -14,6 +14,7 @@ import {
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { VENDORS } from '@/lib/templates/cloudImages'
 import ImageCard from './ImageCard'
+import VendorLogo from './VendorLogo'
 import EmptyState from '@/components/EmptyState'
 
 interface ImageCatalogTabProps {
@@ -96,8 +97,8 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
             <Typography variant="caption">{t('common.all')}</Typography>
           </ToggleButton>
           {VENDORS.map(v => (
-            <ToggleButton key={v.id} value={v.id}>
-              <i className={v.icon} style={{ fontSize: 16, marginRight: 4 }} />
+            <ToggleButton key={v.id} value={v.id} sx={{ gap: 0.5 }}>
+              <VendorLogo vendor={v.id} size={18} />
               <Typography variant="caption">{v.name}</Typography>
             </ToggleButton>
           ))}

@@ -4,6 +4,7 @@ import { Box, Card, CardContent, Chip, Typography, Button, Tooltip } from '@mui/
 import { useTranslations } from 'next-intl'
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
+import VendorLogo from './VendorLogo'
 
 interface ImageCardProps {
   image: CloudImage
@@ -35,13 +36,13 @@ export default function ImageCard({ image, onDeploy }: ImageCardProps) {
               width: 40,
               height: 40,
               borderRadius: 2,
-              bgcolor: 'action.hover',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
-            <i className={image.logoIcon} style={{ fontSize: 22, opacity: 0.8 }} />
+            <VendorLogo vendor={image.vendor} size={36} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.3 }} noWrap>

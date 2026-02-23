@@ -16,15 +16,11 @@ import {
   CircularProgress,
   Alert,
   Button,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
 } from '@mui/material'
 
-import { VERSION, VERSION_NAME, GIT_SHA, GITHUB_URL, CHANGELOG } from '@/config/version'
+import { VERSION_NAME, GIT_SHA, GITHUB_URL } from '@/config/version'
 
 interface VersionInfo {
-  currentVersion: string
   currentSha: string | null
   latestSha: string | null
   updateAvailable: boolean
@@ -61,7 +57,6 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
     } catch (e) {
       console.error('Failed to check version:', e)
       setVersionInfo({
-        currentVersion: VERSION,
         currentSha: GIT_SHA || null,
         latestSha: null,
         updateAvailable: false,
@@ -76,10 +71,6 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
       setLoading(false)
     }
   }
-
-  const changelogEntries = Object.entries(CHANGELOG).sort((a, b) =>
-    b[0].localeCompare(a[0], undefined, { numeric: true })
-  )
 
   return (
     <Dialog
@@ -138,10 +129,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
               {t('about.currentVersion')}
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                v{VERSION}
-              </Typography>
-              {GIT_SHA && (
+              {GIT_SHA ? (
                 <Chip
                   label={GIT_SHA.substring(0, 7)}
                   size="small"
@@ -151,8 +139,12 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
                   target="_blank"
                   rel="noopener noreferrer"
                   clickable
-                  sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.7rem', fontWeight: 600 }}
+                  sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', fontWeight: 700, height: 28 }}
                 />
+              ) : (
+                <Typography variant="body2" sx={{ fontWeight: 600, opacity: 0.5 }}>
+                  dev
+                </Typography>
               )}
               {loading && <CircularProgress size={16} />}
               {!loading && versionInfo?.updateAvailable && (
@@ -243,63 +235,6 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
             )}
           </Alert>
         )}
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* Changelog */}
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-          {t('about.changelog')}
-        </Typography>
-
-        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-          {changelogEntries.map(([version, info], idx) => (
-            <Accordion
-              key={version}
-              defaultExpanded={idx === 0}
-              disableGutters
-              sx={{
-                boxShadow: 'none',
-                '&:before': { display: 'none' },
-                bgcolor: 'transparent'
-              }}
-            >
-              <AccordionSummary
-                expandIcon={<i className="ri-arrow-down-s-line" />}
-                sx={{
-                  minHeight: 40,
-                  px: 1,
-                  '& .MuiAccordionSummary-content': { my: 0.5 }
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Chip
-                    label={`v${version}`}
-                    size="small"
-                    color={idx === 0 ? 'primary' : 'default'}
-                    sx={{ fontWeight: 600, fontSize: '0.7rem' }}
-                  />
-                  <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                    {info.date}
-                  </Typography>
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails sx={{ pt: 0, px: 1 }}>
-                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-                  {info.changes.map((change, i) => (
-                    <Typography
-                      key={i}
-                      component="li"
-                      variant="body2"
-                      sx={{ opacity: 0.8, mb: 0.5 }}
-                    >
-                      {change}
-                    </Typography>
-                  ))}
-                </Box>
-              </AccordionDetails>
-            </Accordion>
-          ))}
-        </Box>
 
         <Divider sx={{ my: 2 }} />
 

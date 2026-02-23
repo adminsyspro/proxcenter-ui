@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { VERSION, GIT_SHA, GITHUB_REPO } from '@/config/version'
+import { GIT_SHA, GITHUB_REPO } from '@/config/version'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -12,7 +12,6 @@ const HEADERS = {
 }
 
 interface VersionCheckResponse {
-  currentVersion: string
   currentSha: string | null
   latestSha: string | null
   updateAvailable: boolean
@@ -26,7 +25,6 @@ interface VersionCheckResponse {
 
 export async function GET() {
   const base: VersionCheckResponse = {
-    currentVersion: VERSION,
     currentSha: GIT_SHA || null,
     latestSha: null,
     updateAvailable: false,

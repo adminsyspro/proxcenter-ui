@@ -52,7 +52,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useActiveAlerts, useDRSRecommendations, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
 
 // Version config
-import { VERSION } from '@/config/version'
+import { GIT_SHA } from '@/config/version'
 
 // Fonction pour obtenir les initiales
 const getInitials = (name, email) => {
@@ -1245,9 +1245,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {t('about.title')}
             <Chip
-              label={`v${VERSION}`}
+              label={GIT_SHA ? GIT_SHA.substring(0, 7) : 'dev'}
               size='small'
-              sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }}
+              sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }}
               color={updateInfo?.updateAvailable ? 'warning' : 'default'}
             />
           </Box>

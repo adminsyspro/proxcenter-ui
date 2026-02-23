@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Box, Card, CardContent, Typography, Chip, Divider } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { GIT_SHA, GITHUB_URL } from '@/config/version'
 
 export default function AboutPage() {
   const { setPageInfo } = usePageTitle()
@@ -24,7 +25,17 @@ return () => setPageInfo('', '', '')
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
             <Typography variant='h4' sx={{ fontWeight: 800 }}>ProxCenter</Typography>
-            <Chip label='v1.0.0' color='primary' size='small' />
+            <Chip
+              label={GIT_SHA ? GIT_SHA.substring(0, 7) : 'dev'}
+              color='primary'
+              size='small'
+              component={GIT_SHA ? 'a' : 'span'}
+              href={GIT_SHA ? `${GITHUB_URL}/commit/${GIT_SHA}` : undefined}
+              target='_blank'
+              rel='noopener noreferrer'
+              clickable={!!GIT_SHA}
+              sx={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}
+            />
           </Box>
           <Typography variant='body1' sx={{ mb: 2, opacity: 0.8 }}>
             {t('aboutPage.description')}

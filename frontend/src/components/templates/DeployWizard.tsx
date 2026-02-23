@@ -274,7 +274,16 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
         body: JSON.stringify(body),
       })
 
-      const data = await res.json()
+      const text = await res.text()
+      let data: any
+      try {
+        data = JSON.parse(text)
+      } catch {
+        console.warn('[DeployWizard] Non-JSON response from /api/v1/templates/deploy →', text.slice(0, 200))
+        setDeployError('Server returned an invalid response')
+        setDeploying(false)
+        return
+      }
       if (data.error) {
         // Validation / permission errors from the sync part
         setDeployError(data.error)

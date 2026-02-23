@@ -64,8 +64,17 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
     let active = true
     const poll = async () => {
       try {
-        const res = await fetch(`/api/v1/templates/deployments/${deploymentId}`)
-        const data = await res.json()
+        const url = `/api/v1/templates/deployments/${deploymentId}`
+        const res = await fetch(url)
+        const text = await res.text()
+        let data: any
+        try {
+          data = JSON.parse(text)
+        } catch {
+          console.warn('[DeploymentProgress] Non-JSON response from', url, '→', text.slice(0, 200))
+          if (active) setTimeout(poll, 5000)
+          return
+        }
         const deployment = data.data
         if (!active || !deployment) return
 

@@ -108,9 +108,9 @@ export async function POST(req: Request) {
         `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/download-url`,
         { method: "POST", body: downloadParams }
       ).catch(async (err: any) => {
-        // Image might already exist — check if it's a duplicate error
+        // Image might already exist — PVE can return different error messages
         const errMsg = String(err?.message || err)
-        if (errMsg.includes("already exists")) {
+        if (errMsg.includes("already exists") || errMsg.includes("refusing to override") || errMsg.includes("existing file")) {
           return null // Skip download, image already present
         }
         throw err
@@ -121,8 +121,14 @@ export async function POST(req: Request) {
         const upid = typeof downloadResult === "string" ? downloadResult : downloadResult
         await updateDeployment(deployment.id, "downloading", { taskUpid: String(upid) })
 
-        // Poll task status until done
-        await waitForTask(conn, body.node, String(upid))
+        // Poll task status until done — the task itself may fail if image already exists
+        await waitForTask(conn, body.node, String(upid)).catch((err: any) => {
+          const errMsg = String(err?.message || err)
+          if (errMsg.includes("refusing to override") || errMsg.includes("existing file") || errMsg.includes("already exists")) {
+            return // Skip — image already present on storage
+          }
+          throw err
+        })
       }
 
       // Step 2: Create VM with imported disk

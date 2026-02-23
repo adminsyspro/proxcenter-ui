@@ -187,12 +187,12 @@ export async function POST(req: Request) {
 
         if (body.cloudInit) {
           const ci = body.cloudInit
-          // Build body manually — PVE expects ipconfig values with raw "=" signs,
-          // and sshkeys to be URL-encoded once (PVE decodes internally).
-          // URLSearchParams double-encodes "=" in values which breaks ipconfig parsing.
+          // Build body manually — PVE expects ipconfig values with raw "=" signs.
+          // sshkeys must be double-encoded: PVE form-decodes the body, then
+          // URL-decodes the sshkeys value internally.
           const ciParts: string[] = []
           if (ci.ciuser) ciParts.push(`ciuser=${encodeURIComponent(ci.ciuser)}`)
-          if (ci.sshKeys) ciParts.push(`sshkeys=${encodeURIComponent(ci.sshKeys)}`)
+          if (ci.sshKeys) ciParts.push(`sshkeys=${encodeURIComponent(encodeURIComponent(ci.sshKeys))}`)
           if (ci.ipconfig0) {
             // Sanitize: trim spaces around commas (PVE rejects " ip" vs "ip")
             const sanitized = ci.ipconfig0.split(',').map((s: string) => s.trim()).filter(Boolean).join(',')

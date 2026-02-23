@@ -94,20 +94,20 @@ export async function POST(req: Request) {
 
       const urlFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
 
-      // Check if image already exists on PVE storage before downloading
+      // Check if image already exists on PVE storage (import content type)
       const storageContents = await pveFetch<any[]>(
         conn,
-        `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/content?content=iso`
+        `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/content?content=import`
       ).catch(() => [])
 
       const imageAlreadyExists = (storageContents || []).some(
-        (item: any) => item.volid?.endsWith(`/${urlFilename}`) || item.volid?.endsWith(`:iso/${urlFilename}`)
+        (item: any) => item.volid?.endsWith(`/${urlFilename}`) || item.volid?.endsWith(`:import/${urlFilename}`)
       )
 
       if (!imageAlreadyExists) {
         const downloadParams = new URLSearchParams({
           url: image.downloadUrl,
-          content: "iso",
+          content: "import",
           filename: urlFilename,
           node: body.node,
           storage: body.storage,
@@ -128,13 +128,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // Get storage filesystem path for import-from (PVE needs absolute path, not iso: volume ID)
-      const storageConfig = await pveFetch<any>(
-        conn,
-        `/storage/${encodeURIComponent(body.storage)}`
-      )
-      const storagePath = storageConfig?.path || "/var/lib/vz"
-      const imageAbsPath = `${storagePath}/template/iso/${urlFilename}`
+      const importVolume = `${body.storage}:import/${urlFilename}`
 
       // Step 2: Create VM with imported disk
       await updateDeployment(deployment.id, "creating")
@@ -150,7 +144,7 @@ export async function POST(req: Request) {
         memory: String(hw.memory),
         cpu: hw.cpu,
         scsihw: hw.scsihw,
-        scsi0: `${body.storage}:0,import-from=${imageAbsPath}`,
+        scsi0: `${body.storage}:0,import-from=${importVolume}`,
         net0: `${hw.networkModel},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`,
         ide2: `${body.storage}:cloudinit`,
         boot: "order=scsi0",

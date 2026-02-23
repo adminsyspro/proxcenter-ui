@@ -92,7 +92,9 @@ export async function POST(req: Request) {
       // Step 1: Download image to storage (skip if already present)
       await updateDeployment(deployment.id, "downloading")
 
-      const urlFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
+      const rawFilename = image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`
+      // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
+      const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
 
       // Ensure storage has 'import' content type enabled (required for import-from)
       const storageConfig = await pveFetch<any>(

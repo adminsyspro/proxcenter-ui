@@ -688,24 +688,19 @@ export default function ClusterTabs(props: any) {
                                 {drsHealth.score} / 100 — {drsHealth.score >= 80 ? t('drsPage.balanced') : drsHealth.score >= 50 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')}
                               </Typography>
                             </Box>
-                            <Stack direction="row" spacing={1}>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={handleEvaluate}
-                                disabled={evaluating}
-                                startIcon={evaluating ? <CircularProgress size={14} /> : <i className="ri-refresh-line" style={{ fontSize: 14 }} />}
-                              >
-                                {t('inventory.drsEvaluate')}
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => router.push('/automation/drs')}
-                                startIcon={<i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
-                              >
-                                {t('inventory.drsGoToDrs')}
-                              </Button>
+                            <Stack direction="row" spacing={0.5}>
+                              <MuiTooltip title={t('inventory.drsEvaluate')}>
+                                <span>
+                                  <IconButton size="small" onClick={handleEvaluate} disabled={evaluating} sx={{ width: 32, height: 32 }}>
+                                    {evaluating ? <CircularProgress size={16} /> : <i className="ri-refresh-line" style={{ fontSize: 18 }} />}
+                                  </IconButton>
+                                </span>
+                              </MuiTooltip>
+                              <MuiTooltip title={t('inventory.drsGoToDrs')}>
+                                <IconButton size="small" onClick={() => router.push('/automation/drs')} sx={{ width: 32, height: 32 }}>
+                                  <i className="ri-settings-3-line" style={{ fontSize: 18 }} />
+                                </IconButton>
+                              </MuiTooltip>
                             </Stack>
                           </Box>
 

@@ -1267,6 +1267,11 @@ return vms
     )
   }, [allVms, search])
 
+  // VMs sans templates (pour affichage dans les modes vms, hosts, pools, tags)
+  const displayVms = useMemo(() => {
+    return filteredVms.filter(vm => !vm.template)
+  }, [filteredVms])
+
   // Notifier le parent quand les VMs filtrées changent
   useEffect(() => {
     if (onAllVmsChange) {
@@ -1294,11 +1299,11 @@ return vms
     }
   }, [filteredVms, onAllVmsChange])
 
-  // Liste des hôtes uniques avec leurs VMs (filtrées)
+  // Liste des hôtes uniques avec leurs VMs (filtrées, sans templates)
   const hostsList = useMemo(() => {
-    const hostsMap = new Map<string, typeof filteredVms>()
-    
-    filteredVms.forEach(vm => {
+    const hostsMap = new Map<string, typeof displayVms>()
+
+    displayVms.forEach(vm => {
       const key = `${vm.connId}:${vm.node}`
 
       if (!hostsMap.has(key)) {
@@ -1307,7 +1312,7 @@ return vms
 
       hostsMap.get(key)!.push(vm)
     })
-    
+
     return Array.from(hostsMap.entries())
       .map(([key, vms]) => ({
         key,
@@ -1316,13 +1321,13 @@ return vms
         vms
       }))
       .sort((a, b) => a.node.localeCompare(b.node))
-  }, [filteredVms])
+  }, [displayVms])
 
-  // Liste des pools uniques avec leurs VMs (filtrées)
+  // Liste des pools uniques avec leurs VMs (filtrées, sans templates)
   const poolsList = useMemo(() => {
-    const poolsMap = new Map<string, typeof filteredVms>()
-    
-    filteredVms.forEach(vm => {
+    const poolsMap = new Map<string, typeof displayVms>()
+
+    displayVms.forEach(vm => {
       const poolName = vm.pool || `(${t('common.none')})`
 
       if (!poolsMap.has(poolName)) {
@@ -1331,23 +1336,23 @@ return vms
 
       poolsMap.get(poolName)!.push(vm)
     })
-    
+
     return Array.from(poolsMap.entries())
       .map(([pool, vms]) => ({ pool, vms }))
       .sort((a, b) => {
         // "(None)" at the end
         if (a.pool === `(${t('common.none')})`) return 1
         if (b.pool === `(${t('common.none')})`) return -1
-        
+
 return a.pool.localeCompare(b.pool)
       })
-  }, [filteredVms])
+  }, [displayVms])
 
-  // Liste des tags uniques avec leurs VMs (filtrées)
+  // Liste des tags uniques avec leurs VMs (filtrées, sans templates)
   const tagsList = useMemo(() => {
-    const tagsMap = new Map<string, typeof filteredVms>()
-    
-    filteredVms.forEach(vm => {
+    const tagsMap = new Map<string, typeof displayVms>()
+
+    displayVms.forEach(vm => {
       if (vm.tags) {
         // Tags peuvent être séparés par ; ou ,
         const vmTags = vm.tags.split(/[;,]/).map(t => t.trim()).filter(Boolean)
@@ -1370,17 +1375,17 @@ return a.pool.localeCompare(b.pool)
         tagsMap.get(noTag)!.push(vm)
       }
     })
-    
+
     return Array.from(tagsMap.entries())
       .map(([tag, vms]) => ({ tag, vms }))
       .sort((a, b) => {
         // "(None)" at the end
         if (a.tag === `(${t('common.none')})`) return 1
         if (b.tag === `(${t('common.none')})`) return -1
-        
+
 return a.tag.localeCompare(b.tag)
       })
-  }, [filteredVms])
+  }, [displayVms])
 
   // Compter les templates
   const templatesCount = useMemo(() => {
@@ -1534,7 +1539,7 @@ return favorites.has(vmKey)
             </Tooltip>
           </ToggleButton>
           <ToggleButton value="vms">
-            <Tooltip title={`${t('inventory.vms')} (${allVms.length})`}>
+            <Tooltip title={`${t('inventory.vms')} (${displayVms.length})`}>
               <i className="ri-computer-line" style={{ fontSize: 16 }} />
             </Tooltip>
           </ToggleButton>
@@ -1566,7 +1571,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, search, viewMode, allVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed]
+    [loading, search, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed]
   )
 
   return (
@@ -1588,14 +1593,14 @@ return favorites.has(vmKey)
       {/* Mode VMs : liste à plat de toutes les VMs */}
       {viewMode === 'vms' ? (
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          {filteredVms.length === 0 ? (
+          {displayVms.length === 0 ? (
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant='body2' sx={{ opacity: 0.6 }}>
                 {search.trim() ? `${t('common.noResults')} "${search}"` : t('common.noResults')}
               </Typography>
             </Box>
           ) : (
-            filteredVms.map(vm => {
+            displayVms.map(vm => {
               const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
               const isFav = favorites.has(vmKey)
               const isMigrating = isVmMigrating(vm.connId, vm.vmid)

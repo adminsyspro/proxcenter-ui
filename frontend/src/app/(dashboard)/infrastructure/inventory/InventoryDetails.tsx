@@ -411,6 +411,9 @@ return next
     }
   }, [propFavorites, loadFavorites])
 
+  // VMs sans templates (pour affichage dans les modes vms, tree, hosts, pools, tags)
+  const displayVms = useMemo(() => allVms.filter(vm => !vm.template), [allVms])
+
   // Quand une création est en attente, poll pour voir si la VM apparaît
   useEffect(() => {
     if (!creationPending) return
@@ -4078,7 +4081,7 @@ return vm?.isCluster ?? false
       {/* Quand sélection root et mode tree: afficher vue hiérarchique collapsable */}
       {selection?.type === 'root' && viewMode === 'tree' ? (
         <RootInventoryView
-          allVms={allVms}
+          allVms={displayVms}
           hosts={hosts}
           pbsServers={pbsServers?.map(pbs => ({
             connId: pbs.connId,
@@ -4103,14 +4106,14 @@ return vm?.isCluster ?? false
           onBulkAction={handleHostBulkAction}
         />
       ) : !selection || selection?.type === 'root' ? (
-        viewMode === 'vms' && allVms.length > 0 ? (
+        viewMode === 'vms' && displayVms.length > 0 ? (
           <Box sx={{ height: '100%' }}>
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 0, height: '100%', border: 'none' }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ 
-                  px: 2, 
-                  py: 1.5, 
-                  borderBottom: '1px solid', 
+                <Box sx={{
+                  px: 2,
+                  py: 1.5,
+                  borderBottom: '1px solid',
                   borderColor: 'divider',
                   display: 'flex',
                   alignItems: 'center',
@@ -4119,7 +4122,7 @@ return vm?.isCluster ?? false
                 }}>
                   <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <i className="ri-computer-line" style={{ fontSize: 20, opacity: 0.7 }} />
-                    {t('inventory.vms')} ({allVms.length})
+                    {t('inventory.vms')} ({displayVms.length})
                   </Typography>
                   <Stack direction="row" spacing={1}>
                     <Button
@@ -4144,7 +4147,7 @@ return vm?.isCluster ?? false
                 </Box>
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <VmsTable
-                    vms={allVms.map(vm => ({
+                    vms={displayVms.map(vm => ({
                       id: `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`,
                       connId: vm.connId,
                       node: vm.node,
@@ -4200,7 +4203,7 @@ return vm?.isCluster ?? false
               sublabel: h.connName,
               vms: h.vms
             }))}
-            allVms={allVms}
+            allVms={displayVms}
             onVmClick={handleVmClick}
             onVmAction={handleTableVmAction}
             onMigrate={handleTableMigrate}
@@ -4219,7 +4222,7 @@ return vm?.isCluster ?? false
               label: p.pool,
               vms: p.vms
             }))}
-            allVms={allVms}
+            allVms={displayVms}
             onVmClick={handleVmClick}
             onVmAction={handleTableVmAction}
             onMigrate={handleTableMigrate}
@@ -4239,7 +4242,7 @@ return vm?.isCluster ?? false
               color: tagColor(t.tag),
               vms: t.vms
             }))}
-            allVms={allVms}
+            allVms={displayVms}
             onVmClick={handleVmClick}
             onVmAction={handleTableVmAction}
             onMigrate={handleTableMigrate}

@@ -62,6 +62,12 @@ export async function POST(req: Request) {
         imageSlug: body.imageSlug,
         blueprintId: body.blueprintId || null,
         blueprintName: body.blueprintName || null,
+        config: JSON.stringify({
+          storage: body.storage,
+          vmName: body.vmName,
+          hardware: body.hardware,
+          cloudInit: body.cloudInit,
+        }),
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),

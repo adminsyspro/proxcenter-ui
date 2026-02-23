@@ -119,6 +119,7 @@ try {
       "vmid"            INTEGER NOT NULL,
       "vm_name"         TEXT,
       "image_slug"      TEXT,
+      "config"          TEXT,
       "status"          TEXT NOT NULL DEFAULT 'pending',
       "current_step"    TEXT,
       "error"           TEXT,
@@ -138,22 +139,30 @@ try {
   // Step 2: Additive column migrations
   // ============================================
 
-  const cols = new Set(db.pragma('table_info(Connection)').map(c => c.name))
-
   const migrations = [
     // Geo fields (2026-02-14)
     { table: 'Connection', column: 'latitude',      type: 'REAL' },
     { table: 'Connection', column: 'longitude',     type: 'REAL' },
     { table: 'Connection', column: 'locationLabel', type: 'TEXT' },
+    // Deployment config for retry (2026-02-23)
+    { table: 'deployments', column: 'config',       type: 'TEXT' },
   ]
 
   let applied = 0
+  const colsCache = {}
 
   for (const m of migrations) {
-    if (!cols.has(m.column)) {
-      db.exec(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type}`)
-      console.log(`  + Added column ${m.table}.${m.column} (${m.type})`)
-      applied++
+    if (!colsCache[m.table]) {
+      try {
+        colsCache[m.table] = new Set(db.pragma(`table_info(${m.table})`).map(c => c.name))
+      } catch { colsCache[m.table] = new Set() }
+    }
+    if (!colsCache[m.table].has(m.column)) {
+      try {
+        db.exec(`ALTER TABLE "${m.table}" ADD COLUMN "${m.column}" ${m.type}`)
+        console.log(`  + Added column ${m.table}.${m.column} (${m.type})`)
+        applied++
+      } catch { /* column may already exist */ }
     }
   }
 

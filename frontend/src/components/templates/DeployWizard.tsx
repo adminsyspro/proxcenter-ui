@@ -158,6 +158,15 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
           setSearchdomain(ci.searchdomain || '')
         }
       } catch { /* ignore */ }
+
+      // Prefill target from retry
+      if (prefillBlueprint._retryFrom) {
+        const rf = prefillBlueprint._retryFrom
+        if (rf.connectionId) setConnectionId(rf.connectionId)
+        if (rf.node) setNode(rf.node)
+        if (rf.storage) setStorage(rf.storage)
+        if (rf.vmName) setVmName(rf.vmName)
+      }
     }
   }, [open, image, prefillBlueprint])
 

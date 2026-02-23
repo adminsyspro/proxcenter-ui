@@ -131,6 +131,7 @@ model Deployment {
   vmid          Int
   vmName        String?   @map("vm_name")
   imageSlug     String?   @map("image_slug")
+  config        String?   // JSON: full deploy config for retry { storage, hardware, cloudInit }
   status        String    @default("pending") // pending|downloading|creating|configuring|starting|completed|failed
   currentStep   String?   @map("current_step")
   error         String?

@@ -50,7 +50,24 @@ export default function TemplatesPage() {
   const handleRetryDeployment = useCallback((deployment: any) => {
     const image = deployment.imageSlug ? getImageBySlug(deployment.imageSlug) : null
     setSelectedImage(image || null)
-    setSelectedBlueprint(null)
+
+    // Build a prefill object from the deployment's saved config
+    let config: any = null
+    try {
+      config = deployment.config ? JSON.parse(deployment.config) : null
+    } catch { /* ignore */ }
+
+    setSelectedBlueprint({
+      imageSlug: deployment.imageSlug,
+      hardware: config?.hardware ? JSON.stringify(config.hardware) : null,
+      cloudInit: config?.cloudInit ? JSON.stringify(config.cloudInit) : null,
+      _retryFrom: {
+        connectionId: deployment.connectionId,
+        node: deployment.node,
+        storage: config?.storage,
+        vmName: config?.vmName,
+      },
+    })
     setWizardOpen(true)
   }, [])
 

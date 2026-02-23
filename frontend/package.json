@@ -68,7 +68,7 @@
     "@iconify/tools": "4.2.0",
     "@iconify/utils": "3.1.0",
     "@tailwindcss/postcss": "4.1.17",
-    "@types/node": "^22.15.2",
+    "@types/node": "^25.3.0",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
     "@types/ssh2": "^1.15.5",

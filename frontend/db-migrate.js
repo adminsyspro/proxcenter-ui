@@ -95,6 +95,41 @@ try {
     CREATE INDEX IF NOT EXISTS "alerts_severity_idx"     ON "alerts" ("severity");
     CREATE INDEX IF NOT EXISTS "alerts_source_idx"       ON "alerts" ("source");
     CREATE INDEX IF NOT EXISTS "alerts_last_seen_at_idx" ON "alerts" ("last_seen_at");
+
+    CREATE TABLE IF NOT EXISTS "blueprints" (
+      "id"          TEXT NOT NULL PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "image_slug"  TEXT NOT NULL,
+      "hardware"    TEXT NOT NULL,
+      "cloud_init"  TEXT,
+      "tags"        TEXT,
+      "is_public"   INTEGER NOT NULL DEFAULT 1,
+      "created_by"  TEXT,
+      "created_at"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at"  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS "deployments" (
+      "id"              TEXT NOT NULL PRIMARY KEY,
+      "blueprint_id"    TEXT,
+      "blueprint_name"  TEXT,
+      "connection_id"   TEXT NOT NULL,
+      "node"            TEXT NOT NULL,
+      "vmid"            INTEGER NOT NULL,
+      "vm_name"         TEXT,
+      "image_slug"      TEXT,
+      "status"          TEXT NOT NULL DEFAULT 'pending',
+      "current_step"    TEXT,
+      "error"           TEXT,
+      "task_upid"       TEXT,
+      "started_at"      DATETIME,
+      "completed_at"    DATETIME,
+      "created_at"      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at"      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS "deployments_status_idx"        ON "deployments" ("status");
+    CREATE INDEX IF NOT EXISTS "deployments_connection_id_idx" ON "deployments" ("connection_id");
   `)
 
   console.log('  Tables OK')

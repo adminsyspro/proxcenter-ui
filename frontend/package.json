@@ -67,7 +67,7 @@
     "@iconify/json": "2.2.408",
     "@iconify/tools": "4.2.0",
     "@iconify/utils": "3.1.0",
-    "@tailwindcss/postcss": "4.1.17",
+    "@tailwindcss/postcss": "4.2.1",
     "@types/node": "^22.15.2",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",

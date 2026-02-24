@@ -44,6 +44,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.TASK_CENTER,
     Features.NOTIFICATIONS,
     Features.CVE_SCANNER,
+    Features.COMPLIANCE,
   ],
   enterprise_plus: [
     Features.DRS,

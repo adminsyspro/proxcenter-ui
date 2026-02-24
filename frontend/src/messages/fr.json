@@ -168,7 +168,8 @@
     "about": "À propos",
     "templates": "Templates",
     "reports": "Rapports",
-    "topology": "Topologie"
+    "topology": "Topologie",
+    "compliance": "Conformité"
   },
   "navbar": {
     "language": "Langue",
@@ -4232,5 +4233,63 @@
     "host": "Hôte",
     "rank": "Rang",
     "community": "Communauté"
+  },
+  "compliance": {
+    "title": "Conformité",
+    "hardening": "Durcissement",
+    "policies": "Politiques",
+    "selectConnection": "Sélectionner une connexion",
+    "runScan": "Lancer le scan",
+    "hardeningScore": "Score de durcissement",
+    "totalChecks": "Total vérifications",
+    "passed": "Réussi",
+    "failed": "Échoué",
+    "criticalIssues": "Problèmes critiques",
+    "checkName": "Vérification",
+    "category": "Catégorie",
+    "severity": "Sévérité",
+    "entity": "Entité",
+    "points": "Points",
+    "lastScan": "Dernier scan",
+    "clickScan": "Sélectionnez une connexion et cliquez sur Lancer le scan pour démarrer l'audit de durcissement.",
+    "categories": {
+      "cluster": "Cluster",
+      "node": "Nœud",
+      "access": "Accès",
+      "vm": "VM"
+    },
+    "severities": {
+      "critical": "Critique",
+      "high": "Élevée",
+      "medium": "Moyenne",
+      "low": "Faible"
+    },
+    "statuses": {
+      "pass": "OK",
+      "fail": "Échec",
+      "warning": "Attention",
+      "skip": "Ignoré"
+    },
+    "passwordPolicy": "Politique de mot de passe",
+    "minLength": "Longueur minimale",
+    "requireUppercase": "Exiger des majuscules",
+    "requireLowercase": "Exiger des minuscules",
+    "requireNumbers": "Exiger des chiffres",
+    "requireSpecial": "Exiger des caractères spéciaux",
+    "sessionPolicy": "Politique de session",
+    "sessionTimeout": "Délai d'expiration (minutes)",
+    "sessionTimeoutHelper": "0 = pas d'expiration",
+    "maxConcurrentSessions": "Sessions simultanées max",
+    "maxConcurrentHelper": "0 = illimité",
+    "loginPolicy": "Politique de connexion",
+    "maxFailedAttempts": "Tentatives échouées max",
+    "maxFailedHelper": "0 = illimité",
+    "lockoutDuration": "Durée de verrouillage (minutes)",
+    "lockoutHelper": "Durée après le nombre max de tentatives",
+    "auditPolicy": "Politique d'audit",
+    "retentionDays": "Rétention (jours)",
+    "retentionHelper": "Nombre de jours de conservation des logs",
+    "autoCleanup": "Nettoyage automatique",
+    "policiesSaved": "Politiques de sécurité enregistrées avec succès"
   }
 }

@@ -195,6 +195,33 @@ export function getDb() {
   }
 
   // ========================================
+  // Table security_policies (singleton, like ldap_config)
+  // ========================================
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS security_policies (
+        id TEXT PRIMARY KEY DEFAULT 'default',
+        password_min_length INTEGER NOT NULL DEFAULT 8,
+        password_require_uppercase INTEGER NOT NULL DEFAULT 0,
+        password_require_lowercase INTEGER NOT NULL DEFAULT 0,
+        password_require_numbers INTEGER NOT NULL DEFAULT 0,
+        password_require_special INTEGER NOT NULL DEFAULT 0,
+        session_timeout_minutes INTEGER NOT NULL DEFAULT 43200,
+        session_max_concurrent INTEGER NOT NULL DEFAULT 0,
+        login_max_failed_attempts INTEGER NOT NULL DEFAULT 0,
+        login_lockout_duration_minutes INTEGER NOT NULL DEFAULT 15,
+        audit_retention_days INTEGER NOT NULL DEFAULT 90,
+        audit_auto_cleanup INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        updated_by TEXT
+      );
+      INSERT OR IGNORE INTO security_policies (id, updated_at) VALUES ('default', datetime('now'));
+    `)
+  } catch (e) {
+    // Migration error is non-critical
+  }
+
+  // ========================================
   // Tables RBAC
   // ========================================
   
@@ -338,6 +365,7 @@ export function getDb() {
     { id: 'admin.rbac', name: 'admin.rbac', category: 'admin', description: 'Gérer les rôles et permissions', is_dangerous: 1 },
     { id: 'admin.settings', name: 'admin.settings', category: 'admin', description: 'Modifier les paramètres', is_dangerous: 1 },
     { id: 'admin.audit', name: 'admin.audit', category: 'admin', description: 'Consulter les logs d\'audit' },
+    { id: 'admin.compliance', name: 'admin.compliance', category: 'admin', description: 'Gérer la conformité et les politiques de sécurité', is_dangerous: 1 },
   ]
 
   // Utiliser INSERT OR IGNORE pour ajouter les permissions manquantes sans erreur

@@ -127,7 +127,7 @@ export const menuData = (t = (key) => key) => [
   {
     isSection: true,
     label: t('navigation.securityAccess'),
-    permissions: ['admin.users', 'admin.rbac', 'admin.audit'], // Section admin
+    permissions: ['admin.users', 'admin.rbac', 'admin.audit', 'admin.compliance'], // Section admin
     children: [
       {
         label: t('navigation.users'),
@@ -147,6 +147,13 @@ export const menuData = (t = (key) => key) => [
         icon: 'ri-file-search-line',
         href: '/security/audit',
         permissions: ['admin.audit']
+      },
+      {
+        label: t('navigation.compliance'),
+        icon: 'ri-shield-check-line',
+        href: '/security/compliance',
+        permissions: ['admin.compliance'],
+        requiredFeature: 'compliance'
       }
     ]
   },

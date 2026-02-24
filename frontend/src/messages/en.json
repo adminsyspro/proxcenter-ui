@@ -168,7 +168,8 @@
     "about": "About",
     "templates": "Templates",
     "reports": "Reports",
-    "topology": "Topology"
+    "topology": "Topology",
+    "compliance": "Compliance"
   },
   "navbar": {
     "language": "Language",
@@ -4226,5 +4227,63 @@
     "host": "Host",
     "rank": "Rank",
     "community": "Community"
+  },
+  "compliance": {
+    "title": "Compliance",
+    "hardening": "Hardening",
+    "policies": "Policies",
+    "selectConnection": "Select connection",
+    "runScan": "Run Scan",
+    "hardeningScore": "Hardening Score",
+    "totalChecks": "Total Checks",
+    "passed": "Passed",
+    "failed": "Failed",
+    "criticalIssues": "Critical Issues",
+    "checkName": "Check",
+    "category": "Category",
+    "severity": "Severity",
+    "entity": "Entity",
+    "points": "Points",
+    "lastScan": "Last scan",
+    "clickScan": "Select a connection and click Run Scan to start the hardening audit.",
+    "categories": {
+      "cluster": "Cluster",
+      "node": "Node",
+      "access": "Access",
+      "vm": "VM"
+    },
+    "severities": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "statuses": {
+      "pass": "Pass",
+      "fail": "Fail",
+      "warning": "Warning",
+      "skip": "Skip"
+    },
+    "passwordPolicy": "Password Policy",
+    "minLength": "Minimum length",
+    "requireUppercase": "Require uppercase letters",
+    "requireLowercase": "Require lowercase letters",
+    "requireNumbers": "Require numbers",
+    "requireSpecial": "Require special characters",
+    "sessionPolicy": "Session Policy",
+    "sessionTimeout": "Session timeout (minutes)",
+    "sessionTimeoutHelper": "0 = no timeout",
+    "maxConcurrentSessions": "Max concurrent sessions",
+    "maxConcurrentHelper": "0 = unlimited",
+    "loginPolicy": "Login Policy",
+    "maxFailedAttempts": "Max failed attempts",
+    "maxFailedHelper": "0 = unlimited",
+    "lockoutDuration": "Lockout duration (minutes)",
+    "lockoutHelper": "Duration after max failed attempts",
+    "auditPolicy": "Audit Policy",
+    "retentionDays": "Retention (days)",
+    "retentionHelper": "Number of days to keep audit logs",
+    "autoCleanup": "Automatic cleanup",
+    "policiesSaved": "Security policies saved successfully"
   }
 }

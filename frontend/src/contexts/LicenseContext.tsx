@@ -20,6 +20,7 @@ export const Features = {
   TASK_CENTER: 'task_center',
   NOTIFICATIONS: 'notifications',
   CVE_SCANNER: 'cve_scanner',
+  COMPLIANCE: 'compliance',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]
@@ -61,6 +62,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.TASK_CENTER,
     Features.NOTIFICATIONS,
     Features.CVE_SCANNER,
+    Features.COMPLIANCE,
   ],
 }
 

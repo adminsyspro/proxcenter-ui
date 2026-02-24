@@ -279,6 +279,7 @@ export const PERMISSIONS = {
   ADMIN_RBAC: "admin.rbac",
   ADMIN_SETTINGS: "admin.settings",
   ADMIN_AUDIT: "admin.audit",
+  ADMIN_COMPLIANCE: "admin.compliance",
 } as const
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS]

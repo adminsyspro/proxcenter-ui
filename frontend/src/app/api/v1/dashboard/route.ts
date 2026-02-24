@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 
+import { getServerSession } from "next-auth"
+
 import { prisma } from "@/lib/db/prisma"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { generateFingerprint } from "@/lib/alerts/fingerprint"
+import { authOptions } from "@/lib/auth/config"
+import { filterVmsByPermission, filterNodesByPermission } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -101,6 +105,14 @@ async function syncAlertsToDatabase(alerts: any[]) {
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
+    const userId = session.user.id
+
     // Récupérer toutes les connexions (PVE et PBS) en une seule requête
     const allConnections = await prisma.connection.findMany({
       orderBy: { createdAt: "desc" },
@@ -255,8 +267,7 @@ return null
     // ============================================
     const validPve = pveResults.filter((c): c is NonNullable<typeof c> => c !== null)
 
-    let totalClusters = 0, totalNodes = 0, onlineNodes = 0
-    let totalCpuCores = 0, totalCpuUsed = 0, totalMemUsed = 0, totalMemMax = 0, totalStorageUsed = 0, totalStorageMax = 0
+    let totalClusters = 0
     const allVms: any[] = [], allLxcs: any[] = [], allNodes: any[] = [], clusterInfos: any[] = []
     let cephGlobal: any = null
 
@@ -264,24 +275,17 @@ return null
       if (data.isCluster) totalClusters++
 
       for (const node of data.nodes) {
-        totalNodes++
-        if (node.status === 'online') onlineNodes++
-        totalCpuCores += node.cpuCores
-        totalCpuUsed += node.cpuUsage * node.cpuCores
-        totalMemUsed += node.memUsed
-        totalMemMax += node.memMax
-        totalStorageUsed += node.storageUsed
-        totalStorageMax += node.storageMax
-
         allNodes.push({
+          connId: data.conn.id, node: node.node,
           name: node.node, connection: data.conn.name || data.conn.id, connectionId: data.conn.id,
           status: node.status, cpuPct: round1(node.cpuUsage * 100),
           memPct: node.memMax > 0 ? round1((node.memUsed / node.memMax) * 100) : 0, uptime: node.uptime,
+          _cpuCores: node.cpuCores, _cpuUsage: node.cpuUsage, _memUsed: node.memUsed, _memMax: node.memMax, _storageUsed: node.storageUsed, _storageMax: node.storageMax,
         })
       }
 
-      for (const vm of data.vms) allVms.push({ ...vm, connection: data.conn.name, connectionId: data.conn.id })
-      for (const lxc of data.lxcs) allLxcs.push({ ...lxc, connection: data.conn.name, connectionId: data.conn.id })
+      for (const vm of data.vms) allVms.push({ ...vm, connId: data.conn.id, connection: data.conn.name, connectionId: data.conn.id })
+      for (const lxc of data.lxcs) allLxcs.push({ ...lxc, connId: data.conn.id, connection: data.conn.name, connectionId: data.conn.id })
 
       clusterInfos.push({
         id: data.conn.id, name: data.clusterName, isCluster: data.isCluster, nodes: data.nodes.length,
@@ -333,29 +337,6 @@ return null
         pbsRecentErrors.push({ ...err, server: data.conn.name })
       }
     }
-
-    // ============================================
-    // CALCULS GLOBAUX
-    // ============================================
-    const globalCpuPct = totalCpuCores > 0 ? round1((totalCpuUsed / totalCpuCores) * 100) : 0
-    const globalRamPct = totalMemMax > 0 ? round1((totalMemUsed / totalMemMax) * 100) : 0
-    const globalStoragePct = totalStorageMax > 0 ? round1((totalStorageUsed / totalStorageMax) * 100) : 0
-
-    const vmsTemplates = allVms.filter(v => v.template === 1).length
-    const vmsRunning = allVms.filter(v => v.status === "running" && v.template !== 1).length
-    const vmsStopped = allVms.filter(v => v.status === "stopped" && v.template !== 1).length
-    const lxcRunning = allLxcs.filter(l => l.status === "running").length
-    const lxcStopped = allLxcs.filter(l => l.status === "stopped").length
-
-    // Top consumers
-    const runningVms = allVms.filter(v => v.status === "running")
-    const topCpu = runningVms.map(v => ({ name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: round1(Number(v.cpu || 0) * 100) })).sort((a, b) => b.value - a.value).slice(0, 10)
-
-    const topRam = runningVms.map(v => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0);
-
- 
-
-return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a, b) => b.value - a.value).slice(0, 10)
 
     // ============================================
     // ALERTES (PVE + PBS) avec contexte complet
@@ -526,22 +507,64 @@ return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max 
     // ============================================
     syncAlertsToDatabase(alerts).catch(err => console.error('[dashboard] Alert sync error:', err))
 
+    // ============================================
+    // RBAC FILTERING — scope data to user's permissions
+    // ============================================
+    const filteredVms = filterVmsByPermission(userId, allVms)
+    const filteredLxcs = filterVmsByPermission(userId, allLxcs)
+    const filteredNodes = filterNodesByPermission(userId, allNodes)
+
+    // Recompute node-level aggregates from filtered nodes
+    const fOnlineNodes = filteredNodes.filter((n: any) => n.status === 'online').length
+    let fCpuCores = 0, fCpuUsed = 0, fMemUsed = 0, fMemMax = 0, fStorageUsed = 0, fStorageMax = 0
+
+    for (const n of filteredNodes as any[]) {
+      fCpuCores += n._cpuCores || 0
+      fCpuUsed += (n._cpuUsage || 0) * (n._cpuCores || 0)
+      fMemUsed += n._memUsed || 0
+      fMemMax += n._memMax || 0
+      fStorageUsed += n._storageUsed || 0
+      fStorageMax += n._storageMax || 0
+    }
+
+    const fCpuPct = fCpuCores > 0 ? round1((fCpuUsed / fCpuCores) * 100) : 0
+    const fRamPct = fMemMax > 0 ? round1((fMemUsed / fMemMax) * 100) : 0
+    const fStoragePct = fStorageMax > 0 ? round1((fStorageUsed / fStorageMax) * 100) : 0
+
+    // Recompute VM/LXC stats from filtered lists
+    const fVmsTemplates = filteredVms.filter((v: any) => v.template === 1).length
+    const fVmsRunning = filteredVms.filter((v: any) => v.status === 'running' && v.template !== 1).length
+    const fVmsStopped = filteredVms.filter((v: any) => v.status === 'stopped' && v.template !== 1).length
+    const fLxcRunning = filteredLxcs.filter((l: any) => l.status === 'running').length
+    const fLxcStopped = filteredLxcs.filter((l: any) => l.status === 'stopped').length
+
+    // Recompute top consumers from filtered VMs
+    const fRunningVms = filteredVms.filter((v: any) => v.status === 'running')
+    const fTopCpu = fRunningVms.map((v: any) => ({ name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: round1(Number(v.cpu || 0) * 100) })).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
+    const fTopRam = fRunningVms.map((v: any) => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0); return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
+
+    // Filter alerts to only include visible resources
+    const visibleNodeNames = new Set(filteredNodes.map((n: any) => n.name))
+    const filteredAlerts = alerts.filter((a: any) => {
+      if (a.entityType === 'node') return visibleNodeNames.has(a.entityId)
+      return filteredNodes.length > 0
+    })
+
     return NextResponse.json({
       data: {
         summary: {
           clusters: totalClusters, standalones: pveConnections.length - totalClusters,
-          nodes: totalNodes, nodesOnline: onlineNodes, nodesOffline: totalNodes - onlineNodes,
-          vmsRunning, vmsTotal: allVms.length - vmsTemplates, lxcRunning, lxcTotal: allLxcs.length,
-          cpuPct: globalCpuPct, ramPct: globalRamPct,
+          nodes: filteredNodes.length, nodesOnline: fOnlineNodes, nodesOffline: filteredNodes.length - fOnlineNodes,
+          vmsRunning: fVmsRunning, vmsTotal: filteredVms.length - fVmsTemplates, lxcRunning: fLxcRunning, lxcTotal: filteredLxcs.length,
+          cpuPct: fCpuPct, ramPct: fRamPct,
         },
         clusters: clusterInfos,
-        nodes: allNodes,
+        nodes: filteredNodes,
         guests: {
-          vms: { total: allVms.length - vmsTemplates, running: vmsRunning, stopped: vmsStopped, templates: vmsTemplates },
-          lxc: { total: allLxcs.length, running: lxcRunning, stopped: lxcStopped },
+          vms: { total: filteredVms.length - fVmsTemplates, running: fVmsRunning, stopped: fVmsStopped, templates: fVmsTemplates },
+          lxc: { total: filteredLxcs.length, running: fLxcRunning, stopped: fLxcStopped },
         },
-        // Full VM list for waffle chart widget
-        vmList: allVms.map(vm => ({
+        vmList: filteredVms.map((vm: any) => ({
           id: `${vm.connectionId}-${vm.node}-${vm.vmid}`,
           connId: vm.connectionId,
           connName: vm.connection,
@@ -555,7 +578,7 @@ return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max 
           maxmem: vm.maxmem,
           template: vm.template === 1,
         })),
-        lxcList: allLxcs.map(lxc => ({
+        lxcList: filteredLxcs.map((lxc: any) => ({
           id: `${lxc.connectionId}-${lxc.node}-${lxc.vmid}`,
           connId: lxc.connectionId,
           connName: lxc.connection,
@@ -570,13 +593,11 @@ return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max 
           template: lxc.template === 1,
         })),
         resources: {
-          cpuCores: totalCpuCores, cpuPct: globalCpuPct,
-          memUsed: totalMemUsed, memMax: totalMemMax, memUsedFormatted: formatBytes(totalMemUsed), memMaxFormatted: formatBytes(totalMemMax), ramPct: globalRamPct,
-          storageUsed: totalStorageUsed, storageMax: totalStorageMax, storageUsedFormatted: formatBytes(totalStorageUsed), storageMaxFormatted: formatBytes(totalStorageMax), storagePct: globalStoragePct,
+          cpuCores: fCpuCores, cpuPct: fCpuPct,
+          memUsed: fMemUsed, memMax: fMemMax, memUsedFormatted: formatBytes(fMemUsed), memMaxFormatted: formatBytes(fMemMax), ramPct: fRamPct,
+          storageUsed: fStorageUsed, storageMax: fStorageMax, storageUsedFormatted: formatBytes(fStorageUsed), storageMaxFormatted: formatBytes(fStorageMax), storagePct: fStoragePct,
         },
         ceph: cephGlobal,
-
-        // NOUVELLES DONNÉES PBS
         pbs: {
           servers: pbsConnections.length,
           datastores: pbsTotalDatastores,
@@ -590,10 +611,10 @@ return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max 
           serverDetails: pbsServers,
           recentErrors: pbsRecentErrors.slice(0, 10),
         },
-        alerts: alerts.slice(0, 20),
-        alertsSummary: { crit: alerts.filter(a => a.severity === 'crit').length, warn: alerts.filter(a => a.severity === 'warn').length, info: alerts.filter(a => a.severity === 'info').length },
-        topCpu,
-        topRam,
+        alerts: filteredAlerts.slice(0, 20),
+        alertsSummary: { crit: filteredAlerts.filter((a: any) => a.severity === 'crit').length, warn: filteredAlerts.filter((a: any) => a.severity === 'warn').length, info: filteredAlerts.filter((a: any) => a.severity === 'info').length },
+        topCpu: fTopCpu,
+        topRam: fTopRam,
         lastUpdated: new Date().toISOString(),
       }
     })

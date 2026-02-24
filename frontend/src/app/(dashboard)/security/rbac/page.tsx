@@ -773,13 +773,8 @@ return groupedAssignments.filter(a =>
     )
   }, [groupedAssignments, filter])
 
-  // Filtrer les utilisateurs qui n'ont pas encore de rôle assigné
-  const availableUsers = useMemo(() => {
-    const assignedUserIds = new Set(assignments.map((a: any) => a.user.id))
-
-    
-return users.filter((u: any) => !assignedUserIds.has(u.id))
-  }, [users, assignments])
+  // All users are available for assignment (a user can have multiple roles)
+  const availableUsers = users
 
   // Supprimer un groupe entier (toutes les assignations du groupe)
   const handleDeleteGroup = async () => {
@@ -920,13 +915,10 @@ return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <TextField size='small' placeholder={t('common.search')} value={filter} onChange={e => setFilter(e.target.value)} InputProps={{ startAdornment: <i className='ri-search-line' style={{ marginRight: 8, opacity: 0.5 }} /> }} sx={{ width: 250 }} />
-        <Button variant='contained' size='small' startIcon={<i className='ri-user-add-line' />} onClick={() => setDialogOpen(true)} disabled={availableUsers.length === 0}>
-          {availableUsers.length === 0 ? (t('common.all')) : (t('common.add'))}
+        <Button variant='contained' size='small' startIcon={<i className='ri-user-add-line' />} onClick={() => setDialogOpen(true)} disabled={users.length === 0}>
+          {t('common.add')}
         </Button>
       </Box>
-      {availableUsers.length === 0 && assignments.length > 0 && (
-        <Alert severity='info'>{t('common.noData')}</Alert>
-      )}
       <Box sx={{ flex: 1, minHeight: 300 }}>
         <DataGrid 
           rows={filtered} 

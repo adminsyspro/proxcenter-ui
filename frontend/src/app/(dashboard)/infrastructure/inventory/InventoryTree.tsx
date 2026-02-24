@@ -264,6 +264,7 @@ type Props = {
   refreshLoading?: boolean  // loading pendant le refresh
   onCollapse?: () => void  // callback pour collapse/expand le panneau
   isCollapsed?: boolean  // état collapsed du panneau
+  allowedViewModes?: Set<ViewMode>  // RBAC-filtered view modes (all if not provided)
 }
 
 type Connection = {
@@ -458,7 +459,7 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed }: Props) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes }: Props) {
   const t = useTranslations()
   const theme = useTheme()
   const { trackTask } = useTaskTracker()
@@ -1533,45 +1534,59 @@ return favorites.has(vmKey)
             }
           }}
         >
-          <ToggleButton value="tree">
-            <Tooltip title={t('navigation.inventory')}>
-              <i className="ri-node-tree" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="vms">
-            <Tooltip title={`${t('inventory.vms')} (${displayVms.length})`}>
-              <i className="ri-computer-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="hosts">
-            <Tooltip title={`${t('inventory.nodes')} (${hostsList.length})`}>
-              <i className="ri-server-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="pools">
-            <Tooltip title={`${t('storage.pools')} (${poolsList.length})`}>
-              <i className="ri-folder-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="tags">
-            <Tooltip title={`Tags (${tagsList.length})`}>
-              <i className="ri-price-tag-3-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="favorites">
-            <Tooltip title={`(${favoritesList.length})`}>
-              <i className={favoritesList.length > 0 ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 16, color: favoritesList.length > 0 ? '#ffc107' : undefined }} />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="templates">
-            <Tooltip title={`${t('navigation.templates')} (${templatesCount})`}>
-              <i className="ri-file-copy-line" style={{ fontSize: 16 }} />
-            </Tooltip>
-          </ToggleButton>
+          {(!allowedViewModes || allowedViewModes.has('tree')) && (
+            <ToggleButton value="tree">
+              <Tooltip title={t('navigation.inventory')}>
+                <i className="ri-node-tree" style={{ fontSize: 16 }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
+          {(!allowedViewModes || allowedViewModes.has('vms')) && (
+            <ToggleButton value="vms">
+              <Tooltip title={`${t('inventory.vms')} (${displayVms.length})`}>
+                <i className="ri-computer-line" style={{ fontSize: 16 }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
+          {(!allowedViewModes || allowedViewModes.has('hosts')) && (
+            <ToggleButton value="hosts">
+              <Tooltip title={`${t('inventory.nodes')} (${hostsList.length})`}>
+                <i className="ri-server-line" style={{ fontSize: 16 }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
+          {(!allowedViewModes || allowedViewModes.has('pools')) && (
+            <ToggleButton value="pools">
+              <Tooltip title={`${t('storage.pools')} (${poolsList.length})`}>
+                <i className="ri-folder-line" style={{ fontSize: 16 }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
+          {(!allowedViewModes || allowedViewModes.has('tags')) && (
+            <ToggleButton value="tags">
+              <Tooltip title={`Tags (${tagsList.length})`}>
+                <i className="ri-price-tag-3-line" style={{ fontSize: 16 }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
+          {(!allowedViewModes || allowedViewModes.has('favorites')) && (
+            <ToggleButton value="favorites">
+              <Tooltip title={`(${favoritesList.length})`}>
+                <i className={favoritesList.length > 0 ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 16, color: favoritesList.length > 0 ? '#ffc107' : undefined }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
+          {(!allowedViewModes || allowedViewModes.has('templates')) && (
+            <ToggleButton value="templates">
+              <Tooltip title={`${t('navigation.templates')} (${templatesCount})`}>
+                <i className="ri-file-copy-line" style={{ fontSize: 16 }} />
+              </Tooltip>
+            </ToggleButton>
+          )}
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, search, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed]
+    [loading, search, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes]
   )
 
   return (

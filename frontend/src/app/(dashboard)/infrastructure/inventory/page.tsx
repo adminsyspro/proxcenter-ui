@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useRBACScopeProfile } from '@/hooks/useRBACScopeProfile'
 
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
@@ -44,6 +45,10 @@ export default function InventoryPage() {
   const [selection, setSelection] = useState<InventorySelection | null>({ type: 'root', id: 'root' })
   const [refreshTree, setRefreshTree] = useState<(() => void) | null>(null)
 
+  // RBAC scope profile — determines default view & allowed view modes
+  const { defaultViewMode, allowedViewModes, loading: rbacLoading } = useRBACScopeProfile()
+  const rbacDefaultApplied = useRef(false)
+
   // Mode de vue actuel et listes de données
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hosts, setHosts] = useState<HostItem[]>([])
@@ -64,6 +69,17 @@ export default function InventoryPage() {
   // Données brutes des VMs (depuis InventoryTree) et données enrichies (IP, snapshots, uptime)
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
   const [enrichedData, setEnrichedData] = useState<Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }>>({})
+
+  // Apply RBAC-aware default view mode (once, before deep-link takes over)
+  useEffect(() => {
+    if (rbacLoading || rbacDefaultApplied.current) return
+    rbacDefaultApplied.current = true
+    setViewMode(defaultViewMode)
+
+    if (defaultViewMode === 'tree') {
+      setSelection({ type: 'root', id: 'root' })
+    }
+  }, [rbacLoading, defaultViewMode])
 
   // Deep-link: auto-select VM from URL search params (?vmid=123&connId=...&node=...&type=qemu)
   // Also handles ?selectType=node&selectId=connId:nodeName and ?selectType=pbs&selectId=pbsId
@@ -512,6 +528,7 @@ return () => setPageInfo('', '', '')
               refreshLoading={loading}
               onCollapse={() => setIsTreeCollapsed(!isTreeCollapsed)}
               isCollapsed={isTreeCollapsed}
+              allowedViewModes={allowedViewModes}
             />
           )}
         </Box>

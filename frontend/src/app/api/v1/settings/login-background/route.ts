@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
 import { writeFile, mkdir, unlink, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
-import { authOptions } from '@/lib/auth/config'
+import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'login-bg')
 const PUBLIC_PATH = '/uploads/login-bg'
@@ -20,10 +19,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userRole = (session.user as any).role
-    if (userRole !== 'admin' && userRole !== 'super_admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    if (permError) return permError
 
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -51,10 +48,8 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userRole = (session.user as any).role
-    if (userRole !== 'admin' && userRole !== 'super_admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    if (permError) return permError
 
     if (existsSync(UPLOAD_DIR)) {
       const files = await readdir(UPLOAD_DIR)

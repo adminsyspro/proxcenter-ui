@@ -63,6 +63,14 @@ export async function POST(req: Request) {
        VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)`
     ).run(id, email.toLowerCase().trim(), hashedPassword, name || null, now, now)
 
+    // Assign RBAC role_super_admin to the first user
+    const roleAssignId = nanoid()
+
+    db.prepare(
+      `INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, granted_at)
+       VALUES (?, ?, 'role_super_admin', 'global', NULL, ?)`
+    ).run(roleAssignId, id, now)
+
     return NextResponse.json({
       success: true,
       message: "Compte administrateur créé avec succès",

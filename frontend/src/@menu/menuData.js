@@ -30,13 +30,13 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.storage'),
         icon: 'ri-database-2-fill',
         href: '/storage/overview',
-        permissions: ['storage.view']
+        permissions: ['storage.admin']
       },
       {
         label: t('navigation.ceph'),
         icon: 'ri-stack-line',
         href: '/storage/ceph',
-        permissions: ['storage.view']
+        permissions: ['storage.admin']
       },
       {
         label: t('navigation.backups'),
@@ -98,25 +98,27 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.events'),
         icon: 'ri-calendar-event-line',
         href: '/operations/events',
-
-        // Accessible à tous - lecture d'événements
+        permissions: ['events.view']
       },
       {
         label: t('navigation.alerts'),
         icon: 'ri-notification-3-line',
         href: '/operations/alerts',
+        permissions: ['alerts.view'],
         requiredFeature: 'alerts'
       },
       {
         label: t('navigation.jobs'),
         icon: 'ri-play-list-2-line',
         href: '/operations/task-center',
+        permissions: ['tasks.view'],
         requiredFeature: 'task_center' // Requires Enterprise license
       },
       {
         label: t('navigation.reports'),
         icon: 'ri-file-chart-line',
         href: '/operations/reports',
+        permissions: ['reports.view'],
         requiredFeature: 'reports'
       }
     ]

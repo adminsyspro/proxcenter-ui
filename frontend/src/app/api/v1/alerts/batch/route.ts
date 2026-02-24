@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/db/prisma'
+import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
 
@@ -10,6 +11,9 @@ export const runtime = 'nodejs'
  */
 export async function DELETE(req: Request) {
   try {
+    const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+    if (permError) return permError
+
     const body = await req.json()
     const { ids } = body
 

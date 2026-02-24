@@ -36,22 +36,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
     }
 
-    // Si l'utilisateur a le rôle "admin" dans la table users (ancien système), il a tout
-    if (user.role === "admin") {
-      const allPermissions = db.prepare("SELECT id, name, category FROM rbac_permissions").all() as any[]
-
-      
-return NextResponse.json({
-        data: {
-          user_id: targetUserId,
-          is_super_admin: true,
-          roles: [{ name: "Admin (Legacy)", scope: "global" }],
-          permissions: allPermissions.map(p => p.name),
-          permission_details: allPermissions
-        }
-      })
-    }
-
     // Récupérer les rôles de l'utilisateur
     const userRoles = db.prepare(`
       SELECT 
@@ -131,10 +115,12 @@ return NextResponse.json({
       }
     }
 
+    const isSuperAdmin = userRoles.some(r => r.role_id === 'role_super_admin')
+
     return NextResponse.json({
       data: {
         user_id: targetUserId,
-        is_super_admin: false,
+        is_super_admin: isSuperAdmin,
         roles: userRoles.map(r => ({
           id: r.role_id,
           name: r.role_name,

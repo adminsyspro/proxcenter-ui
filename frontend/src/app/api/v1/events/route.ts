@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
+import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
 
@@ -100,6 +101,9 @@ return types[type] || type
 
 export async function GET(req: Request) {
   try {
+    const permError = await checkPermission(PERMISSIONS.EVENTS_VIEW)
+    if (permError) return permError
+
     const { searchParams } = new URL(req.url)
     const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
     const source = searchParams.get('source') || 'all' // 'tasks', 'logs', 'all'

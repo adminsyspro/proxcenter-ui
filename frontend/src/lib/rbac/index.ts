@@ -10,11 +10,6 @@ import { authOptions } from "@/lib/auth/config"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
 
 
-/** Check if a role string is an admin-level role */
-function isAdminRole(role: string | undefined): boolean {
-  return role === "admin" || role === "super_admin"
-}
-
 export interface PermissionCheck {
   userId: string
   permission: string
@@ -31,13 +26,6 @@ export interface PermissionCheck {
 export function hasPermission(check: PermissionCheck): boolean {
   const { userId, permission, resourceType, resourceId, resourceMeta } = check
   const db = getDb()
-
-  // First, check if user is admin in the legacy system (users.role = 'admin')
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
-
-  if (isAdminRole(user?.role)) {
-    return true
-  }
 
   // Check via RBAC roles
   // Get all user's active roles
@@ -89,17 +77,6 @@ export function hasPermission(check: PermissionCheck): boolean {
 export function getEffectivePermissions(userId: string, resourceType?: string, resourceId?: string): string[] {
   const db = getDb()
   const permissions = new Set<string>()
-
-  // Check legacy admin role
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
-
-  if (isAdminRole(user?.role)) {
-    // Return all permissions
-    const allPerms = db.prepare("SELECT name FROM rbac_permissions").all() as any[]
-
-
-return allPerms.map(p => p.name)
-  }
 
   // Get permissions from roles
   const rolePerms = db.prepare(`
@@ -155,13 +132,6 @@ export function hasAnyPermission(userId: string, permissions: string[], resource
 export function getAccessibleResources(userId: string, permission: string): { scope_type: string; scope_target: string | null }[] {
   const db = getDb()
   const resources: { scope_type: string; scope_target: string | null }[] = []
-
-  // Check legacy admin
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
-
-  if (isAdminRole(user?.role)) {
-    return [{ scope_type: "global", scope_target: null }]
-  }
 
   // Get from roles
   const fromRoles = db.prepare(`
@@ -294,6 +264,16 @@ export const PERMISSIONS = {
   AUTOMATION_MANAGE: "automation.manage",
   AUTOMATION_EXECUTE: "automation.execute",
 
+  // Operations
+  EVENTS_VIEW: "events.view",
+  ALERTS_VIEW: "alerts.view",
+  ALERTS_MANAGE: "alerts.manage",
+  TASKS_VIEW: "tasks.view",
+  REPORTS_VIEW: "reports.view",
+
+  // Storage Admin
+  STORAGE_ADMIN: "storage.admin",
+
   // Admin
   ADMIN_USERS: "admin.users",
   ADMIN_RBAC: "admin.rbac",
@@ -335,11 +315,15 @@ export async function getRBACContext(): Promise<{ userId: string; isAdmin: boole
   }
 
   const db = getDb()
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(session.user.id) as any
+  const superAdmin = db.prepare(`
+    SELECT 1 FROM rbac_user_roles
+    WHERE user_id = ? AND role_id = 'role_super_admin' AND scope_type = 'global'
+      AND (expires_at IS NULL OR expires_at > datetime('now'))
+  `).get(session.user.id)
 
   return {
     userId: session.user.id,
-    isAdmin: isAdminRole(user?.role)
+    isAdmin: !!superAdmin
   }
 }
 
@@ -418,23 +402,7 @@ export async function checkPermission(
  * Returns a 401/403 NextResponse if denied, or null if allowed
  */
 export async function requireAdmin(): Promise<NextResponse | null> {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
-  }
-
-  const db = getDb()
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(session.user.id) as any
-
-  if (!isAdminRole(user?.role)) {
-    return NextResponse.json(
-      { error: "Admin access required" },
-      { status: 403 }
-    )
-  }
-
-  return null
+  return checkPermission(PERMISSIONS.ADMIN_SETTINGS)
 }
 
 /**
@@ -446,15 +414,6 @@ export function filterVmsByPermission<T extends { id?: string; connId?: string; 
   vms: T[],
   permission: string = PERMISSIONS.VM_VIEW
 ): T[] {
-  const db = getDb()
-
-  // Check if user is admin
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
-
-  if (isAdminRole(user?.role)) {
-    return vms // Admin sees everything
-  }
-
   // Get accessible resources for this permission
   const resources = getAccessibleResources(userId, permission)
 
@@ -507,15 +466,6 @@ export function filterNodesByPermission<T extends { connId: string; node: string
   nodes: T[],
   permission: string = PERMISSIONS.NODE_VIEW
 ): T[] {
-  const db = getDb()
-
-  // Check if user is admin
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as any
-
-  if (isAdminRole(user?.role)) {
-    return nodes
-  }
-
   // Get accessible resources
   const resources = getAccessibleResources(userId, permission)
 

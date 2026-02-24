@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useRBAC } from '@/contexts/RBACContext'
 
 
 // Fonction pour obtenir les initiales
@@ -44,23 +45,9 @@ return name.substring(0, 2).toUpperCase()
 return 'U'
 }
 
-const useRoleConfig = () => {
-  const t = useTranslations('user')
-
-  
-return (role) => {
-    switch (role) {
-      case 'admin': return { label: t('admin'), color: 'error', description: t('adminDesc') }
-      case 'operator': return { label: t('operator'), color: 'warning', description: t('operatorDesc') }
-      case 'viewer': return { label: t('viewer'), color: 'info', description: t('viewerDesc') }
-      default: return { label: role, color: 'default', description: '' }
-    }
-  }
-}
-
 export default function ProfilePage() {
   const t = useTranslations()
-  const getRoleConfig = useRoleConfig()
+  const { roles: rbacRoles } = useRBAC()
   const { data: session, update: updateSession } = useSession()
 
   const { setPageInfo } = usePageTitle()
@@ -84,7 +71,7 @@ return () => setPageInfo('', '', '')
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [passwordError, setPasswordError] = useState('')
 
-  const roleConfig = getRoleConfig(user?.role)
+  const primaryRole = rbacRoles[0]
 
   useEffect(() => {
     if (user?.name) {
@@ -185,14 +172,17 @@ return
               >
                 {!user?.avatar && getInitials(user?.name, user?.email)}
               </Avatar>
-              <Chip 
-                label={roleConfig.label} 
-                color={roleConfig.color}
-                sx={{ mb: 1 }}
-              />
-              <Typography variant='caption' sx={{ opacity: 0.5, textAlign: 'center' }}>
-                {roleConfig.description}
-              </Typography>
+              {primaryRole && (
+                <Chip
+                  label={primaryRole.name}
+                  sx={{ mb: 1, bgcolor: primaryRole.color || undefined, color: '#fff' }}
+                />
+              )}
+              {rbacRoles.length > 1 && (
+                <Typography variant='caption' sx={{ opacity: 0.5, textAlign: 'center' }}>
+                  +{rbacRoles.length - 1} {t('common.other')}
+                </Typography>
+              )}
             </Box>
 
             {/* Détails du compte */}

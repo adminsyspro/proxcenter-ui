@@ -49,6 +49,9 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 // License Context
 import { useLicense, Features } from '@/contexts/LicenseContext'
 
+// RBAC Context
+import { useRBAC } from '@/contexts/RBACContext'
+
 import { useActiveAlerts, useDRSRecommendations, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
 
 // Version config
@@ -130,6 +133,7 @@ const NavbarContent = () => {
   const user = session?.user
   const { title, subtitle, icon } = usePageTitle()
   const { hasFeature, loading: licenseLoading, status: licenseStatus, isEnterprise } = useLicense()
+  const { roles: rbacRoles, hasPermission } = useRBAC()
 
   // Check if AI feature is available
   const aiAvailable = !licenseLoading && hasFeature(Features.AI_INSIGHTS)
@@ -1182,12 +1186,11 @@ return () => window.removeEventListener('keydown', onKeyDown)
           <Typography variant='caption' sx={{ opacity: 0.6 }}>
             {user?.email}
           </Typography>
-          {user?.role && (
+          {rbacRoles.length > 0 && (
             <Chip
               size='small'
-              label={user.role === 'admin' ? t('user.admin') : user.role === 'operator' ? t('user.operator') : t('user.viewer')}
-              color={user.role === 'admin' ? 'error' : user.role === 'operator' ? 'warning' : 'info'}
-              sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+              label={rbacRoles[0]?.name || '—'}
+              sx={{ ml: 1, height: 20, fontSize: '0.65rem', bgcolor: rbacRoles[0]?.color || undefined, color: '#fff' }}
             />
           )}
         </Box>
@@ -1217,7 +1220,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
           {t('navigation.settings')}
         </MenuItem>
 
-        {user?.role === 'admin' && (
+        {hasPermission('admin.users') && (
           <MenuItem
             onClick={() => {
               setUserAnchor(null)

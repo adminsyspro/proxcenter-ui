@@ -323,6 +323,16 @@ export function getDb() {
     { id: 'automation.manage', name: 'automation.manage', category: 'automation', description: 'Configurer l\'automatisation et DRS', is_dangerous: 1 },
     { id: 'automation.execute', name: 'automation.execute', category: 'automation', description: 'Exécuter des actions d\'automatisation', is_dangerous: 1 },
 
+    // Operations
+    { id: 'events.view', name: 'events.view', category: 'operations', description: 'Voir les événements et logs' },
+    { id: 'alerts.view', name: 'alerts.view', category: 'operations', description: 'Voir les alertes' },
+    { id: 'alerts.manage', name: 'alerts.manage', category: 'operations', description: 'Gérer les alertes (acknowledge, resolve)', is_dangerous: 1 },
+    { id: 'tasks.view', name: 'tasks.view', category: 'operations', description: 'Voir le task center' },
+    { id: 'reports.view', name: 'reports.view', category: 'operations', description: 'Voir les rapports' },
+
+    // Storage Admin
+    { id: 'storage.admin', name: 'storage.admin', category: 'storage', description: 'Accès aux pages Storage Overview et Ceph', is_dangerous: 1 },
+
     // Admin Operations
     { id: 'admin.users', name: 'admin.users', category: 'admin', description: 'Gérer les utilisateurs', is_dangerous: 1 },
     { id: 'admin.rbac', name: 'admin.rbac', category: 'admin', description: 'Gérer les rôles et permissions', is_dangerous: 1 },
@@ -355,21 +365,22 @@ export function getDb() {
         color: '#ef4444',
         permissions: ['*'] // Wildcard = toutes les permissions
       },
-      { 
-        id: 'role_operator', 
-        name: 'Opérateur', 
+      {
+        id: 'role_operator',
+        name: 'Opérateur',
         description: 'Gestion quotidienne des VMs sans accès admin',
         is_system: 1,
         color: '#f59e0b',
         permissions: [
           'vm.view', 'vm.console', 'vm.start', 'vm.stop', 'vm.restart', 'vm.suspend',
-          'vm.snapshot', 'vm.backup', 'storage.view', 'storage.content',
-          'node.view', 'connection.view', 'backup.view'
+          'vm.snapshot', 'vm.backup',
+          'node.view', 'connection.view', 'backup.view',
+          'events.view', 'tasks.view'
         ]
       },
-      { 
-        id: 'role_vm_admin', 
-        name: 'VM Admin', 
+      {
+        id: 'role_vm_admin',
+        name: 'VM Admin',
         description: 'Administration complète des VMs',
         is_system: 1,
         color: '#8b5cf6',
@@ -377,17 +388,19 @@ export function getDb() {
           'vm.view', 'vm.console', 'vm.start', 'vm.stop', 'vm.restart', 'vm.suspend',
           'vm.snapshot', 'vm.backup', 'vm.clone', 'vm.migrate', 'vm.config', 'vm.delete', 'vm.create',
           'storage.view', 'storage.content', 'storage.upload',
-          'node.view', 'connection.view', 'backup.view', 'backup.restore'
+          'node.view', 'connection.view', 'backup.view', 'backup.restore',
+          'events.view', 'tasks.view', 'storage.admin'
         ]
       },
-      { 
-        id: 'role_viewer', 
-        name: 'Lecteur', 
+      {
+        id: 'role_viewer',
+        name: 'Lecteur',
         description: 'Lecture seule sur toutes les ressources',
         is_system: 1,
         color: '#3b82f6',
         permissions: [
-          'vm.view', 'storage.view', 'node.view', 'connection.view', 'backup.view'
+          'vm.view', 'node.view', 'connection.view', 'backup.view',
+          'events.view'
         ]
       },
       { 
@@ -442,6 +455,34 @@ export function getDb() {
         insertRolePerm.run('role_super_admin', p.id)
       }
     }
+  }
+
+  // ========================================
+  // Auto-migration: assign role_super_admin to legacy admins
+  // ========================================
+  try {
+    const legacyAdmins = db.prepare(
+      "SELECT id FROM users WHERE role IN ('admin', 'super_admin')"
+    ).all() as any[]
+
+    const checkExisting = db.prepare(
+      "SELECT 1 FROM rbac_user_roles WHERE user_id = ? AND role_id = 'role_super_admin'"
+    )
+    const insertUserRole = db.prepare(
+      "INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, granted_at) VALUES (?, ?, 'role_super_admin', 'global', NULL, ?)"
+    )
+
+    const migrationNow = new Date().toISOString()
+
+    for (const admin of legacyAdmins) {
+      const existing = checkExisting.get(admin.id)
+
+      if (!existing) {
+        insertUserRole.run(crypto.randomUUID(), admin.id, migrationNow)
+      }
+    }
+  } catch (e) {
+    // Migration error is non-critical for existing installs without RBAC tables yet
   }
 
   return db

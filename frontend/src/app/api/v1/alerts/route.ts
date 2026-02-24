@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { createAlertSchema, patchAlertsSchema } from '@/lib/schemas'
+import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
 
@@ -12,6 +13,9 @@ export const runtime = 'nodejs'
  */
 export async function GET(req: Request) {
   try {
+    const permError = await checkPermission(PERMISSIONS.ALERTS_VIEW)
+    if (permError) return permError
+
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') || 'all' // active, acknowledged, resolved, all
     const severity = searchParams.get('severity') || 'all'
@@ -163,6 +167,9 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function PATCH(req: Request) {
   try {
+    const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+    if (permError) return permError
+
     const rawBody = await req.json()
     const parseResult = patchAlertsSchema.safeParse(rawBody)
 
@@ -221,6 +228,9 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function DELETE(req: Request) {
   try {
+    const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+    if (permError) return permError
+
     const { searchParams } = new URL(req.url)
     const olderThanDays = parseInt(searchParams.get('olderThanDays') || '30')
 

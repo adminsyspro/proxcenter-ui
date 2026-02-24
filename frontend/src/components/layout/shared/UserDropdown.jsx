@@ -26,6 +26,7 @@ import Chip from '@mui/material/Chip'
 
 // Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
+import { useRBAC } from '@/contexts/RBACContext'
 
 // Styled component for badge content
 const BadgeContentSpan = styled('span')({
@@ -58,25 +59,6 @@ return name.substring(0, 2).toUpperCase()
 return 'U'
 }
 
-// Couleur basée sur le rôle
-const getRoleColor = (role) => {
-  switch (role) {
-    case 'admin': return 'error'
-    case 'operator': return 'warning'
-    case 'viewer': return 'info'
-    default: return 'default'
-  }
-}
-
-const getRoleLabel = (role, t) => {
-  switch (role) {
-    case 'admin': return t('user.admin')
-    case 'operator': return t('user.operator')
-    case 'viewer': return t('user.viewer')
-    default: return role
-  }
-}
-
 const UserDropdown = () => {
   // States
   const [open, setOpen] = useState(false)
@@ -89,6 +71,7 @@ const UserDropdown = () => {
   const { settings } = useSettings()
   const { data: session } = useSession()
   const t = useTranslations()
+  const { roles: rbacRoles, hasPermission } = useRBAC()
 
   const user = session?.user
 
@@ -164,12 +147,11 @@ const UserDropdown = () => {
                         {user?.name || t('user.defaultName')}
                       </Typography>
                       <Typography variant='caption'>{user?.email}</Typography>
-                      {user?.role && (
+                      {rbacRoles.length > 0 && (
                         <Chip
                           size='small'
-                          label={getRoleLabel(user.role, t)}
-                          color={getRoleColor(user.role)}
-                          sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }}
+                          label={rbacRoles[0]?.name || '—'}
+                          sx={{ mt: 0.5, height: 20, fontSize: '0.7rem', bgcolor: rbacRoles[0]?.color || undefined, color: '#fff' }}
                         />
                       )}
                     </div>
@@ -183,7 +165,7 @@ const UserDropdown = () => {
                     <i className='ri-settings-4-line' />
                     <Typography color='text.primary'>{t('navigation.settings')}</Typography>
                   </MenuItem>
-                  {user?.role === 'admin' && (
+                  {hasPermission('admin.users') && (
                     <MenuItem className='gap-3' onClick={e => handleDropdownClose(e, '/security/users')}>
                       <i className='ri-shield-user-line' />
                       <Typography color='text.primary'>{t('navigation.users')}</Typography>

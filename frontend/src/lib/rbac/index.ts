@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth"
 
 import { getDb } from "@/lib/db/sqlite"
 import { authOptions } from "@/lib/auth/config"
+import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
 
 
 /** Check if a role string is an admin-level role */
@@ -19,6 +20,7 @@ export interface PermissionCheck {
   permission: string
   resourceType?: "connection" | "node" | "vm" | "global" | "pbs"
   resourceId?: string
+  resourceMeta?: { tags?: string[]; pool?: string }
 }
 
 /**
@@ -27,7 +29,7 @@ export interface PermissionCheck {
  * @returns true if the user has the permission, false otherwise
  */
 export function hasPermission(check: PermissionCheck): boolean {
-  const { userId, permission, resourceType, resourceId } = check
+  const { userId, permission, resourceType, resourceId, resourceMeta } = check
   const db = getDb()
 
   // First, check if user is admin in the legacy system (users.role = 'admin')
@@ -57,7 +59,7 @@ export function hasPermission(check: PermissionCheck): boolean {
 
     if (hasPerm) {
       // Check scope
-      if (scopeMatches(role.scope_type, role.scope_target, resourceType, resourceId)) {
+      if (scopeMatches(role.scope_type, role.scope_target, resourceType, resourceId, resourceMeta)) {
         return true
       }
     }
@@ -73,7 +75,7 @@ export function hasPermission(check: PermissionCheck): boolean {
   `).all(userId, permission) as any[]
 
   for (const perm of directPerm) {
-    if (scopeMatches(perm.scope_type, perm.scope_target, resourceType, resourceId)) {
+    if (scopeMatches(perm.scope_type, perm.scope_target, resourceType, resourceId, resourceMeta)) {
       return true
     }
   }
@@ -192,7 +194,8 @@ function scopeMatches(
   scopeType: string,
   scopeTarget: string | null,
   resourceType?: string,
-  resourceId?: string
+  resourceId?: string,
+  resourceMeta?: { tags?: string[]; pool?: string }
 ): boolean {
   // Global scope matches everything
   if (scopeType === "global") {
@@ -220,12 +223,20 @@ function scopeMatches(
         return resourceId.startsWith(scopeTarget + ":") || resourceId === scopeTarget
       }
 
-      
+
 return false
 
     case "vm":
       // VM scope matches exactly
       return resourceId === scopeTarget
+
+    case "tag":
+      if (!resourceMeta?.tags || !scopeTarget) return false
+      return resourceMeta.tags.includes(scopeTarget)
+
+    case "pool":
+      if (!resourceMeta?.pool || !scopeTarget) return false
+      return resourceMeta.pool === scopeTarget
 
     default:
       return false
@@ -333,8 +344,39 @@ export async function getRBACContext(): Promise<{ userId: string; isAdmin: boole
 }
 
 /**
+ * Check if a user has any tag or pool scoped assignments (roles or direct permissions).
+ * Used to decide whether to attempt the second pass in checkPermission().
+ */
+export function hasTagOrPoolScopes(userId: string): boolean {
+  const db = getDb()
+  const row = db
+    .prepare(
+      `SELECT 1 FROM rbac_user_roles
+       WHERE user_id = ? AND scope_type IN ('tag', 'pool')
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+       LIMIT 1`
+    )
+    .get(userId)
+  if (row) return true
+
+  const row2 = db
+    .prepare(
+      `SELECT 1 FROM rbac_user_permissions
+       WHERE user_id = ? AND scope_type IN ('tag', 'pool')
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+       LIMIT 1`
+    )
+    .get(userId)
+  return !!row2
+}
+
+/**
  * Check if the current user has a specific permission
  * Returns a 401/403 NextResponse if denied, or null if allowed
+ *
+ * Uses a two-pass approach:
+ *   Pass 1: standard scopes (global, connection, node, vm)
+ *   Pass 2: if VM resource + user has tag/pool scopes → resolve meta and retry
  */
 export async function checkPermission(
   permission: string,
@@ -347,21 +389,28 @@ export async function checkPermission(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
-  const allowed = hasPermission({
-    userId: session.user.id,
-    permission,
-    resourceType,
-    resourceId
-  })
+  const userId = session.user.id
 
-  if (!allowed) {
-    return NextResponse.json(
-      { error: `Permission denied: ${permission}` },
-      { status: 403 }
-    )
+  // Pass 1: standard scopes (global, connection, node, vm)
+  if (hasPermission({ userId, permission, resourceType, resourceId })) {
+    return null
   }
 
-  return null
+  // Pass 2: if VM resource + user has tag/pool scopes → resolve meta and retry
+  if (resourceType === "vm" && resourceId && hasTagOrPoolScopes(userId)) {
+    const meta = resolveVmMeta(resourceId)
+    if (
+      meta &&
+      hasPermission({ userId, permission, resourceType, resourceId, resourceMeta: meta })
+    ) {
+      return null
+    }
+  }
+
+  return NextResponse.json(
+    { error: `Permission denied: ${permission}` },
+    { status: 403 }
+  )
 }
 
 /**
@@ -429,11 +478,23 @@ export function filterVmsByPermission<T extends { id?: string; connId?: string; 
       return false
     }
 
+    // Extract tags/pool from VM object for tag/pool scope matching
+    const vmAny = vm as any
+    const tags = Array.isArray(vmAny.tags)
+      ? vmAny.tags
+      : typeof vmAny.tags === "string"
+        ? vmAny.tags
+            .split(/[;,]/)
+            .map((t: string) => t.trim())
+            .filter(Boolean)
+        : []
+
     return hasPermission({
       userId,
       permission,
       resourceType: "vm",
-      resourceId
+      resourceId,
+      resourceMeta: { tags, pool: vmAny.pool || undefined }
     })
   })
 }

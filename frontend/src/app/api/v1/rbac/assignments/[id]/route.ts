@@ -168,7 +168,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     if (scope_type !== undefined) {
-      const validScopes = ["global", "connection", "node", "vm"]
+      const validScopes = ["global", "connection", "node", "vm", "tag", "pool"]
 
       if (!validScopes.includes(scope_type)) {
         return NextResponse.json({ error: "scope_type invalide" }, { status: 400 })

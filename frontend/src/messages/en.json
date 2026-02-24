@@ -1614,7 +1614,9 @@
       "connection": "Connection",
       "node": "Node",
       "vmct": "VM/CT",
-      "clusterConnection": "Cluster / Connection"
+      "clusterConnection": "Cluster / Connection",
+      "tag": "Tag",
+      "pool": "Pool"
     },
     "cannotModifySystem": "Cannot modify a system role",
     "cannotDeleteSystem": "Cannot delete a system role",
@@ -2984,7 +2986,15 @@
     "nodes": "nodes",
     "clusters": "clusters",
     "permissionsCount": "Permissions ({count})",
-    "globalScope": "Global"
+    "globalScope": "Global",
+    "tagScope": "Tag",
+    "limitedToTag": "Limited to VMs with a specific tag",
+    "poolScope": "Pool",
+    "limitedToPool": "Limited to VMs in a specific pool",
+    "tagUsedByVms": "{count} VM(s)",
+    "poolContainsVms": "{count} VM(s)",
+    "tags": "tags",
+    "pools": "pools"
   },
   "drsPage": {
     "balanced": "Balanced",

@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "user_id et role_id requis" }, { status: 400 })
     }
 
-    const validScopes = ["global", "connection", "node", "vm"]
+    const validScopes = ["global", "connection", "node", "vm", "tag", "pool"]
     const scopeType = scope_type || "global"
 
     if (!validScopes.includes(scopeType)) {

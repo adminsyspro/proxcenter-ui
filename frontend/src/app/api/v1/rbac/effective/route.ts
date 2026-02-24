@@ -196,7 +196,13 @@ return false
     case "vm":
       // Le scope VM correspond exactement
       return resourceId === scopeTarget
-    
+
+    case "tag":
+    case "pool":
+      // Tag/pool permissions are always listed in effective perms
+      // Actual scope resolution happens at access time via resourceMeta
+      return true
+
     default:
       return false
   }

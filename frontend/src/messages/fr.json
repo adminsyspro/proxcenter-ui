@@ -1619,7 +1619,9 @@
       "connection": "Connexion",
       "node": "Nœud",
       "vmct": "VM/CT",
-      "clusterConnection": "Cluster / Connexion"
+      "clusterConnection": "Cluster / Connexion",
+      "tag": "Tag",
+      "pool": "Pool"
     },
     "cannotModifySystem": "Impossible de modifier un rôle système",
     "cannotDeleteSystem": "Impossible de supprimer un rôle système",
@@ -2989,7 +2991,15 @@
     "nodes": "nœuds",
     "clusters": "clusters",
     "permissionsCount": "Permissions ({count})",
-    "globalScope": "Global"
+    "globalScope": "Global",
+    "tagScope": "Tag",
+    "limitedToTag": "Limité aux VMs avec un tag spécifique",
+    "poolScope": "Pool",
+    "limitedToPool": "Limité aux VMs d'un pool spécifique",
+    "tagUsedByVms": "{count} VM(s)",
+    "poolContainsVms": "{count} VM(s)",
+    "tags": "tags",
+    "pools": "pools"
   },
   "drsPage": {
     "balanced": "Équilibré",

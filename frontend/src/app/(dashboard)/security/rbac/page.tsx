@@ -28,7 +28,7 @@ interface User { id: string; email: string; name: string | null }
 interface Assignment { id: string; user: User; role: { id: string; name: string; color: string }; scope_type: string; scope_target: string | null; granted_at: string; granted_by_email: string | null }
 
 // Constants
-const scopeIcons = { global: 'ri-global-line', connection: 'ri-server-line', node: 'ri-computer-line', vm: 'ri-instance-line' }
+const scopeIcons = { global: 'ri-global-line', connection: 'ri-server-line', node: 'ri-computer-line', vm: 'ri-instance-line', tag: 'ri-price-tag-3-line', pool: 'ri-folder-shared-line' }
 const catIcons = { vm: 'ri-instance-line', storage: 'ri-hard-drive-3-line', node: 'ri-computer-line', connection: 'ri-server-line', backup: 'ri-archive-line', admin: 'ri-shield-user-line' }
 
 // Scope labels function
@@ -36,7 +36,9 @@ const getScopeLabels = (t: any) => ({
   global: t('rbac.scopes.global'),
   connection: t('rbac.scopes.connection'),
   node: t('rbac.scopes.node'),
-  vm: t('rbac.scopes.vmct')
+  vm: t('rbac.scopes.vmct'),
+  tag: t('rbac.scopes.tag'),
+  pool: t('rbac.scopes.pool')
 })
 
 const timeAgo = (d, t?: any, locale?: string) => {
@@ -217,7 +219,7 @@ function AssignmentDialog({ open, onClose, roles, users, onSave, t }) {
   // Construire les options selon le scope type
   const scopeOptions = useMemo(() => {
     if (!inventory?.clusters) return []
-    
+
     switch (scopeType) {
       case 'connection':
         return inventory.clusters.map((c: any) => ({
@@ -227,8 +229,8 @@ function AssignmentDialog({ open, onClose, roles, users, onSave, t }) {
           icon: 'ri-server-line',
           status: c.status
         }))
-      
-      case 'node':
+
+      case 'node': {
         const nodes: any[] = []
 
         inventory.clusters.forEach((c: any) => {
@@ -243,10 +245,11 @@ function AssignmentDialog({ open, onClose, roles, users, onSave, t }) {
             })
           })
         })
-        
-return nodes
-      
-      case 'vm':
+
+        return nodes
+      }
+
+      case 'vm': {
         const vms: any[] = []
 
         inventory.clusters.forEach((c: any) => {
@@ -266,9 +269,59 @@ return nodes
             })
           })
         })
-        
-return vms
-      
+
+        return vms
+      }
+
+      case 'tag': {
+        const tagMap = new Map<string, number>()
+
+        inventory.clusters.forEach((c: any) => {
+          c.nodes?.forEach((n: any) => {
+            n.guests?.forEach((g: any) => {
+              const tags = typeof g.tags === 'string'
+                ? g.tags.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean)
+                : []
+              tags.forEach((tag: string) => {
+                tagMap.set(tag, (tagMap.get(tag) || 0) + 1)
+              })
+            })
+          })
+        })
+
+        return Array.from(tagMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([tag, count]) => ({
+            id: tag,
+            label: tag,
+            sublabel: t('rbacPage.tagUsedByVms', { count }),
+            icon: 'ri-price-tag-3-line'
+          }))
+      }
+
+      case 'pool': {
+        const poolMap = new Map<string, number>()
+
+        inventory.clusters.forEach((c: any) => {
+          c.nodes?.forEach((n: any) => {
+            n.guests?.forEach((g: any) => {
+              if (g.pool) {
+                poolMap.set(g.pool, (poolMap.get(g.pool) || 0) + 1)
+              }
+            })
+          })
+        })
+
+        return Array.from(poolMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([pool, count]) => ({
+            id: pool,
+            label: pool,
+            sublabel: t('rbacPage.poolContainsVms', { count }),
+            icon: 'ri-folder-shared-line'
+          }))
+      }
+
       default:
         return []
     }
@@ -276,7 +329,7 @@ return vms
 
   // Toggle sélection d'un élément
   const toggleTarget = (id: string) => {
-    setSelectedTargets(prev => 
+    setSelectedTargets(prev =>
       prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
     )
   }
@@ -295,9 +348,9 @@ return vms
     if (!searchFilter.trim()) return scopeOptions
     const search = searchFilter.toLowerCase()
 
-    
-return scopeOptions.filter((o: any) => 
-      o.label.toLowerCase().includes(search) || 
+
+return scopeOptions.filter((o: any) =>
+      o.label.toLowerCase().includes(search) ||
       o.sublabel?.toLowerCase().includes(search) ||
       o.id.toLowerCase().includes(search)
     )
@@ -459,6 +512,24 @@ return
                 </Box>
               </Box>
             </MenuItem>
+            <MenuItem value='tag'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-price-tag-3-line' style={{ color: '#ec4899' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbacPage.tagScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToTag')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
+            <MenuItem value='pool'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-folder-shared-line' style={{ color: '#14b8a6' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbacPage.poolScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToPool')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
           </Select>
         </FormControl>
 
@@ -486,7 +557,7 @@ return
                 startAdornment: <i className='ri-search-line' style={{ marginRight: 8, opacity: 0.5 }} />
               }}
             />
-            
+
             {loadingInventory ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('rbacPage.loadingInventory')}</Typography>
@@ -499,10 +570,10 @@ return
               <Paper variant='outlined' sx={{ maxHeight: 250, overflow: 'auto' }}>
                 <List dense disablePadding>
                   {filteredOptions.map((option: any) => (
-                    <ListItem 
-                      key={option.id} 
-                      sx={{ 
-                        borderBottom: '1px solid', 
+                    <ListItem
+                      key={option.id}
+                      sx={{
+                        borderBottom: '1px solid',
                         borderColor: 'divider',
                         cursor: 'pointer',
                         '&:hover': { bgcolor: 'action.hover' }
@@ -510,8 +581,8 @@ return
                       onClick={() => toggleTarget(option.id)}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Checkbox 
-                          checked={selectedTargets.includes(option.id)} 
+                        <Checkbox
+                          checked={selectedTargets.includes(option.id)}
                           size='small'
                           onClick={e => e.stopPropagation()}
                           onChange={() => toggleTarget(option.id)}
@@ -520,16 +591,18 @@ return
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         <i className={option.icon} style={{ fontSize: 18, opacity: 0.7 }} />
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant='body2' sx={{ fontWeight: 500 }}>{option.label}</Typography>
-                            <Chip 
-                              label={option.status} 
-                              size='small' 
-                              color={getStatusColor(option.status) as any}
-                              sx={{ height: 18, fontSize: '0.7rem' }} 
-                            />
+                            {option.status && (
+                              <Chip
+                                label={option.status}
+                                size='small'
+                                color={getStatusColor(option.status) as any}
+                                sx={{ height: 18, fontSize: '0.7rem' }}
+                              />
+                            )}
                           </Box>
                         }
                         secondary={option.sublabel}
@@ -733,11 +806,41 @@ return users.filter((u: any) => !assignedUserIds.has(u.id))
     if (row.scope_type === 'global') {
       return <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('common.all')}</Typography>
     }
-    
+
     const count = row.scope_targets.length
 
     if (count === 0) return null
-    
+
+    // Tag/pool: display as colored chips
+    if (row.scope_type === 'tag' || row.scope_type === 'pool') {
+      const color = row.scope_type === 'tag' ? '#ec4899' : '#14b8a6'
+      const icon = row.scope_type === 'tag' ? 'ri-price-tag-3-line' : 'ri-folder-shared-line'
+
+      if (count === 1) {
+        return (
+          <Chip
+            icon={<i className={icon} style={{ fontSize: 14, color }} />}
+            label={row.scope_targets[0]}
+            size='small'
+            variant='outlined'
+            sx={{ height: 22, fontSize: '0.75rem', borderColor: color, color }}
+          />
+        )
+      }
+
+      return (
+        <Tooltip title={row.scope_targets.join(', ')}>
+          <Chip
+            icon={<i className={icon} style={{ fontSize: 14, color }} />}
+            label={`${count} ${row.scope_type === 'tag' ? t('rbacPage.tags') : t('rbacPage.pools')}`}
+            size='small'
+            variant='outlined'
+            sx={{ height: 22, fontSize: '0.75rem', borderColor: color, color }}
+          />
+        </Tooltip>
+      )
+    }
+
     if (count === 1) {
       const target = row.scope_targets[0]
 
@@ -751,7 +854,7 @@ return users.filter((u: any) => !assignedUserIds.has(u.id))
         displayName = parts[1]
       }
 
-      
+
 return (
         <Tooltip title={target}>
           <Typography variant='body2' sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
@@ -760,13 +863,13 @@ return (
         </Tooltip>
       )
     }
-    
+
     // Plusieurs ressources
     return (
       <Tooltip title={row.scope_targets.join('\n')}>
-        <Chip 
+        <Chip
           label={`${count} ${row.scope_type === 'vm' ? t('rbacPage.vmsCts') : row.scope_type === 'node' ? t('rbac.scopes.node') : t('rbac.scopes.connection')}`}
-          size='small' 
+          size='small'
           variant='outlined'
           sx={{ height: 22, fontSize: '0.75rem' }}
         />
@@ -901,7 +1004,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, onSave, t
   // Construire les options selon le scope type
   const scopeOptions = useMemo(() => {
     if (!inventory?.clusters) return []
-    
+
     switch (scopeType) {
       case 'connection':
         return inventory.clusters.map((c: any) => ({
@@ -911,8 +1014,8 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, onSave, t
           icon: 'ri-server-line',
           status: c.status
         }))
-      
-      case 'node':
+
+      case 'node': {
         const nodes: any[] = []
 
         inventory.clusters.forEach((c: any) => {
@@ -927,10 +1030,11 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, onSave, t
             })
           })
         })
-        
-return nodes
-      
-      case 'vm':
+
+        return nodes
+      }
+
+      case 'vm': {
         const vms: any[] = []
 
         inventory.clusters.forEach((c: any) => {
@@ -950,9 +1054,59 @@ return nodes
             })
           })
         })
-        
-return vms
-      
+
+        return vms
+      }
+
+      case 'tag': {
+        const tagMap = new Map<string, number>()
+
+        inventory.clusters.forEach((c: any) => {
+          c.nodes?.forEach((n: any) => {
+            n.guests?.forEach((g: any) => {
+              const tags = typeof g.tags === 'string'
+                ? g.tags.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean)
+                : []
+              tags.forEach((tag: string) => {
+                tagMap.set(tag, (tagMap.get(tag) || 0) + 1)
+              })
+            })
+          })
+        })
+
+        return Array.from(tagMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([tag, count]) => ({
+            id: tag,
+            label: tag,
+            sublabel: t('rbacPage.tagUsedByVms', { count }),
+            icon: 'ri-price-tag-3-line'
+          }))
+      }
+
+      case 'pool': {
+        const poolMap = new Map<string, number>()
+
+        inventory.clusters.forEach((c: any) => {
+          c.nodes?.forEach((n: any) => {
+            n.guests?.forEach((g: any) => {
+              if (g.pool) {
+                poolMap.set(g.pool, (poolMap.get(g.pool) || 0) + 1)
+              }
+            })
+          })
+        })
+
+        return Array.from(poolMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([pool, count]) => ({
+            id: pool,
+            label: pool,
+            sublabel: t('rbacPage.poolContainsVms', { count }),
+            icon: 'ri-folder-shared-line'
+          }))
+      }
+
       default:
         return []
     }
@@ -960,7 +1114,7 @@ return vms
 
   // Toggle sélection d'un élément
   const toggleTarget = (id: string) => {
-    setSelectedTargets(prev => 
+    setSelectedTargets(prev =>
       prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
     )
   }
@@ -1198,6 +1352,24 @@ return
                 </Box>
               </Box>
             </MenuItem>
+            <MenuItem value='tag'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-price-tag-3-line' style={{ color: '#ec4899' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbacPage.tagScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToTag')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
+            <MenuItem value='pool'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-folder-shared-line' style={{ color: '#14b8a6' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbacPage.poolScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToPool')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
           </Select>
         </FormControl>
 
@@ -1259,16 +1431,18 @@ return
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         <i className={option.icon} style={{ fontSize: 18, opacity: 0.7 }} />
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant='body2' sx={{ fontWeight: 500 }}>{option.label}</Typography>
-                            <Chip 
-                              label={option.status} 
-                              size='small' 
-                              color={getStatusColor(option.status) as any}
-                              sx={{ height: 18, fontSize: '0.7rem' }} 
-                            />
+                            {option.status && (
+                              <Chip
+                                label={option.status}
+                                size='small'
+                                color={getStatusColor(option.status) as any}
+                                sx={{ height: 18, fontSize: '0.7rem' }}
+                              />
+                            )}
                           </Box>
                         }
                         secondary={option.sublabel}

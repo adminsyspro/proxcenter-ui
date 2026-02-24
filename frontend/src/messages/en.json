@@ -1620,7 +1620,8 @@
     },
     "cannotModifySystem": "Cannot modify a system role",
     "cannotDeleteSystem": "Cannot delete a system role",
-    "unauthorizedOther": "Not authorized to view other users' permissions"
+    "unauthorizedOther": "Not authorized to view other users' permissions",
+    "dangerousPermission": "This permission allows destructive or sensitive actions (delete, modify, manage)"
   },
   "network": {
     "title": "Network Security",

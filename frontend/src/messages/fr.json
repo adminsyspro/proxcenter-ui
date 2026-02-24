@@ -1625,7 +1625,8 @@
     },
     "cannotModifySystem": "Impossible de modifier un rôle système",
     "cannotDeleteSystem": "Impossible de supprimer un rôle système",
-    "unauthorizedOther": "Non autorisé à voir les permissions d'autres utilisateurs"
+    "unauthorizedOther": "Non autorisé à voir les permissions d'autres utilisateurs",
+    "dangerousPermission": "Cette permission autorise des actions destructives ou sensibles (supprimer, modifier, gérer)"
   },
   "network": {
     "title": "Sécurité Réseau",

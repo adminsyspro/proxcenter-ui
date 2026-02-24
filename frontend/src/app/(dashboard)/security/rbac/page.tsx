@@ -157,8 +157,8 @@ return n })}>
                   <List dense disablePadding>
                     {cat.permissions.map(perm => (
                       <ListItem key={perm.id} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider' }}>
-                        <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title={t('common.warning')}><i className='ri-alert-line' style={{ color: '#f59e0b' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
-                        <ListItemText primary={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><code style={{ fontSize: '0.85rem' }}>{perm.name}</code>{perm.is_dangerous && <Chip label={t('common.warning')} size='small' color='warning' sx={{ height: 18, fontSize: '0.7rem' }} />}</Box>} secondary={perm.description} />
+                        <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title={t('rbac.dangerousPermission')} arrow><i className='ri-shield-flash-line' style={{ color: '#f59e0b', fontSize: '1.1rem' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
+                        <ListItemText primary={<code style={{ fontSize: '0.85rem' }}>{perm.name}</code>} secondary={perm.description} />
                         <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' disabled={role?.is_system} /></ListItemSecondaryAction>
                       </ListItem>
                     ))}

@@ -157,9 +157,14 @@ const NavbarContent = () => {
   const [notifAnchor, setNotifAnchor] = useState(null)
   const [userAnchor, setUserAnchor] = useState(null)
 
-  // SWR hooks for notifications
-  const { data: alertsResponse, mutate: mutateAlerts } = useActiveAlerts(isEnterprise, 30000)
-  const { data: drsRecsResponse, mutate: mutateDrsRecs } = useDRSRecommendations(isEnterprise, hasFeature(Features.DRS), 30000)
+  // RBAC-based notification visibility
+  const canViewAlerts = hasPermission('alerts.view')
+  const canViewAdmin = hasPermission('admin.settings')
+  const canViewDrs = hasPermission('automation.view')
+
+  // SWR hooks for notifications — gated by permissions to avoid unnecessary fetches
+  const { data: alertsResponse, mutate: mutateAlerts } = useActiveAlerts(isEnterprise && canViewAlerts, 30000)
+  const { data: drsRecsResponse, mutate: mutateDrsRecs } = useDRSRecommendations(isEnterprise && canViewDrs, hasFeature(Features.DRS), 30000)
   const { data: updateInfoData } = useVersionCheck(3600000)
   const { data: healthData } = useOrchestratorHealth(isEnterprise, 30000)
 
@@ -193,8 +198,8 @@ const NavbarContent = () => {
 
   const updateInfo = updateInfoData || null
 
-  // License expiration notification
-  const licenseExpirationNotif = licenseStatus?.licensed &&
+  // License expiration notification (admin only)
+  const licenseExpirationNotif = canViewAdmin && licenseStatus?.licensed &&
     licenseStatus?.expiration_warn &&
     licenseStatus?.days_remaining > 0 ? {
       id: 'license-expiration',
@@ -204,8 +209,8 @@ const NavbarContent = () => {
       isLicenseNotif: true
     } : null
 
-  // Node limit exceeded notification
-  const nodeLimitNotif = licenseStatus?.node_status?.exceeded ? {
+  // Node limit exceeded notification (admin only)
+  const nodeLimitNotif = canViewAdmin && licenseStatus?.node_status?.exceeded ? {
     id: 'node-limit-exceeded',
     message: t('license.nodeLimitExceeded', {
       current: licenseStatus.node_status.current_nodes,
@@ -216,8 +221,8 @@ const NavbarContent = () => {
     isNodeLimitNotif: true
   } : null
 
-  // Update available notification
-  const updateNotif = updateInfo?.updateAvailable ? {
+  // Update available notification (admin only)
+  const updateNotif = canViewAdmin && updateInfo?.updateAvailable ? {
     id: 'version-update',
     message: updateInfo.commitsBehind > 0
       ? t('about.commitsBehind', { count: updateInfo.commitsBehind })
@@ -228,7 +233,7 @@ const NavbarContent = () => {
     compareUrl: updateInfo.compareUrl
   } : null
 
-  // DRS recommendations as notifications (only pending ones)
+  // DRS recommendations as notifications (only pending ones, requires automation.view)
   const drsNotifications = drsRecommendations
     .filter(r => r.status === 'pending')
     .slice(0, 5)

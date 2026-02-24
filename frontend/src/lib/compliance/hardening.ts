@@ -101,6 +101,10 @@ function checkPveVersion(data: HardeningData): HardeningCheck {
   }
 }
 
+const SUB_LEVEL_NAMES: Record<string, string> = {
+  c: 'Community', b: 'Basic', s: 'Standard', p: 'Premium',
+}
+
 function checkNodeSubscriptions(data: HardeningData): HardeningCheck[] {
   const nodes = data.nodes || []
   if (nodes.length === 0) return []
@@ -109,6 +113,7 @@ function checkNodeSubscriptions(data: HardeningData): HardeningCheck[] {
     const details = data.nodeDetails?.[n.node]
     const sub = details?.subscription
     const active = sub?.status === 'Active' || sub?.status === 'active'
+    const levelName = SUB_LEVEL_NAMES[sub?.level?.toLowerCase() || ''] || sub?.level || 'Unknown'
     return {
       id: `node_subscription_${n.node}`,
       name: 'Valid subscription',
@@ -118,7 +123,7 @@ function checkNodeSubscriptions(data: HardeningData): HardeningCheck[] {
       status: active ? 'pass' as CheckStatus : 'warning' as CheckStatus,
       earned: active ? 10 : 0,
       entity: n.node,
-      details: active ? `Subscription active (${sub?.level || 'standard'})` : 'No active subscription — running without support',
+      details: active ? `Subscription active — ${levelName}` : 'No active subscription — running without support',
     }
   })
 }
@@ -159,7 +164,7 @@ function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck[] 
     const problem = hasEnterpriseRepo && !active
     return {
       id: `node_enterprise_repo_${n.node}`,
-      name: 'No enterprise repo without subscription',
+      name: 'APT repository consistency',
       category: 'node' as CheckCategory,
       severity: 'low' as Severity,
       maxPoints: 5,

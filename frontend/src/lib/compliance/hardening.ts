@@ -105,39 +105,50 @@ const SUB_LEVEL_NAMES: Record<string, string> = {
   c: 'Community', b: 'Basic', s: 'Standard', p: 'Premium',
 }
 
-function checkNodeSubscriptions(data: HardeningData): HardeningCheck[] {
+function checkNodeSubscriptions(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
-  if (nodes.length === 0) return []
+  if (nodes.length === 0) {
+    return { id: 'node_subscriptions', name: 'Valid subscriptions', category: 'node', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
+  }
 
-  return nodes.map(n => {
-    const details = data.nodeDetails?.[n.node]
-    const sub = details?.subscription
+  const failed: string[] = []
+  const levels: string[] = []
+  for (const n of nodes) {
+    const sub = data.nodeDetails?.[n.node]?.subscription
     const active = sub?.status === 'Active' || sub?.status === 'active'
-    const levelName = SUB_LEVEL_NAMES[sub?.level?.toLowerCase() || ''] || sub?.level || 'Unknown'
-    return {
-      id: `node_subscription_${n.node}`,
-      name: 'Valid subscription',
-      category: 'node' as CheckCategory,
-      severity: 'medium' as Severity,
-      maxPoints: 10,
-      status: active ? 'pass' as CheckStatus : 'warning' as CheckStatus,
-      earned: active ? 10 : 0,
-      entity: n.node,
-      details: active ? `Subscription active — ${levelName}` : 'No active subscription — running without support',
-    }
-  })
+    if (!active) failed.push(n.node)
+    else levels.push(SUB_LEVEL_NAMES[sub?.level?.toLowerCase() || ''] || sub?.level || 'Unknown')
+  }
+
+  const ok = failed.length === 0
+  const levelSummary = [...new Set(levels)].join(', ')
+  return {
+    id: 'node_subscriptions',
+    name: 'Valid subscriptions',
+    category: 'node',
+    severity: 'medium',
+    maxPoints: 10,
+    status: ok ? 'pass' : 'warning',
+    earned: ok ? 10 : 0,
+    entity: `${nodes.length} nodes`,
+    details: ok
+      ? `${nodes.length}/${nodes.length} nodes — ${levelSummary}`
+      : `${failed.length}/${nodes.length} nodes without subscription: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '...' : ''}`,
+  }
 }
 
-function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck[] {
+function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
-  if (nodes.length === 0) return []
+  if (nodes.length === 0) {
+    return { id: 'apt_repo_consistency', name: 'APT repository consistency', category: 'node', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
+  }
 
-  return nodes.map(n => {
+  const problems: string[] = []
+  for (const n of nodes) {
     const nd = data.nodeDetails?.[n.node]
     const sub = nd?.subscription
     const active = sub?.status === 'Active' || sub?.status === 'active'
 
-    // Check apt repos — handle both formats
     let hasEnterpriseRepo = false
     const repos = nd?.aptRepos
     if (repos) {
@@ -145,120 +156,114 @@ function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck[] 
       for (const file of fileList) {
         if (file.enabled) {
           const uris = Array.isArray(file.uris) ? file.uris.join(' ') : ''
-          if (uris.includes('enterprise.proxmox.com')) {
-            hasEnterpriseRepo = true
-            break
-          }
+          if (uris.includes('enterprise.proxmox.com')) { hasEnterpriseRepo = true; break }
         }
       }
-      // Also check standard format
       const stdList = Array.isArray((repos as any).standard) ? (repos as any).standard : []
       for (const repo of stdList) {
-        if (repo?.handle?.includes('enterprise') && repo?.status === 1) {
-          hasEnterpriseRepo = true
-          break
-        }
+        if (repo?.handle?.includes('enterprise') && repo?.status === 1) { hasEnterpriseRepo = true; break }
       }
     }
+    if (hasEnterpriseRepo && !active) problems.push(n.node)
+  }
 
-    const problem = hasEnterpriseRepo && !active
-    return {
-      id: `node_enterprise_repo_${n.node}`,
-      name: 'APT repository consistency',
-      category: 'node' as CheckCategory,
-      severity: 'low' as Severity,
-      maxPoints: 5,
-      status: problem ? 'fail' as CheckStatus : 'pass' as CheckStatus,
-      earned: problem ? 0 : 5,
-      entity: n.node,
-      details: problem
-        ? 'Enterprise repo enabled without subscription — apt updates will fail'
-        : 'Repository configuration is consistent',
-    }
-  })
+  const ok = problems.length === 0
+  return {
+    id: 'apt_repo_consistency',
+    name: 'APT repository consistency',
+    category: 'node',
+    severity: 'low',
+    maxPoints: 5,
+    status: ok ? 'pass' : 'fail',
+    earned: ok ? 5 : 0,
+    entity: `${nodes.length} nodes`,
+    details: ok
+      ? `${nodes.length}/${nodes.length} nodes — repositories consistent`
+      : `${problems.length} node(s) with enterprise repo but no subscription: ${problems.slice(0, 3).join(', ')}${problems.length > 3 ? '...' : ''}`,
+  }
 }
 
-function checkTlsCertificates(data: HardeningData): HardeningCheck[] {
+function checkTlsCertificates(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
-  if (nodes.length === 0) return []
+  if (nodes.length === 0) {
+    return { id: 'tls_certificates', name: 'Valid TLS certificates', category: 'node', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
+  }
 
   const now = Date.now() / 1000
   const thirtyDays = 30 * 86400
+  const expired: string[] = []
+  const expiringSoon: string[] = []
+  const selfSigned: string[] = []
 
-  return nodes.map(n => {
+  for (const n of nodes) {
     const certs = data.nodeDetails?.[n.node]?.certificates
-    if (!certs || certs.length === 0) {
-      return {
-        id: `node_tls_${n.node}`,
-        name: 'Valid TLS certificates',
-        category: 'node' as CheckCategory,
-        severity: 'high' as Severity,
-        maxPoints: 15,
-        status: 'skip' as CheckStatus,
-        earned: 0,
-        entity: n.node,
-        details: 'No certificate information available',
-      }
-    }
-
+    if (!certs || certs.length === 0) continue
     const pveProxy = certs.find(c => c.filename === 'pveproxy-ssl.pem' || c.filename === '/etc/pve/local/pveproxy-ssl.pem')
     const cert = pveProxy || certs[0]
     const expiry = cert?.notafter || 0
-    const expired = expiry < now
-    const expiringSoon = !expired && expiry < now + thirtyDays
-    const selfSigned = cert?.issuer === cert?.subject
+    if (expiry < now) expired.push(n.node)
+    else if (expiry < now + thirtyDays) expiringSoon.push(n.node)
+    else if (cert?.issuer === cert?.subject) selfSigned.push(n.node)
+  }
 
-    let status: CheckStatus = 'pass'
-    let earned = 15
-    let detail = 'TLS certificate is valid'
+  const hasIssues = expired.length > 0
+  const hasWarnings = expiringSoon.length > 0 || selfSigned.length > 0
+  let status: CheckStatus = 'pass'
+  let earned = 15
+  const parts: string[] = []
 
-    if (expired) {
-      status = 'fail'
-      earned = 0
-      detail = 'TLS certificate has expired'
-    } else if (expiringSoon) {
-      status = 'warning'
-      earned = 10
-      detail = 'TLS certificate expires within 30 days'
-    } else if (selfSigned) {
-      status = 'warning'
-      earned = 10
-      detail = 'Using self-signed certificate — consider using a trusted CA'
-    }
+  if (hasIssues) {
+    status = 'fail'; earned = 0
+    parts.push(`${expired.length} expired: ${expired.slice(0, 3).join(', ')}${expired.length > 3 ? '...' : ''}`)
+  }
+  if (expiringSoon.length > 0) {
+    if (!hasIssues) { status = 'warning'; earned = 10 }
+    parts.push(`${expiringSoon.length} expiring soon`)
+  }
+  if (selfSigned.length > 0) {
+    if (!hasIssues && !hasWarnings) { status = 'warning'; earned = 10 }
+    parts.push(`${selfSigned.length} self-signed`)
+  }
 
-    return {
-      id: `node_tls_${n.node}`,
-      name: 'Valid TLS certificates',
-      category: 'node' as CheckCategory,
-      severity: 'high' as Severity,
-      maxPoints: 15,
-      status,
-      earned,
-      entity: n.node,
-      details: detail,
-    }
-  })
+  return {
+    id: 'tls_certificates',
+    name: 'Valid TLS certificates',
+    category: 'node',
+    severity: 'high',
+    maxPoints: 15,
+    status,
+    earned,
+    entity: `${nodes.length} nodes`,
+    details: parts.length > 0 ? parts.join(', ') : `${nodes.length}/${nodes.length} nodes — certificates valid`,
+  }
 }
 
-function checkNodeFirewall(data: HardeningData): HardeningCheck[] {
+function checkNodeFirewall(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
-  if (nodes.length === 0) return []
+  if (nodes.length === 0) {
+    return { id: 'node_firewalls', name: 'Node firewalls enabled', category: 'node', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
+  }
 
-  return nodes.map(n => {
+  const disabled: string[] = []
+  for (const n of nodes) {
     const fw = data.nodeDetails?.[n.node]?.firewall
-    const enabled = fw?.enable === 1
-    return {
-      id: `node_fw_${n.node}`,
-      name: 'Node firewall enabled',
-      category: 'node' as CheckCategory,
-      severity: 'medium' as Severity,
-      maxPoints: 10,
-      status: enabled ? 'pass' as CheckStatus : 'fail' as CheckStatus,
-      earned: enabled ? 10 : 0,
-      entity: n.node,
-      details: enabled ? 'Node firewall is enabled' : 'Node firewall is disabled',
-    }
-  })
+    if (fw?.enable !== 1) disabled.push(n.node)
+  }
+
+  const ok = disabled.length === 0
+  return {
+    id: 'node_firewalls',
+    name: 'Node firewalls enabled',
+    category: 'node',
+    severity: 'medium',
+    maxPoints: 10,
+    status: ok ? 'pass' : 'fail',
+    earned: ok ? 10 : 0,
+    entity: `${nodes.length} nodes`,
+    details: ok
+      ? `${nodes.length}/${nodes.length} nodes — firewall enabled`
+      : `${disabled.length}/${nodes.length} nodes without firewall: ${disabled.slice(0, 3).join(', ')}${disabled.length > 3 ? '...' : ''}`,
+  }
 }
 
 function checkRootTfa(data: HardeningData): HardeningCheck {
@@ -432,10 +437,10 @@ export function runAllChecks(data: HardeningData): HardeningCheck[] {
     checkPolicyIn(data),
     checkPolicyOut(data),
     checkPveVersion(data),
-    ...checkNodeSubscriptions(data),
-    ...checkNoEnterpriseRepoWithoutSub(data),
-    ...checkTlsCertificates(data),
-    ...checkNodeFirewall(data),
+    checkNodeSubscriptions(data),
+    checkNoEnterpriseRepoWithoutSub(data),
+    checkTlsCertificates(data),
+    checkNodeFirewall(data),
     checkRootTfa(data),
     checkAdminsTfa(data),
     checkDefaultApiTokens(data),

@@ -25,6 +25,8 @@ export default function LoginPage() {
   const [checkingSetup, setCheckingSetup] = useState(true)
   const [error, setError] = useState('')
   const [ldapEnabled, setLdapEnabled] = useState(false)
+  const [oidcEnabled, setOidcEnabled] = useState(false)
+  const [oidcProviderName, setOidcProviderName] = useState('SSO')
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -47,7 +49,11 @@ export default function LoginPage() {
   useEffect(() => {
     fetch('/api/v1/auth/providers')
       .then(res => res.json())
-      .then(data => setLdapEnabled(data.ldapEnabled || false))
+      .then(data => {
+        setLdapEnabled(data.ldapEnabled || false)
+        setOidcEnabled(data.oidcEnabled || false)
+        setOidcProviderName(data.oidcProviderName || 'SSO')
+      })
       .catch(() => {})
     if (errorParam) setError(decodeURIComponent(errorParam))
   }, [errorParam])
@@ -123,6 +129,22 @@ export default function LoginPage() {
           {authMethod === 'ldap' && <Box sx={{ mb: 3 }} />}
           <Button fullWidth variant='contained' type='submit' disabled={loading} sx={{ py: 1.5 }}>{loading ? t('auth.loggingIn') : t('auth.login')}</Button>
         </form>
+        {oidcEnabled && (
+          <>
+            <Divider sx={{ my: 2 }}>
+              <Typography variant='caption' sx={{ opacity: 0.5 }}>{t('auth.or')}</Typography>
+            </Divider>
+            <Button
+              fullWidth
+              variant='outlined'
+              onClick={() => signIn('oidc', { callbackUrl })}
+              startIcon={<i className='ri-shield-keyhole-line' />}
+              sx={{ py: 1.5 }}
+            >
+              {t('auth.signInWithSso', { provider: oidcProviderName })}
+            </Button>
+          </>
+        )}
         <Divider sx={{ my: 3 }} />
         <Typography variant='caption' sx={{ display: 'block', textAlign: 'center', opacity: 0.5 }}>ProxCenter - {t('auth.appSubtitle')}</Typography>
       </Box>

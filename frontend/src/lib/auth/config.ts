@@ -1,12 +1,14 @@
 // src/lib/auth/config.ts
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
+import type { OAuthConfig } from "next-auth/providers/oauth"
 
 import { nanoid } from "nanoid"
 
 import { getDb } from "@/lib/db/sqlite"
 import { verifyPassword, hashPassword } from "./password"
 import { authenticateLdap, isLdapEnabled } from "./ldap"
+import { getOidcConfig, resolveOidcRole } from "./oidc"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -16,7 +18,7 @@ export interface AuthUser {
   name: string | null
   avatar: string | null
   role: UserRole
-  authProvider: "credentials" | "ldap"
+  authProvider: "credentials" | "ldap" | "oidc"
 }
 
 declare module "next-auth" {
@@ -33,7 +35,7 @@ declare module "next-auth/jwt" {
     name: string | null
     // avatar is NOT stored in JWT to keep cookie size small
     role: UserRole
-    authProvider: "credentials" | "ldap"
+    authProvider: "credentials" | "ldap" | "oidc"
   }
 }
 
@@ -217,7 +219,69 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ user, account, profile }) {
+      // Handle OIDC provider sign-in: provision or update user in SQLite
+      if (account?.provider === 'oidc' && profile) {
+        const oidcConfig = getOidcConfig()
+
+        if (!oidcConfig || !oidcConfig.enabled) return false
+
+        const db = getDb()
+        const now = new Date().toISOString()
+        const sub = (profile as any).sub as string
+        const email = ((profile as any)[oidcConfig.claimEmail] || (profile as any).email || '').toLowerCase().trim()
+        const name = (profile as any)[oidcConfig.claimName] || (profile as any).name || email
+        const groups: string[] = (profile as any)[oidcConfig.claimGroups || 'groups'] || []
+
+        if (!email) return false
+
+        // Look up by oidc_sub first, then by email
+        let existing = db
+          .prepare("SELECT id, email, name, role, enabled, oidc_sub FROM users WHERE oidc_sub = ?")
+          .get(sub) as any
+
+        if (!existing) {
+          existing = db
+            .prepare("SELECT id, email, name, role, enabled, oidc_sub FROM users WHERE email = ?")
+            .get(email) as any
+        }
+
+        if (existing) {
+          if (!existing.enabled) return false
+
+          // Update existing user
+          db.prepare(
+            "UPDATE users SET name = ?, oidc_sub = ?, last_login_at = ?, updated_at = ?, auth_provider = 'oidc' WHERE id = ?"
+          ).run(name, sub, now, now, existing.id)
+
+          user.id = existing.id
+          user.email = existing.email
+          user.name = name
+          user.role = existing.role as UserRole
+          user.authProvider = 'oidc'
+        } else {
+          // Auto-provision new user
+          if (!oidcConfig.autoProvision) return false
+
+          const id = nanoid()
+          const role = resolveOidcRole(groups, oidcConfig)
+
+          db.prepare(
+            `INSERT INTO users (id, email, name, role, auth_provider, oidc_sub, enabled, created_at, updated_at, last_login_at)
+             VALUES (?, ?, ?, ?, 'oidc', ?, 1, ?, ?, ?)`
+          ).run(id, email, name, role, sub, now, now, now)
+
+          user.id = id
+          user.email = email
+          user.name = name
+          user.role = role as UserRole
+          user.authProvider = 'oidc'
+        }
+      }
+
+      return true
+    },
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id
         token.email = user.email
@@ -225,11 +289,10 @@ export const authOptions: NextAuthOptions = {
         // Don't store avatar in JWT to keep cookie size small
         // Avatar will be fetched from DB in session callback
         token.role = user.role
-        token.authProvider = user.authProvider
+        token.authProvider = account?.provider === 'oidc' ? 'oidc' : user.authProvider
       }
 
-
-return token
+      return token
     },
     async session({ session, token }) {
       // Fetch avatar from DB instead of storing in JWT (avoids large cookies)
@@ -248,10 +311,10 @@ return token
         name: token.name as string | null,
         avatar,
         role: token.role as UserRole,
-        authProvider: token.authProvider as "credentials" | "ldap",
+        authProvider: token.authProvider as "credentials" | "ldap" | "oidc",
       }
 
-return session
+      return session
     },
   },
   events: {
@@ -290,4 +353,50 @@ return session
     maxAge: 30 * 24 * 60 * 60, // 30 jours
   },
   secret: process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production",
+}
+
+/**
+ * Returns authOptions with OIDC provider dynamically included if configured.
+ * Used only in the [...nextauth] route handler.
+ * All getServerSession(authOptions) calls remain unchanged (JWT validation doesn't need the provider list).
+ */
+export function getAuthOptions(): NextAuthOptions {
+  const oidcConfig = getOidcConfig()
+
+  if (!oidcConfig || !oidcConfig.enabled || !oidcConfig.issuerUrl || !oidcConfig.clientId) {
+    return authOptions
+  }
+
+  const oidcProvider: OAuthConfig<any> = {
+    id: 'oidc',
+    name: oidcConfig.providerName || 'SSO',
+    type: 'oauth',
+    wellKnown: oidcConfig.authorizationUrl ? undefined : `${oidcConfig.issuerUrl}/.well-known/openid-configuration`,
+    authorization: oidcConfig.authorizationUrl ? {
+      url: oidcConfig.authorizationUrl,
+      params: { scope: oidcConfig.scopes },
+    } : { params: { scope: oidcConfig.scopes } },
+    token: oidcConfig.tokenUrl || undefined,
+    userinfo: oidcConfig.userinfoUrl || undefined,
+    clientId: oidcConfig.clientId,
+    clientSecret: oidcConfig.clientSecret || '',
+    idToken: true,
+    checks: ['pkce', 'state'],
+    allowDangerousEmailAccountLinking: true,
+    profile(profile) {
+      return {
+        id: profile.sub,
+        email: profile[oidcConfig.claimEmail] || profile.email,
+        name: profile[oidcConfig.claimName] || profile.name,
+        avatar: profile.picture || null,
+        role: 'viewer' as UserRole,
+        authProvider: 'oidc' as const,
+      }
+    },
+  }
+
+  return {
+    ...authOptions,
+    providers: [...authOptions.providers, oidcProvider],
+  }
 }

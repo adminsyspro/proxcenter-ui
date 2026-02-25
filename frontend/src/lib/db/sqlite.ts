@@ -50,6 +50,18 @@ export function getDb() {
     // Ignore si erreur
   }
 
+  // Migration pour ajouter la colonne oidc_sub si elle n'existe pas
+  try {
+    const userColumns2 = db.pragma('table_info(users)') as any[]
+    const hasOidcSub = userColumns2.some((col: any) => col.name === 'oidc_sub')
+
+    if (!hasOidcSub) {
+      db.exec(`ALTER TABLE users ADD COLUMN oidc_sub TEXT`)
+    }
+  } catch (e) {
+    // Ignore si erreur
+  }
+
   db.exec(`
     -- Table des sessions
     CREATE TABLE IF NOT EXISTS sessions (
@@ -101,6 +113,28 @@ export function getDb() {
       email_attribute TEXT NOT NULL DEFAULT 'mail',
       name_attribute TEXT NOT NULL DEFAULT 'cn',
       tls_insecure INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    -- Table de configuration OIDC / SSO
+    CREATE TABLE IF NOT EXISTS oidc_config (
+      id TEXT PRIMARY KEY DEFAULT 'default',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      provider_name TEXT NOT NULL DEFAULT 'SSO',
+      issuer_url TEXT NOT NULL DEFAULT '',
+      client_id TEXT NOT NULL DEFAULT '',
+      client_secret_enc TEXT,
+      scopes TEXT NOT NULL DEFAULT 'openid profile email',
+      authorization_url TEXT,
+      token_url TEXT,
+      userinfo_url TEXT,
+      claim_email TEXT NOT NULL DEFAULT 'email',
+      claim_name TEXT NOT NULL DEFAULT 'name',
+      claim_groups TEXT DEFAULT 'groups',
+      auto_provision INTEGER NOT NULL DEFAULT 1,
+      default_role TEXT NOT NULL DEFAULT 'viewer',
+      group_role_mapping TEXT DEFAULT '{}',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

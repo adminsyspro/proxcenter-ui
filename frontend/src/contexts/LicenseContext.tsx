@@ -21,6 +21,7 @@ export const Features = {
   NOTIFICATIONS: 'notifications',
   CVE_SCANNER: 'cve_scanner',
   COMPLIANCE: 'compliance',
+  OIDC: 'oidc',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]
@@ -45,6 +46,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.NOTIFICATIONS,
     Features.CVE_SCANNER,
     Features.COMPLIANCE,
+    Features.OIDC,
   ],
   enterprise_plus: [
     Features.DRS,
@@ -64,6 +66,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.NOTIFICATIONS,
     Features.CVE_SCANNER,
     Features.COMPLIANCE,
+    Features.OIDC,
   ],
 }
 

@@ -62,6 +62,11 @@ const LdapConfigTab = dynamic(() => import('@/components/settings/LdapConfigTab'
   loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
 })
 
+const OidcConfigTab = dynamic(() => import('@/components/settings/OidcConfigTab'), {
+  ssr: false,
+  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+})
+
 const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionDialog'), {
   ssr: false
 })
@@ -1702,6 +1707,7 @@ export default function SettingsPage() {
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP },
+    { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC },
     { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab },
     { label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS },
     { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS },

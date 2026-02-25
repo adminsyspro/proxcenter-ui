@@ -26,13 +26,18 @@ export interface HardeningData {
     aptRepos?: { files?: Array<{ file_type?: string; enabled?: number; types?: string; uris?: string[]; suites?: string[]; components?: string[] }> }
       | { standard?: Array<any>; errors?: Array<any> }
     certificates?: Array<{ filename?: string; notafter?: number; notbefore?: number; fingerprint?: string; subject?: string; issuer?: string }>
-    firewall?: { enable?: number }
+    firewall?: { enable?: number; log_level_in?: string; log_level_out?: string }
   }>
   users?: Array<{ userid: string; enable?: number; realm?: string; tokens?: Array<{ tokenid: string }> }>
   tfa?: Array<{ userid: string; type?: string; enabled?: number }>
   resources?: Array<{ type: string; vmid?: number; node?: string; name?: string; id?: string }>
   vmFirewalls?: Record<string, { enable?: number }>
   vmSecurityGroups?: Record<string, boolean>
+  backupJobs?: Array<{ id?: string; enabled?: number; schedule?: string; type?: string }>
+  haResources?: Array<{ sid?: string; type?: string; state?: string }>
+  replicationJobs?: Array<{ id?: string; target?: string; schedule?: string; disable?: number }>
+  pools?: Array<{ poolid?: string; members?: Array<{ id: string; type: string }> }>
+  vmConfigs?: Record<string, Record<string, any>>
 }
 
 const LATEST_PVE_MAJOR = 8
@@ -431,6 +436,372 @@ function checkVmSecurityGroups(data: HardeningData): HardeningCheck {
   }
 }
 
+function checkBackupSchedule(data: HardeningData): HardeningCheck {
+  const jobs = data.backupJobs || []
+  const enabledJobs = jobs.filter(j => j.enabled !== 0)
+  const hasJobs = enabledJobs.length > 0
+  return {
+    id: 'backup_schedule',
+    name: 'Backup jobs configured',
+    category: 'cluster',
+    severity: 'high',
+    maxPoints: 15,
+    status: hasJobs ? 'pass' : 'fail',
+    earned: hasJobs ? 15 : 0,
+    entity: `${enabledJobs.length} jobs`,
+    details: hasJobs
+      ? `${enabledJobs.length} backup job(s) configured and enabled`
+      : 'No backup jobs configured — create scheduled backups in Datacenter > Backup',
+  }
+}
+
+function checkHaEnabled(data: HardeningData): HardeningCheck {
+  const resources = data.haResources || []
+  const hasHA = resources.length > 0
+  return {
+    id: 'ha_enabled',
+    name: 'High availability configured',
+    category: 'cluster',
+    severity: 'medium',
+    maxPoints: 10,
+    status: hasHA ? 'pass' : 'warning',
+    earned: hasHA ? 10 : 0,
+    entity: `${resources.length} HA resources`,
+    details: hasHA
+      ? `${resources.length} HA resource(s) configured`
+      : 'No HA resources configured — consider adding critical VMs to HA',
+  }
+}
+
+function checkStorageReplication(data: HardeningData): HardeningCheck {
+  const jobs = data.replicationJobs || []
+  const activeJobs = jobs.filter(j => !j.disable)
+  const hasReplication = activeJobs.length > 0
+  return {
+    id: 'storage_replication',
+    name: 'Storage replication configured',
+    category: 'cluster',
+    severity: 'medium',
+    maxPoints: 10,
+    status: hasReplication ? 'pass' : 'warning',
+    earned: hasReplication ? 10 : 0,
+    entity: `${activeJobs.length} jobs`,
+    details: hasReplication
+      ? `${activeJobs.length} active replication job(s) configured`
+      : 'No storage replication configured — consider replicating critical data',
+  }
+}
+
+function checkPoolIsolation(data: HardeningData): HardeningCheck {
+  const pools = data.pools || []
+  const nonEmptyPools = pools.filter(p => (p.members?.length || 0) > 0)
+  const hasPools = nonEmptyPools.length > 0
+  return {
+    id: 'pool_isolation',
+    name: 'Resource pool isolation',
+    category: 'cluster',
+    severity: 'medium',
+    maxPoints: 10,
+    status: hasPools ? 'pass' : 'warning',
+    earned: hasPools ? 10 : 0,
+    entity: `${nonEmptyPools.length} pools`,
+    details: hasPools
+      ? `${nonEmptyPools.length} resource pool(s) with assigned VMs`
+      : 'No resource pools configured — use pools to isolate workloads',
+  }
+}
+
+function checkVmVlanIsolation(data: HardeningData): HardeningCheck {
+  const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+  if (vms.length === 0) {
+    return { id: 'vm_vlan_isolation', name: 'VMs use VLAN isolation', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VMs found' }
+  }
+
+  const configs = data.vmConfigs || {}
+  let checked = 0, withVlan = 0
+  for (const vm of vms) {
+    const key = `${vm.node}/${vm.type}/${vm.vmid}`
+    const cfg = configs[key]
+    if (!cfg) continue
+    checked++
+    let hasVlan = false
+    for (const [k, v] of Object.entries(cfg)) {
+      if (k.startsWith('net') && typeof v === 'string' && v.includes('tag=')) {
+        hasVlan = true
+        break
+      }
+    }
+    if (hasVlan) withVlan++
+  }
+
+  if (checked === 0) {
+    return { id: 'vm_vlan_isolation', name: 'VMs use VLAN isolation', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VM configs available' }
+  }
+
+  const ratio = withVlan / checked
+  const status: CheckStatus = ratio >= 0.8 ? 'pass' : ratio >= 0.5 ? 'warning' : 'fail'
+  const earned = status === 'pass' ? 15 : status === 'warning' ? 8 : 0
+
+  return {
+    id: 'vm_vlan_isolation',
+    name: 'VMs use VLAN isolation',
+    category: 'vm',
+    severity: 'high',
+    maxPoints: 15,
+    status,
+    earned,
+    entity: `${checked}/${vms.length} VMs checked`,
+    details: `${withVlan}/${checked} VMs use VLAN tags for network isolation`,
+  }
+}
+
+function checkVmGuestAgent(data: HardeningData): HardeningCheck {
+  const qemuVms = (data.resources || []).filter(r => r.type === 'qemu')
+  if (qemuVms.length === 0) {
+    return { id: 'vm_guest_agent', name: 'QEMU guest agent enabled', category: 'vm', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'VMs', details: 'No QEMU VMs found' }
+  }
+
+  const configs = data.vmConfigs || {}
+  let checked = 0, withAgent = 0
+  for (const vm of qemuVms) {
+    const key = `${vm.node}/${vm.type}/${vm.vmid}`
+    const cfg = configs[key]
+    if (!cfg) continue
+    checked++
+    const agent = cfg.agent
+    if (agent && (agent === 1 || String(agent).startsWith('1'))) withAgent++
+  }
+
+  if (checked === 0) {
+    return { id: 'vm_guest_agent', name: 'QEMU guest agent enabled', category: 'vm', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'VMs', details: 'No VM configs available' }
+  }
+
+  const allEnabled = withAgent / checked >= 0.8
+  return {
+    id: 'vm_guest_agent',
+    name: 'QEMU guest agent enabled',
+    category: 'vm',
+    severity: 'low',
+    maxPoints: 5,
+    status: allEnabled ? 'pass' : 'warning',
+    earned: allEnabled ? 5 : 0,
+    entity: `${checked}/${qemuVms.length} VMs checked`,
+    details: `${withAgent}/${checked} QEMU VMs have guest agent enabled`,
+  }
+}
+
+function checkVmSecureBoot(data: HardeningData): HardeningCheck {
+  const qemuVms = (data.resources || []).filter(r => r.type === 'qemu')
+  if (qemuVms.length === 0) {
+    return { id: 'vm_secure_boot', name: 'UEFI boot enabled', category: 'vm', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'VMs', details: 'No QEMU VMs found' }
+  }
+
+  const configs = data.vmConfigs || {}
+  let checked = 0, withUefi = 0
+  for (const vm of qemuVms) {
+    const key = `${vm.node}/${vm.type}/${vm.vmid}`
+    const cfg = configs[key]
+    if (!cfg) continue
+    checked++
+    if (cfg.bios === 'ovmf' || cfg.efidisk0) withUefi++
+  }
+
+  if (checked === 0) {
+    return { id: 'vm_secure_boot', name: 'UEFI boot enabled', category: 'vm', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'VMs', details: 'No VM configs available' }
+  }
+
+  const ratio = withUefi / checked
+  const status: CheckStatus = ratio >= 0.7 ? 'pass' : ratio >= 0.3 ? 'warning' : 'fail'
+  const earned = status === 'pass' ? 10 : status === 'warning' ? 5 : 0
+
+  return {
+    id: 'vm_secure_boot',
+    name: 'UEFI boot enabled',
+    category: 'vm',
+    severity: 'medium',
+    maxPoints: 10,
+    status,
+    earned,
+    entity: `${checked}/${qemuVms.length} VMs checked`,
+    details: `${withUefi}/${checked} QEMU VMs use UEFI/secure boot`,
+  }
+}
+
+function checkVmNoUsbPassthrough(data: HardeningData): HardeningCheck {
+  const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+  if (vms.length === 0) {
+    return { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VMs found' }
+  }
+
+  const configs = data.vmConfigs || {}
+  let checked = 0
+  const withUsb: string[] = []
+  for (const vm of vms) {
+    const key = `${vm.node}/${vm.type}/${vm.vmid}`
+    const cfg = configs[key]
+    if (!cfg) continue
+    checked++
+    for (const k of Object.keys(cfg)) {
+      if (/^(usb|hostpci)\d+$/.test(k)) {
+        withUsb.push(vm.name || String(vm.vmid))
+        break
+      }
+    }
+  }
+
+  if (checked === 0) {
+    return { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VM configs available' }
+  }
+
+  const ok = withUsb.length === 0
+  return {
+    id: 'vm_no_usb_passthrough',
+    name: 'No USB/PCI passthrough',
+    category: 'vm',
+    severity: 'high',
+    maxPoints: 15,
+    status: ok ? 'pass' : 'warning',
+    earned: ok ? 15 : 0,
+    entity: `${checked}/${vms.length} VMs checked`,
+    details: ok
+      ? 'No VMs have USB/PCI passthrough devices'
+      : `${withUsb.length} VM(s) with USB/PCI passthrough: ${withUsb.slice(0, 3).join(', ')}${withUsb.length > 3 ? '...' : ''}`,
+  }
+}
+
+function checkVmCpuIsolation(data: HardeningData): HardeningCheck {
+  const qemuVms = (data.resources || []).filter(r => r.type === 'qemu')
+  if (qemuVms.length === 0) {
+    return { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'VMs', details: 'No QEMU VMs found' }
+  }
+
+  const configs = data.vmConfigs || {}
+  let checked = 0
+  const withHostCpu: string[] = []
+  for (const vm of qemuVms) {
+    const key = `${vm.node}/${vm.type}/${vm.vmid}`
+    const cfg = configs[key]
+    if (!cfg) continue
+    checked++
+    if (cfg.cpu === 'host') {
+      withHostCpu.push(vm.name || String(vm.vmid))
+    }
+  }
+
+  if (checked === 0) {
+    return { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'VMs', details: 'No VM configs available' }
+  }
+
+  const ok = withHostCpu.length === 0
+  return {
+    id: 'vm_cpu_isolation',
+    name: 'CPU type isolation',
+    category: 'vm',
+    severity: 'medium',
+    maxPoints: 10,
+    status: ok ? 'pass' : 'warning',
+    earned: ok ? 10 : 5,
+    entity: `${checked}/${qemuVms.length} VMs checked`,
+    details: ok
+      ? `All ${checked} QEMU VMs use isolated CPU types`
+      : `${withHostCpu.length} VM(s) use host CPU type (less isolation): ${withHostCpu.slice(0, 3).join(', ')}${withHostCpu.length > 3 ? '...' : ''}`,
+  }
+}
+
+function checkVmIpFilter(data: HardeningData): HardeningCheck {
+  const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+  if (vms.length === 0) {
+    return { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VMs found' }
+  }
+
+  const vmFws = data.vmFirewalls || {}
+  let checked = 0, withFilter = 0
+  for (const vm of vms) {
+    const key = `${vm.node}/${vm.type}/${vm.vmid}`
+    const fw = vmFws[key] as any
+    if (!fw) continue
+    checked++
+    if (fw.ipfilter === 1 || fw.ipfilter === true) withFilter++
+  }
+
+  if (checked === 0) {
+    return { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VM firewall data available' }
+  }
+
+  const ratio = withFilter / checked
+  const status: CheckStatus = ratio >= 0.8 ? 'pass' : ratio >= 0.5 ? 'warning' : 'fail'
+  const earned = status === 'pass' ? 15 : status === 'warning' ? 8 : 0
+
+  return {
+    id: 'vm_ip_filter',
+    name: 'VM IP filter enabled',
+    category: 'vm',
+    severity: 'high',
+    maxPoints: 15,
+    status,
+    earned,
+    entity: `${checked}/${vms.length} VMs checked`,
+    details: `${withFilter}/${checked} VMs have IP filter enabled`,
+  }
+}
+
+function checkLeastPrivilegeUsers(data: HardeningData): HardeningCheck {
+  const users = data.users || []
+  const enabledUsers = users.filter(u => u.enable !== 0)
+  if (enabledUsers.length === 0) {
+    return { id: 'least_privilege_users', name: 'Least privilege access', category: 'access', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'Users', details: 'No users found' }
+  }
+
+  const pamUsers = enabledUsers.filter(u => u.userid?.endsWith('@pam'))
+  const tooManyPam = pamUsers.length > 3 || (enabledUsers.length > 5 && pamUsers.length / enabledUsers.length > 0.5)
+
+  return {
+    id: 'least_privilege_users',
+    name: 'Least privilege access',
+    category: 'access',
+    severity: 'medium',
+    maxPoints: 10,
+    status: tooManyPam ? 'warning' : 'pass',
+    earned: tooManyPam ? 0 : 10,
+    entity: `${enabledUsers.length} users`,
+    details: tooManyPam
+      ? `${pamUsers.length}/${enabledUsers.length} users have direct PAM access — consider using PVE or LDAP realms`
+      : `${pamUsers.length} PAM user(s) out of ${enabledUsers.length} total — access is properly segmented`,
+  }
+}
+
+function checkNodeFirewallLogging(data: HardeningData): HardeningCheck {
+  const nodes = data.nodes || []
+  if (nodes.length === 0) {
+    return { id: 'node_firewall_logging', name: 'Firewall logging enabled', category: 'node', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
+  }
+
+  const withoutLogging: string[] = []
+  for (const n of nodes) {
+    const fw = data.nodeDetails?.[n.node]?.firewall as any
+    const logIn = fw?.log_level_in
+    const logOut = fw?.log_level_out
+    if ((!logIn || logIn === 'nolog') && (!logOut || logOut === 'nolog')) {
+      withoutLogging.push(n.node)
+    }
+  }
+
+  const ok = withoutLogging.length === 0
+  return {
+    id: 'node_firewall_logging',
+    name: 'Firewall logging enabled',
+    category: 'node',
+    severity: 'low',
+    maxPoints: 5,
+    status: ok ? 'pass' : 'warning',
+    earned: ok ? 5 : 0,
+    entity: `${nodes.length} nodes`,
+    details: ok
+      ? `All ${nodes.length} nodes have firewall logging enabled`
+      : `${withoutLogging.length}/${nodes.length} nodes without firewall logging: ${withoutLogging.slice(0, 3).join(', ')}${withoutLogging.length > 3 ? '...' : ''}`,
+  }
+}
+
 // Map of check ID -> check function for dynamic lookup
 const CHECK_FUNCTIONS: Record<string, (data: HardeningData) => HardeningCheck> = {
   cluster_fw_enabled: checkClusterFirewall,
@@ -446,6 +817,18 @@ const CHECK_FUNCTIONS: Record<string, (data: HardeningData) => HardeningCheck> =
   no_default_tokens: checkDefaultApiTokens,
   vm_firewalls: checkVmFirewalls,
   vm_security_groups: checkVmSecurityGroups,
+  backup_schedule: checkBackupSchedule,
+  ha_enabled: checkHaEnabled,
+  storage_replication: checkStorageReplication,
+  pool_isolation: checkPoolIsolation,
+  vm_vlan_isolation: checkVmVlanIsolation,
+  vm_guest_agent: checkVmGuestAgent,
+  vm_secure_boot: checkVmSecureBoot,
+  vm_no_usb_passthrough: checkVmNoUsbPassthrough,
+  vm_cpu_isolation: checkVmCpuIsolation,
+  vm_ip_filter: checkVmIpFilter,
+  least_privilege_users: checkLeastPrivilegeUsers,
+  node_firewall_logging: checkNodeFirewallLogging,
 }
 
 export function runAllChecks(data: HardeningData): HardeningCheck[] {
@@ -463,6 +846,18 @@ export function runAllChecks(data: HardeningData): HardeningCheck[] {
     checkDefaultApiTokens(data),
     checkVmFirewalls(data),
     checkVmSecurityGroups(data),
+    checkBackupSchedule(data),
+    checkHaEnabled(data),
+    checkStorageReplication(data),
+    checkPoolIsolation(data),
+    checkVmVlanIsolation(data),
+    checkVmGuestAgent(data),
+    checkVmSecureBoot(data),
+    checkVmNoUsbPassthrough(data),
+    checkVmCpuIsolation(data),
+    checkVmIpFilter(data),
+    checkLeastPrivilegeUsers(data),
+    checkNodeFirewallLogging(data),
   ]
 }
 

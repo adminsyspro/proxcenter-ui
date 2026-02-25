@@ -40,17 +40,25 @@ export async function GET(
     const profileId = searchParams.get('profileId')
 
     // Parallel fetch: cluster-level data
-    const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw] = await Promise.all([
+    const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw, backupJobsRaw, haResourcesRaw, replicationRaw, poolsRaw] = await Promise.all([
       pveFetch<any>(conn, '/cluster/firewall/options').catch(() => ({})),
       pveFetch<any>(conn, '/version').catch(() => ({})),
       pveFetch<any>(conn, '/nodes').catch(() => []),
       pveFetch<any>(conn, '/access/users?full=1').catch(() => []),
       pveFetch<any>(conn, '/cluster/resources').catch(() => []),
+      pveFetch<any>(conn, '/cluster/backup').catch(() => []),
+      pveFetch<any>(conn, '/cluster/ha/resources').catch(() => []),
+      pveFetch<any>(conn, '/cluster/replication').catch(() => []),
+      pveFetch<any>(conn, '/pools').catch(() => []),
     ])
 
     const nodes: Array<{ node: string; status?: string }> = Array.isArray(nodesRaw) ? nodesRaw : []
     const users = Array.isArray(usersRaw) ? usersRaw : []
     const resources = Array.isArray(resourcesRaw) ? resourcesRaw : []
+    const backupJobs = Array.isArray(backupJobsRaw) ? backupJobsRaw : []
+    const haResources = Array.isArray(haResourcesRaw) ? haResourcesRaw : []
+    const replicationJobs = Array.isArray(replicationRaw) ? replicationRaw : []
+    const pools = Array.isArray(poolsRaw) ? poolsRaw : []
 
     // TFA info
     let tfa: any[] = []
@@ -74,10 +82,11 @@ export async function GET(
       nodeDetails[n.node] = { subscription, aptRepos, certificates: Array.isArray(certificates) ? certificates : [], firewall: nodeFirewall }
     }))
 
-    // VM firewall checks (all VMs, concurrency-controlled)
+    // VM data: firewall + config (all VMs, concurrency-controlled)
     const vms = resources.filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
     const vmFirewalls: Record<string, any> = {}
     const vmSecurityGroups: Record<string, boolean> = {}
+    const vmConfigs: Record<string, Record<string, any>> = {}
 
     await runWithConcurrency(vms, VM_CONCURRENCY, async (vm: any) => {
       const key = `${vm.node}/${vm.type}/${vm.vmid}`
@@ -85,20 +94,18 @@ export async function GET(
       const vmType = vm.type === 'lxc' ? 'lxc' : 'qemu'
       const vmid = vm.vmid
 
-      try {
-        const fwOpts = await pveFetch<any>(conn, `/nodes/${nodeName}/${vmType}/${vmid}/firewall/options`)
-        vmFirewalls[key] = fwOpts || {}
-      } catch {
-        vmFirewalls[key] = {}
-      }
+      const [fwOpts, rules, config] = await Promise.all([
+        pveFetch<any>(conn, `/nodes/${nodeName}/${vmType}/${vmid}/firewall/options`).catch(() => ({})),
+        pveFetch<any>(conn, `/nodes/${nodeName}/${vmType}/${vmid}/firewall/rules`).catch(() => []),
+        pveFetch<any>(conn, `/nodes/${nodeName}/${vmType}/${vmid}/config`).catch(() => null),
+      ])
 
-      try {
-        const rules = await pveFetch<any>(conn, `/nodes/${nodeName}/${vmType}/${vmid}/firewall/rules`)
-        const rulesList = Array.isArray(rules) ? rules : []
-        vmSecurityGroups[key] = rulesList.some((r: any) => r.type === 'group')
-      } catch {
-        vmSecurityGroups[key] = false
-      }
+      vmFirewalls[key] = fwOpts || {}
+
+      const rulesList = Array.isArray(rules) ? rules : []
+      vmSecurityGroups[key] = rulesList.some((r: any) => r.type === 'group')
+
+      if (config) vmConfigs[key] = config
     })
 
     const hardeningData: HardeningData = {
@@ -111,6 +118,11 @@ export async function GET(
       resources,
       vmFirewalls,
       vmSecurityGroups,
+      backupJobs,
+      haResources,
+      replicationJobs,
+      pools,
+      vmConfigs,
     }
 
     // Determine check config: profileId > frameworkId > active profile > all checks
@@ -177,7 +189,7 @@ export async function GET(
       })
     }
 
-    // Default: all 13 checks, no weighting
+    // Default: all 25 checks, no weighting
     const checks = runAllChecks(hardeningData)
     const summary = computeScore(checks)
 

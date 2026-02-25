@@ -101,7 +101,9 @@ function HardeningTab() {
     }
   }, [connections, selectedConnection])
 
-  const checks = data?.checks || []
+  // Sort checks: fail > warning > pass > skip
+  const statusOrder: Record<string, number> = { fail: 0, warning: 1, pass: 2, skip: 3 }
+  const checks = [...(data?.checks || [])].sort((a: any, b: any) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4))
   const summary = data?.summary || { score: 0, total: 0, passed: 0, failed: 0, warnings: 0, skipped: 0, critical: 0 }
   const score = data?.score ?? 0
   const hasProfile = !!profileId || !!data?.profileId
@@ -179,23 +181,23 @@ function HardeningTab() {
           )}
 
           {/* Score gauge + stat cards */}
-          <Grid container spacing={3}>
+          <Grid container spacing={3} columns={5}>
             {/* Score gauge */}
-            <Grid size={{ xs: 12, md: 3 }}>
+            <Grid size={{ xs: 5, sm: 2.5, md: 1 }}>
               <Card sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Box sx={{ position: 'relative', display: 'inline-flex', mb: 1 }}>
                     <CircularProgress
                       variant="determinate"
                       value={100}
-                      size={100}
+                      size={90}
                       thickness={4}
                       sx={{ color: 'action.hover', position: 'absolute' }}
                     />
                     <CircularProgress
                       variant="determinate"
                       value={score}
-                      size={100}
+                      size={90}
                       thickness={4}
                       sx={{ color: scoreColor(score) }}
                     />
@@ -222,7 +224,7 @@ function HardeningTab() {
               { label: t('compliance.failed'), value: summary.failed, icon: 'ri-close-line', color: '#ef4444' },
               { label: t('compliance.criticalIssues'), value: summary.critical, icon: 'ri-error-warning-line', color: '#dc2626' },
             ].map((stat) => (
-              <Grid size={{ xs: 6, md: 2.25 }} key={stat.label}>
+              <Grid size={{ xs: 2.5, md: 1 }} key={stat.label}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Box sx={{
@@ -763,10 +765,10 @@ function PoliciesTab() {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Grid container spacing={3} sx={{ alignItems: 'stretch' }}>
         {/* Password Policy */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
+          <Card sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <i className="ri-lock-password-line" style={{ fontSize: 20 }} />
@@ -805,7 +807,7 @@ function PoliciesTab() {
 
         {/* Session Policy */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
+          <Card sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <i className="ri-time-line" style={{ fontSize: 20 }} />
@@ -838,7 +840,7 @@ function PoliciesTab() {
 
         {/* Login Policy */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
+          <Card sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <i className="ri-login-box-line" style={{ fontSize: 20 }} />
@@ -871,7 +873,7 @@ function PoliciesTab() {
 
         {/* Audit Policy */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
+          <Card sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <i className="ri-file-list-3-line" style={{ fontSize: 20 }} />

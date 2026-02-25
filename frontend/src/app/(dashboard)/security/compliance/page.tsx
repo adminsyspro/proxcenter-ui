@@ -1,13 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import {
   Alert, Autocomplete, Box, Button, Card, CardContent, Chip, CircularProgress,
-  Divider, FormControlLabel, Grid, Switch, Tab, Tabs, TextField, Typography
+  Collapse, Divider, FormControlLabel, Grid, IconButton, Switch, Tab, Table,
+  TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField, Typography
 } from '@mui/material'
-import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
@@ -53,6 +53,7 @@ function HardeningTab() {
   const connections = connectionsData?.data || []
 
   const [selectedConnection, setSelectedConnection] = useState<any>(null)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const { data, isLoading, mutate } = useHardeningChecks(selectedConnection?.id)
 
   // Auto-select first connection
@@ -66,73 +67,14 @@ function HardeningTab() {
   const summary = data?.summary || { score: 0, total: 0, passed: 0, failed: 0, warnings: 0, skipped: 0, critical: 0 }
   const score = data?.score ?? 0
 
-  const columns: GridColDef[] = [
-    {
-      field: 'name',
-      headerName: t('compliance.checkName'),
-      flex: 2,
-      minWidth: 200,
-    },
-    {
-      field: 'category',
-      headerName: t('compliance.category'),
-      width: 120,
-      renderCell: (params) => (
-        <Chip
-          icon={<i className={categoryIcons[params.value] || 'ri-question-line'} />}
-          label={t(`compliance.categories.${params.value}`)}
-          size="small"
-          variant="outlined"
-        />
-      ),
-    },
-    {
-      field: 'severity',
-      headerName: t('compliance.severity'),
-      width: 110,
-      renderCell: (params) => (
-        <Chip
-          label={t(`compliance.severities.${params.value}`)}
-          size="small"
-          color={severityColors[params.value] || 'default'}
-        />
-      ),
-    },
-    {
-      field: 'status',
-      headerName: t('common.status'),
-      width: 100,
-      renderCell: (params) => (
-        <Chip
-          label={t(`compliance.statuses.${params.value}`)}
-          size="small"
-          color={statusColors[params.value] || 'default'}
-          variant={params.value === 'pass' ? 'filled' : 'outlined'}
-        />
-      ),
-    },
-    {
-      field: 'entity',
-      headerName: t('compliance.entity'),
-      width: 150,
-    },
-    {
-      field: 'details',
-      headerName: t('common.details'),
-      flex: 2,
-      minWidth: 200,
-    },
-    {
-      field: 'earned',
-      headerName: t('compliance.points'),
-      width: 100,
-      renderCell: (params) => (
-        <Typography variant="body2" color={params.row.earned === params.row.maxPoints ? 'success.main' : 'text.secondary'}>
-          {params.row.earned}/{params.row.maxPoints}
-        </Typography>
-      ),
-    },
-  ]
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -230,22 +172,95 @@ function HardeningTab() {
             ))}
           </Grid>
 
-          {/* Results DataGrid */}
+          {/* Results Table */}
           <Card>
-            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-              <DataGrid
-                rows={checks}
-                columns={columns}
-                autoHeight
-                disableRowSelectionOnClick
-                pageSizeOptions={[25, 50]}
-                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-                sx={{
-                  border: 'none',
-                  '& .MuiDataGrid-cell': { py: 1 },
-                }}
-              />
-            </CardContent>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell padding="checkbox" />
+                    <TableCell>{t('compliance.checkName')}</TableCell>
+                    <TableCell>{t('compliance.category')}</TableCell>
+                    <TableCell>{t('compliance.severity')}</TableCell>
+                    <TableCell>{t('common.status')}</TableCell>
+                    <TableCell align="right">{t('compliance.points')}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {checks.map((check: any) => {
+                    const isExpanded = expandedRows.has(check.id)
+                    return (
+                      <Fragment key={check.id}>
+                        <TableRow
+                          hover
+                          onClick={() => toggleRow(check.id)}
+                          sx={{ cursor: 'pointer', '& > td': { borderBottom: isExpanded ? 'none' : undefined } }}
+                        >
+                          <TableCell padding="checkbox">
+                            <IconButton size="small">
+                              <i className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 18 }} />
+                            </IconButton>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{check.name}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              icon={<i className={categoryIcons[check.category] || 'ri-question-line'} />}
+                              label={t(`compliance.categories.${check.category}`)}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={t(`compliance.severities.${check.severity}`)}
+                              size="small"
+                              color={severityColors[check.severity] || 'default'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={t(`compliance.statuses.${check.status}`)}
+                              size="small"
+                              color={statusColors[check.status] || 'default'}
+                              variant={check.status === 'pass' ? 'filled' : 'outlined'}
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" color={check.earned === check.maxPoints ? 'success.main' : 'text.secondary'}>
+                              {check.earned}/{check.maxPoints}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell colSpan={6} sx={{ py: 0, px: 0 }}>
+                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                              <Box sx={{ py: 1.5, px: 4, pl: 8, bgcolor: 'action.hover' }}>
+                                <Grid container spacing={2}>
+                                  {check.entity && (
+                                    <Grid size={{ xs: 12, sm: 4 }}>
+                                      <Typography variant="caption" color="text.secondary">{t('compliance.entity')}</Typography>
+                                      <Typography variant="body2">{check.entity}</Typography>
+                                    </Grid>
+                                  )}
+                                  {check.details && (
+                                    <Grid size={{ xs: 12, sm: 8 }}>
+                                      <Typography variant="caption" color="text.secondary">{t('common.details')}</Typography>
+                                      <Typography variant="body2">{check.details}</Typography>
+                                    </Grid>
+                                  )}
+                                </Grid>
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </Fragment>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Card>
 
           {data.scannedAt && (

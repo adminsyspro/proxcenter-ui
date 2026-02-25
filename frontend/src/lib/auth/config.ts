@@ -381,7 +381,7 @@ export function getAuthOptions(): NextAuthOptions {
     clientId: oidcConfig.clientId,
     clientSecret: oidcConfig.clientSecret || '',
     idToken: true,
-    checks: ['pkce', 'state'],
+    checks: ['state'],
     allowDangerousEmailAccountLinking: true,
     profile(profile) {
       return {

@@ -48,34 +48,37 @@ function scoreColor(score: number): string {
   return '#ef4444'
 }
 
-// All 25 check IDs with readable names (for profile editor)
+// All 25 check IDs with readable names and descriptions
 const ALL_CHECKS = [
-  { id: 'cluster_fw_enabled', name: 'Cluster firewall enabled', category: 'cluster' },
-  { id: 'cluster_policy_in', name: 'Inbound policy = DROP', category: 'cluster' },
-  { id: 'cluster_policy_out', name: 'Outbound policy = DROP', category: 'cluster' },
-  { id: 'pve_version', name: 'PVE version up to date', category: 'cluster' },
-  { id: 'backup_schedule', name: 'Backup jobs configured', category: 'cluster' },
-  { id: 'ha_enabled', name: 'High availability configured', category: 'cluster' },
-  { id: 'storage_replication', name: 'Storage replication configured', category: 'cluster' },
-  { id: 'pool_isolation', name: 'Resource pool isolation', category: 'cluster' },
-  { id: 'node_subscriptions', name: 'Valid subscriptions', category: 'node' },
-  { id: 'apt_repo_consistency', name: 'APT repository consistency', category: 'node' },
-  { id: 'tls_certificates', name: 'Valid TLS certificates', category: 'node' },
-  { id: 'node_firewalls', name: 'Node firewalls enabled', category: 'node' },
-  { id: 'node_firewall_logging', name: 'Firewall logging enabled', category: 'node' },
-  { id: 'root_tfa', name: 'TFA for root@pam', category: 'access' },
-  { id: 'admins_tfa', name: 'TFA for admin users', category: 'access' },
-  { id: 'no_default_tokens', name: 'No default API tokens', category: 'access' },
-  { id: 'least_privilege_users', name: 'Least privilege access', category: 'access' },
-  { id: 'vm_firewalls', name: 'Firewall on all VMs', category: 'vm' },
-  { id: 'vm_security_groups', name: 'VMs have security groups', category: 'vm' },
-  { id: 'vm_vlan_isolation', name: 'VMs use VLAN isolation', category: 'vm' },
-  { id: 'vm_guest_agent', name: 'QEMU guest agent enabled', category: 'vm' },
-  { id: 'vm_secure_boot', name: 'UEFI boot enabled', category: 'vm' },
-  { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm' },
-  { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm' },
-  { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm' },
+  { id: 'cluster_fw_enabled', name: 'Cluster firewall enabled', category: 'cluster', description: 'Verifies the datacenter-level firewall is active. Without it, no firewall rules are enforced across the cluster.' },
+  { id: 'cluster_policy_in', name: 'Inbound policy = DROP', category: 'cluster', description: 'Checks that the default inbound policy is DROP or REJECT, blocking all unsolicited traffic unless explicitly allowed by rules.' },
+  { id: 'cluster_policy_out', name: 'Outbound policy = DROP', category: 'cluster', description: 'Checks that the default outbound policy restricts egress traffic, preventing compromised VMs from freely communicating outbound.' },
+  { id: 'pve_version', name: 'PVE version up to date', category: 'cluster', description: 'Ensures the Proxmox VE version is on the latest major release to benefit from security patches and new features.' },
+  { id: 'backup_schedule', name: 'Backup jobs configured', category: 'cluster', description: 'Verifies that at least one backup job is enabled in Datacenter > Backup, ensuring data can be recovered after incidents.' },
+  { id: 'ha_enabled', name: 'High availability configured', category: 'cluster', description: 'Checks whether critical VMs are added to the HA manager for automatic failover if a node goes down.' },
+  { id: 'storage_replication', name: 'Storage replication configured', category: 'cluster', description: 'Verifies that storage replication jobs exist to keep VM data synchronized across nodes for disaster recovery.' },
+  { id: 'pool_isolation', name: 'Resource pool isolation', category: 'cluster', description: 'Checks that resource pools are used to logically separate workloads and enforce access control boundaries.' },
+  { id: 'node_subscriptions', name: 'Valid subscriptions', category: 'node', description: 'Verifies all nodes have an active Proxmox subscription, required for enterprise repository access and vendor support.' },
+  { id: 'apt_repo_consistency', name: 'APT repository consistency', category: 'node', description: 'Detects nodes that have the enterprise repository enabled but lack a valid subscription, causing update failures.' },
+  { id: 'tls_certificates', name: 'Valid TLS certificates', category: 'node', description: 'Checks that PVE web interface certificates are valid, not expired, and ideally not self-signed, to prevent MITM attacks.' },
+  { id: 'node_firewalls', name: 'Node firewalls enabled', category: 'node', description: 'Verifies the host-level firewall is enabled on each node, protecting the hypervisor management interfaces.' },
+  { id: 'node_firewall_logging', name: 'Firewall logging enabled', category: 'node', description: 'Checks that firewall logging is active on nodes for audit trails and incident investigation capabilities.' },
+  { id: 'root_tfa', name: 'TFA for root@pam', category: 'access', description: 'Ensures the root@pam superuser account is protected with two-factor authentication (TOTP or WebAuthn).' },
+  { id: 'admins_tfa', name: 'TFA for admin users', category: 'access', description: 'Verifies all enabled user accounts have two-factor authentication configured to prevent credential theft attacks.' },
+  { id: 'no_default_tokens', name: 'No default API tokens', category: 'access', description: 'Detects API tokens with suspicious names (test, default, tmp) that may indicate leftover or insecure credentials.' },
+  { id: 'least_privilege_users', name: 'Least privilege access', category: 'access', description: 'Checks that most users use PVE/LDAP realms instead of direct PAM access, enforcing proper privilege separation.' },
+  { id: 'vm_firewalls', name: 'Firewall on all VMs', category: 'vm', description: 'Verifies that every VM and container has its individual firewall enabled for per-guest network filtering.' },
+  { id: 'vm_security_groups', name: 'VMs have security groups', category: 'vm', description: 'Checks that VMs have security group rules applied, enabling centralized and reusable firewall rule management.' },
+  { id: 'vm_vlan_isolation', name: 'VMs use VLAN isolation', category: 'vm', description: 'Verifies that VM network interfaces use VLAN tags to isolate traffic between different network segments.' },
+  { id: 'vm_guest_agent', name: 'QEMU guest agent enabled', category: 'vm', description: 'Checks that the QEMU guest agent is enabled for proper shutdown, freeze/thaw snapshots, and IP reporting.' },
+  { id: 'vm_secure_boot', name: 'UEFI boot enabled', category: 'vm', description: 'Verifies VMs use OVMF/UEFI firmware instead of legacy BIOS, enabling Secure Boot and modern security features.' },
+  { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm', description: 'Detects VMs with USB or PCI device passthrough, which bypasses the hypervisor isolation boundary.' },
+  { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm', description: 'Checks that VMs use emulated CPU types instead of host passthrough, maintaining migration compatibility and isolation.' },
+  { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm', description: 'Verifies that IP filtering is enabled on VM firewalls to prevent IP spoofing and unauthorized network access.' },
 ]
+
+// Map check ID -> description for quick lookup in table
+const CHECK_DESCRIPTIONS: Record<string, string> = Object.fromEntries(ALL_CHECKS.map(c => [c.id, c.description]))
 
 // ============================================================================
 // Hardening Tab
@@ -251,6 +254,7 @@ function HardeningTab() {
                   <TableRow>
                     <TableCell padding="checkbox" />
                     <TableCell>{t('compliance.checkName')}</TableCell>
+                    <TableCell sx={{ minWidth: 280 }}>{t('compliance.description')}</TableCell>
                     <TableCell>{t('compliance.category')}</TableCell>
                     <TableCell>{t('compliance.severity')}</TableCell>
                     <TableCell>{t('common.status')}</TableCell>
@@ -273,7 +277,12 @@ function HardeningTab() {
                             </IconButton>
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2">{check.name}</Typography>
+                            <Typography variant="body2" fontWeight={500}>{check.name}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+                              {CHECK_DESCRIPTIONS[check.id] || '-'}
+                            </Typography>
                           </TableCell>
                           <TableCell>
                             <Chip
@@ -305,7 +314,7 @@ function HardeningTab() {
                           </TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell colSpan={6} sx={{ py: 0, px: 0 }}>
+                          <TableCell colSpan={7} sx={{ py: 0, px: 0 }}>
                             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                               <Box sx={{ py: 1.5, px: 4, pl: 8, bgcolor: 'action.hover' }}>
                                 <Grid container spacing={2}>

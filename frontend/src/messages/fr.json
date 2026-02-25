@@ -4293,6 +4293,7 @@
     "policiesSaved": "Politiques de sécurité enregistrées avec succès",
     "profiles": "Profils",
     "profilesDescription": "Créez des profils personnalisés pour choisir les vérifications à exécuter et ajuster leur pondération.",
+    "description": "Description",
     "controlRef": "Réf. contrôle",
     "activate": "Activer",
     "activeProfile": "Profil actif",

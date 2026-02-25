@@ -4287,6 +4287,7 @@
     "policiesSaved": "Security policies saved successfully",
     "profiles": "Profiles",
     "profilesDescription": "Create custom profiles to select which checks to run and adjust their weights.",
+    "description": "Description",
     "controlRef": "Control Ref",
     "activate": "Activate",
     "activeProfile": "Active Profile",

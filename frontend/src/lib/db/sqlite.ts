@@ -222,6 +222,41 @@ export function getDb() {
   }
 
   // ========================================
+  // Tables compliance profiles
+  // ========================================
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS compliance_profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        framework_id TEXT,
+        is_active INTEGER NOT NULL DEFAULT 0,
+        connection_id TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_compliance_profiles_active ON compliance_profiles(is_active);
+      CREATE INDEX IF NOT EXISTS idx_compliance_profiles_connection ON compliance_profiles(connection_id);
+
+      CREATE TABLE IF NOT EXISTS compliance_profile_checks (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        check_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        weight REAL NOT NULL DEFAULT 1.0,
+        control_ref TEXT,
+        category TEXT,
+        FOREIGN KEY (profile_id) REFERENCES compliance_profiles(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_compliance_profile_checks_profile ON compliance_profile_checks(profile_id);
+    `)
+  } catch (e) {
+    // Migration error is non-critical
+  }
+
+  // ========================================
   // Tables RBAC
   // ========================================
   

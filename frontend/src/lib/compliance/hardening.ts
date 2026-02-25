@@ -431,6 +431,23 @@ function checkVmSecurityGroups(data: HardeningData): HardeningCheck {
   }
 }
 
+// Map of check ID -> check function for dynamic lookup
+const CHECK_FUNCTIONS: Record<string, (data: HardeningData) => HardeningCheck> = {
+  cluster_fw_enabled: checkClusterFirewall,
+  cluster_policy_in: checkPolicyIn,
+  cluster_policy_out: checkPolicyOut,
+  pve_version: checkPveVersion,
+  node_subscriptions: checkNodeSubscriptions,
+  apt_repo_consistency: checkNoEnterpriseRepoWithoutSub,
+  tls_certificates: checkTlsCertificates,
+  node_firewalls: checkNodeFirewall,
+  root_tfa: checkRootTfa,
+  admins_tfa: checkAdminsTfa,
+  no_default_tokens: checkDefaultApiTokens,
+  vm_firewalls: checkVmFirewalls,
+  vm_security_groups: checkVmSecurityGroups,
+}
+
 export function runAllChecks(data: HardeningData): HardeningCheck[] {
   return [
     checkClusterFirewall(data),
@@ -447,6 +464,76 @@ export function runAllChecks(data: HardeningData): HardeningCheck[] {
     checkVmFirewalls(data),
     checkVmSecurityGroups(data),
   ]
+}
+
+export interface CheckConfig {
+  checkId: string
+  enabled: boolean
+  weight: number
+  controlRef?: string
+  category?: string
+}
+
+export interface WeightedHardeningCheck extends HardeningCheck {
+  weight: number
+  weightedMaxPoints: number
+  weightedEarned: number
+  controlRef?: string
+  frameworkCategory?: string
+}
+
+export function runChecksWithProfile(
+  data: HardeningData,
+  checkConfigs: CheckConfig[]
+): WeightedHardeningCheck[] {
+  const results: WeightedHardeningCheck[] = []
+
+  for (const config of checkConfigs) {
+    if (!config.enabled) continue
+
+    const checkFn = CHECK_FUNCTIONS[config.checkId]
+    if (!checkFn) continue
+
+    const check = checkFn(data)
+    const weight = Math.max(0.5, Math.min(2.0, config.weight))
+
+    results.push({
+      ...check,
+      weight,
+      weightedMaxPoints: Math.round(check.maxPoints * weight),
+      weightedEarned: Math.round(check.earned * weight),
+      controlRef: config.controlRef,
+      frameworkCategory: config.category,
+    })
+  }
+
+  return results
+}
+
+export function computeWeightedScore(checks: WeightedHardeningCheck[]): HardeningScore {
+  const applicable = checks.filter(c => c.status !== 'skip')
+  const earned = applicable.reduce((sum, c) => sum + c.weightedEarned, 0)
+  const maxApplicable = applicable.reduce((sum, c) => sum + c.weightedMaxPoints, 0)
+  const score = maxApplicable > 0 ? Math.round((earned / maxApplicable) * 100) : 0
+
+  const passed = checks.filter(c => c.status === 'pass').length
+  const failed = checks.filter(c => c.status === 'fail').length
+  const warnings = checks.filter(c => c.status === 'warning').length
+  const skipped = checks.filter(c => c.status === 'skip').length
+  const critical = checks.filter(c => c.status === 'fail' && c.severity === 'critical').length
+
+  return {
+    score,
+    earned,
+    maxApplicable,
+    total: checks.length,
+    passed,
+    failed,
+    warnings,
+    skipped,
+    critical,
+    color: score >= 80 ? 'success' : score >= 50 ? 'warning' : 'error',
+  }
 }
 
 export interface HardeningScore {

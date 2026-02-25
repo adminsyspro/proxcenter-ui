@@ -4,7 +4,13 @@ import { NextResponse } from 'next/server'
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { runAllChecks, computeScore, type HardeningData } from '@/lib/compliance/hardening'
+import {
+  runAllChecks, computeScore,
+  runChecksWithProfile, computeWeightedScore,
+  type HardeningData, type CheckConfig,
+} from '@/lib/compliance/hardening'
+import { getFrameworkById } from '@/lib/compliance/frameworks'
+import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance/profiles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,7 +18,7 @@ export const dynamic = 'force-dynamic'
 const VM_BATCH_LIMIT = 50
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ connectionId: string }> }
 ) {
   try {
@@ -21,6 +27,10 @@ export async function GET(
 
     const { connectionId } = await ctx.params
     const conn = await getConnectionById(connectionId)
+
+    const { searchParams } = new URL(req.url)
+    const frameworkId = searchParams.get('frameworkId')
+    const profileId = searchParams.get('profileId')
 
     // Parallel fetch: cluster-level data
     const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw] = await Promise.all([
@@ -96,6 +106,71 @@ export async function GET(
       vmSecurityGroups,
     }
 
+    // Determine check config: profileId > frameworkId > active profile > all checks
+    let checkConfig: CheckConfig[] | null = null
+    let activeFrameworkId: string | null = null
+    let activeProfileId: string | null = null
+
+    if (profileId) {
+      const profile = getProfile(profileId)
+      if (profile) {
+        const profileChecks = getProfileChecks(profileId)
+        checkConfig = profileChecks.map(pc => ({
+          checkId: pc.check_id,
+          enabled: pc.enabled === 1,
+          weight: pc.weight,
+          controlRef: pc.control_ref || undefined,
+          category: pc.category || undefined,
+        }))
+        activeProfileId = profileId
+        activeFrameworkId = profile.framework_id
+      }
+    } else if (frameworkId) {
+      const fw = getFrameworkById(frameworkId)
+      if (fw) {
+        checkConfig = fw.checks.map(c => ({
+          checkId: c.checkId,
+          enabled: true,
+          weight: c.weight,
+          controlRef: c.controlRef,
+          category: c.category,
+        }))
+        activeFrameworkId = frameworkId
+      }
+    } else {
+      // Check for active profile
+      const active = getActiveProfile(connectionId)
+      if (active) {
+        checkConfig = active.checks.map(pc => ({
+          checkId: pc.check_id,
+          enabled: pc.enabled === 1,
+          weight: pc.weight,
+          controlRef: pc.control_ref || undefined,
+          category: pc.category || undefined,
+        }))
+        activeProfileId = active.id
+        activeFrameworkId = active.framework_id
+      }
+    }
+
+    // Run checks
+    if (checkConfig) {
+      const weightedChecks = runChecksWithProfile(hardeningData, checkConfig)
+      const summary = computeWeightedScore(weightedChecks)
+
+      return NextResponse.json({
+        connectionId,
+        connectionName: conn.name,
+        score: summary.score,
+        checks: weightedChecks,
+        summary,
+        frameworkId: activeFrameworkId,
+        profileId: activeProfileId,
+        scannedAt: new Date().toISOString(),
+      })
+    }
+
+    // Default: all 13 checks, no weighting
     const checks = runAllChecks(hardeningData)
     const summary = computeScore(checks)
 
@@ -105,6 +180,8 @@ export async function GET(
       score: summary.score,
       checks,
       summary,
+      frameworkId: null,
+      profileId: null,
       scannedAt: new Date().toISOString(),
     })
   } catch (e: any) {

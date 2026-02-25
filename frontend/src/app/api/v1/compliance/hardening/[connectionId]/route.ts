@@ -9,7 +9,6 @@ import {
   runChecksWithProfile, computeWeightedScore,
   type HardeningData, type CheckConfig,
 } from '@/lib/compliance/hardening'
-import { getFrameworkById } from '@/lib/compliance/frameworks'
 import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance/profiles'
 
 export const runtime = 'nodejs'
@@ -36,7 +35,6 @@ export async function GET(
     const conn = await getConnectionById(connectionId)
 
     const { searchParams } = new URL(req.url)
-    const frameworkId = searchParams.get('frameworkId')
     const profileId = searchParams.get('profileId')
 
     // Parallel fetch: cluster-level data
@@ -125,9 +123,8 @@ export async function GET(
       vmConfigs,
     }
 
-    // Determine check config: profileId > frameworkId > active profile > all checks
+    // Determine check config: explicit profileId > active profile > all checks
     let checkConfig: CheckConfig[] | null = null
-    let activeFrameworkId: string | null = null
     let activeProfileId: string | null = null
 
     if (profileId) {
@@ -142,19 +139,6 @@ export async function GET(
           category: pc.category || undefined,
         }))
         activeProfileId = profileId
-        activeFrameworkId = profile.framework_id
-      }
-    } else if (frameworkId) {
-      const fw = getFrameworkById(frameworkId)
-      if (fw) {
-        checkConfig = fw.checks.map(c => ({
-          checkId: c.checkId,
-          enabled: true,
-          weight: c.weight,
-          controlRef: c.controlRef,
-          category: c.category,
-        }))
-        activeFrameworkId = frameworkId
       }
     } else {
       // Check for active profile
@@ -168,7 +152,6 @@ export async function GET(
           category: pc.category || undefined,
         }))
         activeProfileId = active.id
-        activeFrameworkId = active.framework_id
       }
     }
 
@@ -183,7 +166,6 @@ export async function GET(
         score: summary.score,
         checks: weightedChecks,
         summary,
-        frameworkId: activeFrameworkId,
         profileId: activeProfileId,
         scannedAt: new Date().toISOString(),
       })
@@ -199,7 +181,6 @@ export async function GET(
       score: summary.score,
       checks,
       summary,
-      frameworkId: null,
       profileId: null,
       scannedAt: new Date().toISOString(),
     })

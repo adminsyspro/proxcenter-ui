@@ -2,7 +2,6 @@
 // CRUD operations for compliance profiles
 
 import { getDb } from '@/lib/db/sqlite'
-import { getFrameworkById, type ComplianceFramework } from './frameworks'
 
 export interface ComplianceProfile {
   id: string
@@ -49,7 +48,6 @@ export function getProfileChecks(profileId: string): ComplianceProfileCheck[] {
 export function createProfile(data: {
   name: string
   description?: string
-  framework_id?: string
   connection_id?: string
   created_by?: string
 }): ComplianceProfile {
@@ -59,45 +57,10 @@ export function createProfile(data: {
 
   db.prepare(`
     INSERT INTO compliance_profiles (id, name, description, framework_id, is_active, connection_id, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
-  `).run(id, data.name, data.description || null, data.framework_id || null, data.connection_id || null, data.created_by || null, now, now)
+    VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?)
+  `).run(id, data.name, data.description || null, data.connection_id || null, data.created_by || null, now, now)
 
   return getProfile(id)!
-}
-
-export function createFromFramework(
-  frameworkId: string,
-  overrides?: { name?: string; description?: string; connection_id?: string; created_by?: string }
-): ComplianceProfile {
-  const fw = getFrameworkById(frameworkId)
-  if (!fw) throw new Error(`Framework not found: ${frameworkId}`)
-
-  const profile = createProfile({
-    name: overrides?.name || fw.name,
-    description: overrides?.description || fw.description,
-    framework_id: frameworkId,
-    connection_id: overrides?.connection_id,
-    created_by: overrides?.created_by,
-  })
-
-  const db = getDb()
-  const insert = db.prepare(`
-    INSERT INTO compliance_profile_checks (id, profile_id, check_id, enabled, weight, control_ref, category)
-    VALUES (?, ?, ?, 1, ?, ?, ?)
-  `)
-
-  for (const check of fw.checks) {
-    insert.run(
-      crypto.randomUUID(),
-      profile.id,
-      check.checkId,
-      check.weight,
-      check.controlRef,
-      check.category
-    )
-  }
-
-  return profile
 }
 
 export function updateProfile(id: string, data: {

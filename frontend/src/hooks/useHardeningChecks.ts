@@ -2,13 +2,11 @@ import { useSWRFetch } from './useSWRFetch'
 
 export function useHardeningChecks(
   connectionId?: string | null,
-  frameworkId?: string | null,
   profileId?: string | null
 ) {
   let url: string | null = null
   if (connectionId) {
     const params = new URLSearchParams()
-    if (frameworkId) params.set('frameworkId', frameworkId)
     if (profileId) params.set('profileId', profileId)
     const qs = params.toString()
     url = `/api/v1/compliance/hardening/${connectionId}${qs ? `?${qs}` : ''}`
@@ -18,10 +16,6 @@ export function useHardeningChecks(
 
 export function useSecurityPolicies() {
   return useSWRFetch('/api/v1/compliance/policies')
-}
-
-export function useComplianceFrameworks() {
-  return useSWRFetch('/api/v1/compliance/frameworks')
 }
 
 export function useComplianceProfiles(connectionId?: string | null) {

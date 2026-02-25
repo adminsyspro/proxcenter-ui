@@ -17,7 +17,7 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { usePVEConnections } from '@/hooks/useConnections'
 import {
   useHardeningChecks, useSecurityPolicies,
-  useComplianceFrameworks, useComplianceProfiles,
+  useComplianceProfiles,
 } from '@/hooks/useHardeningChecks'
 
 // Severity config
@@ -48,21 +48,33 @@ function scoreColor(score: number): string {
   return '#ef4444'
 }
 
-// All 13 check IDs with readable names (for profile editor)
+// All 25 check IDs with readable names (for profile editor)
 const ALL_CHECKS = [
-  { id: 'cluster_fw_enabled', name: 'Cluster firewall enabled' },
-  { id: 'cluster_policy_in', name: 'Inbound policy = DROP' },
-  { id: 'cluster_policy_out', name: 'Outbound policy = DROP' },
-  { id: 'pve_version', name: 'PVE version up to date' },
-  { id: 'node_subscriptions', name: 'Valid subscriptions' },
-  { id: 'apt_repo_consistency', name: 'APT repository consistency' },
-  { id: 'tls_certificates', name: 'Valid TLS certificates' },
-  { id: 'node_firewalls', name: 'Node firewalls enabled' },
-  { id: 'root_tfa', name: 'TFA for root@pam' },
-  { id: 'admins_tfa', name: 'TFA for admin users' },
-  { id: 'no_default_tokens', name: 'No default API tokens' },
-  { id: 'vm_firewalls', name: 'Firewall on all VMs' },
-  { id: 'vm_security_groups', name: 'VMs have security groups' },
+  { id: 'cluster_fw_enabled', name: 'Cluster firewall enabled', category: 'cluster' },
+  { id: 'cluster_policy_in', name: 'Inbound policy = DROP', category: 'cluster' },
+  { id: 'cluster_policy_out', name: 'Outbound policy = DROP', category: 'cluster' },
+  { id: 'pve_version', name: 'PVE version up to date', category: 'cluster' },
+  { id: 'backup_schedule', name: 'Backup jobs configured', category: 'cluster' },
+  { id: 'ha_enabled', name: 'High availability configured', category: 'cluster' },
+  { id: 'storage_replication', name: 'Storage replication configured', category: 'cluster' },
+  { id: 'pool_isolation', name: 'Resource pool isolation', category: 'cluster' },
+  { id: 'node_subscriptions', name: 'Valid subscriptions', category: 'node' },
+  { id: 'apt_repo_consistency', name: 'APT repository consistency', category: 'node' },
+  { id: 'tls_certificates', name: 'Valid TLS certificates', category: 'node' },
+  { id: 'node_firewalls', name: 'Node firewalls enabled', category: 'node' },
+  { id: 'node_firewall_logging', name: 'Firewall logging enabled', category: 'node' },
+  { id: 'root_tfa', name: 'TFA for root@pam', category: 'access' },
+  { id: 'admins_tfa', name: 'TFA for admin users', category: 'access' },
+  { id: 'no_default_tokens', name: 'No default API tokens', category: 'access' },
+  { id: 'least_privilege_users', name: 'Least privilege access', category: 'access' },
+  { id: 'vm_firewalls', name: 'Firewall on all VMs', category: 'vm' },
+  { id: 'vm_security_groups', name: 'VMs have security groups', category: 'vm' },
+  { id: 'vm_vlan_isolation', name: 'VMs use VLAN isolation', category: 'vm' },
+  { id: 'vm_guest_agent', name: 'QEMU guest agent enabled', category: 'vm' },
+  { id: 'vm_secure_boot', name: 'UEFI boot enabled', category: 'vm' },
+  { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm' },
+  { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm' },
+  { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm' },
 ]
 
 // ============================================================================
@@ -72,15 +84,15 @@ function HardeningTab() {
   const t = useTranslations()
   const { data: connectionsData } = usePVEConnections()
   const connections = connectionsData?.data || []
-  const { data: frameworksData } = useComplianceFrameworks()
-  const frameworks = frameworksData?.data || []
+  const { data: profilesData } = useComplianceProfiles()
+  const profiles = profilesData?.data || []
 
   const [selectedConnection, setSelectedConnection] = useState<any>(null)
-  const [selectedFramework, setSelectedFramework] = useState<any>(null)
+  const [selectedProfile, setSelectedProfile] = useState<any>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-  const frameworkId = selectedFramework?.id || null
-  const { data, isLoading, mutate } = useHardeningChecks(selectedConnection?.id, frameworkId)
+  const profileId = selectedProfile?.id || null
+  const { data, isLoading, mutate } = useHardeningChecks(selectedConnection?.id, profileId)
 
   // Auto-select first connection
   useEffect(() => {
@@ -92,7 +104,7 @@ function HardeningTab() {
   const checks = data?.checks || []
   const summary = data?.summary || { score: 0, total: 0, passed: 0, failed: 0, warnings: 0, skipped: 0, critical: 0 }
   const score = data?.score ?? 0
-  const hasFramework = !!frameworkId || !!data?.frameworkId
+  const hasProfile = !!profileId || !!data?.profileId
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -103,15 +115,15 @@ function HardeningTab() {
     })
   }
 
-  // Framework options: "No framework" + all frameworks
-  const frameworkOptions = [
+  // Profile options: "All checks" + all profiles
+  const profileOptions = [
     { id: null, name: t('compliance.allChecks') },
-    ...frameworks,
+    ...profiles,
   ]
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* Connection selector + framework selector + scan button */}
+      {/* Connection selector + profile selector + scan button */}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <Autocomplete
           options={connections}
@@ -124,12 +136,12 @@ function HardeningTab() {
           sx={{ minWidth: 280 }}
         />
         <Autocomplete
-          options={frameworkOptions}
+          options={profileOptions}
           getOptionLabel={(opt: any) => opt.name || ''}
-          value={selectedFramework ? frameworkOptions.find(f => f.id === selectedFramework.id) || frameworkOptions[0] : frameworkOptions[0]}
-          onChange={(_, v) => setSelectedFramework(v?.id ? v : null)}
+          value={selectedProfile ? profileOptions.find(p => p.id === selectedProfile.id) || profileOptions[0] : profileOptions[0]}
+          onChange={(_, v) => setSelectedProfile(v?.id ? v : null)}
           renderInput={(params) => (
-            <TextField {...params} label={t('compliance.selectFramework')} size="small" />
+            <TextField {...params} label={t('compliance.selectProfile')} size="small" />
           )}
           sx={{ minWidth: 220 }}
         />
@@ -152,13 +164,13 @@ function HardeningTab() {
 
       {!isLoading && data && (
         <>
-          {/* Framework badge */}
-          {hasFramework && (
+          {/* Active profile badge */}
+          {hasProfile && (
             <Box>
               <Chip
                 icon={<i className="ri-shield-check-line" />}
-                label={`${t('compliance.activeFramework')}: ${
-                  frameworks.find((f: any) => f.id === (frameworkId || data?.frameworkId))?.name || frameworkId || data?.frameworkId
+                label={`${t('compliance.activeProfile')}: ${
+                  profiles.find((p: any) => p.id === (profileId || data?.profileId))?.name || profileId || data?.profileId
                 }`}
                 color="primary"
                 variant="outlined"
@@ -239,8 +251,6 @@ function HardeningTab() {
                     <TableCell>{t('compliance.checkName')}</TableCell>
                     <TableCell>{t('compliance.category')}</TableCell>
                     <TableCell>{t('compliance.severity')}</TableCell>
-                    {hasFramework && <TableCell>{t('compliance.controlRef')}</TableCell>}
-                    {hasFramework && <TableCell>{t('compliance.frameworkCategory')}</TableCell>}
                     <TableCell>{t('common.status')}</TableCell>
                     <TableCell align="right">{t('compliance.points')}</TableCell>
                   </TableRow>
@@ -248,7 +258,6 @@ function HardeningTab() {
                 <TableBody>
                   {checks.map((check: any) => {
                     const isExpanded = expandedRows.has(check.id)
-                    const colSpan = hasFramework ? 8 : 6
                     return (
                       <Fragment key={check.id}>
                         <TableRow
@@ -279,20 +288,6 @@ function HardeningTab() {
                               color={severityColors[check.severity] || 'default'}
                             />
                           </TableCell>
-                          {hasFramework && (
-                            <TableCell>
-                              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                {check.controlRef || '-'}
-                              </Typography>
-                            </TableCell>
-                          )}
-                          {hasFramework && (
-                            <TableCell>
-                              <Typography variant="body2" color="text.secondary">
-                                {check.frameworkCategory || '-'}
-                              </Typography>
-                            </TableCell>
-                          )}
                           <TableCell>
                             <Chip
                               label={t(`compliance.statuses.${check.status}`)}
@@ -303,12 +298,12 @@ function HardeningTab() {
                           </TableCell>
                           <TableCell align="right">
                             <Typography variant="body2" color={check.earned === check.maxPoints ? 'success.main' : 'text.secondary'}>
-                              {hasFramework ? `${check.weightedEarned ?? check.earned}/${check.weightedMaxPoints ?? check.maxPoints}` : `${check.earned}/${check.maxPoints}`}
+                              {hasProfile ? `${check.weightedEarned ?? check.earned}/${check.weightedMaxPoints ?? check.maxPoints}` : `${check.earned}/${check.maxPoints}`}
                             </Typography>
                           </TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell colSpan={colSpan} sx={{ py: 0, px: 0 }}>
+                          <TableCell colSpan={6} sx={{ py: 0, px: 0 }}>
                             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                               <Box sx={{ py: 1.5, px: 4, pl: 8, bgcolor: 'action.hover' }}>
                                 <Grid container spacing={2}>
@@ -353,73 +348,28 @@ function HardeningTab() {
 }
 
 // ============================================================================
-// Frameworks Tab
+// Profiles Tab
 // ============================================================================
-function FrameworksTab() {
+function ProfilesTab() {
   const t = useTranslations()
-  const { data: frameworksData } = useComplianceFrameworks()
   const { data: profilesData, mutate: mutateProfiles } = useComplianceProfiles()
-  const frameworks = frameworksData?.data || []
   const profiles = profilesData?.data || []
 
-  const [editDialog, setEditDialog] = useState<any>(null) // null or profile data
+  const [editDialog, setEditDialog] = useState<any>(null)
   const [creating, setCreating] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-
-  const handleActivateFramework = async (frameworkId: string) => {
-    try {
-      // Create a profile from the framework and activate it
-      const res = await fetch('/api/v1/compliance/profiles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: frameworks.find((f: any) => f.id === frameworkId)?.name, framework_id: frameworkId }),
-      })
-      if (!res.ok) throw new Error('Failed to create profile')
-      const { data: profile } = await res.json()
-
-      await fetch(`/api/v1/compliance/profiles/${profile.id}/activate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      mutateProfiles()
-      setToast({ type: 'success', message: t('compliance.profileActivated') })
-    } catch (e: any) {
-      setToast({ type: 'error', message: e?.message || 'Error' })
-    }
-  }
-
-  const handleCustomize = (frameworkId: string) => {
-    const fw = frameworks.find((f: any) => f.id === frameworkId)
-    if (!fw) return
-
-    setEditDialog({
-      isNew: true,
-      name: `${fw.name} (Custom)`,
-      description: fw.description,
-      framework_id: frameworkId,
-      checks: fw.checks.map((c: any) => ({
-        check_id: c.checkId,
-        enabled: true,
-        weight: c.weight,
-        control_ref: c.controlRef,
-        category: c.category,
-      })),
-    })
-  }
 
   const handleCreateBlank = () => {
     setEditDialog({
       isNew: true,
       name: '',
       description: '',
-      framework_id: null,
       checks: ALL_CHECKS.map(c => ({
         check_id: c.id,
         enabled: true,
         weight: 1.0,
         control_ref: '',
-        category: '',
+        category: c.category,
       })),
     })
   }
@@ -430,8 +380,7 @@ function FrameworksTab() {
       if (!res.ok) throw new Error('Failed to load profile')
       const { data: profile } = await res.json()
 
-      // Merge with ALL_CHECKS to ensure all 13 checks are represented
-      const existingCheckIds = new Set(profile.checks.map((c: any) => c.check_id))
+      // Merge with ALL_CHECKS to ensure all 25 checks are represented
       const mergedChecks = ALL_CHECKS.map(ac => {
         const existing = profile.checks.find((c: any) => c.check_id === ac.id)
         if (existing) {
@@ -440,10 +389,10 @@ function FrameworksTab() {
             enabled: existing.enabled === 1,
             weight: existing.weight,
             control_ref: existing.control_ref || '',
-            category: existing.category || '',
+            category: existing.category || ac.category,
           }
         }
-        return { check_id: ac.id, enabled: false, weight: 1.0, control_ref: '', category: '' }
+        return { check_id: ac.id, enabled: false, weight: 1.0, control_ref: '', category: ac.category }
       })
 
       setEditDialog({
@@ -451,7 +400,6 @@ function FrameworksTab() {
         id: profile.id,
         name: profile.name,
         description: profile.description || '',
-        framework_id: profile.framework_id,
         checks: mergedChecks,
       })
     } catch (e: any) {
@@ -472,7 +420,6 @@ function FrameworksTab() {
           body: JSON.stringify({
             name: editDialog.name,
             description: editDialog.description,
-            framework_id: editDialog.framework_id,
           }),
         })
         if (!res.ok) throw new Error('Failed to create profile')
@@ -532,6 +479,20 @@ function FrameworksTab() {
     }
   }
 
+  const handleDeactivateAll = async () => {
+    try {
+      await fetch('/api/v1/compliance/profiles/none/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      mutateProfiles()
+      setToast({ type: 'success', message: t('compliance.profilesDeactivated') })
+    } catch (e: any) {
+      setToast({ type: 'error', message: e?.message || 'Error' })
+    }
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       {toast && (
@@ -542,73 +503,30 @@ function FrameworksTab() {
 
       {/* Description */}
       <Typography variant="body2" color="text.secondary">
-        {t('compliance.frameworksDescription')}
+        {t('compliance.profilesDescription')}
       </Typography>
 
-      {/* Framework cards grid */}
-      <Grid container spacing={3}>
-        {frameworks.map((fw: any) => (
-          <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={fw.id}>
-            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <CardContent sx={{ flex: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                  <Box sx={{
-                    width: 40, height: 40, borderRadius: 2,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    bgcolor: `${fw.color}15`,
-                  }}>
-                    <i className={fw.icon} style={{ fontSize: 22, color: fw.color }} />
-                  </Box>
-                  <Box>
-                    <Typography variant="subtitle1" fontWeight={600}>{fw.name}</Typography>
-                    <Typography variant="caption" color="text.secondary">v{fw.version}</Typography>
-                  </Box>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  {fw.description}
-                </Typography>
-                <Chip
-                  label={t('compliance.checksIncluded', { count: fw.checksCount })}
-                  size="small"
-                  variant="outlined"
-                />
-              </CardContent>
-              <Divider />
-              <Box sx={{ display: 'flex', gap: 1, p: 1.5 }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  startIcon={<i className="ri-check-line" />}
-                  onClick={() => handleActivateFramework(fw.id)}
-                >
-                  {t('compliance.activate')}
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<i className="ri-edit-line" />}
-                  onClick={() => handleCustomize(fw.id)}
-                >
-                  {t('compliance.customize')}
-                </Button>
-              </Box>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Custom Profiles section */}
-      <Divider />
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h6">{t('compliance.customProfiles')}</Typography>
+      {/* Actions */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Button
-          variant="outlined"
+          variant="contained"
           size="small"
           startIcon={<i className="ri-add-line" />}
           onClick={handleCreateBlank}
         >
           {t('compliance.createProfile')}
         </Button>
+        {profiles.some((p: any) => p.is_active) && (
+          <Button
+            variant="outlined"
+            size="small"
+            color="warning"
+            startIcon={<i className="ri-close-circle-line" />}
+            onClick={handleDeactivateAll}
+          >
+            {t('compliance.deactivateAll')}
+          </Button>
+        )}
       </Box>
 
       {profiles.length === 0 && (
@@ -616,59 +534,64 @@ function FrameworksTab() {
       )}
 
       {profiles.length > 0 && (
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{t('compliance.profileName')}</TableCell>
-                <TableCell>{t('compliance.baseFramework')}</TableCell>
-                <TableCell>{t('common.status')}</TableCell>
-                <TableCell align="right">{t('common.actions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {profiles.map((p: any) => (
-                <TableRow key={p.id} hover>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight={p.is_active ? 600 : 400}>{p.name}</Typography>
-                    {p.description && (
-                      <Typography variant="caption" color="text.secondary">{p.description}</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {p.framework_id ? frameworks.find((f: any) => f.id === p.framework_id)?.name || p.framework_id : t('compliance.fromScratch')}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {p.is_active ? (
-                      <Chip label="Active" size="small" color="success" />
-                    ) : (
-                      <Chip label="Inactive" size="small" variant="outlined" />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title={t('compliance.activate')}>
-                      <IconButton size="small" onClick={() => handleActivateProfile(p.id)} disabled={p.is_active}>
-                        <i className="ri-check-line" style={{ fontSize: 18 }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('common.edit')}>
-                      <IconButton size="small" onClick={() => handleEditProfile(p.id)}>
-                        <i className="ri-edit-line" style={{ fontSize: 18 }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('common.delete')}>
-                      <IconButton size="small" color="error" onClick={() => handleDeleteProfile(p.id)}>
-                        <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
+        <Card>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t('compliance.profileName')}</TableCell>
+                  <TableCell>{t('compliance.profileDescription')}</TableCell>
+                  <TableCell>{t('common.status')}</TableCell>
+                  <TableCell>{t('common.created')}</TableCell>
+                  <TableCell align="right">{t('common.actions')}</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {profiles.map((p: any) => (
+                  <TableRow key={p.id} hover>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={p.is_active ? 600 : 400}>{p.name}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {p.description || '-'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      {p.is_active ? (
+                        <Chip label={t('compliance.active')} size="small" color="success" />
+                      ) : (
+                        <Chip label={t('compliance.inactive')} size="small" variant="outlined" />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title={t('compliance.activate')}>
+                        <IconButton size="small" onClick={() => handleActivateProfile(p.id)} disabled={p.is_active}>
+                          <i className="ri-check-line" style={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={t('common.edit')}>
+                        <IconButton size="small" onClick={() => handleEditProfile(p.id)}>
+                          <i className="ri-edit-line" style={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={t('common.delete')}>
+                        <IconButton size="small" color="error" onClick={() => handleDeleteProfile(p.id)}>
+                          <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Card>
       )}
 
       {/* Profile Editor Dialog */}
@@ -696,15 +619,19 @@ function FrameworksTab() {
                 rows={2}
               />
               <Divider />
-              <Typography variant="subtitle2">{t('compliance.checks')}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="subtitle2">{t('compliance.checks')}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {editDialog.checks.filter((c: any) => c.enabled).length}/{ALL_CHECKS.length} {t('compliance.enabled').toLowerCase()}
+                </Typography>
+              </Box>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>{t('compliance.enabled')}</TableCell>
+                    <TableCell padding="checkbox">{t('compliance.enabled')}</TableCell>
                     <TableCell>{t('compliance.checkName')}</TableCell>
+                    <TableCell>{t('compliance.category')}</TableCell>
                     <TableCell>{t('compliance.weight')}</TableCell>
-                    <TableCell>{t('compliance.controlRef')}</TableCell>
-                    <TableCell>{t('compliance.frameworkCategory')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -730,6 +657,15 @@ function FrameworksTab() {
                             {checkDef?.name || check.check_id}
                           </Typography>
                         </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={<i className={categoryIcons[checkDef?.category || ''] || 'ri-question-line'} />}
+                            label={checkDef?.category || '-'}
+                            size="small"
+                            variant="outlined"
+                            sx={{ opacity: check.enabled ? 1 : 0.5 }}
+                          />
+                        </TableCell>
                         <TableCell sx={{ width: 140 }}>
                           <Slider
                             value={check.weight}
@@ -746,37 +682,6 @@ function FrameworksTab() {
                                 return { ...prev, checks }
                               })
                             }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            value={check.control_ref}
-                            size="small"
-                            disabled={!check.enabled}
-                            onChange={(e) => {
-                              setEditDialog((prev: any) => {
-                                const checks = [...prev.checks]
-                                checks[idx] = { ...checks[idx], control_ref: e.target.value }
-                                return { ...prev, checks }
-                              })
-                            }}
-                            sx={{ width: 120 }}
-                            inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.8rem' } }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            value={check.category}
-                            size="small"
-                            disabled={!check.enabled}
-                            onChange={(e) => {
-                              setEditDialog((prev: any) => {
-                                const checks = [...prev.checks]
-                                checks[idx] = { ...checks[idx], category: e.target.value }
-                                return { ...prev, checks }
-                              })
-                            }}
-                            sx={{ width: 160 }}
                           />
                         </TableCell>
                       </TableRow>
@@ -1030,9 +935,9 @@ export default function CompliancePage() {
             label={t('compliance.hardening')}
           />
           <Tab
-            icon={<i className="ri-shield-star-line" />}
+            icon={<i className="ri-profile-line" />}
             iconPosition="start"
-            label={t('compliance.frameworks')}
+            label={t('compliance.profiles')}
           />
           <Tab
             icon={<i className="ri-file-shield-2-line" />}
@@ -1042,7 +947,7 @@ export default function CompliancePage() {
         </Tabs>
 
         {tab === 0 && <HardeningTab />}
-        {tab === 1 && <FrameworksTab />}
+        {tab === 1 && <ProfilesTab />}
         {tab === 2 && <PoliciesTab />}
       </Box>
     </EnterpriseGuard>

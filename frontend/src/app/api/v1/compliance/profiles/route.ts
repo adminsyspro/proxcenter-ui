@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { listProfiles, createProfile, createFromFramework } from '@/lib/compliance/profiles'
+import { listProfiles, createProfile } from '@/lib/compliance/profiles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,19 +28,13 @@ export async function POST(req: Request) {
     if (denied) return denied
 
     const body = await req.json()
-    const { name, description, framework_id, connection_id, created_by } = body
+    const { name, description, connection_id, created_by } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
-    let profile
-    if (framework_id) {
-      // Clone from framework
-      profile = createFromFramework(framework_id, { name, description, connection_id, created_by })
-    } else {
-      profile = createProfile({ name, description, connection_id, created_by })
-    }
+    const profile = createProfile({ name, description, connection_id, created_by })
 
     return NextResponse.json({ data: profile }, { status: 201 })
   } catch (e: any) {

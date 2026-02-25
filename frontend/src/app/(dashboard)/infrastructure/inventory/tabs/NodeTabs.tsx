@@ -332,28 +332,12 @@ export default function NodeTabs(props: any) {
                     </Box>
                   }
                 />
-                {/* Onglet Updates */}
+                {/* Onglet Updates — always accessible (standalone = direct SSH, cluster = Enterprise rolling update) */}
                 <Tab
-                  disabled={!rollingUpdateAvailable}
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: rollingUpdateAvailable ? 1 : 0.4 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-download-cloud-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabUpdates')}
-                      {!rollingUpdateAvailable && (
-                        <Chip
-                          size="small"
-                          label="Enterprise"
-                          sx={{
-                            height: 18,
-                            fontSize: '0.6rem',
-                            fontWeight: 600,
-                            bgcolor: 'primary.main',
-                            color: 'primary.contrastText',
-                            ml: 0.5,
-                            '& .MuiChip-label': { px: 0.75 }
-                          }}
-                        />
-                      )}
                     </Box>
                   }
                 />
@@ -3129,8 +3113,10 @@ export default function NodeTabs(props: any) {
                                 onClick={() => data.clusterName ? setRollingUpdateWizardOpen(true) : setNodeUpdateDialogOpen(true)}
                                 sx={{ alignSelf: 'flex-start' }}
                                 disabled={
-                                  !!(data.clusterName && nodeCephData && nodeCephData.hasCeph !== false &&
-                                  (nodeCephData?.health?.status || nodeCephData?.health?.overall_status) !== 'HEALTH_OK')
+                                  // Cluster nodes: require Enterprise license + healthy Ceph
+                                  !!(data.clusterName && (!rollingUpdateAvailable ||
+                                    (nodeCephData && nodeCephData.hasCeph !== false &&
+                                    (nodeCephData?.health?.status || nodeCephData?.health?.overall_status) !== 'HEALTH_OK')))
                                 }
                               >
                                 {t('updates.update')}

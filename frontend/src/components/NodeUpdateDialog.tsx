@@ -33,33 +33,7 @@ interface NodeUpdateDialogProps {
   nodeUpdates: Record<string, { count: number; updates: any[]; version: string | null }>
 }
 
-interface RollingUpdate {
-  id: string
-  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
-  total_nodes: number
-  completed_nodes: number
-  current_node: string
-  node_statuses: Array<{
-    node_name: string
-    status: string
-    started_at?: string
-    completed_at?: string
-    error?: string
-    reboot_required: boolean
-    did_reboot: boolean
-    version_before?: string
-    version_after?: string
-  }>
-  logs: Array<{
-    timestamp: string
-    level: string
-    node?: string
-    message: string
-  }>
-  error?: string
-  started_at?: string
-  completed_at?: string
-}
+type UpgradeStatus = 'UNKNOWN' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'REBOOTING'
 
 export default function NodeUpdateDialog({
   open,
@@ -76,14 +50,20 @@ export default function NodeUpdateDialog({
 
   // Config
   const [autoReboot, setAutoReboot] = useState(true)
-  const [shutdownLocalVms, setShutdownLocalVms] = useState(false)
 
   // Execution
   const [loading, setLoading] = useState(false)
-  const [rollingUpdate, setRollingUpdate] = useState<RollingUpdate | null>(null)
+  const [upgradeStatus, setUpgradeStatus] = useState<UpgradeStatus>('UNKNOWN')
+  const [upgradeLogs, setUpgradeLogs] = useState<string>('')
+  const [rebootRequired, setRebootRequired] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [startedAt, setStartedAt] = useState<Date | null>(null)
+  const [completedAt, setCompletedAt] = useState<Date | null>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const logsEndRef = useRef<HTMLDivElement | null>(null)
+
+  // SSH check
+  const [sshNotConfigured, setSshNotConfigured] = useState(false)
 
   // Repository check
   const [repoIssues, setRepoIssues] = useState<string[]>([])
@@ -92,20 +72,31 @@ export default function NodeUpdateDialog({
   const nodeUpdate = nodeUpdates?.[nodeName]
   const pkgCount = nodeUpdate?.count || 0
 
-  // Check repository configuration when dialog opens
+  const baseUrl = `/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/upgrade`
+
+  // Check SSH + repository configuration when dialog opens
   useEffect(() => {
     if (!open || !connectionId || !nodeName) return
 
     let cancelled = false
+    setSshNotConfigured(false)
     setRepoChecking(true)
     setRepoIssues([])
+
+    // Check SSH enabled on connection
+    fetch(`/api/v1/connections/${connectionId}`)
+      .then(res => res.json())
+      .then(json => {
+        if (cancelled) return
+        if (!json.sshEnabled) setSshNotConfigured(true)
+      })
+      .catch(() => {})
 
     fetch(`/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/apt/repositories`)
       .then(res => res.json())
       .then(json => {
         if (cancelled || !json.data?.standard_repos) return
 
-        // PVE returns status as Option<bool>: null=not configured, true=enabled, false=disabled
         const repos = json.data.standard_repos as Array<{ handle: string; status: boolean | null; name: string }>
         const status: Record<string, boolean | null> = {}
         for (const r of repos) {
@@ -114,12 +105,10 @@ export default function NodeUpdateDialog({
 
         const issues: string[] = []
 
-        // PVE enterprise without no-subscription
         if (status['enterprise'] === true && status['no-subscription'] !== true) {
           issues.push('PVE Enterprise repository is enabled without a no-subscription alternative. apt update will fail without a valid PVE subscription.')
         }
 
-        // Ceph enterprise without no-subscription (e.g. ceph-squid-enterprise / ceph-squid-no-subscription)
         for (const [handle, s] of Object.entries(status)) {
           if (s === true && handle.endsWith('-enterprise') && handle !== 'enterprise') {
             const base = handle.replace(/-enterprise$/, '')
@@ -129,7 +118,6 @@ export default function NodeUpdateDialog({
           }
         }
 
-        // Repo errors from PVE
         if (json.data.errors?.length) {
           for (const e of json.data.errors) {
             issues.push(`Repository error: ${e.message}`)
@@ -138,9 +126,7 @@ export default function NodeUpdateDialog({
 
         setRepoIssues(issues)
       })
-      .catch(() => {
-        // Ignore - repo check is best-effort
-      })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setRepoChecking(false)
       })
@@ -161,36 +147,50 @@ export default function NodeUpdateDialog({
   // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [rollingUpdate?.logs?.length])
+  }, [upgradeLogs])
+
+  const pollStatus = useCallback(async () => {
+    try {
+      const res = await fetch(baseUrl)
+      const json = await res.json()
+
+      if (!res.ok) return
+
+      const status = json.status as UpgradeStatus
+      setUpgradeStatus(status)
+      setUpgradeLogs(json.logs || '')
+      setRebootRequired(json.reboot_required || false)
+
+      if (['COMPLETED', 'FAILED'].includes(status)) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current)
+          pollingRef.current = null
+        }
+        setCompletedAt(new Date())
+        setActiveStep(2)
+
+        // Auto-reboot if enabled, upgrade succeeded, and reboot is needed
+        if (status === 'COMPLETED' && json.reboot_required && autoReboot) {
+          try {
+            await fetch(`${baseUrl}/reboot`, { method: 'POST' })
+            setRebootRequired(false)
+          } catch {}
+        }
+      }
+    } catch {
+      // ignore polling errors (node may be rebooting)
+    }
+  }, [baseUrl, autoReboot])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const config = {
-        node_order: [nodeName],
-        exclude_nodes: [],
-        migrate_non_ha_vms: false,
-        shutdown_local_vms: shutdownLocalVms,
-        max_concurrent_migrations: 1,
-        migration_timeout: 600,
-        auto_reboot: autoReboot,
-        reboot_timeout: 300,
-        require_manual_approval: false,
-        min_healthy_nodes: 0,
-        abort_on_failure: true,
-        set_ceph_noout: false,
-        wait_ceph_healthy: false,
-        restore_vm_placement: false,
-        notify_on_complete: true,
-        notify_on_error: true,
-      }
-
-      const res = await fetch('/api/v1/orchestrator/rolling-updates', {
+      const res = await fetch(baseUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connection_id: connectionId, config }),
+        body: JSON.stringify({ auto_reboot: autoReboot }),
       })
 
       const json = await res.json()
@@ -199,48 +199,38 @@ export default function NodeUpdateDialog({
         throw new Error(json.error || 'Failed to start update')
       }
 
-      setRollingUpdate(json.data)
+      setStartedAt(new Date())
+      setUpgradeStatus('RUNNING')
+      setUpgradeLogs('')
       setActiveStep(1)
 
-      // Poll for status
-      const interval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`/api/v1/orchestrator/rolling-updates/${json.data.id}`)
-          const statusJson = await statusRes.json()
-
-          if (statusRes.ok && statusJson.data) {
-            setRollingUpdate(statusJson.data)
-
-            if (['completed', 'failed', 'cancelled'].includes(statusJson.data.status)) {
-              clearInterval(interval)
-              pollingRef.current = null
-              setActiveStep(2)
-            }
-          }
-        } catch {
-          // ignore polling errors
-        }
-      }, 3000)
-
+      // Poll for status every 3s
+      const interval = setInterval(pollStatus, 3000)
       pollingRef.current = interval
+
+      // First poll immediately after a short delay
+      setTimeout(pollStatus, 1500)
     } catch (e: any) {
       setError(e.message || 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }, [connectionId, nodeName, autoReboot, shutdownLocalVms])
+  }, [baseUrl, autoReboot, pollStatus])
 
   const cancelUpdate = useCallback(async () => {
-    if (!rollingUpdate) return
     try {
-      await fetch(`/api/v1/orchestrator/rolling-updates/${rollingUpdate.id}/cancel`, { method: 'POST' })
-    } catch {
-      // ignore
-    }
-  }, [rollingUpdate])
+      await fetch(`/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/upgrade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancel: true }),
+      })
+      // Best-effort: kill apt process on the node
+      // The status file will eventually show FAILED
+    } catch {}
+  }, [connectionId, nodeName])
 
   const handleClose = () => {
-    if (rollingUpdate && ['running', 'paused'].includes(rollingUpdate.status)) {
+    if (upgradeStatus === 'RUNNING') {
       if (!window.confirm(t('updates.confirmCloseWhileRunning'))) {
         return
       }
@@ -252,17 +242,27 @@ export default function NodeUpdateDialog({
     }
 
     setActiveStep(0)
-    setRollingUpdate(null)
+    setUpgradeStatus('UNKNOWN')
+    setUpgradeLogs('')
+    setRebootRequired(false)
     setError(null)
     setAutoReboot(true)
-    setShutdownLocalVms(false)
+    setStartedAt(null)
+    setCompletedAt(null)
     onClose()
   }
 
+  const rebootNode = useCallback(async () => {
+    try {
+      await fetch(`${baseUrl}/reboot`, { method: 'POST' })
+      setRebootRequired(false)
+    } catch {}
+  }, [baseUrl])
+
   // Compute duration string
   const getDuration = () => {
-    if (!rollingUpdate?.started_at || !rollingUpdate?.completed_at) return null
-    const ms = new Date(rollingUpdate.completed_at).getTime() - new Date(rollingUpdate.started_at).getTime()
+    if (!startedAt || !completedAt) return null
+    const ms = completedAt.getTime() - startedAt.getTime()
     const sec = Math.floor(ms / 1000)
     if (sec < 60) return `${sec}s`
     const min = Math.floor(sec / 60)
@@ -270,7 +270,10 @@ export default function NodeUpdateDialog({
     return remSec > 0 ? `${min}min ${remSec}s` : `${min}min`
   }
 
-  const nodeStatus = rollingUpdate?.node_statuses?.[0]
+  // Parse log lines for display
+  const logLines = upgradeLogs
+    ? upgradeLogs.split('\n').filter(l => l.trim()).slice(-80)
+    : []
 
   return (
     <Dialog
@@ -302,6 +305,21 @@ export default function NodeUpdateDialog({
         {/* Step 0: Configuration */}
         {activeStep === 0 && (
           <Stack spacing={2.5}>
+            {/* SSH not configured warning */}
+            {sshNotConfigured && (
+              <Alert
+                severity="error"
+                icon={<i className="ri-terminal-box-line" style={{ fontSize: 20 }} />}
+              >
+                <Typography variant="body2" fontWeight={600}>
+                  {t('updates.sshNotConfiguredTitle')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {t('updates.sshNotConfiguredDescription')}
+                </Typography>
+              </Alert>
+            )}
+
             {/* Repository issues warning */}
             {repoIssues.length > 0 && (
               <Alert
@@ -382,26 +400,6 @@ export default function NodeUpdateDialog({
                       </Box>
                     }
                   />
-
-                  {vmCount > 0 && (
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={shutdownLocalVms}
-                          onChange={(e) => setShutdownLocalVms(e.target.checked)}
-                          size="small"
-                        />
-                      }
-                      label={
-                        <Box>
-                          <Typography variant="body2">{t('updates.shutdownVms')}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {t('updates.shutdownVmsDescription')}
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                  )}
                 </Stack>
               </CardContent>
             </Card>
@@ -411,7 +409,7 @@ export default function NodeUpdateDialog({
         )}
 
         {/* Step 1: Execution */}
-        {activeStep === 1 && rollingUpdate && (
+        {activeStep === 1 && (
           <Stack spacing={2.5}>
             {/* Status */}
             <Box>
@@ -419,27 +417,24 @@ export default function NodeUpdateDialog({
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CircularProgress size={16} />
                   <Typography variant="body2" fontWeight={600}>
-                    {nodeStatus?.status === 'updating' ? t('updates.installingPackages') :
-                     nodeStatus?.status === 'rebooting' ? t('updates.rebooting') :
-                     nodeStatus?.status === 'migrating_vms' ? t('updates.managingVms') :
-                     t('updates.updateInProgress')}
+                    {upgradeStatus === 'REBOOTING' ? t('updates.rebooting') : t('updates.installingPackages')}
                   </Typography>
                 </Box>
                 <Chip
                   size="small"
-                  label={rollingUpdate.status}
-                  color={rollingUpdate.status === 'running' ? 'primary' : 'warning'}
+                  label={upgradeStatus}
+                  color="primary"
                   sx={{ height: 22, fontSize: 11 }}
                 />
               </Box>
               <LinearProgress
-                variant={nodeStatus?.status === 'rebooting' ? 'indeterminate' : 'indeterminate'}
+                variant="indeterminate"
                 sx={{ height: 6, borderRadius: 1 }}
               />
             </Box>
 
             {/* Logs */}
-            {rollingUpdate.logs && rollingUpdate.logs.length > 0 && (
+            {logLines.length > 0 && (
               <Card variant="outlined">
                 <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                   <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 1 }}>
@@ -457,19 +452,9 @@ export default function NodeUpdateDialog({
                       lineHeight: 1.6,
                     }}
                   >
-                    {rollingUpdate.logs.slice(-50).map((log, i) => (
-                      <Box
-                        key={i}
-                        sx={{
-                          color: log.level === 'error' ? 'error.main' :
-                                 log.level === 'warning' ? 'warning.main' :
-                                 'text.primary',
-                        }}
-                      >
-                        <Typography component="span" sx={{ opacity: 0.4, fontSize: 'inherit', fontFamily: 'inherit' }}>
-                          [{new Date(log.timestamp).toLocaleTimeString()}]
-                        </Typography>
-                        {' '}{log.message}
+                    {logLines.map((line, i) => (
+                      <Box key={i} sx={{ color: 'text.primary' }}>
+                        {line}
                       </Box>
                     ))}
                     <div ref={logsEndRef} />
@@ -483,23 +468,21 @@ export default function NodeUpdateDialog({
         )}
 
         {/* Step 2: Completed */}
-        {activeStep === 2 && rollingUpdate && (
+        {activeStep === 2 && (
           <Stack spacing={2.5}>
             <Alert
-              severity={rollingUpdate.status === 'completed' ? 'success' : 'error'}
+              severity={upgradeStatus === 'COMPLETED' ? 'success' : 'error'}
               icon={
                 <i
-                  className={rollingUpdate.status === 'completed' ? 'ri-checkbox-circle-fill' : 'ri-error-warning-fill'}
+                  className={upgradeStatus === 'COMPLETED' ? 'ri-checkbox-circle-fill' : 'ri-error-warning-fill'}
                   style={{ fontSize: 22 }}
                 />
               }
             >
               <Typography variant="body2" fontWeight={600}>
-                {rollingUpdate.status === 'completed'
+                {upgradeStatus === 'COMPLETED'
                   ? t('updates.updateCompletedSuccess')
-                  : rollingUpdate.status === 'cancelled'
-                    ? t('updates.updateCancelled')
-                    : t('updates.updateFailed', { error: rollingUpdate.error || t('updates.unknownError') })
+                  : t('updates.updateFailed', { error: 'See logs for details' })
                 }
               </Typography>
               {getDuration() && (
@@ -509,48 +492,64 @@ export default function NodeUpdateDialog({
               )}
             </Alert>
 
-            {/* Node result */}
-            {nodeStatus && (
+            {/* Reboot status */}
+            <Card variant="outlined">
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                  <i className="ri-server-line" style={{ marginRight: 8, fontSize: 16 }} />
+                  {t('updates.resultTitle')}
+                </Typography>
+                <Stack spacing={1}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('updates.rebootLabel')}</Typography>
+                    {rebootRequired ? (
+                      <Chip size="small" label={t('updates.rebootRequiredNotDone')} color="warning" sx={{ height: 22, fontSize: 11 }} />
+                    ) : (
+                      <Chip size="small" label={t('updates.rebootNotRequired')} color="default" sx={{ height: 22, fontSize: 11 }} />
+                    )}
+                  </Box>
+
+                  {rebootRequired && (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      size="small"
+                      startIcon={<i className="ri-restart-line" style={{ fontSize: 16 }} />}
+                      onClick={rebootNode}
+                      sx={{ alignSelf: 'flex-start' }}
+                    >
+                      {t('updates.rebootNow')}
+                    </Button>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+
+            {/* Logs in completed step */}
+            {logLines.length > 0 && (
               <Card variant="outlined">
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                    <i className="ri-server-line" style={{ marginRight: 8, fontSize: 16 }} />
-                    {t('updates.resultTitle')}
+                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 1 }}>
+                    Logs
                   </Typography>
-                  <Stack spacing={1}>
-                    {/* Version transition */}
-                    {nodeStatus.version_before && nodeStatus.version_after && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('updates.versionLabel')}</Typography>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-                          {nodeStatus.version_before}
-                        </Typography>
-                        <i className="ri-arrow-right-line" style={{ fontSize: 14, opacity: 0.5 }} />
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12, color: 'success.main', fontWeight: 600 }}>
-                          {nodeStatus.version_after}
-                        </Typography>
+                  <Box
+                    sx={{
+                      maxHeight: 200,
+                      overflow: 'auto',
+                      bgcolor: 'background.default',
+                      borderRadius: 1,
+                      p: 1,
+                      fontFamily: '"JetBrains Mono", monospace',
+                      fontSize: 11,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {logLines.map((line, i) => (
+                      <Box key={i} sx={{ color: 'text.primary' }}>
+                        {line}
                       </Box>
-                    )}
-
-                    {/* Reboot status */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('updates.rebootLabel')}</Typography>
-                      {nodeStatus.did_reboot ? (
-                        <Chip size="small" label={t('updates.rebooted')} color="info" icon={<i className="ri-restart-line" style={{ fontSize: 14 }} />} sx={{ height: 22, fontSize: 11 }} />
-                      ) : nodeStatus.reboot_required ? (
-                        <Chip size="small" label={t('updates.rebootRequiredNotDone')} color="warning" sx={{ height: 22, fontSize: 11 }} />
-                      ) : (
-                        <Chip size="small" label={t('updates.rebootNotRequired')} color="default" sx={{ height: 22, fontSize: 11 }} />
-                      )}
-                    </Box>
-
-                    {/* Error */}
-                    {nodeStatus.error && (
-                      <Alert severity="error" sx={{ mt: 1 }}>
-                        {nodeStatus.error}
-                      </Alert>
-                    )}
-                  </Stack>
+                    ))}
+                  </Box>
                 </CardContent>
               </Card>
             )}
@@ -576,7 +575,7 @@ export default function NodeUpdateDialog({
               variant="contained"
               color="warning"
               onClick={startUpdate}
-              disabled={loading || pkgCount === 0 || repoIssues.length > 0 || repoChecking}
+              disabled={loading || pkgCount === 0 || repoIssues.length > 0 || repoChecking || sshNotConfigured}
               startIcon={loading ? <CircularProgress size={16} /> : <i className="ri-play-circle-line" style={{ fontSize: 18 }} />}
             >
               {t('updates.startUpdate')}
@@ -584,7 +583,7 @@ export default function NodeUpdateDialog({
           </>
         )}
 
-        {activeStep === 1 && rollingUpdate && ['running', 'paused'].includes(rollingUpdate.status) && (
+        {activeStep === 1 && upgradeStatus === 'RUNNING' && (
           <Button
             onClick={cancelUpdate}
             color="error"

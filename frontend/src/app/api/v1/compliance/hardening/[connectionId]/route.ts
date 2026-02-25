@@ -15,7 +15,14 @@ import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const VM_BATCH_LIMIT = 50
+const VM_CONCURRENCY = 10
+
+async function runWithConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency)
+    await Promise.all(batch.map(fn))
+  }
+}
 
 export async function GET(
   req: Request,
@@ -67,12 +74,12 @@ export async function GET(
       nodeDetails[n.node] = { subscription, aptRepos, certificates: Array.isArray(certificates) ? certificates : [], firewall: nodeFirewall }
     }))
 
-    // VM firewall checks (batch limited)
-    const vms = resources.filter((r: any) => r.type === 'qemu' || r.type === 'lxc').slice(0, VM_BATCH_LIMIT)
+    // VM firewall checks (all VMs, concurrency-controlled)
+    const vms = resources.filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
     const vmFirewalls: Record<string, any> = {}
     const vmSecurityGroups: Record<string, boolean> = {}
 
-    await Promise.all(vms.map(async (vm: any) => {
+    await runWithConcurrency(vms, VM_CONCURRENCY, async (vm: any) => {
       const key = `${vm.node}/${vm.type}/${vm.vmid}`
       const nodeName = encodeURIComponent(vm.node)
       const vmType = vm.type === 'lxc' ? 'lxc' : 'qemu'
@@ -92,7 +99,7 @@ export async function GET(
       } catch {
         vmSecurityGroups[key] = false
       }
-    }))
+    })
 
     const hardeningData: HardeningData = {
       firewallOptions,

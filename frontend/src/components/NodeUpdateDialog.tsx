@@ -216,14 +216,17 @@ export default function NodeUpdateDialog({
           (r: any) => r.node === nodeName && r.status === 'running' && !r.template && (r.type === 'qemu' || r.type === 'lxc')
         )
 
-        // Local VM IDs
+        // local-vms API returns { data: { localVms: [...], summary: {...} } }
+        const localVmsList = localVmsJson.data?.localVms || []
+
+        // Local VM IDs set
         const localVmIds = new Set(
-          (localVmsJson.data || []).map((v: any) => v.vmid)
+          localVmsList.map((v: any) => v.vmid)
         )
 
         // Build local disks map
         const localDisksMap = new Map<number, string[]>()
-        for (const v of localVmsJson.data || []) {
+        for (const v of localVmsList) {
           if (v.localDisks?.length) localDisksMap.set(v.vmid, v.localDisks)
         }
 

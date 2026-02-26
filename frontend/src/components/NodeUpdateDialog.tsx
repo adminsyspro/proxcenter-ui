@@ -15,9 +15,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
   IconButton,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
   Stack,
   Step,
   StepLabel,
@@ -31,6 +35,23 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
+
+interface RunningVmInfo {
+  vmid: number
+  name: string
+  type: 'qemu' | 'lxc'
+  isLocal: boolean
+  localDisks?: string[]
+}
+
+interface VmActionResult {
+  vmid: number
+  name: string
+  type: 'qemu' | 'lxc'
+  action: 'migrate' | 'shutdown'
+  status: 'pending' | 'running' | 'success' | 'failed'
+  error?: string
+}
 
 interface NodeUpdateDialogProps {
   open: boolean
@@ -111,6 +132,24 @@ export default function NodeUpdateDialog({
   const [didSetCephFlags, setDidSetCephFlags] = useState(false)
   const [didEnableMaintenance, setDidEnableMaintenance] = useState(false)
 
+  // VM migration state
+  const [runningVms, setRunningVms] = useState<RunningVmInfo[]>([])
+  const [vmsLoading, setVmsLoading] = useState(false)
+  const [clusterNodes, setClusterNodes] = useState<string[]>([])
+  const [migrateSharedVms, setMigrateSharedVms] = useState(true)
+  const [shutdownLocalVms, setShutdownLocalVms] = useState(false)
+  const [targetNode, setTargetNode] = useState<string>('')
+  const [vmActionResults, setVmActionResults] = useState<VmActionResult[]>([])
+  const [vmActionsInProgress, setVmActionsInProgress] = useState(false)
+  const [migratedVms, setMigratedVms] = useState<RunningVmInfo[]>([])
+  const [shutdownVms, setShutdownVmsList] = useState<RunningVmInfo[]>([])
+  const [didMigrateVms, setDidMigrateVms] = useState(false)
+  const [didShutdownVms, setDidShutdownVms] = useState(false)
+  const [migrateBackInProgress, setMigrateBackInProgress] = useState(false)
+  const [migrateBackDone, setMigrateBackDone] = useState(false)
+  const [restartVmsInProgress, setRestartVmsInProgress] = useState(false)
+  const [restartVmsDone, setRestartVmsDone] = useState(false)
+
   const nodeUpdate = nodeUpdates?.[nodeName]
   const pkgCount = nodeUpdate?.count || 0
 
@@ -118,7 +157,12 @@ export default function NodeUpdateDialog({
   const maintenanceUrl = `/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/maintenance`
   const cephFlagsUrl = `/api/v1/connections/${connectionId}/ceph/flags`
 
+  const connBaseUrl = `/api/v1/connections/${connectionId}`
+
   const cephMaintenanceFlagsSet = CEPH_MAINTENANCE_FLAGS.every(f => cephFlags.includes(f))
+
+  const sharedVms = runningVms.filter(vm => !vm.isLocal)
+  const localVms = runningVms.filter(vm => vm.isLocal)
 
   // Fetch pre-flight data when dialog opens in cluster mode
   useEffect(() => {
@@ -150,8 +194,54 @@ export default function NodeUpdateDialog({
         .finally(() => { if (!cancelled) setCephFlagsLoading(false) })
     }
 
+    // Fetch running VMs and cluster nodes for migration
+    setVmsLoading(true)
+    Promise.all([
+      fetch(`${connBaseUrl}/nodes`).then(r => r.json()),
+      fetch(`${connBaseUrl}/resources`).then(r => r.json()),
+      fetch(`${connBaseUrl}/nodes/${encodeURIComponent(nodeName)}/local-vms`).then(r => r.json()),
+    ])
+      .then(([nodesJson, resourcesJson, localVmsJson]) => {
+        if (cancelled) return
+
+        // Cluster nodes: online nodes other than current
+        const onlineNodes = (nodesJson.data || [])
+          .filter((n: any) => n.node !== nodeName && n.status === 'online')
+          .map((n: any) => n.node) as string[]
+        setClusterNodes(onlineNodes)
+        if (onlineNodes.length > 0) setTargetNode(onlineNodes[0])
+
+        // Running VMs on this node (not templates)
+        const resources = (resourcesJson.data || []).filter(
+          (r: any) => r.node === nodeName && r.status === 'running' && !r.template && (r.type === 'qemu' || r.type === 'lxc')
+        )
+
+        // Local VM IDs
+        const localVmIds = new Set(
+          (localVmsJson.data || []).map((v: any) => v.vmid)
+        )
+
+        // Build local disks map
+        const localDisksMap = new Map<number, string[]>()
+        for (const v of localVmsJson.data || []) {
+          if (v.localDisks?.length) localDisksMap.set(v.vmid, v.localDisks)
+        }
+
+        const vms: RunningVmInfo[] = resources.map((r: any) => ({
+          vmid: r.vmid,
+          name: r.name || `${r.type === 'qemu' ? 'VM' : 'CT'} ${r.vmid}`,
+          type: r.type as 'qemu' | 'lxc',
+          isLocal: localVmIds.has(r.vmid),
+          localDisks: localDisksMap.get(r.vmid),
+        }))
+
+        setRunningVms(vms)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setVmsLoading(false) })
+
     return () => { cancelled = true }
-  }, [open, connectionId, nodeName, clusterMode, hasCeph, maintenanceUrl, cephFlagsUrl])
+  }, [open, connectionId, nodeName, clusterMode, hasCeph, maintenanceUrl, cephFlagsUrl, connBaseUrl])
 
   // Check SSH + repository configuration when dialog opens
   useEffect(() => {
@@ -289,13 +379,85 @@ export default function NodeUpdateDialog({
         setDidSetCephFlags(true)
       }
 
+      // Migrate shared-storage VMs
+      const vmsToMigrate = migrateSharedVms && targetNode ? sharedVms : []
+      const vmsToShutdown = shutdownLocalVms ? localVms : []
+      const allActions: VmActionResult[] = [
+        ...vmsToMigrate.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'migrate' as const, status: 'pending' as const })),
+        ...vmsToShutdown.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'shutdown' as const, status: 'pending' as const })),
+      ]
+
+      if (allActions.length > 0) {
+        setVmActionResults(allActions)
+        setVmActionsInProgress(true)
+
+        // Migrate shared VMs
+        for (const vm of vmsToMigrate) {
+          setVmActionResults(prev => prev.map(r =>
+            r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'running' } : r
+          ))
+          try {
+            const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/migrate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ target: targetNode, online: true }),
+            })
+            if (!res.ok) {
+              const json = await res.json().catch(() => ({}))
+              throw new Error(json.error || 'Migration failed')
+            }
+            setVmActionResults(prev => prev.map(r =>
+              r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'success' } : r
+            ))
+          } catch (err: any) {
+            setVmActionResults(prev => prev.map(r =>
+              r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'failed', error: err.message } : r
+            ))
+          }
+        }
+        if (vmsToMigrate.length > 0) {
+          setMigratedVms(vmsToMigrate)
+          setDidMigrateVms(true)
+        }
+
+        // Shutdown local VMs
+        for (const vm of vmsToShutdown) {
+          setVmActionResults(prev => prev.map(r =>
+            r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'running' } : r
+          ))
+          try {
+            const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/shutdown`, {
+              method: 'POST',
+            })
+            if (!res.ok) {
+              const json = await res.json().catch(() => ({}))
+              throw new Error(json.error || 'Shutdown failed')
+            }
+            setVmActionResults(prev => prev.map(r =>
+              r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'success' } : r
+            ))
+          } catch (err: any) {
+            setVmActionResults(prev => prev.map(r =>
+              r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'failed', error: err.message } : r
+            ))
+          }
+        }
+        if (vmsToShutdown.length > 0) {
+          setShutdownVmsList(vmsToShutdown)
+          setDidShutdownVms(true)
+        }
+
+        setVmActionsInProgress(false)
+      }
+
       setActiveStep(STEP.CONFIG)
     } catch (e: any) {
       setError(e.message || 'Failed to prepare cluster')
+      setVmActionsInProgress(false)
     } finally {
       setPreflightLoading(false)
     }
-  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG])
+  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, targetNode, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)
@@ -368,6 +530,36 @@ export default function NodeUpdateDialog({
     setPostMaintenanceExiting(false)
   }, [maintenanceUrl])
 
+  // Post-actions: migrate VMs back
+  const migrateVmsBack = useCallback(async () => {
+    setMigrateBackInProgress(true)
+    try {
+      for (const vm of migratedVms) {
+        await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(targetNode)}/${vm.vmid}/migrate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: nodeName, online: true }),
+        })
+      }
+      setMigrateBackDone(true)
+    } catch {}
+    setMigrateBackInProgress(false)
+  }, [migratedVms, connBaseUrl, targetNode, nodeName])
+
+  // Post-actions: restart shut down VMs
+  const restartLocalVmsAction = useCallback(async () => {
+    setRestartVmsInProgress(true)
+    try {
+      for (const vm of shutdownVms) {
+        await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/start`, {
+          method: 'POST',
+        })
+      }
+      setRestartVmsDone(true)
+    } catch {}
+    setRestartVmsInProgress(false)
+  }, [shutdownVms, connBaseUrl, nodeName])
+
   const handleClose = () => {
     if (upgradeStatus === 'RUNNING') {
       if (!window.confirm(t('updates.confirmCloseWhileRunning'))) {
@@ -400,6 +592,22 @@ export default function NodeUpdateDialog({
     setPostMaintenanceExited(false)
     setDidSetCephFlags(false)
     setDidEnableMaintenance(false)
+    setRunningVms([])
+    setVmsLoading(false)
+    setClusterNodes([])
+    setMigrateSharedVms(true)
+    setShutdownLocalVms(false)
+    setTargetNode('')
+    setVmActionResults([])
+    setVmActionsInProgress(false)
+    setMigratedVms([])
+    setShutdownVmsList([])
+    setDidMigrateVms(false)
+    setDidShutdownVms(false)
+    setMigrateBackInProgress(false)
+    setMigrateBackDone(false)
+    setRestartVmsInProgress(false)
+    setRestartVmsDone(false)
     onClose()
   }
 
@@ -537,19 +745,148 @@ export default function NodeUpdateDialog({
               </Card>
             )}
 
-            {/* VM warning for cluster — migration, not shutdown */}
-            {vmCount > 0 && (
-              <Alert
-                severity="info"
-                icon={<i className="ri-swap-box-line" style={{ fontSize: 20 }} />}
-              >
-                <Typography variant="body2" fontWeight={600}>
-                  {t('updates.vmsRunningOnNode', { count: vmCount })}
-                </Typography>
-                <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                  {t('updates.vmsMigrateHint')}
-                </Typography>
-              </Alert>
+            {/* VM Migration card */}
+            {runningVms.length > 0 && !vmsLoading && (
+              <Card variant="outlined">
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    <i className="ri-swap-box-line" style={{ marginRight: 8, fontSize: 16 }} />
+                    {t('updates.vmMigrationCard')}
+                  </Typography>
+
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {t('updates.vmMigrationSummary', {
+                      total: runningVms.length,
+                      shared: sharedVms.length,
+                      local: localVms.length,
+                    })}
+                  </Typography>
+
+                  {/* Shared storage section */}
+                  {sharedVms.length > 0 && (
+                    <Box sx={{ mb: localVms.length > 0 ? 2 : 0 }}>
+                      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        {t('updates.sharedStorageSection')}
+                      </Typography>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={migrateSharedVms}
+                            onChange={(e) => setMigrateSharedVms(e.target.checked)}
+                            size="small"
+                            disabled={clusterNodes.length === 0 || vmActionsInProgress}
+                          />
+                        }
+                        label={<Typography variant="body2">{t('updates.migrateSharedVms')}</Typography>}
+                      />
+                      {migrateSharedVms && (
+                        <Box sx={{ ml: 4, mt: 1 }}>
+                          {clusterNodes.length > 0 ? (
+                            <FormControl size="small" sx={{ minWidth: 200 }}>
+                              <InputLabel>{t('updates.targetNode')}</InputLabel>
+                              <Select
+                                value={targetNode}
+                                label={t('updates.targetNode')}
+                                onChange={(e) => setTargetNode(e.target.value)}
+                                disabled={vmActionsInProgress}
+                              >
+                                {clusterNodes.map(n => (
+                                  <MenuItem key={n} value={n}>{n}</MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          ) : (
+                            <Alert severity="warning" sx={{ py: 0.5 }}>
+                              <Typography variant="caption">{t('updates.noTargetNodes')}</Typography>
+                            </Alert>
+                          )}
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {t('updates.migrateSharedVmsHint')}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Local storage section */}
+                  {localVms.length > 0 && (
+                    <Box>
+                      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        {t('updates.localStorageSection')}
+                      </Typography>
+                      <Alert severity="warning" sx={{ mb: 1, py: 0.5 }}>
+                        <Typography variant="caption" fontWeight={600}>{t('updates.localStorageVmsWarning')}</Typography>
+                        {localVms.map(vm => (
+                          <Typography key={vm.vmid} variant="caption" sx={{ display: 'block', ml: 1 }}>
+                            &bull; {vm.type === 'qemu' ? 'VM' : 'CT'} {vm.vmid} ({vm.name})
+                            {vm.localDisks?.length ? ` — ${vm.localDisks.join(', ')}` : ''}
+                          </Typography>
+                        ))}
+                      </Alert>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={shutdownLocalVms}
+                            onChange={(e) => setShutdownLocalVms(e.target.checked)}
+                            size="small"
+                            disabled={vmActionsInProgress}
+                          />
+                        }
+                        label={<Typography variant="body2">{t('updates.shutdownLocalVmsSwitch')}</Typography>}
+                      />
+                      {shutdownLocalVms && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+                          {t('updates.shutdownLocalVmsHint')}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Progress during execution */}
+                  {vmActionsInProgress && vmActionResults.length > 0 && (
+                    <Box sx={{ mt: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <CircularProgress size={14} />
+                        <Typography variant="caption" fontWeight={600}>
+                          {t('updates.migratingVms', {
+                            done: vmActionResults.filter(r => r.status === 'success' || r.status === 'failed').length,
+                            total: vmActionResults.length,
+                          })}
+                        </Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={(vmActionResults.filter(r => r.status === 'success' || r.status === 'failed').length / vmActionResults.length) * 100}
+                        sx={{ height: 4, borderRadius: 1, mb: 1 }}
+                      />
+                      {vmActionResults.map(r => (
+                        <Box key={`${r.type}-${r.vmid}`} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                          {r.status === 'success' && <i className="ri-checkbox-circle-fill" style={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />}
+                          {r.status === 'failed' && <i className="ri-error-warning-fill" style={{ fontSize: 14, color: 'var(--mui-palette-error-main)' }} />}
+                          {r.status === 'running' && <CircularProgress size={12} />}
+                          {r.status === 'pending' && <i className="ri-time-line" style={{ fontSize: 14, opacity: 0.4 }} />}
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11 }}>
+                            {r.type === 'qemu' ? 'VM' : 'CT'} {r.vmid} ({r.name})
+                          </Typography>
+                          <Typography variant="caption" sx={{ ml: 'auto', fontSize: 11 }}>
+                            {r.status === 'success' && r.action === 'migrate' && t('updates.vmMigrateSuccess', { target: targetNode })}
+                            {r.status === 'success' && r.action === 'shutdown' && t('updates.vmShutdownSuccess')}
+                            {r.status === 'failed' && (r.error || (r.action === 'migrate' ? t('updates.vmMigrateFailed') : t('updates.vmShutdownFailed')))}
+                            {r.status === 'running' && '...'}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {vmsLoading && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
+                <CircularProgress size={16} />
+                <Typography variant="caption" color="text.secondary">Loading VMs...</Typography>
+              </Box>
             )}
 
             {error && <Alert severity="error">{error}</Alert>}
@@ -828,6 +1165,72 @@ export default function NodeUpdateDialog({
               </Card>
             )}
 
+            {/* Migrate VMs back */}
+            {didMigrateVms && migratedVms.length > 0 && (
+              <Card variant="outlined">
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    <i className="ri-swap-box-line" style={{ marginRight: 8, fontSize: 16 }} />
+                    {t('updates.migrateVmsBack')}
+                  </Typography>
+                  {migrateBackDone ? (
+                    <Alert severity="success">
+                      <Typography variant="body2">{t('updates.vmsMigratedBack')}</Typography>
+                    </Alert>
+                  ) : (
+                    <>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {t('updates.migrateVmsBackDescription', { node: nodeName, target: targetNode })}
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={migrateVmsBack}
+                        disabled={migrateBackInProgress}
+                        startIcon={migrateBackInProgress ? <CircularProgress size={14} /> : <i className="ri-arrow-go-back-line" style={{ fontSize: 16 }} />}
+                      >
+                        {migrateBackInProgress ? t('updates.migratingVmsBack') : t('updates.migrateVmsBackBtn')}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Restart local VMs */}
+            {didShutdownVms && shutdownVms.length > 0 && (
+              <Card variant="outlined">
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    <i className="ri-play-circle-line" style={{ marginRight: 8, fontSize: 16 }} />
+                    {t('updates.restartLocalVms')}
+                  </Typography>
+                  {restartVmsDone ? (
+                    <Alert severity="success">
+                      <Typography variant="body2">{t('updates.localVmsRestarted')}</Typography>
+                    </Alert>
+                  ) : (
+                    <>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {t('updates.restartLocalVmsDescription')}
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={restartLocalVmsAction}
+                        disabled={restartVmsInProgress}
+                        startIcon={restartVmsInProgress ? <CircularProgress size={14} /> : <i className="ri-restart-line" style={{ fontSize: 16 }} />}
+                      >
+                        {restartVmsInProgress ? t('updates.restartingLocalVms') : t('updates.restartLocalVmsBtn')}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Reboot status */}
             <Card variant="outlined">
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -983,7 +1386,7 @@ export default function NodeUpdateDialog({
             <Button
               variant="contained"
               onClick={executePreFlight}
-              disabled={preflightLoading || maintenanceLoading || cephFlagsLoading}
+              disabled={preflightLoading || maintenanceLoading || cephFlagsLoading || vmsLoading}
               startIcon={preflightLoading ? <CircularProgress size={16} /> : <i className="ri-arrow-right-line" style={{ fontSize: 18 }} />}
             >
               {preflightLoading ? t('updates.preparingCluster') : t('common.next')}

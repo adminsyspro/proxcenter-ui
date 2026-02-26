@@ -49,8 +49,8 @@ export interface DRSSettings {
   balancing_mode: 'used' | 'assigned' | 'psi'
   balance_types: ('vm' | 'ct')[]
   maintenance_nodes: string[]
-  ignore_nodes: string[]
   excluded_clusters: string[]
+  excluded_nodes: Record<string, string[]>
   cluster_modes: Record<string, string>
   cpu_high_threshold: number
   cpu_low_threshold: number
@@ -82,7 +82,7 @@ export interface ClusterVersionInfo {
 
 interface DRSSettingsPanelProps {
   settings: DRSSettings
-  nodes: string[]
+  clusterNodes: Record<string, string[]>
   clusters?: { id: string; name: string }[]
   clusterVersions?: ClusterVersionInfo[]
   onSave: (settings: DRSSettings) => Promise<void>
@@ -100,8 +100,8 @@ export const defaultDRSSettings: DRSSettings = {
   balancing_mode: 'used',
   balance_types: ['vm', 'ct'],
   maintenance_nodes: [],
-  ignore_nodes: [],
   excluded_clusters: [],
+  excluded_nodes: {},
   cluster_modes: {},
   cpu_high_threshold: 80,
   cpu_low_threshold: 20,
@@ -144,7 +144,7 @@ const SECTIONS: { key: SectionKey; icon: string; colorKey: string }[] = [
 
 export default function DRSSettingsPanel({
   settings: initialSettings,
-  nodes,
+  clusterNodes,
   clusters = [],
   clusterVersions = [],
   onSave,
@@ -344,6 +344,67 @@ export default function DRSSettingsPanel({
                   </FormControl>
                 </Box>
               ))}
+            </Stack>
+          </Grid>
+        )
+      })()}
+
+      {/* Per-cluster excluded nodes */}
+      {clusters.length > 0 && (() => {
+        const activeClusters = clusters.filter(c => !settings.excluded_clusters.includes(c.id))
+        if (activeClusters.length === 0) return null
+        return (
+          <Grid size={{ xs: 12 }}>
+            <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+              {t('drsPage.excludedNodesTitle')}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              {t('drsPage.excludedNodesDesc')}
+            </Typography>
+            <Stack spacing={1.5}>
+              {activeClusters.map(cluster => {
+                const nodesForCluster = clusterNodes[cluster.id] || []
+                if (nodesForCluster.length === 0) return null
+                return (
+                  <Box key={cluster.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                    <Typography variant="body2" sx={{ minWidth: 140, fontWeight: 500, mt: 1 }}>{cluster.name}</Typography>
+                    <Autocomplete
+                      multiple
+                      size="small"
+                      sx={{ flex: 1 }}
+                      options={nodesForCluster}
+                      value={settings.excluded_nodes[cluster.id] || []}
+                      onChange={(_, selected) => {
+                        const newExcluded = { ...settings.excluded_nodes }
+                        if (selected.length === 0) {
+                          delete newExcluded[cluster.id]
+                        } else {
+                          newExcluded[cluster.id] = selected
+                        }
+                        handleChange('excluded_nodes', newExcluded)
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder={t('drsPage.excludedNodesPlaceholder')}
+                        />
+                      )}
+                      renderTags={(value, getTagProps) =>
+                        value.map((node, index) => (
+                          <Chip
+                            {...getTagProps({ index })}
+                            key={node}
+                            label={node}
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                          />
+                        ))
+                      }
+                    />
+                  </Box>
+                )
+              })}
             </Stack>
           </Grid>
         )

@@ -380,20 +380,22 @@ const ResourceGauge = ({
 }
 
 // Cluster Card - Affiche un cluster avec ses nœuds
-const ClusterCard = ({ 
+const ClusterCard = ({
   clusterId,
   clusterName,
   metrics,
   recommendations,
   expanded,
-  onToggle
-}: { 
+  onToggle,
+  excludedNodeNames = []
+}: {
   clusterId: string
   clusterName: string
   metrics: ClusterMetrics
   recommendations: DRSRecommendation[]
   expanded: boolean
   onToggle: () => void
+  excludedNodeNames?: string[]
 }) => {
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
@@ -430,12 +432,13 @@ return max - min
   const avgMem = metrics?.summary?.avg_memory_usage ?? 0
 
   const getNodeRole = (node: NodeMetrics) => {
+    if (excludedNodeNames.includes(node.node)) return 'excluded'
     if (node.in_maintenance) return 'maintenance'
     const diff = node.memory_usage - avgMem
 
     if (diff > 5) return 'source'
     if (diff < -5) return 'target'
-    
+
 return 'neutral'
   }
 
@@ -567,6 +570,10 @@ return 'neutral'
               <BuildIcon sx={{ fontSize: 14, color: 'warning.main' }} />
               <Typography variant="caption">{t('drsPage.maintenance')}</Typography>
             </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <i className="ri-filter-off-line" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
+              <Typography variant="caption">{t('drsPage.excludedFromDRS')}</Typography>
+            </Box>
           </Box>
 
           {/* Liste des nœuds */}
@@ -576,7 +583,8 @@ return 'neutral'
               const isSource = role === 'source'
               const isTarget = role === 'target'
               const isMaintenance = role === 'maintenance'
-              
+              const isExcluded = role === 'excluded'
+
               return (
                 <Box
                   key={node.node}
@@ -586,40 +594,48 @@ return 'neutral'
                     gap: 2,
                     p: 1.5,
                     borderRadius: 1,
-                    bgcolor: isMaintenance
-                      ? alpha(theme.palette.warning.main, 0.08)
-                      : isSource 
-                        ? alpha(theme.palette.error.main, 0.06)
-                        : isTarget 
-                          ? alpha(theme.palette.success.main, 0.06)
-                          : alpha(theme.palette.action.hover, 0.04),
+                    opacity: isExcluded ? 0.5 : 1,
+                    bgcolor: isExcluded
+                      ? alpha(theme.palette.action.disabled, 0.06)
+                      : isMaintenance
+                        ? alpha(theme.palette.warning.main, 0.08)
+                        : isSource
+                          ? alpha(theme.palette.error.main, 0.06)
+                          : isTarget
+                            ? alpha(theme.palette.success.main, 0.06)
+                            : alpha(theme.palette.action.hover, 0.04),
 
                     // Bordure gauche épaisse colorée pour les rôles
-                    borderLeft: isMaintenance || isSource || isTarget ? '4px solid' : 'none',
-                    borderLeftColor: isMaintenance
-                      ? 'warning.main'
-                      : isSource
-                        ? 'error.main'
-                        : isTarget
-                          ? 'success.main'
-                          : 'transparent',
+                    borderLeft: isExcluded || isMaintenance || isSource || isTarget ? '4px solid' : 'none',
+                    borderLeftColor: isExcluded
+                      ? 'text.disabled'
+                      : isMaintenance
+                        ? 'warning.main'
+                        : isSource
+                          ? 'error.main'
+                          : isTarget
+                            ? 'success.main'
+                            : 'transparent',
                     borderTop: 'none',
                     borderRight: 'none',
                     borderBottom: 'none',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      bgcolor: isMaintenance
-                        ? alpha(theme.palette.warning.main, 0.12)
-                        : isSource 
-                          ? alpha(theme.palette.error.main, 0.1)
-                          : isTarget 
-                            ? alpha(theme.palette.success.main, 0.1)
-                            : alpha(theme.palette.action.hover, 0.08),
+                      bgcolor: isExcluded
+                        ? alpha(theme.palette.action.disabled, 0.1)
+                        : isMaintenance
+                          ? alpha(theme.palette.warning.main, 0.12)
+                          : isSource
+                            ? alpha(theme.palette.error.main, 0.1)
+                            : isTarget
+                              ? alpha(theme.palette.success.main, 0.1)
+                              : alpha(theme.palette.action.hover, 0.08),
                     }
                   }}
                 >
                   {/* Indicateur de rôle */}
                   <Box sx={{ width: 24 }}>
+                    {isExcluded && <i className="ri-filter-off-line" style={{ fontSize: 18, color: theme.palette.text.disabled }} />}
                     {isMaintenance && <BuildIcon sx={{ fontSize: 18, color: 'warning.main' }} />}
                     {isSource && <TrendingUpIcon sx={{ fontSize: 18, color: 'error.main' }} />}
                     {isTarget && <TrendingDownIcon sx={{ fontSize: 18, color: 'success.main' }} />}
@@ -627,14 +643,23 @@ return 'neutral'
 
                   {/* Nom du nœud */}
                   <Box sx={{ minWidth: 180 }}>
-                    <Typography 
-                      sx={{ 
-                        fontWeight: 600, 
-                        fontSize: '0.875rem'
+                    <Typography
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        color: isExcluded ? 'text.disabled' : 'text.primary'
                       }}
                     >
                       {node.node}
                     </Typography>
+                    {isExcluded && (
+                      <Chip
+                        label={t('drsPage.excludedFromDRS')}
+                        size="small"
+                        sx={{ height: 18, fontSize: '0.65rem', mt: 0.5, color: 'text.disabled', borderColor: 'text.disabled' }}
+                        variant="outlined"
+                      />
+                    )}
                     {isMaintenance && (
                       <Chip
                         label={t('drsPage.inMaintenance')}
@@ -1956,6 +1981,7 @@ return next
                 recommendations={pendingRecs}
                 expanded={expandedClusters.has(cluster.id)}
                 onToggle={() => toggleCluster(cluster.id)}
+                excludedNodeNames={drsSettings?.excluded_nodes?.[cluster.id] || []}
               />
             ))
           )}
@@ -2069,7 +2095,7 @@ return next
           <CardContent>
             <DRSSettingsPanel
               settings={drsSettings || defaultDRSSettings}
-              nodes={allNodes}
+              clusterNodes={Object.fromEntries(clusters.map(c => [c.id, c.metrics.nodes?.map(n => n.node) || []]))}
               clusters={clusters.map(c => ({ id: c.id, name: c.name }))}
               clusterVersions={clusterVersions}
               onSave={handleSaveSettings}

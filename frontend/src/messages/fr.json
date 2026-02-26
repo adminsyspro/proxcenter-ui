@@ -3256,7 +3256,11 @@
     "allClustersDefault": "Tous les clusters (par défaut)",
     "clusterModeOverrides": "Mode par cluster",
     "clusterModeOverridesDesc": "Remplacez le mode DRS global pour des clusters individuels.",
-    "clusterModeGlobalDefault": "Défaut global ({mode})"
+    "clusterModeGlobalDefault": "Défaut global ({mode})",
+    "excludedNodesTitle": "Nœuds exclus",
+    "excludedNodesDesc": "Exclure des nœuds spécifiques du balancing DRS par cluster (ex : nœuds GPU dédiés, matériel en fin de vie).",
+    "excludedNodesPlaceholder": "Sélectionner des nœuds à exclure...",
+    "excludedFromDRS": "Exclu du DRS"
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

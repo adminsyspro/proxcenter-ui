@@ -15,13 +15,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   FormControlLabel,
   IconButton,
-  InputLabel,
   LinearProgress,
-  MenuItem,
-  Select,
   Stack,
   Step,
   StepLabel,
@@ -33,8 +29,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material'
+
+import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 
 interface RunningVmInfo {
   vmid: number
@@ -42,6 +41,7 @@ interface RunningVmInfo {
   type: 'qemu' | 'lxc'
   isLocal: boolean
   localDisks?: string[]
+  maxmem?: number
 }
 
 interface VmActionResult {
@@ -51,6 +51,7 @@ interface VmActionResult {
   action: 'migrate' | 'shutdown'
   status: 'pending' | 'running' | 'success' | 'failed'
   error?: string
+  target?: string
 }
 
 interface NodeUpdateDialogProps {
@@ -67,6 +68,42 @@ interface NodeUpdateDialogProps {
 type UpgradeStatus = 'UNKNOWN' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'REBOOTING'
 
 const CEPH_MAINTENANCE_FLAGS = ['noout', 'norebalance', 'norecover']
+
+/**
+ * Greedy first-fit-decreasing bin-packing: distribute VMs across nodes by available RAM.
+ * Returns a Map of vmid → target node name.
+ */
+function distributeVms(vms: RunningVmInfo[], nodes: NodeInfo[]): Map<number, string> {
+  const result = new Map<number, string>()
+  if (nodes.length === 0) return result
+
+  // Track remaining free memory per node
+  const freeMem = new Map<string, number>()
+  for (const n of nodes) {
+    freeMem.set(n.node, (n.maxmem || 0) - (n.mem || 0))
+  }
+
+  // Sort VMs by maxmem descending (biggest first)
+  const sorted = [...vms].sort((a, b) => (b.maxmem || 0) - (a.maxmem || 0))
+
+  for (const vm of sorted) {
+    // Pick node with the most free memory
+    let bestNode = nodes[0].node
+    let bestFree = freeMem.get(bestNode) || 0
+    for (const n of nodes) {
+      const free = freeMem.get(n.node) || 0
+      if (free > bestFree) {
+        bestNode = n.node
+        bestFree = free
+      }
+    }
+
+    result.set(vm.vmid, bestNode)
+    freeMem.set(bestNode, bestFree - (vm.maxmem || 0))
+  }
+
+  return result
+}
 
 export default function NodeUpdateDialog({
   open,
@@ -135,13 +172,13 @@ export default function NodeUpdateDialog({
   // VM migration state
   const [runningVms, setRunningVms] = useState<RunningVmInfo[]>([])
   const [vmsLoading, setVmsLoading] = useState(false)
-  const [clusterNodes, setClusterNodes] = useState<string[]>([])
+  const [clusterNodes, setClusterNodes] = useState<NodeInfo[]>([])
   const [migrateSharedVms, setMigrateSharedVms] = useState(true)
   const [shutdownLocalVms, setShutdownLocalVms] = useState(false)
-  const [targetNode, setTargetNode] = useState<string>('')
+  const [vmDistribution, setVmDistribution] = useState<Map<number, string>>(new Map())
   const [vmActionResults, setVmActionResults] = useState<VmActionResult[]>([])
   const [vmActionsInProgress, setVmActionsInProgress] = useState(false)
-  const [migratedVms, setMigratedVms] = useState<RunningVmInfo[]>([])
+  const [migratedVms, setMigratedVms] = useState<VmActionResult[]>([])
   const [shutdownVms, setShutdownVmsList] = useState<RunningVmInfo[]>([])
   const [didMigrateVms, setDidMigrateVms] = useState(false)
   const [didShutdownVms, setDidShutdownVms] = useState(false)
@@ -204,12 +241,18 @@ export default function NodeUpdateDialog({
       .then(([nodesJson, resourcesJson, localVmsJson]) => {
         if (cancelled) return
 
-        // Cluster nodes: online nodes other than current
-        const onlineNodes = (nodesJson.data || [])
+        // Cluster nodes: online nodes other than current (keep full NodeInfo)
+        const onlineNodes: NodeInfo[] = (nodesJson.data || [])
           .filter((n: any) => n.node !== nodeName && n.status === 'online')
-          .map((n: any) => n.node) as string[]
+          .map((n: any) => ({
+            node: n.node,
+            status: n.status,
+            cpu: n.cpu,
+            maxcpu: n.maxcpu,
+            mem: n.mem,
+            maxmem: n.maxmem,
+          }))
         setClusterNodes(onlineNodes)
-        if (onlineNodes.length > 0) setTargetNode(onlineNodes[0])
 
         // Running VMs on this node (not templates)
         const resources = (resourcesJson.data || []).filter(
@@ -236,9 +279,16 @@ export default function NodeUpdateDialog({
           type: r.type as 'qemu' | 'lxc',
           isLocal: localVmIds.has(r.vmid),
           localDisks: localDisksMap.get(r.vmid),
+          maxmem: r.maxmem,
         }))
 
         setRunningVms(vms)
+
+        // Compute VM distribution across cluster nodes
+        const shared = vms.filter(vm => !vm.isLocal)
+        if (onlineNodes.length > 0 && shared.length > 0) {
+          setVmDistribution(distributeVms(shared, onlineNodes))
+        }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setVmsLoading(false) })
@@ -382,11 +432,11 @@ export default function NodeUpdateDialog({
         setDidSetCephFlags(true)
       }
 
-      // Migrate shared-storage VMs
-      const vmsToMigrate = migrateSharedVms && targetNode ? sharedVms : []
+      // Migrate shared-storage VMs (distributed across nodes)
+      const vmsToMigrate = migrateSharedVms && vmDistribution.size > 0 ? sharedVms : []
       const vmsToShutdown = shutdownLocalVms ? localVms : []
       const allActions: VmActionResult[] = [
-        ...vmsToMigrate.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'migrate' as const, status: 'pending' as const })),
+        ...vmsToMigrate.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'migrate' as const, status: 'pending' as const, target: vmDistribution.get(vm.vmid) })),
         ...vmsToShutdown.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'shutdown' as const, status: 'pending' as const })),
       ]
 
@@ -394,8 +444,12 @@ export default function NodeUpdateDialog({
         setVmActionResults(allActions)
         setVmActionsInProgress(true)
 
-        // Migrate shared VMs
+        // Migrate shared VMs (each to its distributed target)
+        const successfulMigrations: VmActionResult[] = []
         for (const vm of vmsToMigrate) {
+          const target = vmDistribution.get(vm.vmid)
+          if (!target) continue
+
           setVmActionResults(prev => prev.map(r =>
             r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'running' } : r
           ))
@@ -403,7 +457,7 @@ export default function NodeUpdateDialog({
             const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/migrate`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ target: targetNode, online: true }),
+              body: JSON.stringify({ target, online: true }),
             })
             if (!res.ok) {
               const json = await res.json().catch(() => ({}))
@@ -412,6 +466,7 @@ export default function NodeUpdateDialog({
             setVmActionResults(prev => prev.map(r =>
               r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'success' } : r
             ))
+            successfulMigrations.push({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'migrate', status: 'success', target })
           } catch (err: any) {
             setVmActionResults(prev => prev.map(r =>
               r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'failed', error: err.message } : r
@@ -419,7 +474,7 @@ export default function NodeUpdateDialog({
           }
         }
         if (vmsToMigrate.length > 0) {
-          setMigratedVms(vmsToMigrate)
+          setMigratedVms(successfulMigrations)
           setDidMigrateVms(true)
         }
 
@@ -460,7 +515,7 @@ export default function NodeUpdateDialog({
     } finally {
       setPreflightLoading(false)
     }
-  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, targetNode, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
+  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)
@@ -533,12 +588,13 @@ export default function NodeUpdateDialog({
     setPostMaintenanceExiting(false)
   }, [maintenanceUrl])
 
-  // Post-actions: migrate VMs back
+  // Post-actions: migrate VMs back (each from its specific target node)
   const migrateVmsBack = useCallback(async () => {
     setMigrateBackInProgress(true)
     try {
       for (const vm of migratedVms) {
-        await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(targetNode)}/${vm.vmid}/migrate`, {
+        if (!vm.target) continue
+        await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(vm.target)}/${vm.vmid}/migrate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target: nodeName, online: true }),
@@ -547,7 +603,7 @@ export default function NodeUpdateDialog({
       setMigrateBackDone(true)
     } catch {}
     setMigrateBackInProgress(false)
-  }, [migratedVms, connBaseUrl, targetNode, nodeName])
+  }, [migratedVms, connBaseUrl, nodeName])
 
   // Post-actions: restart shut down VMs
   const restartLocalVmsAction = useCallback(async () => {
@@ -600,7 +656,7 @@ export default function NodeUpdateDialog({
     setClusterNodes([])
     setMigrateSharedVms(true)
     setShutdownLocalVms(false)
-    setTargetNode('')
+    setVmDistribution(new Map())
     setVmActionResults([])
     setVmActionsInProgress(false)
     setMigratedVms([])
@@ -785,19 +841,53 @@ export default function NodeUpdateDialog({
                       {migrateSharedVms && (
                         <Box sx={{ ml: 4, mt: 1 }}>
                           {clusterNodes.length > 0 ? (
-                            <FormControl size="small" sx={{ minWidth: 200 }}>
-                              <InputLabel>{t('updates.targetNode')}</InputLabel>
-                              <Select
-                                value={targetNode}
-                                label={t('updates.targetNode')}
-                                onChange={(e) => setTargetNode(e.target.value)}
-                                disabled={vmActionsInProgress}
-                              >
-                                {clusterNodes.map(n => (
-                                  <MenuItem key={n} value={n}>{n}</MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
+                            <Box>
+                              <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                                {t('updates.distributionSummary')}
+                              </Typography>
+                              {clusterNodes.map(node => {
+                                const nodeVms = sharedVms.filter(vm => vmDistribution.get(vm.vmid) === node.node)
+                                if (nodeVms.length === 0) return null
+                                const totalRam = nodeVms.reduce((sum, vm) => sum + (vm.maxmem || 0), 0)
+                                const currentMem = node.mem || 0
+                                const projectedMem = currentMem + totalRam
+                                const projectedPercent = node.maxmem ? Math.round((projectedMem / node.maxmem) * 100) : 0
+
+                                return (
+                                  <Tooltip
+                                    key={node.node}
+                                    title={nodeVms.map(vm => `${vm.type === 'qemu' ? 'VM' : 'CT'} ${vm.vmid} (${vm.name})`).join(', ')}
+                                    arrow
+                                  >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.5 }}>
+                                      <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, minWidth: 60 }}>
+                                        {node.node}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 100 }}>
+                                        {nodeVms.length} VM{nodeVms.length > 1 ? 's' : ''} · {formatMemory(totalRam)}
+                                      </Typography>
+                                      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <LinearProgress
+                                          variant="determinate"
+                                          value={Math.min(projectedPercent, 100)}
+                                          sx={{
+                                            flex: 1,
+                                            height: 6,
+                                            borderRadius: 1,
+                                            '& .MuiLinearProgress-bar': {
+                                              bgcolor: projectedPercent > 85 ? 'error.main' : projectedPercent > 70 ? 'warning.main' : 'primary.main',
+                                            },
+                                          }}
+                                        />
+                                        <Typography variant="caption" sx={{ fontSize: 10, minWidth: 28, textAlign: 'right' }}>
+                                          {projectedPercent}%
+                                        </Typography>
+                                      </Box>
+                                    </Box>
+                                  </Tooltip>
+                                )
+                              })}
+                            </Box>
                           ) : (
                             <Alert severity="warning" sx={{ py: 0.5 }}>
                               <Typography variant="caption">{t('updates.noTargetNodes')}</Typography>
@@ -872,7 +962,7 @@ export default function NodeUpdateDialog({
                             {r.type === 'qemu' ? 'VM' : 'CT'} {r.vmid} ({r.name})
                           </Typography>
                           <Typography variant="caption" sx={{ ml: 'auto', fontSize: 11 }}>
-                            {r.status === 'success' && r.action === 'migrate' && t('updates.vmMigrateSuccess', { target: targetNode })}
+                            {r.status === 'success' && r.action === 'migrate' && t('updates.vmMigrateSuccess', { target: r.target || '?' })}
                             {r.status === 'success' && r.action === 'shutdown' && t('updates.vmShutdownSuccess')}
                             {r.status === 'failed' && (r.error || (r.action === 'migrate' ? t('updates.vmMigrateFailed') : t('updates.vmShutdownFailed')))}
                             {r.status === 'running' && '...'}
@@ -1183,7 +1273,10 @@ export default function NodeUpdateDialog({
                   ) : (
                     <>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        {t('updates.migrateVmsBackDescription', { node: nodeName, target: targetNode })}
+                        {t('updates.migrateVmsBackDescription', {
+                          node: nodeName,
+                          targets: [...new Set(migratedVms.map(vm => vm.target).filter(Boolean))].join(', '),
+                        })}
                       </Typography>
                       <Button
                         variant="outlined"

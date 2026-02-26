@@ -3264,7 +3264,7 @@ return
 
   // Charger la config du cluster pour les nodes standalone quand on sélectionne l'onglet Cluster
   useEffect(() => {
-    if (selection?.type === 'node' && nodeTab === 8 && !clusterConfigLoaded && !clusterConfigLoading) {
+    if (selection?.type === 'node' && nodeTab === 9 && !clusterConfigLoaded && !clusterConfigLoading) {
       loadClusterConfig(parseNodeId(selection.id).connId)
     }
   }, [selection?.type, selection?.id, nodeTab, clusterConfigLoaded, clusterConfigLoading, loadClusterConfig])

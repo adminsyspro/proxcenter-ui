@@ -2803,15 +2803,15 @@ export default function NodeTabs(props: any) {
                 )}
 
 
-                {/* Onglet CVE - Index 9 pour cluster, Index 10 pour standalone */}
-                {((nodeTab === 9 && data.clusterName) || (nodeTab === 10 && !data.clusterName)) && (
+                {/* Onglet CVE - Index 10 pour cluster, Index 11 pour standalone */}
+                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Subscription - Index 10 pour cluster, Index 11 pour standalone */}
-                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
+                {/* Onglet Subscription - Index 11 pour cluster, Index 12 pour standalone */}
+                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

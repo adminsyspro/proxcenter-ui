@@ -55,6 +55,8 @@ function VCenterSummary({
   nodesOnline,
   nodesTotal,
   vmCount,
+  isCluster,
+  hasCeph,
 }: {
   kindLabel: string
   status: Status
@@ -75,6 +77,8 @@ function VCenterSummary({
   nodesOnline?: number
   nodesTotal?: number
   vmCount?: number
+  isCluster?: boolean
+  hasCeph?: boolean
 }) {
   const t = useTranslations()
   const theme = useTheme()
@@ -716,6 +720,8 @@ return `${mins}m`
               version: hostInfo?.pveVersion || null,
             }
           } : {}}
+          isCluster={isCluster}
+          hasCeph={hasCeph}
         />
       )}
 

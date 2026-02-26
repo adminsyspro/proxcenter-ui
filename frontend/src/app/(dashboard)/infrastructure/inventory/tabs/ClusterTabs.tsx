@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 
@@ -82,6 +82,9 @@ export default function ClusterTabs(props: any) {
   const [expandedRecId, setExpandedRecId] = useState<string | null>(null)
   const [recSeries, setRecSeries] = useState<SeriesPoint[]>([])
   const [recRrdLoading, setRecRrdLoading] = useState(false)
+  const [cephOsdFlags, setCephOsdFlags] = useState<string[]>([])
+  const [cephOsdFlagsLoading, setCephOsdFlagsLoading] = useState(false)
+  const [cephFlagToggling, setCephFlagToggling] = useState<string | null>(null)
   const theme = useTheme()
   const toast = useToast()
 
@@ -255,6 +258,39 @@ export default function ClusterTabs(props: any) {
     setTimeout(() => mutateRecs(), 2000)
     setExecutingAll(false)
   }, [clusterRecs, mutateRecs, toast, t])
+
+  // Fetch Ceph OSD flags when in summary tab and ceph is available
+  const connId = selection?.type === 'cluster' ? selection.id : ''
+  useEffect(() => {
+    if (clusterTab !== 0 || !data.cephHealth || !connId) return
+    let cancelled = false
+    setCephOsdFlagsLoading(true)
+    fetch(`/api/v1/connections/${connId}/ceph/flags`)
+      .then(res => res.json())
+      .then(json => {
+        if (!cancelled) setCephOsdFlags(json.data?.flags || [])
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setCephOsdFlagsLoading(false) })
+    return () => { cancelled = true }
+  }, [clusterTab, data.cephHealth, connId])
+
+  const handleRemoveCephFlag = useCallback(async (flag: string) => {
+    if (!connId) return
+    setCephFlagToggling(flag)
+    try {
+      const res = await fetch(`/api/v1/connections/${connId}/ceph/flags`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flag }),
+      })
+      if (res.ok) {
+        setCephOsdFlags(prev => prev.filter(f => f !== flag))
+        toast.success(t('ceph.flagUnset', { flag }))
+      }
+    } catch { /* ignore */ }
+    setCephFlagToggling(null)
+  }, [connId, toast, t])
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />
@@ -657,6 +693,42 @@ export default function ClusterTabs(props: any) {
                           </CardContent>
                         </Card>
                     </Box>
+
+                    {/* Ceph OSD Flags */}
+                    {data.cephHealth && (
+                      <Card variant="outlined" sx={{ mb: 2 }}>
+                        <CardContent sx={{ py: 1.5, px: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <i className="ri-flag-line" style={{ fontSize: 18 }} />
+                              <Typography variant="subtitle2" fontWeight={700}>{t('ceph.osdFlags')}</Typography>
+                            </Box>
+                            {cephOsdFlagsLoading && <CircularProgress size={16} />}
+                          </Box>
+                          {!cephOsdFlagsLoading && cephOsdFlags.length === 0 && (
+                            <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.6 }}>
+                              {t('ceph.noOsdFlagsActive')}
+                            </Typography>
+                          )}
+                          {cephOsdFlags.length > 0 && (
+                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                              {cephOsdFlags.map(flag => (
+                                <Chip
+                                  key={flag}
+                                  label={flag}
+                                  size="small"
+                                  color="warning"
+                                  onDelete={() => handleRemoveCephFlag(flag)}
+                                  disabled={cephFlagToggling === flag}
+                                  deleteIcon={cephFlagToggling === flag ? <CircularProgress size={14} /> : undefined}
+                                  sx={{ fontFamily: 'monospace', fontSize: 11, height: 24 }}
+                                />
+                              ))}
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {/* DRS Status */}
                     {drsHealth !== null && (

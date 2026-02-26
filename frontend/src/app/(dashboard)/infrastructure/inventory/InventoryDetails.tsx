@@ -4620,6 +4620,8 @@ return vm?.isCluster ?? false
             nodesOnline={data.nodesData?.filter(n => n.status === 'online').length}
             nodesTotal={data.nodesData?.length}
             vmCount={selection?.type === 'node' ? data.vmsData?.filter((vm: any) => vm.status === 'running').length : undefined}
+            isCluster={!!data.clusterName}
+            hasCeph={!!data.cephHealth}
           />
 
           {/* VM Detail Tabs */}

@@ -131,6 +131,8 @@ interface DRSRecommendation {
   score: number
   created_at: string
   status: 'pending' | 'approved' | 'rejected' | 'executed' | 'stale'
+  confirmation_count?: number
+  last_seen_at?: string
   maintenance_evacuation?: boolean
 }
 
@@ -937,6 +939,18 @@ const RecommendationRow = ({
             sx={{ minWidth: 55, cursor: 'help' }}
           />
         </Tooltip>
+        {(rec.confirmation_count ?? 0) > 1 && (
+          <Tooltip title={t('drsPage.confirmationTooltip', { count: rec.confirmation_count })} arrow>
+            <Chip
+              size="small"
+              variant="outlined"
+              color="info"
+              label={`${rec.confirmation_count}\u00d7`}
+              icon={<CheckCircleIcon fontSize="small" />}
+              sx={{ cursor: 'help' }}
+            />
+          </Tooltip>
+        )}
       </Stack>
     </Box>
   )
@@ -2187,6 +2201,17 @@ return next
                   +{selectedRec.score.toFixed(1)}%
                 </Typography>
               </Box>
+              {(selectedRec.confirmation_count ?? 0) > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ opacity: 0.6 }}>{t('drsPage.confirmations')}</Typography>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color="info"
+                    label={t('drsPage.confirmationTooltip', { count: selectedRec.confirmation_count })}
+                  />
+                </Box>
+              )}
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" sx={{ opacity: 0.6 }}>{t('drsPage.reason')}</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>

@@ -3116,6 +3116,8 @@
     "estimatedImprovement": "Amélioration estimée",
     "reason": "Raison",
     "createdOn": "Créée le",
+    "confirmations": "Confirmations",
+    "confirmationTooltip": "Recommandé dans {count} cycles d\u0027analyse consécutifs",
     "executeMigration": "Exécuter la migration",
     "approve": "Approuver",
     "reject": "Rejeter",

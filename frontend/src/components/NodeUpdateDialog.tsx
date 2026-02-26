@@ -10,17 +10,25 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  IconButton,
   LinearProgress,
   Stack,
   Step,
   StepLabel,
   Stepper,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Typography,
 } from '@mui/material'
 
@@ -66,6 +74,7 @@ export default function NodeUpdateDialog({
 
   // Config
   const [autoReboot, setAutoReboot] = useState(true)
+  const [packagesExpanded, setPackagesExpanded] = useState(false)
 
   // Execution
   const [loading, setLoading] = useState(false)
@@ -377,6 +386,7 @@ export default function NodeUpdateDialog({
     setRebootRequired(false)
     setError(null)
     setAutoReboot(true)
+    setPackagesExpanded(false)
     setStartedAt(null)
     setCompletedAt(null)
     setMaintenanceStatus(null)
@@ -527,17 +537,17 @@ export default function NodeUpdateDialog({
               </Card>
             )}
 
-            {/* VM warning for cluster */}
+            {/* VM warning for cluster — migration, not shutdown */}
             {vmCount > 0 && (
               <Alert
-                severity="warning"
-                icon={<i className="ri-computer-line" style={{ fontSize: 20 }} />}
+                severity="info"
+                icon={<i className="ri-swap-box-line" style={{ fontSize: 20 }} />}
               >
                 <Typography variant="body2" fontWeight={600}>
                   {t('updates.vmsRunningOnNode', { count: vmCount })}
                 </Typography>
                 <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                  {t('updates.vmsShutdownHint')}
+                  {t('updates.vmsMigrateHint')}
                 </Typography>
               </Alert>
             )}
@@ -591,12 +601,43 @@ export default function NodeUpdateDialog({
                       {pkgCount} {t('updates.packages').toLowerCase()}
                     </Typography>
                   </Box>
-                  {nodeUpdate?.version && (
-                    <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                      {nodeUpdate.version}
-                    </Typography>
-                  )}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {nodeUpdate?.version && (
+                      <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                        {nodeUpdate.version}
+                      </Typography>
+                    )}
+                    {pkgCount > 0 && (
+                      <IconButton size="small" onClick={() => setPackagesExpanded(p => !p)} sx={{ ml: 0.5 }}>
+                        <i className={packagesExpanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 18 }} />
+                      </IconButton>
+                    )}
+                  </Box>
                 </Box>
+                <Collapse in={packagesExpanded}>
+                  {nodeUpdate?.updates && nodeUpdate.updates.length > 0 && (
+                    <TableContainer sx={{ mt: 1.5, maxHeight: 250 }}>
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('updates.package')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('updates.currentVersion')}</TableCell>
+                            <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('updates.newVersion')}</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {nodeUpdate.updates.map((pkg: any, i: number) => (
+                            <TableRow key={i}>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 11 }}>{pkg.Package}</TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, opacity: 0.6 }}>{pkg.OldVersion}</TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 11 }}>{pkg.Version}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Collapse>
               </CardContent>
             </Card>
 

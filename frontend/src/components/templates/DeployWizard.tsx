@@ -209,7 +209,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
           (s.content?.includes('images') || s.content?.includes('rootdir')) && isFileBasedStorage(s.type)
         )
         setStorages(stList)
-        if (stList.length > 0 && !storage) setStorage(stList[0].storage)
+        setStorage(stList.length > 0 ? stList[0].storage : '')
       })
       .catch(() => setStorages([]))
 

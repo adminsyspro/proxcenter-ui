@@ -2380,7 +2380,8 @@
         "storage": "Stockage",
         "vmid": "ID de la VM",
         "vmName": "Nom de la VM",
-        "available": "disponible"
+        "available": "disponible",
+        "noFileStorage": "Aucun stockage file-based trouvé sur ce nœud. Le déploiement de templates nécessite un stockage file-based (dir, NFS, CIFS, etc.)."
       },
       "hardware": {
         "title": "Matériel",
@@ -3799,6 +3800,7 @@
     "stepCompleted": "Terminé",
     "vmsRunningOnNode": "{count} VM(s) en cours d'exécution sur ce nœud",
     "vmsShutdownHint": "Les VMs seront éteintes durant la mise à jour si l'option est activée ci-dessous.",
+    "vmsMigrateHint": "Dans un cluster, les VMs en cours d'exécution doivent être migrées vers un autre nœud avant la mise à jour. Le mode maintenance gère automatiquement les ressources HA.",
     "autoReboot": "Redémarrage automatique",
     "autoRebootDescription": "Redémarrer le nœud si une mise à jour du kernel est installée",
     "shutdownVms": "Éteindre les VMs",

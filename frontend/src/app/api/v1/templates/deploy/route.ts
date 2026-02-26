@@ -9,6 +9,7 @@ import { deploySchema } from "@/lib/schemas"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getImageBySlug } from "@/lib/templates/cloudImages"
+import { isFileBasedStorage } from "@/lib/proxmox/storage"
 
 export const runtime = "nodejs"
 
@@ -96,25 +97,63 @@ export async function POST(req: Request) {
         // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
         const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
 
-        // Ensure storage has 'import' content type enabled (required for import-from)
+        // Determine if target storage is file-based (supports download-url) or block-based
         const storageConfig = await pveFetch<any>(
           conn,
           `/storage/${encodeURIComponent(body.storage)}`
         )
-        const currentContent = String(storageConfig?.content || "")
-        if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
-          const newContent = currentContent ? `${currentContent},import` : "import"
-          await pveFetch<any>(
+        const storageType = storageConfig?.type || "dir"
+        let downloadStorage = body.storage
+
+        // Block-based storages (zfspool, lvm, lvmthin, rbd...) do not support download-url.
+        // Use a file-based storage as staging area for the download, then import-from it.
+        if (!isFileBasedStorage(storageType)) {
+          const nodeStorages = await pveFetch<any[]>(
             conn,
-            `/storage/${encodeURIComponent(body.storage)}`,
-            { method: "PUT", body: new URLSearchParams({ content: newContent }) }
-          )
+            `/nodes/${encodeURIComponent(body.node)}/storage`
+          ).catch(() => [])
+
+          const staging = (nodeStorages || []).find((s: any) => isFileBasedStorage(s.type) && s.enabled !== 0)
+          if (!staging) {
+            throw new Error(
+              `Storage '${body.storage}' is type '${storageType}' which does not support direct image download. ` +
+              `No file-based storage (dir/NFS/CIFS) found on node '${body.node}' to use as staging area.`
+            )
+          }
+          downloadStorage = staging.storage
         }
 
-        // Check if image already exists on PVE storage (import content type)
+        // Ensure download storage has 'import' content type enabled
+        if (downloadStorage !== body.storage) {
+          const dlStorageConfig = await pveFetch<any>(
+            conn,
+            `/storage/${encodeURIComponent(downloadStorage)}`
+          )
+          const dlContent = String(dlStorageConfig?.content || "")
+          if (!dlContent.split(",").map((s: string) => s.trim()).includes("import")) {
+            const newContent = dlContent ? `${dlContent},import` : "import"
+            await pveFetch<any>(
+              conn,
+              `/storage/${encodeURIComponent(downloadStorage)}`,
+              { method: "PUT", body: new URLSearchParams({ content: newContent }) }
+            )
+          }
+        } else {
+          const currentContent = String(storageConfig?.content || "")
+          if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
+            const newContent = currentContent ? `${currentContent},import` : "import"
+            await pveFetch<any>(
+              conn,
+              `/storage/${encodeURIComponent(body.storage)}`,
+              { method: "PUT", body: new URLSearchParams({ content: newContent }) }
+            )
+          }
+        }
+
+        // Check if image already exists on download storage
         const storageContents = await pveFetch<any[]>(
           conn,
-          `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/content?content=import`
+          `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(downloadStorage)}/content?content=import`
         ).catch(() => [])
 
         const imageAlreadyExists = (storageContents || []).some(
@@ -127,13 +166,13 @@ export async function POST(req: Request) {
             content: "import",
             filename: urlFilename,
             node: body.node,
-            storage: body.storage,
+            storage: downloadStorage,
             "verify-certificates": "0",
           })
 
           const downloadResult = await pveFetch<any>(
             conn,
-            `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(body.storage)}/download-url`,
+            `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(downloadStorage)}/download-url`,
             { method: "POST", body: downloadParams }
           )
 
@@ -145,7 +184,7 @@ export async function POST(req: Request) {
           }
         }
 
-        const importVolume = `${body.storage}:import/${urlFilename}`
+        const importVolume = `${downloadStorage}:import/${urlFilename}`
 
         // Step 2: Create VM with imported disk
         await updateDeployment(deployment.id, "creating")

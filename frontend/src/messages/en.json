@@ -2375,7 +2375,8 @@
         "storage": "Storage",
         "vmid": "VM ID",
         "vmName": "VM Name",
-        "available": "available"
+        "available": "available",
+        "noFileStorage": "No file-based storage found on this node. Template deployment requires a file-based storage (dir, NFS, CIFS, etc.)."
       },
       "hardware": {
         "title": "Hardware",
@@ -3799,6 +3800,7 @@
     "stepCompleted": "Completed",
     "vmsRunningOnNode": "{count} VM(s) running on this node",
     "vmsShutdownHint": "VMs will be shut down during the update if the option is enabled below.",
+    "vmsMigrateHint": "In a cluster, running VMs should be migrated to another node before updating. Maintenance mode will handle HA resources automatically.",
     "autoReboot": "Auto reboot",
     "autoRebootDescription": "Reboot node if a kernel update is installed",
     "shutdownVms": "Shutdown VMs",

@@ -28,6 +28,7 @@ import {
 } from '@mui/material'
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
+import { isFileBasedStorage } from '@/lib/proxmox/storage'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
 
@@ -205,7 +206,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
       .then(r => r.json())
       .then(res => {
         const stList = (res.data || []).filter((s: any) =>
-          s.content?.includes('images') || s.content?.includes('rootdir')
+          (s.content?.includes('images') || s.content?.includes('rootdir')) && isFileBasedStorage(s.type)
         )
         setStorages(stList)
         if (stList.length > 0 && !storage) setStorage(stList[0].storage)
@@ -420,6 +421,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
           ))}
         </Select>
       </FormControl>
+
+      {node && storages.length === 0 && (
+        <Alert severity="warning" variant="outlined">
+          {t('templates.deploy.target.noFileStorage')}
+        </Alert>
+      )}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         <TextField

@@ -88,7 +88,7 @@ export default function NodeUpdateDialog({
       .then(res => res.json())
       .then(json => {
         if (cancelled) return
-        if (!json.sshEnabled) setSshNotConfigured(true)
+        if (!json.data?.sshEnabled) setSshNotConfigured(true)
       })
       .catch(() => {})
 

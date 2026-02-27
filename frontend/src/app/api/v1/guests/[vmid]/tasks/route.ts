@@ -96,37 +96,8 @@ export async function GET(
     
     const tasks = await pveFetch<any[]>(conn, `${apiPath}?${queryParams}`)
 
-    const typeLabels: Record<string, string> = {
-      'qmstart': 'Démarrage',
-      'qmstop': 'Arrêt',
-      'qmshutdown': 'Arrêt propre',
-      'qmreboot': 'Redémarrage',
-      'qmsuspend': 'Mise en pause',
-      'qmresume': 'Reprise',
-      'qmreset': 'Reset',
-      'qmmigrate': 'Migration',
-      'qmclone': 'Clonage',
-      'qmcreate': 'Création',
-      'qmdestroy': 'Suppression',
-      'qmsnapshot': 'Snapshot',
-      'qmrollback': 'Rollback',
-      'qmdelsnapshot': 'Suppr. snapshot',
-      'qmconfig': 'Configuration',
-      'vzdump': 'Sauvegarde',
-      'vzstart': 'Démarrage CT',
-      'vzstop': 'Arrêt CT',
-      'vzshutdown': 'Arrêt propre CT',
-      'vzmigrate': 'Migration CT',
-      'vzclone': 'Clonage CT',
-      'vzcreate': 'Création CT',
-      'vzdestroy': 'Suppression CT',
-      'vzsnapshot': 'Snapshot CT',
-      'vzrollback': 'Rollback CT',
-    }
-
     const formatted = (tasks || []).map(t => {
       let taskType = t.type || 'unknown'
-      let taskLabel = typeLabels[taskType] || taskType
 
       let status = 'running'
 
@@ -139,21 +110,14 @@ export async function GET(
       return {
         upid: t.upid,
         type: taskType,
-        label: taskLabel,
         status,
-        statusText: t.status || 'En cours...',
+        statusText: t.status || null,
         starttime: t.starttime || 0,
-        starttimeFormatted: t.starttime 
-          ? new Date(t.starttime * 1000).toLocaleString('fr-FR')
-          : '-',
         endtime: t.endtime || null,
-        endtimeFormatted: t.endtime 
-          ? new Date(t.endtime * 1000).toLocaleString('fr-FR')
+        duration: t.endtime && t.starttime
+          ? t.endtime - t.starttime
           : null,
-        duration: t.endtime && t.starttime 
-          ? t.endtime - t.starttime 
-          : null,
-        durationFormatted: t.endtime && t.starttime 
+        durationFormatted: t.endtime && t.starttime
           ? formatDuration(t.endtime - t.starttime)
           : null,
         user: t.user || '-',

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
 
 import {
@@ -50,6 +50,7 @@ import {
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
 import { formatBytes } from '@/utils/format'
+import { formatDateTime } from '@/lib/i18n/date'
 import VmFirewallTab from '@/components/VmFirewallTab'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
@@ -66,6 +67,7 @@ import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 
 export default function VmDetailTabs(props: any) {
   const t = useTranslations()
+  const locale = useLocale()
 
   const {
     addCephReplicationDialogOpen,
@@ -1508,12 +1510,12 @@ return (
                                     <tr key={task.upid || idx} style={{ backgroundColor: rowBgColor }}>
                                       <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                                          {task.starttimeFormatted}
+                                          {task.starttime ? formatDateTime(task.starttime * 1000, locale) : '-'}
                                         </Typography>
                                       </td>
                                       <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                                          {task.endtimeFormatted || '-'}
+                                          {task.endtime ? formatDateTime(task.endtime * 1000, locale) : '-'}
                                         </Typography>
                                       </td>
                                       <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
@@ -1523,19 +1525,19 @@ return (
                                       </td>
                                       <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                                          {data?.kindLabel}/{data?.vmType?.toUpperCase()} {selection?.id?.split(':').pop()} - {task.label}
+                                          {data?.kindLabel}/{data?.vmType?.toUpperCase()} {selection?.id?.split(':').pop()} - {t(`tasks.types.${task.type}`, { defaultValue: task.type })}
                                         </Typography>
                                       </td>
                                       <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-                                        <Typography 
-                                          variant="body2" 
-                                          sx={{ 
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
                                             fontSize: '0.8rem',
                                             color: isError ? 'error.main' : 'inherit',
                                             fontWeight: isError ? 500 : 400
                                           }}
                                         >
-                                          {task.statusText}
+                                          {task.statusText || t('tasks.status.running')}
                                         </Typography>
                                       </td>
                                     </tr>

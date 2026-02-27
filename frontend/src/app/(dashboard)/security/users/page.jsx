@@ -63,30 +63,24 @@ return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `${Math.floo
    Components
 -------------------------------- */
 
-function RoleChips({ roles, t }) {
-  if (!roles || roles.length === 0) {
+function RoleChip({ roles, t }) {
+  const role = roles?.[0]
+
+  if (!role) {
     return <Chip size='small' label={t ? t('usersPage.noRole') : 'No role'} variant='outlined' sx={{ opacity: 0.5 }} />
   }
 
   return (
-    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-      {roles.slice(0, 2).map((role, idx) => (
-        <Chip
-          key={idx}
-          size='small'
-          label={role.name}
-          sx={{
-            bgcolor: role.color ? `${role.color}20` : undefined,
-            color: role.color || undefined,
-            borderColor: role.color || undefined,
-          }}
-          variant='outlined'
-        />
-      ))}
-      {roles.length > 2 && (
-        <Chip size='small' label={`+${roles.length - 2}`} variant='outlined' />
-      )}
-    </Box>
+    <Chip
+      size='small'
+      label={role.name}
+      sx={{
+        bgcolor: role.color ? `${role.color}20` : undefined,
+        color: role.color || undefined,
+        borderColor: role.color || undefined,
+      }}
+      variant='outlined'
+    />
   )
 }
 
@@ -108,7 +102,7 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [enabled, setEnabled] = useState(true)
-  const [selectedRoles, setSelectedRoles] = useState([])
+  const [selectedRole, setSelectedRole] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -120,14 +114,14 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
       setName(user.name || '')
       setEmail(user.email || '')
       setEnabled(user.enabled === 1)
-      setSelectedRoles(user.roles || [])
+      setSelectedRole(user.roles?.[0] || null)
       setPassword('')
     } else {
       setName('')
       setEmail('')
       setPassword('')
       setEnabled(true)
-      setSelectedRoles([])
+      setSelectedRole(null)
     }
 
     setError('')
@@ -178,8 +172,8 @@ return
 
       const userId = isEdit ? user.id : data.data.id
 
-      // Mettre à jour les rôles RBAC
-      // D'abord supprimer les anciens rôles de l'utilisateur
+      // Mettre à jour le rôle RBAC
+      // D'abord supprimer l'ancien rôle de l'utilisateur
       if (isEdit && user.roles) {
         for (const role of user.roles) {
           if (role.assignment_id) {
@@ -190,14 +184,14 @@ return
         }
       }
 
-      // Ensuite ajouter les nouveaux rôles
-      for (const role of selectedRoles) {
+      // Ensuite assigner le nouveau rôle
+      if (selectedRole) {
         await fetch('/api/v1/rbac/assignments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_id: userId,
-            role_id: role.id,
+            role_id: selectedRole.id,
             scope_type: 'global',
             scope_target: null
           })
@@ -272,34 +266,19 @@ return
 
         {showRbac && (
           <Autocomplete
-            multiple
             options={rbacRoles}
-            value={selectedRoles}
-            onChange={(_, newValue) => setSelectedRoles(newValue)}
+            value={selectedRole}
+            onChange={(_, newValue) => setSelectedRole(newValue)}
             getOptionLabel={(option) => option.name}
             isOptionEqualToValue={(option, value) => option.id === value.id}
             renderInput={(params) => (
               <TextField
                 {...params}
-                label={t ? t('usersPage.rbacRoles') : 'RBAC Roles'}
-                placeholder={t ? t('usersPage.selectRoles') : 'Select roles...'}
-                helperText={t ? t('usersPage.rolesDefinePermissions') : 'Roles define user permissions'}
+                label={t ? t('usersPage.rbacRole') : 'RBAC Role'}
+                placeholder={t ? t('usersPage.selectRole') : 'Select a role...'}
+                helperText={t ? t('usersPage.roleDefinesPermissions') : 'The role defines user permissions'}
               />
             )}
-            renderTags={(value, getTagProps) =>
-              value.map((option, index) => (
-                <Chip
-                  size='small'
-                  label={option.name}
-                  {...getTagProps({ index })}
-                  key={option.id}
-                  sx={{
-                    bgcolor: option.color ? `${option.color}20` : undefined,
-                    color: option.color || undefined,
-                  }}
-                />
-              ))
-            }
             renderOption={(props, option) => (
               <li {...props} key={option.id}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -515,7 +494,7 @@ return () => setPageInfo('', '', '')
         field: 'roles',
         headerName: t('navigation.rbacRoles'),
         width: 200,
-        renderCell: params => <RoleChips roles={params.row.roles} t={t} />,
+        renderCell: params => <RoleChip roles={params.row.roles} t={t} />,
       }] : []),
       {
         field: 'auth_provider',

@@ -861,10 +861,12 @@ const ActiveMigrationRow = ({
 // Recommendation Row - Ligne compacte pour une recommandation
 const RecommendationRow = ({
   rec,
-  onClick
+  onClick,
+  isHAManaged = false
 }: {
   rec: DRSRecommendation
   onClick: () => void
+  isHAManaged?: boolean
 }) => {
   const theme = useTheme()
   const t = useTranslations()
@@ -907,6 +909,18 @@ const RecommendationRow = ({
         )}
         {rec.maintenance_evacuation && (
           <Chip label={t('drsPage.evacuation')} size="small" color="warning" sx={{ height: 16, fontSize: '0.6rem', ml: 0.5 }} />
+        )}
+        {isHAManaged && (
+          <Tooltip title={t('drsPage.haWarningVm')} arrow>
+            <Chip
+              icon={<i className="ri-shield-star-line" style={{ fontSize: 12 }} />}
+              label="HA"
+              size="small"
+              color="warning"
+              variant="outlined"
+              sx={{ height: 18, fontSize: '0.6rem', ml: 0.5, cursor: 'help' }}
+            />
+          </Tooltip>
         )}
       </Box>
 
@@ -1419,16 +1433,36 @@ return Object.entries(metricsData as any)
   const { data: haDataMap } = useSWR(
     clusterIds ? `ha-check:${clusterIds}` : null,
     async () => {
-      const results: Record<string, { groups: number; rules: number; majorVersion: number }> = {}
+      const results: Record<string, {
+        groups: any[]
+        restrictedGroups: number
+        rules: number
+        majorVersion: number
+        haVmids: Set<number>
+      }> = {}
       await Promise.all(clusters.map(async (c) => {
         try {
           const res = await fetch(`/api/v1/connections/${c.id}/ha`)
           if (!res.ok) return
           const { data } = await res.json()
+          const groups = data?.groups || []
+          // Count groups that have node restrictions (restricted flag or limited node list)
+          const restrictedGroups = groups.filter((g: any) =>
+            g.restricted === 1 || (g.nodes && g.nodes.split(',').length > 0 && g.nodes.split(',').length < 99)
+          ).length
+          // Build set of HA-managed VMIDs
+          const haVmids = new Set<number>()
+          for (const r of (data?.resources || [])) {
+            // sid format: "vm:100" or "ct:200"
+            const match = r.sid?.match(/^(?:vm|ct):(\d+)$/)
+            if (match) haVmids.add(parseInt(match[1], 10))
+          }
           results[c.id] = {
-            groups: data?.groups?.length || 0,
+            groups,
+            restrictedGroups,
             rules: data?.rules?.length || 0,
             majorVersion: data?.majorVersion || 8,
+            haVmids,
           }
         } catch { /* ignore */ }
       }))
@@ -1437,20 +1471,30 @@ return Object.entries(metricsData as any)
     { revalidateOnFocus: false }
   )
 
-  // Only warn for PVE 9+ clusters that have native affinity rules.
-  // PVE 8 HA groups are the normal HA mechanism, not a conflict.
+  // Warn for PVE 9+ clusters with native affinity rules AND PVE 8 clusters with restricted HA groups
   const haWarnings = useMemo(() => {
     if (!haDataMap) return []
-    const warnings: { clusterId: string; clusterName: string; majorVersion: number; groups: number; rules: number }[] = []
+    const warnings: { clusterId: string; clusterName: string; majorVersion: number; restrictedGroups: number; rules: number }[] = []
     for (const c of clusters) {
       const ha = haDataMap[c.id]
       if (!ha) continue
-      if (ha.majorVersion >= 9 && ha.rules > 0) {
-        warnings.push({ clusterId: c.id, clusterName: c.name, majorVersion: ha.majorVersion, groups: ha.groups, rules: ha.rules })
+      const hasConflict = (ha.majorVersion >= 9 && ha.rules > 0) || ha.restrictedGroups > 0
+      if (hasConflict) {
+        warnings.push({ clusterId: c.id, clusterName: c.name, majorVersion: ha.majorVersion, restrictedGroups: ha.restrictedGroups, rules: ha.rules })
       }
     }
     return warnings
   }, [haDataMap, clusters])
+
+  // Build set of all HA-managed VMIDs across clusters (for recommendation warnings)
+  const haManagedVmids = useMemo(() => {
+    if (!haDataMap) return new Set<number>()
+    const set = new Set<number>()
+    for (const ha of Object.values(haDataMap)) {
+      for (const vmid of ha.haVmids) set.add(vmid)
+    }
+    return set
+  }, [haDataMap])
 
   // Récupérer la progression des migrations actives
   const activeMigrations = useMemo(() =>
@@ -1951,7 +1995,9 @@ return next
           {haWarnings.map(w => (
             <Typography key={w.clusterId} variant="body2">
               <strong>{w.clusterName}</strong> (PVE {w.majorVersion}){' — '}
-              {t('drsPage.haConflictPve9', { rules: w.rules, groups: w.groups })}
+              {w.rules > 0 && t('drsPage.haConflictRules', { rules: w.rules })}
+              {w.rules > 0 && w.restrictedGroups > 0 && ', '}
+              {w.restrictedGroups > 0 && t('drsPage.haConflictGroups', { groups: w.restrictedGroups })}
             </Typography>
           ))}
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
@@ -2072,6 +2118,7 @@ return next
                         key={rec.id}
                         rec={rec}
                         onClick={() => openRecommendation(rec)}
+                        isHAManaged={haManagedVmids.has(rec.vmid)}
                       />
                     ))}
                   </Stack>
@@ -2178,6 +2225,18 @@ return next
                 {selectedRec.guest_type === 'lxc' ? t('drsPage.ctidLabel') : t('drsPage.vmidLabel')}: {selectedRec.vmid}
               </Typography>
             </Box>
+
+            {/* HA warning */}
+            {haManagedVmids.has(selectedRec.vmid) && (
+              <Alert severity="warning" icon={<i className="ri-shield-star-line" style={{ fontSize: 20 }} />}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  {t('drsPage.haWarningTitle')}
+                </Typography>
+                <Typography variant="body2">
+                  {t('drsPage.haWarningDetail')}
+                </Typography>
+              </Alert>
+            )}
 
             {/* Migration visualization */}
             <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>

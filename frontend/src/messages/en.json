@@ -1017,7 +1017,7 @@
     "unprotected": "Unprotected",
     "backupJobs": "Backup jobs",
     "pveCluster": "PVE Cluster",
-    "createJob": "Create {type} job",
+    "createJob": "Create Job",
     "scheduleTime": "Schedule",
     "selection": "Selection",
     "mode": "Mode",

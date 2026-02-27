@@ -614,37 +614,35 @@ return () => clearTimeout(timer)
       {selectedPbs && (
         <Card variant='outlined'>
           <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className='ri-archive-line' style={{ fontSize: 22, color: theme.palette.primary.main }} />
-                <Typography variant='h6'>{t('backups.backupsCount', { count: totalRows })}</Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <FormControl size='small' sx={{ minWidth: 200 }}>
-                  <InputLabel>{t('backups.pbsServer')}</InputLabel>
-                  <Select
-                    value={selectedPbs}
-                    onChange={e => setSelectedPbs(e.target.value)}
-                    label={t('backups.pbsServer')}
-                    disabled={pbsLoading || pbsConnections.length === 0}
-                  >
-                    {pbsConnections.map(pbs => (
-                      <MenuItem key={pbs.id} value={pbs.id}>{pbs.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <IconButton
-                  size='small'
-                  onClick={() => setSelectedPbs(prev => prev)}
-                  disabled={loading || !selectedPbs}
-                >
-                  {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
-                </IconButton>
-              </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <i className='ri-archive-line' style={{ fontSize: 22, color: theme.palette.primary.main }} />
+              <Typography variant='h6'>{t('backups.backupsCount', { count: totalRows })}</Typography>
             </Box>
 
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              <FormControl size='small' sx={{ minWidth: 200 }}>
+                <InputLabel>{t('backups.pbsServer')}</InputLabel>
+                <Select
+                  value={selectedPbs}
+                  onChange={e => setSelectedPbs(e.target.value)}
+                  label={t('backups.pbsServer')}
+                  disabled={pbsLoading || pbsConnections.length === 0}
+                >
+                  {pbsConnections.map(pbs => (
+                    <MenuItem key={pbs.id} value={pbs.id}>{pbs.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <IconButton
+                size='small'
+                onClick={() => setSelectedPbs(prev => prev)}
+                disabled={loading || !selectedPbs}
+              >
+                {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
+              </IconButton>
+
+              <Box sx={{ flex: 1 }} />
+
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <TextField
                   size='small'

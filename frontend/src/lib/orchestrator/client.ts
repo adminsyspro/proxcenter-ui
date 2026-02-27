@@ -79,13 +79,17 @@ export interface DRSRecommendation {
   connection_id: string
   vmid: number
   vm_name: string
+  guest_type?: string
   source_node: string
   target_node: string
   reason: string
   priority: 'low' | 'medium' | 'high' | 'critical'
   score: number
   created_at: string
-  status: 'pending' | 'approved' | 'rejected' | 'executed'
+  status: 'pending' | 'approved' | 'rejected' | 'executed' | 'stale'
+  confirmation_count?: number
+  last_seen_at?: string
+  maintenance_evacuation?: boolean
 }
 
 export interface DRSMigration {

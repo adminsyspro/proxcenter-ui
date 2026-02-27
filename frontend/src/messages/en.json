@@ -3124,6 +3124,7 @@
     "confirmations": "Confirmations",
     "confirmationTooltip": "Recommended in {count} consecutive analysis cycles",
     "executeMigration": "Execute migration",
+    "executeAll": "Execute all",
     "approve": "Approve",
     "reject": "Reject",
     "migrationExecuted": "This migration has been executed.",

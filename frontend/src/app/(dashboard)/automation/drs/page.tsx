@@ -1766,6 +1766,24 @@ return next
     }
   }, [mutateRecs, mutateMigrations])
 
+  const handleExecuteAll = useCallback(async () => {
+    setActionLoading('execute-all')
+    try {
+      for (const rec of pendingRecs) {
+        try {
+          await apiAction(`/api/v1/orchestrator/drs/recommendations/${rec.id}/execute`, 'POST')
+          setExecutedRecIds(prev => new Set(prev).add(rec.id))
+        } catch {
+          // Skip stale/moved/already-on-target — continue with next
+        }
+      }
+      await mutateMigrations()
+      await mutateRecs()
+    } finally {
+      setActionLoading(null)
+    }
+  }, [pendingRecs, mutateMigrations, mutateRecs])
+
   // Fermer le drawer et nettoyer
   const handleCloseDrawer = useCallback(() => {
     setDrawerOpen(false)
@@ -2180,9 +2198,21 @@ return next
                 </Alert>
               ) : (
                 <>
-                  <Typography variant="subtitle2" sx={{ mb: 2, opacity: 0.7 }}>
-                    {t('drsPage.pendingRecommendations', { count: pendingRecs.length })}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography variant="subtitle2" sx={{ opacity: 0.7 }}>
+                      {t('drsPage.pendingRecommendations', { count: pendingRecs.length })}
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      size="small"
+                      startIcon={actionLoading === 'execute-all' ? <CircularProgress size={16} /> : <PlayArrowIcon />}
+                      onClick={handleExecuteAll}
+                      disabled={!!actionLoading || pendingRecs.length === 0}
+                    >
+                      {t('drsPage.executeAll')}
+                    </Button>
+                  </Box>
                   <Stack spacing={1}>
                     {pendingRecs.slice(0, visibleRecCount).map(rec => (
                       <RecommendationRow

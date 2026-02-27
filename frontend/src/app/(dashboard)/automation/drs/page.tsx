@@ -389,7 +389,8 @@ const ClusterCard = ({
   recommendations,
   expanded,
   onToggle,
-  excludedNodeNames = []
+  excludedNodeNames = [],
+  isClusterExcluded = false
 }: {
   clusterId: string
   clusterName: string
@@ -398,6 +399,7 @@ const ClusterCard = ({
   expanded: boolean
   onToggle: () => void
   excludedNodeNames?: string[]
+  isClusterExcluded?: boolean
 }) => {
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
@@ -445,12 +447,13 @@ return 'neutral'
   }
 
   return (
-    <Card 
-      variant="outlined" 
-      sx={{ 
+    <Card
+      variant="outlined"
+      sx={{
         borderRadius: 2,
         overflow: 'hidden',
-        borderColor: clusterRecs.length > 0 ? alpha(theme.palette.warning.main, 0.5) : 'divider'
+        opacity: isClusterExcluded ? 0.6 : 1,
+        borderColor: isClusterExcluded ? 'text.disabled' : clusterRecs.length > 0 ? alpha(theme.palette.warning.main, 0.5) : 'divider'
       }}
     >
       {/* Header cliquable */}
@@ -462,8 +465,8 @@ return 'neutral'
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: 'pointer',
-          bgcolor: alpha(theme.palette.primary.main, 0.03),
-          '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.06) },
+          bgcolor: isClusterExcluded ? alpha(theme.palette.action.disabled, 0.06) : alpha(theme.palette.primary.main, 0.03),
+          '&:hover': { bgcolor: isClusterExcluded ? alpha(theme.palette.action.disabled, 0.1) : alpha(theme.palette.primary.main, 0.06) },
           borderBottom: expanded ? '1px solid' : 'none',
           borderColor: 'divider'
         }}
@@ -476,11 +479,20 @@ return 'neutral'
                 {clusterName || clusterId.slice(0, 12)}
               </Typography>
               {metrics.pve_version && (
-                <Chip 
-                  label={`PVE ${metrics.pve_version}`} 
-                  size="small" 
+                <Chip
+                  label={`PVE ${metrics.pve_version}`}
+                  size="small"
                   variant="outlined"
                   sx={{ height: 20, fontSize: '0.65rem' }}
+                />
+              )}
+              {isClusterExcluded && (
+                <Chip
+                  icon={<i className="ri-filter-off-line" style={{ fontSize: 14 }} />}
+                  label={t('drsPage.excludedFromDRS')}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 22, fontSize: '0.7rem', color: 'text.disabled', borderColor: 'text.disabled' }}
                 />
               )}
             </Box>
@@ -1996,6 +2008,7 @@ return next
                 expanded={expandedClusters.has(cluster.id)}
                 onToggle={() => toggleCluster(cluster.id)}
                 excludedNodeNames={drsSettings?.excluded_nodes?.[cluster.id] || []}
+                isClusterExcluded={drsSettings?.excluded_clusters?.includes(cluster.id) || false}
               />
             ))
           )}

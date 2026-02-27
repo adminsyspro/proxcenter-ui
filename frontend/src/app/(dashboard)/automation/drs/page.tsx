@@ -862,11 +862,11 @@ const ActiveMigrationRow = ({
 const RecommendationRow = ({
   rec,
   onClick,
-  isHAManaged = false
+  haConflict = false
 }: {
   rec: DRSRecommendation
   onClick: () => void
-  isHAManaged?: boolean
+  haConflict?: boolean
 }) => {
   const theme = useTheme()
   const t = useTranslations()
@@ -965,7 +965,7 @@ const RecommendationRow = ({
             />
           </Tooltip>
         )}
-        {isHAManaged && (
+        {haConflict && (
           <Tooltip title={t('drsPage.haWarningVm')} arrow>
             <Chip
               icon={<i className="ri-shield-star-line" style={{ fontSize: 12 }} />}
@@ -1236,6 +1236,56 @@ const StorageWarningPanel = ({
 }
 
 // ============================================
+// HA Conflict Detection Helper
+// ============================================
+
+/**
+ * Determines if a DRS recommendation conflicts with HA group node restrictions.
+ * Returns 'conflict' only when the target node is NOT in the restricted group's allowed nodes.
+ * Returns 'none' if the VM is not HA-managed, the group is not restricted, or the target is allowed.
+ */
+function getHAConflictStatus(
+  vmid: number,
+  targetNode: string,
+  connectionId: string,
+  haDataMap: Record<string, {
+    groups: any[]
+    restrictedGroups: number
+    rules: number
+    majorVersion: number
+    haVmids: Set<number>
+    vmGroupMap: Map<number, string>
+  }> | undefined
+): 'none' | 'conflict' {
+  if (!haDataMap) return 'none'
+  const ha = haDataMap[connectionId]
+  if (!ha) return 'none'
+
+  // VM not HA-managed
+  if (!ha.haVmids.has(vmid)) return 'none'
+
+  // Get the group name assigned to this VM
+  const groupName = ha.vmGroupMap.get(vmid)
+  if (!groupName) return 'none' // no group assigned → default group, no restriction
+
+  // Find the group definition
+  const group = ha.groups.find((g: any) => g.group === groupName)
+  if (!group) return 'none'
+
+  // Group not restricted → no conflict possible
+  if (group.restricted !== 1) return 'none'
+
+  // Parse allowed nodes: format "node1:priority,node2:priority" or "node1,node2"
+  if (!group.nodes) return 'none'
+  const allowedNodes = (group.nodes as string).split(',').map((entry: string) => entry.split(':')[0].trim())
+
+  // Target node is in the allowed list → no conflict
+  if (allowedNodes.includes(targetNode)) return 'none'
+
+  return 'conflict'
+}
+
+// ============================================
 // Main Page Component
 // ============================================
 
@@ -1251,6 +1301,7 @@ export default function DRSPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [selectedCluster, setSelectedCluster] = useState<string>('')
   const [executedRecIds, setExecutedRecIds] = useState<Set<string>>(new Set())
+  const [visibleRecCount, setVisibleRecCount] = useState(8)
 
   const { setPageInfo } = usePageTitle()
 
@@ -1385,7 +1436,7 @@ return allVMsData.data.vms.map(vm => ({
     recommendations.filter(r =>
       (r.status === 'pending' || r.status === 'approved') &&
       !maintenanceNodeNames.has(r.target_node)
-    ),
+    ).sort((a, b) => b.score - a.score),
     [recommendations, maintenanceNodeNames]
   )
 
@@ -1439,6 +1490,7 @@ return Object.entries(metricsData as any)
         rules: number
         majorVersion: number
         haVmids: Set<number>
+        vmGroupMap: Map<number, string>
       }> = {}
       await Promise.all(clusters.map(async (c) => {
         try {
@@ -1450,12 +1502,17 @@ return Object.entries(metricsData as any)
           const restrictedGroups = groups.filter((g: any) =>
             g.restricted === 1 || (g.nodes && g.nodes.split(',').length > 0 && g.nodes.split(',').length < 99)
           ).length
-          // Build set of HA-managed VMIDs
+          // Build set of HA-managed VMIDs and map VMID -> group name
           const haVmids = new Set<number>()
+          const vmGroupMap = new Map<number, string>()
           for (const r of (data?.resources || [])) {
             // sid format: "vm:100" or "ct:200"
             const match = r.sid?.match(/^(?:vm|ct):(\d+)$/)
-            if (match) haVmids.add(parseInt(match[1], 10))
+            if (match) {
+              const vmid = parseInt(match[1], 10)
+              haVmids.add(vmid)
+              if (r.group) vmGroupMap.set(vmid, r.group)
+            }
           }
           results[c.id] = {
             groups,
@@ -1463,6 +1520,7 @@ return Object.entries(metricsData as any)
             rules: data?.rules?.length || 0,
             majorVersion: data?.majorVersion || 8,
             haVmids,
+            vmGroupMap,
           }
         } catch { /* ignore */ }
       }))
@@ -1485,16 +1543,6 @@ return Object.entries(metricsData as any)
     }
     return warnings
   }, [haDataMap, clusters])
-
-  // Build set of all HA-managed VMIDs across clusters (for recommendation warnings)
-  const haManagedVmids = useMemo(() => {
-    if (!haDataMap) return new Set<number>()
-    const set = new Set<number>()
-    for (const ha of Object.values(haDataMap)) {
-      for (const vmid of ha.haVmids) set.add(vmid)
-    }
-    return set
-  }, [haDataMap])
 
   // Récupérer la progression des migrations actives
   const activeMigrations = useMemo(() =>
@@ -2113,15 +2161,30 @@ return next
                     {t('drsPage.pendingRecommendations', { count: pendingRecs.length })}
                   </Typography>
                   <Stack spacing={1}>
-                    {pendingRecs.map(rec => (
+                    {pendingRecs.slice(0, visibleRecCount).map(rec => (
                       <RecommendationRow
                         key={rec.id}
                         rec={rec}
                         onClick={() => openRecommendation(rec)}
-                        isHAManaged={haManagedVmids.has(rec.vmid)}
+                        haConflict={getHAConflictStatus(rec.vmid, rec.target_node, rec.connection_id, haDataMap) === 'conflict'}
                       />
                     ))}
                   </Stack>
+                  {pendingRecs.length > 8 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => setVisibleRecCount(prev => prev >= pendingRecs.length ? 8 : pendingRecs.length)}
+                        startIcon={visibleRecCount >= pendingRecs.length ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      >
+                        {visibleRecCount >= pendingRecs.length
+                          ? t('common.showLess')
+                          : `${t('common.showMore')} (+${pendingRecs.length - visibleRecCount})`
+                        }
+                      </Button>
+                    </Box>
+                  )}
                 </>
               )}
             </CardContent>
@@ -2227,7 +2290,7 @@ return next
             </Box>
 
             {/* HA warning */}
-            {haManagedVmids.has(selectedRec.vmid) && (
+            {selectedRec && getHAConflictStatus(selectedRec.vmid, selectedRec.target_node, selectedRec.connection_id, haDataMap) === 'conflict' && (
               <Alert severity="warning" icon={<i className="ri-shield-star-line" style={{ fontSize: 20 }} />}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                   {t('drsPage.haWarningTitle')}

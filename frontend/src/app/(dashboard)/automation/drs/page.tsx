@@ -1988,7 +1988,7 @@ return next
       {/* Tabs */}
       {/* HA conflict warnings */}
       {haWarnings.length > 0 && (
-        <Alert severity="warning" variant="filled" sx={{ mb: 2 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}>
+        <Alert severity="warning" variant="outlined" sx={{ mb: 2, bgcolor: (theme) => alpha(theme.palette.warning.main, 0.08) }} icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
             {t('drsPage.haConflictTitle')}
           </Typography>

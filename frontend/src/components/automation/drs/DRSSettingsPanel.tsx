@@ -38,6 +38,15 @@ const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: 
 const WarningIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
+// Help tooltip component
+const HelpTip = ({ text }: { text: string }) => (
+  <Tooltip title={text} arrow placement="top">
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', ml: 0.5, cursor: 'help', opacity: 0.5, '&:hover': { opacity: 1 } }}>
+      <i className="ri-question-line" style={{ fontSize: 16 }} />
+    </Box>
+  </Tooltip>
+)
+
 // ============================================
 // Types
 // ============================================
@@ -485,6 +494,9 @@ export default function DRSSettingsPanel({
             <MenuItem value="cpu">{t('drsPage.cpuResource')}</MenuItem>
             <MenuItem value="disk">{t('drsPage.diskResource')}</MenuItem>
           </Select>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+            {t('drsPage.helpPriorityResource')}
+          </Typography>
         </FormControl>
       </Grid>
 
@@ -549,6 +561,7 @@ export default function DRSSettingsPanel({
       <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           {t('drsPage.cpuHighThreshold', { value: settings.cpu_high_threshold })}
+          <HelpTip text={t('drsPage.helpCpuHigh')} />
         </Typography>
         <Slider
           value={settings.cpu_high_threshold}
@@ -558,13 +571,11 @@ export default function DRSSettingsPanel({
           valueLabelDisplay="auto"
           color="error"
         />
-        <Typography variant="caption" color="text.secondary">
-          {t('drs.hotNodeThreshold')}
-        </Typography>
       </Grid>
       <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           {t('drsPage.cpuLowThreshold', { value: settings.cpu_low_threshold })}
+          <HelpTip text={t('drsPage.helpCpuLow')} />
         </Typography>
         <Slider
           value={settings.cpu_low_threshold}
@@ -574,13 +585,11 @@ export default function DRSSettingsPanel({
           valueLabelDisplay="auto"
           color="success"
         />
-        <Typography variant="caption" color="text.secondary">
-          {t('drs.coldNodeThreshold')}
-        </Typography>
       </Grid>
       <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           {t('drsPage.memoryHighThreshold', { value: settings.memory_high_threshold })}
+          <HelpTip text={t('drsPage.helpMemoryHigh')} />
         </Typography>
         <Slider
           value={settings.memory_high_threshold}
@@ -594,6 +603,7 @@ export default function DRSSettingsPanel({
       <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           {t('drsPage.memoryLowThreshold', { value: settings.memory_low_threshold })}
+          <HelpTip text={t('drsPage.helpMemoryLow')} />
         </Typography>
         <Slider
           value={settings.memory_low_threshold}
@@ -607,6 +617,7 @@ export default function DRSSettingsPanel({
       <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           {t('drsPage.imbalanceThreshold', { value: settings.imbalance_threshold })}
+          <HelpTip text={t('drsPage.helpImbalanceThreshold')} />
         </Typography>
         <Slider
           value={settings.imbalance_threshold}
@@ -616,9 +627,6 @@ export default function DRSSettingsPanel({
           step={0.5}
           valueLabelDisplay="auto"
         />
-        <Typography variant="caption" color="text.secondary">
-          {t('drsPage.imbalanceThresholdDesc')}
-        </Typography>
       </Grid>
 
       <Grid size={{ xs: 12 }}>
@@ -636,7 +644,10 @@ export default function DRSSettingsPanel({
           }
           label={
             <Box>
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.homogenizationEnabled')}</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {t('drsPage.homogenizationEnabled')}
+                <HelpTip text={t('drsPage.helpHomogenization')} />
+              </Typography>
               <Typography variant="caption" color="text.secondary">
                 {t('drsPage.homogenizationEnabledDesc')}
               </Typography>
@@ -647,6 +658,7 @@ export default function DRSSettingsPanel({
       <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle2" gutterBottom>
           {t('drsPage.maxLoadSpread', { value: settings.max_load_spread })}
+          <HelpTip text={t('drsPage.helpMaxLoadSpread')} />
         </Typography>
         <Slider
           value={settings.max_load_spread}
@@ -657,9 +669,6 @@ export default function DRSSettingsPanel({
           valueLabelDisplay="auto"
           disabled={!settings.homogenization_enabled}
         />
-        <Typography variant="caption" color="text.secondary">
-          {t('drsPage.maxLoadSpreadDesc')}
-        </Typography>
       </Grid>
     </Grid>
   )
@@ -674,7 +683,7 @@ export default function DRSSettingsPanel({
               onChange={(e) => handleChange('enable_affinity_rules', e.target.checked)}
             />
           }
-          label={t('drsPage.enableAffinityRules')}
+          label={<>{t('drsPage.enableAffinityRules')}<HelpTip text={t('drsPage.helpEnableAffinity')} /></>}
         />
       </Grid>
       <Grid size={{ xs: 12, md: 6 }}>
@@ -686,7 +695,7 @@ export default function DRSSettingsPanel({
               disabled={!settings.enable_affinity_rules}
             />
           }
-          label={t('drsPage.enforceAffinityRules')}
+          label={<>{t('drsPage.enforceAffinityRules')}<HelpTip text={t('drsPage.helpEnforceAffinity')} /></>}
         />
       </Grid>
       <Grid size={{ xs: 12 }}>
@@ -717,6 +726,7 @@ export default function DRSSettingsPanel({
             value={settings.max_concurrent_migrations}
             onChange={(e) => handleChange('max_concurrent_migrations', parseInt(e.target.value) || 1)}
             inputProps={{ min: 1, max: 10 }}
+            helperText={t('drsPage.helpMaxConcurrent')}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -726,7 +736,7 @@ export default function DRSSettingsPanel({
             label={t('drsPage.cooldownBetweenMigrations')}
             value={settings.migration_cooldown}
             onChange={(e) => handleChange('migration_cooldown', e.target.value)}
-            helperText={t('drsPage.cooldownExample')}
+            helperText={t('drsPage.helpCooldown')}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -737,7 +747,7 @@ export default function DRSSettingsPanel({
                 onChange={(e) => handleChange('balance_larger_first', e.target.checked)}
               />
             }
-            label={t('drsPage.migrateLargerFirst')}
+            label={<>{t('drsPage.migrateLargerFirst')}<HelpTip text={t('drsPage.helpLargerFirst')} /></>}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -748,14 +758,20 @@ export default function DRSSettingsPanel({
                 onChange={(e) => handleChange('prevent_overprovisioning', e.target.checked)}
               />
             }
-            label={t('drsPage.preventOverprovisioning')}
+            label={<>{t('drsPage.preventOverprovisioning')}<HelpTip text={t('drsPage.helpPreventOverprov')} /></>}
           />
         </Grid>
       </Grid>
 
       <Divider sx={{ my: 2 }} />
 
-      <Typography variant="subtitle2" sx={{ mb: 2 }}>{t('drsPage.resourceWeights')}</Typography>
+      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+        {t('drsPage.resourceWeights')}
+        <HelpTip text={t('drsPage.helpResourceWeights')} />
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+        {t('drsPage.helpResourceWeightsDesc')}
+      </Typography>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
           <Typography variant="caption">{t('drsPage.cpuWeight', { value: settings.cpu_weight.toFixed(1) })}</Typography>

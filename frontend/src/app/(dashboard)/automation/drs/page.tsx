@@ -512,22 +512,35 @@ return 'neutral'
             />
           )}
 
-          {/* Health badge */}
+          {/* Health score ring */}
           <Tooltip title={
             <Box sx={{ fontSize: '0.75rem' }}>
               <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.healthScore')}: {healthScore}/100</Typography>
-              <Box>RAM {Math.round(healthBreakdown.avgMem)}% → {healthBreakdown.memPenalty === 0 ? 'OK' : healthBreakdown.memPenalty}</Box>
-              <Box>CPU {Math.round(healthBreakdown.avgCpu)}% → {healthBreakdown.cpuPenalty === 0 ? 'OK' : healthBreakdown.cpuPenalty}</Box>
-              <Box>{t('drsPage.imbalanceLabel')} {healthBreakdown.imbalance.toFixed(1)}% → {healthBreakdown.imbalancePenalty === 0 ? 'OK' : healthBreakdown.imbalancePenalty}</Box>
+              {healthBreakdown.memSpreadPenalty !== 0 && <Box>RAM spread {healthBreakdown.memSpread.toFixed(1)}pp → {healthBreakdown.memSpreadPenalty}</Box>}
+              {healthBreakdown.cpuSpreadPenalty !== 0 && <Box>CPU spread {healthBreakdown.cpuSpread.toFixed(1)}pp → {healthBreakdown.cpuSpreadPenalty}</Box>}
+              {healthBreakdown.memPenalty !== 0 && <Box>RAM avg {Math.round(healthBreakdown.avgMem)}% → {healthBreakdown.memPenalty}</Box>}
+              {healthBreakdown.cpuPenalty !== 0 && <Box>CPU avg {Math.round(healthBreakdown.avgCpu)}% → {healthBreakdown.cpuPenalty}</Box>}
+              {healthBreakdown.imbalancePenalty !== 0 && <Box>CV {healthBreakdown.imbalance.toFixed(1)}% → {healthBreakdown.imbalancePenalty}</Box>}
+              {healthScore === 100 && <Box>{t('drsPage.balanced')}</Box>}
             </Box>
           } arrow disableInteractive>
-            <Chip
-              size="small"
-              icon={healthScore >= 85 ? <CheckCircleIcon /> : <WarningAmberIcon />}
-              label={healthLabel}
-              color={healthColor}
-              variant="outlined"
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                <CircularProgress
+                  variant="determinate"
+                  value={healthScore}
+                  size={36}
+                  thickness={5}
+                  sx={{ color: `${healthColor}.main` }}
+                />
+                <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography variant="caption" fontWeight={700} sx={{ fontSize: 10 }}>{healthScore}</Typography>
+                </Box>
+              </Box>
+              <Typography variant="caption" fontWeight={600} color={`${healthColor}.main`} sx={{ display: { xs: 'none', md: 'block' } }}>
+                {healthLabel}
+              </Typography>
+            </Box>
           </Tooltip>
 
           {/* Spread indicator */}

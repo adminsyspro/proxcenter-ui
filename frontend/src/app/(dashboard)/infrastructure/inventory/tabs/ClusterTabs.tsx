@@ -180,7 +180,7 @@ export default function ClusterTabs(props: any) {
     if ((drsSettings as any)?.excluded_clusters?.includes(connId)) return null
     const clusterMetrics = (metricsData as any)?.[connId]
     if (!clusterMetrics?.summary) return null
-    return computeDrsHealthScore(clusterMetrics.summary)
+    return computeDrsHealthScore(clusterMetrics.summary, clusterMetrics.nodes)
   }, [isEnterprise, drsStatus, drsSettings, metricsData, selection])
 
   const clusterRecs = useMemo(() => {
@@ -742,7 +742,7 @@ export default function ClusterTabs(props: any) {
                                 value={drsHealth.score}
                                 size={48}
                                 thickness={5}
-                                sx={{ color: drsHealth.score >= 80 ? 'success.main' : drsHealth.score >= 50 ? 'warning.main' : 'error.main' }}
+                                sx={{ color: drsHealth.score >= 85 ? 'success.main' : drsHealth.score >= 60 ? 'warning.main' : 'error.main' }}
                               />
                               <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Typography variant="caption" fontWeight={700} sx={{ fontSize: 11 }}>{drsHealth.score}</Typography>
@@ -760,7 +760,7 @@ export default function ClusterTabs(props: any) {
                                 })()}
                               </Box>
                               <Typography variant="body2" color="text.secondary">
-                                {drsHealth.score} / 100 — {drsHealth.score >= 80 ? t('drsPage.balanced') : drsHealth.score >= 50 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')}
+                                {drsHealth.score} / 100 — {drsHealth.score >= 85 ? t('drsPage.balanced') : drsHealth.score >= 60 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')}
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={0.5}>
@@ -955,7 +955,7 @@ export default function ClusterTabs(props: any) {
                               </Collapse>
                             </>
                           )}
-                          {clusterRecs.length === 0 && drsHealth.score >= 80 && (
+                          {clusterRecs.length === 0 && drsHealth.score >= 85 && (
                             <>
                               <Divider sx={{ my: 1.5 }} />
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>

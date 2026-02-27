@@ -416,12 +416,12 @@ return max - min
   }, [metrics.nodes])
 
   // Calculer le score de santé du cluster avec breakdown
-  const healthBreakdown = useMemo(() => computeDrsHealthScore(metrics?.summary), [metrics])
+  const healthBreakdown = useMemo(() => computeDrsHealthScore(metrics?.summary, metrics?.nodes), [metrics])
   const healthScore = healthBreakdown.score
 
   const t = useTranslations()
-  const healthColor = healthScore >= 80 ? 'success' : healthScore >= 50 ? 'warning' : 'error'
-  const healthLabel = healthScore >= 80 ? t('drsPage.balanced') : healthScore >= 50 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')
+  const healthColor = healthScore >= 85 ? 'success' : healthScore >= 60 ? 'warning' : 'error'
+  const healthLabel = healthScore >= 85 ? t('drsPage.balanced') : healthScore >= 60 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')
   
   // Couleur du spread selon le seuil (10% = warning)
   const spreadColor = memorySpread > 10 ? 'error' : memorySpread > 6 ? 'warning' : 'success'
@@ -523,7 +523,7 @@ return 'neutral'
           } arrow disableInteractive>
             <Chip
               size="small"
-              icon={healthScore >= 80 ? <CheckCircleIcon /> : <WarningAmberIcon />}
+              icon={healthScore >= 85 ? <CheckCircleIcon /> : <WarningAmberIcon />}
               label={healthLabel}
               color={healthColor}
               variant="outlined"
@@ -1792,16 +1792,22 @@ return next
     let clusterCount = 0
     let maxImbalance = 0
     let totalMemPenalty = 0, totalCpuPenalty = 0, totalImbalancePenalty = 0
+    let totalMemSpreadPenalty = 0, totalCpuSpreadPenalty = 0
     let avgMemAll = 0, avgCpuAll = 0, avgImbalanceAll = 0
+    let avgMemSpreadAll = 0, avgCpuSpreadAll = 0
     for (const c of clusters) {
-      const b = computeDrsHealthScore(c.metrics?.summary)
+      const b = computeDrsHealthScore(c.metrics?.summary, c.metrics?.nodes)
       healthSum += b.score
       totalMemPenalty += b.memPenalty
       totalCpuPenalty += b.cpuPenalty
       totalImbalancePenalty += b.imbalancePenalty
+      totalMemSpreadPenalty += b.memSpreadPenalty
+      totalCpuSpreadPenalty += b.cpuSpreadPenalty
       avgMemAll += b.avgMem
       avgCpuAll += b.avgCpu
       avgImbalanceAll += b.imbalance
+      avgMemSpreadAll += b.memSpread
+      avgCpuSpreadAll += b.cpuSpread
       clusterCount++
       if (b.imbalance > maxImbalance) maxImbalance = b.imbalance
     }
@@ -1821,6 +1827,10 @@ return next
         cpuPenalty: Math.round(totalCpuPenalty / clusterCount),
         imbalance: avgImbalanceAll / clusterCount,
         imbalancePenalty: Math.round(totalImbalancePenalty / clusterCount),
+        memSpread: avgMemSpreadAll / clusterCount,
+        memSpreadPenalty: Math.round(totalMemSpreadPenalty / clusterCount),
+        cpuSpread: avgCpuSpreadAll / clusterCount,
+        cpuSpreadPenalty: Math.round(totalCpuSpreadPenalty / clusterCount),
       } : null,
     }
   }, [clusters, pendingRecs, migrations])
@@ -1882,8 +1892,8 @@ return next
                 size={100}
                 thickness={5}
                 sx={{ color: alpha(
-                  globalStats.healthScore >= 80 ? theme.palette.success.main
-                  : globalStats.healthScore >= 50 ? theme.palette.warning.main
+                  globalStats.healthScore >= 85 ? theme.palette.success.main
+                  : globalStats.healthScore >= 60 ? theme.palette.warning.main
                   : theme.palette.error.main, 0.15
                 ) }}
               />
@@ -1893,8 +1903,8 @@ return next
                 size={100}
                 thickness={5}
                 sx={{
-                  color: globalStats.healthScore >= 80 ? 'success.main'
-                    : globalStats.healthScore >= 50 ? 'warning.main'
+                  color: globalStats.healthScore >= 85 ? 'success.main'
+                    : globalStats.healthScore >= 60 ? 'warning.main'
                     : 'error.main',
                   position: 'absolute', left: 0,
                 }}

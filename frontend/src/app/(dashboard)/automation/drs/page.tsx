@@ -2201,7 +2201,7 @@ return next
                   +{selectedRec.score.toFixed(1)}%
                 </Typography>
               </Box>
-              {(selectedRec.confirmation_count ?? 0) > 0 && (
+              {(selectedRec.confirmation_count ?? 0) > 1 && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="body2" sx={{ opacity: 0.6 }}>{t('drsPage.confirmations')}</Typography>
                   <Chip

@@ -228,6 +228,9 @@ export default function RollingUpdateWizard({
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null)
   const [preflightError, setPreflightError] = useState<string | null>(null)
   
+  // SSH check
+  const [sshNotConfigured, setSshNotConfigured] = useState(false)
+
   // Execution state
   const [rollingUpdate, setRollingUpdate] = useState<RollingUpdate | null>(null)
   const [executionError, setExecutionError] = useState<string | null>(null)
@@ -259,7 +262,25 @@ export default function RollingUpdateWizard({
       }
     }
   }, [pollingInterval])
-  
+
+  // Check SSH configuration when wizard opens
+  useEffect(() => {
+    if (!open || !connectionId) return
+
+    let cancelled = false
+    setSshNotConfigured(false)
+
+    fetch(`/api/v1/connections/${connectionId}`)
+      .then(res => res.json())
+      .then(json => {
+        if (cancelled) return
+        if (!json.data?.sshEnabled) setSshNotConfigured(true)
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [open, connectionId])
+
   // Run preflight check
   const runPreflightCheck = useCallback(async () => {
     setPreflightLoading(true)
@@ -481,6 +502,20 @@ export default function RollingUpdateWizard({
         {/* Step 0: Configuration */}
         {activeStep === 0 && (
           <Stack spacing={3}>
+            {sshNotConfigured && (
+              <Alert
+                severity="error"
+                icon={<i className="ri-terminal-box-line" style={{ fontSize: 20 }} />}
+              >
+                <Typography variant="body2" fontWeight={600}>
+                  {t('updates.sshNotConfiguredTitle')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {t('updates.sshNotConfiguredDescription')}
+                </Typography>
+              </Alert>
+            )}
+
             {/* Node selection */}
             <Card variant="outlined">
               <CardContent>
@@ -893,9 +928,15 @@ export default function RollingUpdateWizard({
                 </CardContent>
               </Card>
             )}
+
+            {executionError && (
+              <Alert severity="error" icon={<ErrorIcon />}>
+                {executionError}
+              </Alert>
+            )}
           </Stack>
         )}
-        
+
         {/* Step 2: Execution */}
         {activeStep === 2 && rollingUpdate && (
           <Stack spacing={3}>
@@ -1074,7 +1115,7 @@ export default function RollingUpdateWizard({
             <Button
               variant="contained"
               onClick={runPreflightCheck}
-              disabled={preflightLoading || nodeOrder.filter(n => !excludedNodes.includes(n)).length === 0}
+              disabled={preflightLoading || sshNotConfigured || nodeOrder.filter(n => !excludedNodes.includes(n)).length === 0}
               startIcon={preflightLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
             >
               {t('updates.verify')}
@@ -1088,7 +1129,7 @@ export default function RollingUpdateWizard({
             <Button
               variant="contained"
               onClick={startRollingUpdate}
-              disabled={!preflightResult?.can_proceed}
+              disabled={!preflightResult?.can_proceed || sshNotConfigured}
               startIcon={<PlayArrowIcon />}
               color="warning"
             >

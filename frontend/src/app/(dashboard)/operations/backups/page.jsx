@@ -32,7 +32,8 @@ import {
   Tabs,
   TextField,
   Tooltip,
-  Typography
+  Typography,
+  useTheme
 } from '@mui/material'
 
 import { DataGrid } from '@mui/x-data-grid'
@@ -117,6 +118,7 @@ const FileIcon = ({ type, name }) => {
 
 export default function BackupsPage() {
   const t = useTranslations()
+  const theme = useTheme()
   const { setPageInfo } = usePageTitle()
   const timeAgo = useTimeAgo(t)
 
@@ -528,34 +530,6 @@ return () => clearTimeout(timer)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* Header Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
-        {/* Sélecteur PBS */}
-        <FormControl size='small' sx={{ minWidth: 200 }}>
-          <InputLabel>{t('backups.pbsServer')}</InputLabel>
-          <Select
-            value={selectedPbs}
-            onChange={e => setSelectedPbs(e.target.value)}
-            label={t('backups.pbsServer')}
-            disabled={pbsLoading || pbsConnections.length === 0}
-          >
-            {pbsConnections.map(pbs => (
-              <MenuItem key={pbs.id} value={pbs.id}>{pbs.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <Button
-          variant='outlined'
-          size='small'
-          onClick={() => setSelectedPbs(prev => prev)} // Trigger reload
-          disabled={loading || !selectedPbs}
-          startIcon={loading ? <CircularProgress size={16} /> : <i className='ri-refresh-line' />}
-        >
-          {t('common.refresh')}
-        </Button>
-      </Box>
-
       {/* Alerte si pas de PBS configuré */}
       {!pbsLoading && pbsConnections.length === 0 && (
         <Alert severity='warning'>
@@ -640,12 +614,37 @@ return () => clearTimeout(timer)
       {selectedPbs && (
         <Card variant='outlined'>
           <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-              <Typography variant='subtitle2' sx={{ fontWeight: 700 }}>
-                <i className='ri-archive-line' style={{ marginRight: 8 }} />
-                {t('backups.backupsCount', { count: totalRows })}
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-archive-line' style={{ fontSize: 22, color: theme.palette.primary.main }} />
+                <Typography variant='h6'>{t('backups.backupsCount', { count: totalRows })}</Typography>
+              </Box>
 
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <FormControl size='small' sx={{ minWidth: 200 }}>
+                  <InputLabel>{t('backups.pbsServer')}</InputLabel>
+                  <Select
+                    value={selectedPbs}
+                    onChange={e => setSelectedPbs(e.target.value)}
+                    label={t('backups.pbsServer')}
+                    disabled={pbsLoading || pbsConnections.length === 0}
+                  >
+                    {pbsConnections.map(pbs => (
+                      <MenuItem key={pbs.id} value={pbs.id}>{pbs.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <IconButton
+                  size='small'
+                  onClick={() => setSelectedPbs(prev => prev)}
+                  disabled={loading || !selectedPbs}
+                >
+                  {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
+                </IconButton>
+              </Box>
+            </Box>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <TextField
                   size='small'

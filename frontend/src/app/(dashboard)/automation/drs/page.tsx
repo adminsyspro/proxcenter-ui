@@ -910,18 +910,6 @@ const RecommendationRow = ({
         {rec.maintenance_evacuation && (
           <Chip label={t('drsPage.evacuation')} size="small" color="warning" sx={{ height: 16, fontSize: '0.6rem', ml: 0.5 }} />
         )}
-        {isHAManaged && (
-          <Tooltip title={t('drsPage.haWarningVm')} arrow>
-            <Chip
-              icon={<i className="ri-shield-star-line" style={{ fontSize: 12 }} />}
-              label="HA"
-              size="small"
-              color="warning"
-              variant="outlined"
-              sx={{ height: 18, fontSize: '0.6rem', ml: 0.5, cursor: 'help' }}
-            />
-          </Tooltip>
-        )}
       </Box>
 
       {/* Migration path */}
@@ -974,6 +962,18 @@ const RecommendationRow = ({
               label={`${rec.confirmation_count}\u00d7`}
               icon={<CheckCircleIcon fontSize="small" />}
               sx={{ cursor: 'help' }}
+            />
+          </Tooltip>
+        )}
+        {isHAManaged && (
+          <Tooltip title={t('drsPage.haWarningVm')} arrow>
+            <Chip
+              icon={<i className="ri-shield-star-line" style={{ fontSize: 12 }} />}
+              label="HA"
+              size="small"
+              color="warning"
+              variant="outlined"
+              sx={{ height: 22, fontSize: '0.65rem', cursor: 'help' }}
             />
           </Tooltip>
         )}

@@ -374,9 +374,33 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         color: '#49afd9 !important'
       },
 
-      // vCenter horizontal header (VCenterHeader component) — colors derived from theme in component
+      // vCenter horizontal header (VCenterHeader component)
       '.vcenter-header': {
         boxShadow: 'none !important'
+      },
+      // Force white icons/buttons inside the dark vCenter header (overrides generic .MuiIconButton-root light-mode color)
+      '.vcenter-header .MuiIconButton-root': {
+        color: 'rgba(255,255,255,0.75) !important',
+        '&:hover': {
+          color: '#fff !important',
+          backgroundColor: '#3a3a52 !important'
+        }
+      },
+      '.vcenter-header .MuiButton-root': {
+        color: 'rgba(255,255,255,0.75) !important',
+        '&:hover': {
+          color: '#fff !important',
+          backgroundColor: '#3a3a52 !important'
+        }
+      },
+      // Burger menu popover — always dark regardless of light/dark mode
+      '.vcenter-burger-menu > .MuiPaper-root': {
+        backgroundColor: '#1e1e2e !important',
+        color: '#fff !important',
+        border: '1px solid #333348 !important'
+      },
+      '.vcenter-burger-menu .MuiTypography-root': {
+        color: 'inherit !important'
       },
       // Hide the standard horizontal navigation bar shadow when vCenter header is active
       '.ts-horizontal-layout-header': {

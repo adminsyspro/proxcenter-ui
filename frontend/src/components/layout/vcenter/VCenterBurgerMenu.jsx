@@ -78,8 +78,10 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
       open={open}
       anchorEl={anchorEl}
       onClose={onClose}
+      className='vcenter-burger-menu'
       anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      sx={{ zIndex: 10001 }}
       slotProps={{
         paper: {
           className: 'no-theme-override',

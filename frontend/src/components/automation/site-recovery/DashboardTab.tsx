@@ -301,10 +301,19 @@ const ActivityItem = ({ activity }: { activity: ReplicationActivity }) => {
 
 // ── Bandwidth Chart ─────────────────────────────────────────────────────
 
-const BANDWIDTH_PALETTE = [
-  '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4',
-  '#E91E63', '#8BC34A', '#FF5722'
-]
+function useThemePalette() {
+  const theme = useTheme()
+  return useMemo(() => [
+    theme.palette.primary.main,
+    theme.palette.success.main,
+    theme.palette.warning.main,
+    theme.palette.secondary.main,
+    theme.palette.info.main,
+    theme.palette.error.main,
+    theme.palette.success.dark,
+    theme.palette.primary.dark,
+  ], [theme])
+}
 
 const BUCKET_SIZE_MS = 30 * 1000 // 30s
 
@@ -385,6 +394,7 @@ const BandwidthChart = ({ jobs, connections, t }: {
   t: any
 }) => {
   const theme = useTheme()
+  const palette = useThemePalette()
   const { chartData, seriesKeys } = useBandwidthData(jobs, connections)
 
   const hasData = chartData.length > 0 && seriesKeys.length > 0
@@ -409,8 +419,8 @@ const BandwidthChart = ({ jobs, connections, t }: {
                 <defs>
                   {seriesKeys.map((key, i) => (
                     <linearGradient key={key} id={`bw-grad-${i}`} x1='0' y1='0' x2='0' y2='1'>
-                      <stop offset='5%' stopColor={BANDWIDTH_PALETTE[i % BANDWIDTH_PALETTE.length]} stopOpacity={0.3} />
-                      <stop offset='95%' stopColor={BANDWIDTH_PALETTE[i % BANDWIDTH_PALETTE.length]} stopOpacity={0} />
+                      <stop offset='5%' stopColor={palette[i % palette.length]} stopOpacity={0.3} />
+                      <stop offset='95%' stopColor={palette[i % palette.length]} stopOpacity={0} />
                     </linearGradient>
                   ))}
                 </defs>
@@ -455,7 +465,7 @@ const BandwidthChart = ({ jobs, connections, t }: {
                     type='monotone'
                     dataKey={key}
                     name={key}
-                    stroke={BANDWIDTH_PALETTE[i % BANDWIDTH_PALETTE.length]}
+                    stroke={palette[i % palette.length]}
                     fill={`url(#bw-grad-${i})`}
                     strokeWidth={2}
                     dot={false}

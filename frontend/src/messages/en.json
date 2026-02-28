@@ -3289,7 +3289,11 @@
     "helpPreventOverprov": "When enabled, DRS will not migrate a VM to a node if it would cause that node to exceed its capacity (allocated > available). Prevents overcommitting resources.",
     "helpResourceWeights": "How much each resource type influences the balancing score.",
     "helpResourceWeightsDesc": "Set to 0 to ignore a resource. Set to 2 for maximum priority. For example, Memory=1 CPU=0.3 Storage=0 means DRS focuses primarily on memory balance.",
-    "excludedFromDRS": "Excluded from DRS"
+    "excludedFromDRS": "Excluded from DRS",
+    "metricsSmoothing": "Metrics smoothing",
+    "metricsSmoothingDesc": "DRS uses Exponential Weighted Moving Average (EWMA) over the last 30 minutes of collected metrics to smooth out transient CPU and memory spikes. This prevents unnecessary migrations triggered by short-lived load bursts.",
+    "metricsSmoothingFormula": "S(t) = \u03b1 \u00d7 X(t) + (1-\u03b1) \u00d7 S(t-1), \u03b1 = 0.3",
+    "metricsSmoothingFormulaDesc": "Each new data point contributes 30% to the smoothed value. Recent measurements have more weight, but older values still dampen sudden changes."
   },
   "usersPage": {
     "rbacRoles": "RBAC Roles",

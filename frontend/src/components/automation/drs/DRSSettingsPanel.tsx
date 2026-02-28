@@ -815,6 +815,26 @@ export default function DRSSettingsPanel({
           />
         </Grid>
       </Grid>
+
+      <Divider sx={{ my: 2 }} />
+
+      <Alert severity="info" icon={<InfoIcon />} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+          <i className="ri-line-chart-line" style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} />
+          {t('drsPage.metricsSmoothing')}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {t('drsPage.metricsSmoothingDesc')}
+        </Typography>
+        <Box sx={{ bgcolor: 'action.hover', borderRadius: 1, px: 1.5, py: 1, fontFamily: 'JetBrains Mono, monospace' }}>
+          <Typography variant="body2" sx={{ fontFamily: 'inherit', fontWeight: 600 }}>
+            {t('drsPage.metricsSmoothingFormula')}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'inherit' }}>
+            {t('drsPage.metricsSmoothingFormulaDesc')}
+          </Typography>
+        </Box>
+      </Alert>
     </>
   )
 

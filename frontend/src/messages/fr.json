@@ -3294,7 +3294,11 @@
     "helpPreventOverprov": "Lorsqu'activé, DRS ne migrera pas une VM vers un nœud si cela causerait un dépassement de capacité (alloué > disponible). Empêche le surprovisionnement.",
     "helpResourceWeights": "L'influence de chaque type de ressource sur le score d'équilibrage.",
     "helpResourceWeightsDesc": "Mettre à 0 pour ignorer une ressource. Mettre à 2 pour priorité maximale. Exemple : Mémoire=1 CPU=0.3 Stockage=0 signifie que DRS se concentre principalement sur l'équilibre mémoire.",
-    "excludedFromDRS": "Exclu du DRS"
+    "excludedFromDRS": "Exclu du DRS",
+    "metricsSmoothing": "Lissage des métriques",
+    "metricsSmoothingDesc": "DRS utilise une Moyenne Mobile Exponentielle Pondérée (EWMA) sur les 30 dernières minutes de métriques collectées pour lisser les pics transitoires de CPU et mémoire. Cela évite les migrations inutiles déclenchées par des pics de charge éphémères.",
+    "metricsSmoothingFormula": "S(t) = α × X(t) + (1-α) × S(t-1), α = 0.3",
+    "metricsSmoothingFormulaDesc": "Chaque nouveau point de données contribue à 30% de la valeur lissée. Les mesures récentes ont plus de poids, mais les anciennes valeurs atténuent les changements brusques."
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

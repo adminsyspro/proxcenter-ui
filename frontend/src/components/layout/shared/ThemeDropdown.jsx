@@ -163,6 +163,7 @@ const ThemeDropdown = () => {
                         border: '2px solid',
                         borderColor: settings.mode === 'light' ? 'primary.main' : 'divider',
                         bgcolor: settings.mode === 'light' ? 'primary.lightOpacity' : 'transparent',
+                        color: settings.mode === 'light' ? 'primary.main' : 'text.primary',
                         '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >
@@ -175,6 +176,7 @@ const ThemeDropdown = () => {
                         border: '2px solid',
                         borderColor: settings.mode === 'dark' ? 'primary.main' : 'divider',
                         bgcolor: settings.mode === 'dark' ? 'primary.lightOpacity' : 'transparent',
+                        color: settings.mode === 'dark' ? 'primary.main' : 'text.primary',
                         '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >
@@ -187,6 +189,7 @@ const ThemeDropdown = () => {
                         border: '2px solid',
                         borderColor: settings.mode === 'system' ? 'primary.main' : 'divider',
                         bgcolor: settings.mode === 'system' ? 'primary.lightOpacity' : 'transparent',
+                        color: settings.mode === 'system' ? 'primary.main' : 'text.primary',
                         '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >

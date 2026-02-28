@@ -87,6 +87,7 @@ const ModeDropdown = () => {
                     className='gap-3'
                     onClick={() => handleModeSwitch('light')}
                     selected={settings.mode === 'light'}
+                    sx={{ color: settings.mode === 'light' ? 'primary.main' : 'text.primary' }}
                   >
                     <i className='ri-sun-line' />
                     Light
@@ -95,6 +96,7 @@ const ModeDropdown = () => {
                     className='gap-3'
                     onClick={() => handleModeSwitch('dark')}
                     selected={settings.mode === 'dark'}
+                    sx={{ color: settings.mode === 'dark' ? 'primary.main' : 'text.primary' }}
                   >
                     <i className='ri-moon-clear-line' />
                     Dark
@@ -103,6 +105,7 @@ const ModeDropdown = () => {
                     className='gap-3'
                     onClick={() => handleModeSwitch('system')}
                     selected={settings.mode === 'system'}
+                    sx={{ color: settings.mode === 'system' ? 'primary.main' : 'text.primary' }}
                   >
                     <i className='ri-computer-line' />
                     System

@@ -21,8 +21,18 @@ services:
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - APP_URL=${APP_URL:-http://localhost:3000}
       - ORCHESTRATOR_URL=http://orchestrator:8080
+      #
+      # Docker Secrets support (Swarm / file-based):
+      # Instead of setting secrets directly, point to a secret file:
+      # - APP_SECRET_FILE=/run/secrets/app_secret
+      # - NEXTAUTH_SECRET_FILE=/run/secrets/nextauth_secret
+      # - LICENSE_KEY_FILE=/run/secrets/license_key
     volumes:
       - proxcenter_data:/app/data
+    # secrets:
+    #   - app_secret
+    #   - nextauth_secret
+    #   - license_key
     networks:
       - proxcenter
     depends_on:
@@ -48,10 +58,18 @@ services:
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - TZ=${TZ:-Europe/Paris}
+      #
+      # Docker Secrets support (Swarm / file-based):
+      # - APP_SECRET_FILE=/run/secrets/app_secret
+      # - LICENSE_KEY_FILE=/run/secrets/license_key
+      # - PROXCENTER_API_KEY_FILE=/run/secrets/api_key
     volumes:
       - orchestrator_data:/app/data
       - proxcenter_data:/app/shared_data:ro
       - ./config/orchestrator.yaml:/app/config.yaml:ro
+    # secrets:
+    #   - app_secret
+    #   - license_key
     networks:
       - proxcenter
     healthcheck:
@@ -72,6 +90,17 @@ networks:
 # ========================================
 # Volumes
 # ========================================
+# ========================================
+# Secrets (uncomment for Docker Swarm)
+# ========================================
+# secrets:
+#   app_secret:
+#     external: true
+#   nextauth_secret:
+#     external: true
+#   license_key:
+#     external: true
+
 volumes:
   proxcenter_data:
     name: proxcenter_data

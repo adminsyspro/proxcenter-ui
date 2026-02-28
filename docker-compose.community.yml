@@ -21,8 +21,16 @@ services:
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - APP_URL=${APP_URL:-http://localhost:3000}
       # No ORCHESTRATOR_URL = Community mode
+      #
+      # Docker Secrets support (Swarm / file-based):
+      # Instead of setting APP_SECRET directly, point to a secret file:
+      # - APP_SECRET_FILE=/run/secrets/app_secret
+      # - NEXTAUTH_SECRET_FILE=/run/secrets/nextauth_secret
     volumes:
       - proxcenter_data:/app/data
+    # secrets:
+    #   - app_secret
+    #   - nextauth_secret
     networks:
       - proxcenter
     healthcheck:
@@ -43,6 +51,15 @@ networks:
 # ========================================
 # Volumes
 # ========================================
+# ========================================
+# Secrets (uncomment for Docker Swarm)
+# ========================================
+# secrets:
+#   app_secret:
+#     external: true
+#   nextauth_secret:
+#     external: true
+
 volumes:
   proxcenter_data:
     name: proxcenter_data

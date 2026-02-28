@@ -93,7 +93,7 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
             overflow: 'auto',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             color: '#fff !important',
-            '& *': { color: 'inherit' }
+            '& *': { color: 'inherit !important' }
           }
         }
       }}

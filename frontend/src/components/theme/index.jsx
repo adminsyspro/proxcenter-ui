@@ -458,14 +458,9 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         color: `${isLightMode ? '#313131' : '#fafafa'} !important`
       },
 
-      // Virtualized tables / custom tables
-      '[class*="table"], [class*="Table"], [class*="grid"], [class*="Grid"]': {
+      // Virtualized tables / custom tables (only target actual table components, not MuiGrid)
+      '.MuiTableContainer-root table, [class*="VirtualTable"], [class*="virtualTable"]': {
         backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
-      },
-      '[class*="row"]:not(.MuiTableRow-root), [class*="Row"]:not(.MuiDataGrid-row)': {
-        '&:hover': {
-          backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
-        }
       },
 
       // ============================================================

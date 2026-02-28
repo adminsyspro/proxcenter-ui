@@ -130,7 +130,7 @@ export const defaultDRSSettings: DRSSettings = {
   enable_affinity_rules: true,
   enforce_affinity: false,
   rebalance_schedule: 'interval',
-  rebalance_interval: '15m',
+  rebalance_interval: '1h',
   rebalance_time: '10:00',
 }
 
@@ -139,6 +139,8 @@ export const defaultDRSSettings: DRSSettings = {
 // ============================================
 
 type SectionKey = 'general' | 'thresholds' | 'affinity' | 'advanced'
+
+const validIntervalOptions = ['1h', '2h', '3h', '4h', '6h', '8h', '12h', '24h']
 
 const SECTIONS: { key: SectionKey; icon: string; colorKey: string }[] = [
   { key: 'general', icon: 'ri-speed-line', colorKey: 'primary.main' },
@@ -173,7 +175,12 @@ export default function DRSSettingsPanel({
   const pve8Clusters = clusterVersions.filter(v => v.version < 9)
 
   useEffect(() => {
-    setSettings(initialSettings)
+    // Clamp legacy sub-1h interval values to 1h
+    const normalized = { ...initialSettings }
+    if (!validIntervalOptions.includes(normalized.rebalance_interval)) {
+      normalized.rebalance_interval = '1h'
+    }
+    setSettings(normalized)
     setHasChanges(false)
   }, [initialSettings])
 
@@ -447,17 +454,18 @@ export default function DRSSettingsPanel({
               <FormControl fullWidth size="small">
                 <InputLabel>{t('drsPage.rebalanceEvery')}</InputLabel>
                 <Select
-                  value={settings.rebalance_interval}
+                  value={validIntervalOptions.includes(settings.rebalance_interval) ? settings.rebalance_interval : '1h'}
                   label={t('drsPage.rebalanceEvery')}
                   onChange={(e) => handleChange('rebalance_interval', e.target.value)}
                 >
-                  <MenuItem value="5m">5 min</MenuItem>
-                  <MenuItem value="10m">10 min</MenuItem>
-                  <MenuItem value="15m">15 min</MenuItem>
-                  <MenuItem value="30m">30 min</MenuItem>
                   <MenuItem value="1h">1 h</MenuItem>
                   <MenuItem value="2h">2 h</MenuItem>
+                  <MenuItem value="3h">3 h</MenuItem>
+                  <MenuItem value="4h">4 h</MenuItem>
                   <MenuItem value="6h">6 h</MenuItem>
+                  <MenuItem value="8h">8 h</MenuItem>
+                  <MenuItem value="12h">12 h</MenuItem>
+                  <MenuItem value="24h">24 h</MenuItem>
                 </Select>
               </FormControl>
             ) : (

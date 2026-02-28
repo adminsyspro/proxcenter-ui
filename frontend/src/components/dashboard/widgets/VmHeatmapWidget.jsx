@@ -290,12 +290,11 @@ function VmHeatmapWidget({ data, loading: dashboardLoading }) {
           onChange={(e, val) => val && setMetric(val)}
           size="small"
         >
-          <ToggleButton value="cpu" sx={{ px: 1.5, py: 0.25, fontSize: '0.65rem', minWidth: 40 }}>
-            CPU
-          </ToggleButton>
-          <ToggleButton value="ram" sx={{ px: 1.5, py: 0.25, fontSize: '0.65rem', minWidth: 40 }}>
-            RAM
-          </ToggleButton>
+          {['cpu', 'ram'].map((v) => (
+            <ToggleButton key={v} value={v} sx={{ px: 1.5, py: 0.5, fontSize: '0.75rem', minWidth: 48, fontWeight: metric === v ? 700 : 400, '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' } } }}>
+              {v.toUpperCase()}
+            </ToggleButton>
+          ))}
         </ToggleButtonGroup>
       </Box>
 

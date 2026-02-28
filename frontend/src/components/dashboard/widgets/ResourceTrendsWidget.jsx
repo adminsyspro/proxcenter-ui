@@ -181,10 +181,12 @@ function ResourceTrendsWidget({ data, loading: dashboardLoading }) {
               key={tf.value}
               value={tf.value}
               sx={{
-                px: 1,
-                py: 0.25,
-                fontSize: '0.65rem',
-                minWidth: 32,
+                px: 1.5,
+                py: 0.5,
+                fontSize: '0.75rem',
+                minWidth: 42,
+                fontWeight: timeframe === tf.value ? 700 : 400,
+                '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' } },
               }}
             >
               {tf.label}

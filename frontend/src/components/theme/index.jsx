@@ -374,14 +374,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         color: '#49afd9 !important'
       },
 
-      // vCenter horizontal header (VCenterHeader component)
+      // vCenter horizontal header (VCenterHeader component) — colors derived from theme in component
       '.vcenter-header': {
-        backgroundColor: '#1b2a32 !important',
-        borderBottom: '1px solid #324a5e !important',
-        height: '48px !important',
         boxShadow: 'none !important'
       },
-      // Hide the standard horizontal navigation bar when vCenter header is active
+      // Hide the standard horizontal navigation bar shadow when vCenter header is active
       '.ts-horizontal-layout-header': {
         boxShadow: 'none !important'
       },

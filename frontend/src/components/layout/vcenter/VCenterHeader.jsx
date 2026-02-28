@@ -18,7 +18,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
+import { useTheme, darken } from '@mui/material/styles'
 
 import { useLocale } from '@/contexts/LocaleContext'
 import { useSettings } from '@core/hooks/useSettings'
@@ -35,7 +35,6 @@ import CommandPalette from '@components/layout/shared/CommandPalette'
 import { LogoIcon } from '@components/layout/shared/Logo'
 
 import VCenterBurgerMenu from './VCenterBurgerMenu'
-import VCenterQuickNav from './VCenterQuickNav'
 
 const getInitials = (name, email) => {
   if (name) {
@@ -311,6 +310,14 @@ const VCenterHeader = () => {
 
   const pxcoreInfo = getPXCoreInfo(pxcoreStatus.status, pxcoreStatus.components)
 
+  // Derive header colors from theme primary
+  const primaryColor = theme.palette.primary.main
+  const headerBg = darken(primaryColor, 0.82)
+  const headerBorder = darken(primaryColor, 0.65)
+  const headerHover = darken(primaryColor, 0.55)
+  const headerTextMuted = darken(primaryColor, 0.15)
+  const accentLight = theme.palette.primary.light || primaryColor
+
   return (
     <>
       {/* Main header bar */}
@@ -319,9 +326,9 @@ const VCenterHeader = () => {
         sx={{
           display: 'flex',
           alignItems: 'center',
-          height: 48,
-          backgroundColor: '#1b2a32',
-          borderBottom: '1px solid #324a5e',
+          height: 56,
+          backgroundColor: headerBg,
+          borderBottom: `1px solid ${headerBorder}`,
           px: 2,
           position: 'sticky',
           top: 0,
@@ -329,7 +336,7 @@ const VCenterHeader = () => {
           boxShadow: 'none'
         }}
       >
-        {/* LEFT: Logo + Burger + Quick Nav */}
+        {/* LEFT: Logo + Burger */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
           {/* Logo */}
           <Box
@@ -342,7 +349,7 @@ const VCenterHeader = () => {
             }}
             onClick={() => router.push('/home')}
           >
-            <LogoIcon size={24} accentColor='#0079b8' />
+            <LogoIcon size={24} accentColor={primaryColor} />
             <Typography
               sx={{
                 color: '#fff',
@@ -361,7 +368,7 @@ const VCenterHeader = () => {
             size='small'
             onClick={(e) => setBurgerAnchor(e.currentTarget)}
             sx={{
-              color: '#d0d8de',
+              color: 'rgba(255,255,255,0.75)',
               textTransform: 'none',
               fontSize: 12,
               fontWeight: 500,
@@ -370,7 +377,7 @@ const VCenterHeader = () => {
               py: 0.5,
               borderRadius: '3px',
               '&:hover': {
-                backgroundColor: '#324a5e',
+                backgroundColor: headerHover,
                 color: '#fff'
               }
             }}
@@ -378,12 +385,6 @@ const VCenterHeader = () => {
             <i className='ri-menu-line' style={{ fontSize: 18, marginRight: 4 }} />
             <Box component='span' sx={{ display: { xs: 'none', sm: 'inline' } }}>Menu</Box>
           </Button>
-
-          {/* Divider */}
-          <Box sx={{ width: 1, height: 24, backgroundColor: '#324a5e', mx: 0.5 }} />
-
-          {/* Quick Nav */}
-          <VCenterQuickNav />
         </Box>
 
         {/* CENTER: Search */}
@@ -396,22 +397,22 @@ const VCenterHeader = () => {
             px: 1.5,
             py: 0.5,
             borderRadius: '3px',
-            border: '1px solid #324a5e',
+            border: `1px solid ${headerBorder}`,
             cursor: 'pointer',
             width: 260,
             mx: 2,
             transition: 'all 150ms',
             '&:hover': {
-              borderColor: '#49afd9',
+              borderColor: accentLight,
               backgroundColor: 'rgba(255,255,255,0.05)'
             }
           }}
         >
-          <i className='ri-search-line' style={{ color: '#7a8f9e', fontSize: 14 }} />
-          <Typography sx={{ color: '#7a8f9e', fontSize: 12, flex: 1, userSelect: 'none' }}>
+          <i className='ri-search-line' style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14 }} />
+          <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, flex: 1, userSelect: 'none' }}>
             {t('navbar.search')}...
           </Typography>
-          <Typography sx={{ color: '#4a6070', fontSize: 10, fontFamily: 'monospace' }}>
+          <Typography sx={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, fontFamily: 'monospace' }}>
             Ctrl+K
           </Typography>
         </Box>
@@ -450,7 +451,7 @@ const VCenterHeader = () => {
 
           {/* Language */}
           <Tooltip title={t('navbar.language')}>
-            <IconButton size='small' onClick={e => setLangAnchor(e.currentTarget)} disabled={isPending} sx={{ color: '#d0d8de' }}>
+            <IconButton size='small' onClick={e => setLangAnchor(e.currentTarget)} disabled={isPending} sx={{ color: 'rgba(255,255,255,0.75)' }}>
               <span style={{ fontSize: 16 }}>{localeFlags[locale]}</span>
             </IconButton>
           </Tooltip>
@@ -465,7 +466,7 @@ const VCenterHeader = () => {
                 size='small'
                 onClick={() => aiAvailable && setAiChatOpen(true)}
                 disabled={!aiAvailable}
-                sx={{ color: '#d0d8de', ...(! aiAvailable && { opacity: 0.3 }) }}
+                sx={{ color: 'rgba(255,255,255,0.75)', ...(!aiAvailable && { opacity: 0.3 }) }}
               >
                 <i className='ri-sparkling-2-line' style={{ fontSize: 18 }} />
               </IconButton>
@@ -477,7 +478,7 @@ const VCenterHeader = () => {
 
           {/* Notifications */}
           <Tooltip title={t('navbar.notifications')}>
-            <IconButton size='small' onClick={handleOpenNotif} sx={{ color: '#d0d8de' }}>
+            <IconButton size='small' onClick={handleOpenNotif} sx={{ color: 'rgba(255,255,255,0.75)' }}>
               <Badge badgeContent={totalNotifCount} color={totalNotifStats.crit > 0 ? 'error' : 'warning'} invisible={totalNotifCount === 0}>
                 <i className='ri-notification-3-line' style={{ fontSize: 18 }} />
               </Badge>
@@ -489,7 +490,7 @@ const VCenterHeader = () => {
             <IconButton size='small' onClick={e => setUserAnchor(e.currentTarget)} sx={{ ml: 0.5 }}>
               <Avatar
                 src={user?.avatar || undefined}
-                sx={{ width: 28, height: 28, fontSize: 11, fontWeight: 600, bgcolor: '#0079b8' }}
+                sx={{ width: 28, height: 28, fontSize: 11, fontWeight: 600, bgcolor: primaryColor }}
               >
                 {!user?.avatar && getInitials(user?.name, user?.email)}
               </Avatar>

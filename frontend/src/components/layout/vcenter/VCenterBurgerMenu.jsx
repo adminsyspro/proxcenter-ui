@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Box, Popover, Typography } from '@mui/material'
+import { useTheme, darken, alpha } from '@mui/material/styles'
 
 import { menuData } from '@/@menu/menuData'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -13,15 +14,22 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
   const router = useRouter()
   const pathname = usePathname()
   const t = useTranslations()
+  const theme = useTheme()
   const { hasPermission } = useRBAC()
   const { hasFeature } = useLicense()
+
+  // Derive colors from theme primary
+  const primaryColor = theme.palette.primary.main
+  const menuBg = darken(primaryColor, 0.82)
+  const menuBorder = darken(primaryColor, 0.65)
+  const menuHover = darken(primaryColor, 0.55)
+  const accentLight = theme.palette.primary.light || primaryColor
 
   const sections = useMemo(() => {
     const data = menuData(t)
     const result = []
 
     for (const item of data) {
-      // Standalone item (e.g. Dashboard)
       if (!item.isSection) {
         result.push({
           standalone: true,
@@ -33,7 +41,6 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
         continue
       }
 
-      // Section — check section-level perms
       if (item.permissions && !item.permissions.some(p => hasPermission(p))) continue
 
       const sectionLocked = item.requiredFeature && !hasFeature(item.requiredFeature)
@@ -76,8 +83,8 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
       slotProps={{
         paper: {
           sx: {
-            backgroundColor: '#1b2a32',
-            border: '1px solid #324a5e',
+            backgroundColor: menuBg,
+            border: `1px solid ${menuBorder}`,
             borderRadius: '4px',
             mt: 0.5,
             width: { xs: '95vw', sm: 520, md: 680 },
@@ -89,7 +96,6 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
       }}
     >
       <Box sx={{ p: 2 }}>
-        {/* Grid of sections */}
         <Box
           sx={{
             display: 'grid',
@@ -111,12 +117,12 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
                       py: 0.75,
                       borderRadius: '3px',
                       cursor: 'pointer',
-                      backgroundColor: pathname === section.href ? 'rgba(0, 121, 184, 0.2)' : 'transparent',
-                      '&:hover': { backgroundColor: '#324a5e' },
+                      backgroundColor: pathname === section.href ? alpha(primaryColor, 0.2) : 'transparent',
+                      '&:hover': { backgroundColor: menuHover },
                       transition: 'background-color 150ms'
                     }}
                   >
-                    <i className={section.icon} style={{ color: '#49afd9', fontSize: 18 }} />
+                    <i className={section.icon} style={{ color: accentLight, fontSize: 18 }} />
                     <Typography sx={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>
                       {section.label}
                     </Typography>
@@ -129,7 +135,7 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
               <Box key={idx}>
                 <Typography
                   sx={{
-                    color: '#7a8f9e',
+                    color: 'rgba(255,255,255,0.45)',
                     fontSize: 10,
                     fontWeight: 700,
                     textTransform: 'uppercase',
@@ -155,20 +161,20 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
                         borderRadius: '3px',
                         cursor: child.locked ? 'not-allowed' : 'pointer',
                         opacity: child.locked ? 0.4 : 1,
-                        backgroundColor: isActive ? 'rgba(0, 121, 184, 0.2)' : 'transparent',
+                        backgroundColor: isActive ? alpha(primaryColor, 0.2) : 'transparent',
                         '&:hover': {
-                          backgroundColor: child.locked ? 'transparent' : '#324a5e'
+                          backgroundColor: child.locked ? 'transparent' : menuHover
                         },
                         transition: 'background-color 150ms'
                       }}
                     >
                       <i
                         className={child.locked ? 'ri-lock-line' : child.icon}
-                        style={{ color: isActive ? '#49afd9' : '#49afd9', fontSize: 16, opacity: child.locked ? 0.5 : 0.8 }}
+                        style={{ color: accentLight, fontSize: 16, opacity: child.locked ? 0.5 : 0.8 }}
                       />
                       <Typography
                         sx={{
-                          color: isActive ? '#49afd9' : '#d0d8de',
+                          color: isActive ? accentLight : 'rgba(255,255,255,0.75)',
                           fontSize: 12.5,
                           fontWeight: isActive ? 600 : 400,
                           lineHeight: 1.4

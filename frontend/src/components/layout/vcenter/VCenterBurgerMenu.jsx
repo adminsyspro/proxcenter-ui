@@ -18,11 +18,11 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
   const { hasPermission } = useRBAC()
   const { hasFeature } = useLicense()
 
-  // Derive colors from theme primary
+  // vCenter exact colors (dark charcoal/indigo)
   const primaryColor = theme.palette.primary.main
-  const menuBg = darken(primaryColor, 0.82)
-  const menuBorder = darken(primaryColor, 0.65)
-  const menuHover = darken(primaryColor, 0.55)
+  const menuBg = '#1e1e2e'
+  const menuBorder = '#333348'
+  const menuHover = '#3a3a52'
   const accentLight = theme.palette.primary.light || primaryColor
 
   const sections = useMemo(() => {

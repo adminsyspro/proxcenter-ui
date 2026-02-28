@@ -318,11 +318,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
     ...(globalTheme.id === 'vcenter' && {
       // Header - VMware dark blue-grey (toujours sombre, même en light mode)
       '.ts-vertical-layout-header, .ts-horizontal-layout-header': {
-        backgroundColor: '#1b2a32 !important',
-        borderBottom: '1px solid #324a5e !important'
+        backgroundColor: '#1e1e2e !important',
+        borderBottom: '1px solid #333348 !important'
       },
       '.ts-vertical-layout-navbar, .ts-horizontal-layout-navbar': {
-        backgroundColor: '#1b2a32 !important'
+        backgroundColor: '#1e1e2e !important'
       },
       '.ts-vertical-layout-navbar *, .ts-horizontal-layout-navbar *': {
         color: '#fafafa !important'
@@ -333,7 +333,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
 
       // Sidebar - VMware dark (toujours sombre)
       '.ts-vertical-nav-root, .ts-vertical-nav-container, .ts-vertical-nav-bg-color-container': {
-        backgroundColor: '#17242b !important'
+        backgroundColor: '#14142a !important'
       },
 
       // Sidebar text - VMware style
@@ -357,7 +357,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
 
       // Menu hover - VMware blue highlight
       '.ts-vertical-nav-root .ts-menuitem-root > .ts-menu-button:hover': {
-        backgroundColor: '#324a5e !important',
+        backgroundColor: '#333348 !important',
         color: '#ffffff !important'
       },
       '.ts-vertical-nav-root .ts-menuitem-root > .ts-menu-button:hover .ts-menu-icon': {
@@ -385,16 +385,16 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
 
       // Content area background
       'main, .ts-vertical-layout-content, .ts-vertical-layout-content-wrapper, .ts-horizontal-layout-content-wrapper': {
-        backgroundColor: `${isLightMode ? '#fafafa' : '#17242b'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#14142a'} !important`
       },
       'body': {
-        backgroundColor: `${isLightMode ? '#fafafa' : '#17242b'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#14142a'} !important`
       },
 
       // Cards VMware style
       '.MuiCard-root, .MuiPaper-root:not(.no-theme-override)': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
-        borderColor: `${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiCardContent-root, .MuiCardHeader-root': {
         backgroundColor: 'transparent !important'
@@ -404,14 +404,14 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // TABLES - VMware style - TOUS les tableaux
       // ============================================================
       '.MuiTable-root, .MuiTableContainer-root, table': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
       },
       '.MuiTableHead-root, thead': {
-        backgroundColor: `${isLightMode ? '#f4f6f8' : '#17242b'} !important`
+        backgroundColor: `${isLightMode ? '#f4f6f8' : '#14142a'} !important`
       },
       '.MuiTableHead-root .MuiTableCell-root, thead th, thead td': {
-        backgroundColor: `${isLightMode ? '#f4f6f8' : '#17242b'} !important`,
-        borderBottom: `1px solid ${isLightMode ? '#d7d7d7' : '#324a5e'} !important`,
+        backgroundColor: `${isLightMode ? '#f4f6f8' : '#14142a'} !important`,
+        borderBottom: `1px solid ${isLightMode ? '#e0e0e0' : '#333348'} !important`,
         color: `${isLightMode ? '#313131' : '#9a9a9a'} !important`,
         fontWeight: '600 !important',
         fontSize: '11px !important',
@@ -419,52 +419,52 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         letterSpacing: '0.03em !important'
       },
       '.MuiTableBody-root, tbody': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
       },
       '.MuiTableBody-root .MuiTableRow-root, tbody tr': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
         '&:hover': {
-          backgroundColor: `${isLightMode ? '#f0f7ff' : '#243847'} !important`
+          backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
         }
       },
       '.MuiTableBody-root .MuiTableRow-root:nth-of-type(even), tbody tr:nth-of-type(even)': {
-        backgroundColor: `${isLightMode ? '#f9fafb' : '#1e2d38'} !important`
+        backgroundColor: `${isLightMode ? '#f9fafb' : '#252538'} !important`
       },
       '.MuiTableBody-root .MuiTableCell-root, tbody td': {
-        borderBottom: `1px solid ${isLightMode ? '#e8e8e8' : '#2a3d4a'} !important`,
+        borderBottom: `1px solid ${isLightMode ? '#e8e8e8' : '#333348'} !important`,
         color: `${isLightMode ? '#313131' : '#fafafa'} !important`
       },
 
       // DataGrid (si utilisé)
       '.MuiDataGrid-root': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
-        borderColor: `${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiDataGrid-columnHeaders': {
-        backgroundColor: `${isLightMode ? '#f4f6f8' : '#17242b'} !important`,
-        borderColor: `${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+        backgroundColor: `${isLightMode ? '#f4f6f8' : '#14142a'} !important`,
+        borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiDataGrid-row': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
         '&:hover': {
-          backgroundColor: `${isLightMode ? '#f0f7ff' : '#243847'} !important`
+          backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
         }
       },
       '.MuiDataGrid-row:nth-of-type(even)': {
-        backgroundColor: `${isLightMode ? '#f9fafb' : '#1e2d38'} !important`
+        backgroundColor: `${isLightMode ? '#f9fafb' : '#252538'} !important`
       },
       '.MuiDataGrid-cell': {
-        borderColor: `${isLightMode ? '#e8e8e8' : '#2a3d4a'} !important`,
+        borderColor: `${isLightMode ? '#e8e8e8' : '#333348'} !important`,
         color: `${isLightMode ? '#313131' : '#fafafa'} !important`
       },
 
       // Virtualized tables / custom tables
       '[class*="table"], [class*="Table"], [class*="grid"], [class*="Grid"]': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
       },
       '[class*="row"]:not(.MuiTableRow-root), [class*="Row"]:not(.MuiDataGrid-row)': {
         '&:hover': {
-          backgroundColor: `${isLightMode ? '#f0f7ff' : '#243847'} !important`
+          backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
         }
       },
 
@@ -472,9 +472,9 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // INPUTS & FORM CONTROLS - VMware style
       // ============================================================
       '.MuiOutlinedInput-root': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
         '& .MuiOutlinedInput-notchedOutline': {
-          borderColor: `${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+          borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
         },
         '&:hover .MuiOutlinedInput-notchedOutline': {
           borderColor: `${isLightMode ? '#0079b8' : '#49afd9'} !important`
@@ -491,7 +491,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         color: `${isLightMode ? '#737373' : '#9a9a9a'} !important`
       },
       '.MuiSelect-select': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
       },
 
       // ============================================================
@@ -522,7 +522,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // TABS - VMware style
       // ============================================================
       '.MuiTabs-root': {
-        borderBottom: `1px solid ${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+        borderBottom: `1px solid ${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiTab-root': {
         color: `${isLightMode ? '#737373' : '#9a9a9a'} !important`,
@@ -569,12 +569,12 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // DIALOGS & MENUS - VMware style
       // ============================================================
       '.MuiDialog-paper, .MuiPopover-paper:not(.no-theme-override), .MuiMenu-paper': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
-        border: `1px solid ${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        border: `1px solid ${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiMenuItem-root': {
         '&:hover': {
-          backgroundColor: `${isLightMode ? '#f0f7ff' : '#243847'} !important`
+          backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
         },
         '&.Mui-selected': {
           backgroundColor: `${isLightMode ? '#e3f2fd' : 'rgba(0, 121, 184, 0.2)'} !important`
@@ -585,7 +585,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // DIVIDERS & BORDERS - VMware style
       // ============================================================
       '.MuiDivider-root': {
-        borderColor: `${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
+        borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
 
       // ============================================================
@@ -596,10 +596,10 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         height: '8px !important'
       },
       '*::-webkit-scrollbar-track': {
-        backgroundColor: `${isLightMode ? '#f4f6f8' : '#17242b'} !important`
+        backgroundColor: `${isLightMode ? '#f4f6f8' : '#14142a'} !important`
       },
       '*::-webkit-scrollbar-thumb': {
-        backgroundColor: `${isLightMode ? '#c4c4c4' : '#324a5e'} !important`,
+        backgroundColor: `${isLightMode ? '#c4c4c4' : '#333348'} !important`,
         borderRadius: '4px !important',
         '&:hover': {
           backgroundColor: `${isLightMode ? '#a0a0a0' : '#49afd9'} !important`
@@ -610,9 +610,9 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // TOOLTIPS - VMware style
       // ============================================================
       '.MuiTooltip-tooltip': {
-        backgroundColor: `${isLightMode ? '#313131' : '#1b2a32'} !important`,
+        backgroundColor: `${isLightMode ? '#313131' : '#1e1e2e'} !important`,
         color: '#fafafa !important',
-        border: `1px solid ${isLightMode ? '#313131' : '#324a5e'} !important`,
+        border: `1px solid ${isLightMode ? '#313131' : '#333348'} !important`,
         fontSize: '12px !important'
       },
 
@@ -620,7 +620,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // PROGRESS BARS - VMware style
       // ============================================================
       '.MuiLinearProgress-root': {
-        backgroundColor: `${isLightMode ? '#e0e0e0' : '#324a5e'} !important`
+        backgroundColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiLinearProgress-bar': {
         backgroundColor: '#0079b8 !important'

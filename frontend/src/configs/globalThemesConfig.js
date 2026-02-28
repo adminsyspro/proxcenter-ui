@@ -259,7 +259,7 @@ const globalThemesConfig = [
     tagKeys: ['themes.tags.vmware', 'themes.tags.enterprise'],
     preferredLayout: 'horizontal',
     preview: {
-      cardBg: 'linear-gradient(180deg, #1e2d3d 0%, #10171e 100%)',
+      cardBg: 'linear-gradient(180deg, #1e1e2e 0%, #14142a 100%)',
       accent: '#0079b8'
     },
     styles: {
@@ -294,11 +294,11 @@ const globalThemesConfig = [
       primaryDark: '#005d91',
       primaryLight: '#49afd9',
 
-      // Navigation
-      navBg: '#1b2a32',
-      navBgDark: '#10171e',
+      // Navigation — vSphere Client 8 charcoal header
+      navBg: '#1e1e2e',
+      navBgDark: '#14142a',
       navText: '#ffffff',
-      navHover: '#324a5e',
+      navHover: '#3a3a52',
 
       // Status colors (VMware style)
       success: '#62a420',
@@ -308,17 +308,17 @@ const globalThemesConfig = [
     },
     cssOverrides: {
       dark: {
-        // Header - VMware dark blue-gray
-        '--vcenter-header-bg': '#1b2a32',
-        '--vcenter-nav-bg': '#17242b',
-        '--vcenter-nav-hover': '#324a5e',
+        // Header — vSphere Client 8 charcoal/indigo
+        '--vcenter-header-bg': '#1e1e2e',
+        '--vcenter-nav-bg': '#14142a',
+        '--vcenter-nav-hover': '#3a3a52',
         '--vcenter-nav-active': '#0079b8',
-        '--vcenter-nav-border': '#324a5e',
+        '--vcenter-nav-border': '#333348',
 
         // Content
-        '--vcenter-content-bg': '#17242b',
-        '--vcenter-card-bg': '#1b2a32',
-        '--vcenter-card-border': '#324a5e',
+        '--vcenter-content-bg': '#14142a',
+        '--vcenter-card-bg': '#1e1e2e',
+        '--vcenter-card-border': '#333348',
 
         // Accent
         '--vcenter-accent': '#0079b8',
@@ -329,16 +329,16 @@ const globalThemesConfig = [
         '--vcenter-text-secondary': '#9a9a9a'
       },
       light: {
-        // Header stays dark like vCenter  
-        '--vcenter-header-bg': '#1b2a32',
-        '--vcenter-nav-bg': '#17242b',
-        '--vcenter-nav-hover': '#324a5e',
+        // Header stays dark like vCenter
+        '--vcenter-header-bg': '#1e1e2e',
+        '--vcenter-nav-bg': '#14142a',
+        '--vcenter-nav-hover': '#3a3a52',
         '--vcenter-nav-active': '#0079b8',
 
-        // Content
-        '--vcenter-content-bg': '#fafafa',
+        // Content — white like vSphere Client
+        '--vcenter-content-bg': '#ffffff',
         '--vcenter-card-bg': '#ffffff',
-        '--vcenter-card-border': '#d7d7d7',
+        '--vcenter-card-border': '#e0e0e0',
 
         // Accent
         '--vcenter-accent': '#0079b8',

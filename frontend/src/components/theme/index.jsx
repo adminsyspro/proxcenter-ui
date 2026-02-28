@@ -392,7 +392,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       },
 
       // Cards VMware style
-      '.MuiCard-root, .MuiPaper-root': {
+      '.MuiCard-root, .MuiPaper-root:not(.no-theme-override)': {
         backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
         borderColor: `${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
       },
@@ -568,7 +568,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // ============================================================
       // DIALOGS & MENUS - VMware style
       // ============================================================
-      '.MuiDialog-paper, .MuiPopover-paper, .MuiMenu-paper': {
+      '.MuiDialog-paper, .MuiPopover-paper:not(.no-theme-override), .MuiMenu-paper': {
         backgroundColor: `${isLightMode ? '#ffffff' : '#1b2a32'} !important`,
         border: `1px solid ${isLightMode ? '#d7d7d7' : '#324a5e'} !important`
       },

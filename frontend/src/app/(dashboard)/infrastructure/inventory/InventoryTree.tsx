@@ -36,8 +36,8 @@ import {
 const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const SearchIcon = (props: any) => <i className="ri-search-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const ClearIcon = (props: any) => <i className="ri-close-circle-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PlayArrowIcon = (props: any) => <i className="ri-checkbox-blank-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props: any) => <i className="ri-checkbox-blank-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const TerminalIcon = (props: any) => <i className="ri-terminal-box-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -132,9 +132,12 @@ function StatusIcon({ status, type, isMigrating, maintenance }: { status?: strin
           justifyContent: 'center',
           width: 14,
           height: 14,
+          color: '#f44336',
+          fontSize: 14,
+          fontWeight: 'bold'
         }}
       >
-        <i className="ri-close-circle-fill" style={{ fontSize: 14, color: '#f44336' }} />
+        ✕
       </Box>
     )
   }
@@ -354,14 +357,14 @@ const RAM_WARNING_THRESHOLD = 95
 // Retourne l'icône appropriée pour une VM (template ou non)
 function getVmIcon(type: string, isTemplate?: boolean, filled = true): string {
   if (isTemplate) {
-    return filled ? 'ri-draft-fill' : 'ri-draft-line'
+    return filled ? 'ri-file-copy-fill' : 'ri-file-copy-line'
   }
 
   if (type === 'lxc') {
-    return filled ? 'ri-terminal-box-fill' : 'ri-terminal-box-line'
+    return filled ? 'ri-instance-fill' : 'ri-instance-line'
   }
 
-  return filled ? 'ri-window-fill' : 'ri-window-line'
+  return filled ? 'ri-computer-fill' : 'ri-computer-line'
 }
 
 // Génère une couleur à partir d'un string (tag)
@@ -2161,7 +2164,7 @@ return (
                 >
                   <i className={isFav ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 14 }} />
                 </IconButton>
-                <i className="ri-draft-fill" style={{ opacity: 0.8, fontSize: 14, color: '#0288d1' }} />
+                <i className="ri-file-copy-fill" style={{ opacity: 0.8, fontSize: 14, color: '#0288d1' }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {vm.name}
@@ -2355,7 +2358,7 @@ return (
               itemId={`cluster:${clu.connId}`}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-layout-grid-fill' style={{ opacity: 0.8, fontSize: 14, color: '#F29221' }} />
+                  <i className='ri-cloud-fill' style={{ opacity: 0.8, fontSize: 14, color: '#F29221' }} />
                   <span style={{ fontSize: 14 }}>{clu.name}</span>
                   {/* Warning Ceph */}
                   {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
@@ -2464,7 +2467,7 @@ return (
           <>
             {/* Séparateur Proxmox Backup Server */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, mt: 1, opacity: 0.6 }}>
-              <i className="ri-shield-check-fill" style={{ fontSize: 12, color: '#2196f3' }} />
+              <i className="ri-hard-drive-2-fill" style={{ fontSize: 12, color: '#2196f3' }} />
               <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Proxmox Backup Server
               </Typography>
@@ -2480,7 +2483,7 @@ return (
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <StatusIcon status={pbs.status} type="node" />
-                    <i className='ri-shield-check-fill' style={{ opacity: 0.8, fontSize: 14, color: '#2196f3' }} />
+                    <i className='ri-hard-drive-2-fill' style={{ opacity: 0.8, fontSize: 14, color: '#2196f3' }} />
                     <span style={{ fontSize: 14 }}>{pbs.name}</span>
                     <span style={{ opacity: 0.5, fontSize: 12 }}>
                       ({pbs.stats.backupCount} backups)
@@ -2495,7 +2498,7 @@ return (
                     itemId={`datastore:${pbs.connId}:${ds.name}`}
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className='ri-hard-drive-3-fill' style={{ opacity: 0.6, fontSize: 14 }} />
+                        <i className='ri-database-2-line' style={{ opacity: 0.6, fontSize: 14 }} />
                         <span style={{ fontSize: 13 }}>{ds.name}</span>
                         <Box 
                           sx={{ 

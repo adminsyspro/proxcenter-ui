@@ -392,7 +392,7 @@ export default function SiteRecoveryPage() {
 
         {/* Tab Content */}
         {tab === 0 && (
-          <DashboardTab health={health} loading={healthLoading} />
+          <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} />
         )}
 
         {tab === 1 && (

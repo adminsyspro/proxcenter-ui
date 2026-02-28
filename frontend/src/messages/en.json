@@ -2147,7 +2147,9 @@
       "noRecentActivity": "No recent activity",
       "noSitesConfigured": "No replication sites configured. Add cluster connections with Ceph to get started.",
       "noSitesTitle": "No replication job configured",
-      "noSitesDesc": "Site Recovery requires at least one replication job between two Proxmox clusters with Ceph. Configure a replication job to enable disaster recovery, failover plans, and cross-site protection."
+      "noSitesDesc": "Site Recovery requires at least one replication job between two Proxmox clusters with Ceph. Configure a replication job to enable disaster recovery, failover plans, and cross-site protection.",
+      "bandwidthOverTime": "Replication Bandwidth",
+      "noBandwidthData": "No bandwidth data yet. Trigger a sync to start collecting throughput metrics."
     },
     "protection": {
       "volume": "Volume",

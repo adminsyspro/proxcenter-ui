@@ -2152,7 +2152,9 @@
       "noRecentActivity": "Aucune activité récente",
       "noSitesConfigured": "Aucun site de réplication configuré. Ajoutez des connexions cluster avec Ceph pour commencer.",
       "noSitesTitle": "Aucun job de réplication configuré",
-      "noSitesDesc": "Le Site Recovery nécessite au moins un job de réplication entre deux clusters Proxmox avec Ceph. Configurez un job de réplication pour activer la reprise après sinistre, les plans de failover et la protection inter-sites."
+      "noSitesDesc": "Le Site Recovery nécessite au moins un job de réplication entre deux clusters Proxmox avec Ceph. Configurez un job de réplication pour activer la reprise après sinistre, les plans de failover et la protection inter-sites.",
+      "bandwidthOverTime": "Bande passante de réplication",
+      "noBandwidthData": "Pas encore de données. Lancez une synchronisation pour collecter les métriques de débit."
     },
     "protection": {
       "volume": "Volume",

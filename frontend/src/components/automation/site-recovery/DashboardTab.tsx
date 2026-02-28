@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -8,11 +8,17 @@ import {
   Skeleton, Stack, Typography, alpha, useTheme
 } from '@mui/material'
 
+import {
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
+  Tooltip as RTooltip, Legend, CartesianGrid
+} from 'recharts'
+
 import EmptyState from '@/components/EmptyState'
 import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
 
 import type {
-  ReplicationHealthStatus, ReplicationActivity, JobStatusSummary
+  ReplicationHealthStatus, ReplicationActivity, JobStatusSummary,
+  ReplicationJob
 } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -293,12 +299,188 @@ const ActivityItem = ({ activity }: { activity: ReplicationActivity }) => {
 
 // ── Main Component ─────────────────────────────────────────────────────
 
+// ── Bandwidth Chart ─────────────────────────────────────────────────────
+
+const BANDWIDTH_PALETTE = [
+  '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4',
+  '#E91E63', '#8BC34A', '#FF5722'
+]
+
+const BUCKET_SIZE_MS = 5 * 60 * 1000 // 5 min
+
+function formatBps(bps: number): string {
+  if (!bps || bps <= 0) return '0 B/s'
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const i = Math.min(Math.floor(Math.log(bps) / Math.log(1024)), units.length - 1)
+  return `${(bps / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+}
+
+function useBandwidthData(jobs?: ReplicationJob[], connections?: { id: string; name: string }[]) {
+  const [tick, setTick] = useState(0)
+
+  // Re-read localStorage every 15s
+  useEffect(() => {
+    const iv = setInterval(() => setTick(n => n + 1), 15_000)
+    return () => clearInterval(iv)
+  }, [])
+
+  return useMemo(() => {
+    // Build connection name map
+    const connMap: Record<string, string> = {}
+    for (const c of connections || []) connMap[c.id] = c.name
+
+    // Build job → cluster pair map
+    const jobPairMap: Record<string, string> = {}
+    for (const j of jobs || []) {
+      const src = connMap[j.source_cluster] || j.source_cluster
+      const dst = connMap[j.target_cluster] || j.target_cluster
+      jobPairMap[j.id] = `${src} → ${dst}`
+    }
+
+    // Read localStorage
+    let raw: Record<string, { ts: number; bps: number }[]> = {}
+    try {
+      const stored = localStorage.getItem('sr-throughput-history')
+      if (stored) raw = JSON.parse(stored)
+    } catch { /* ignore */ }
+
+    // Group points by cluster pair and bucket into 5min intervals
+    const pairBuckets: Record<string, Record<number, { sum: number; count: number }>> = {}
+    const allBucketKeys = new Set<number>()
+
+    for (const [jobId, points] of Object.entries(raw)) {
+      const pair = jobPairMap[jobId]
+      if (!pair || !points?.length) continue
+      if (!pairBuckets[pair]) pairBuckets[pair] = {}
+
+      for (const p of points) {
+        const bucket = Math.floor(p.ts / BUCKET_SIZE_MS) * BUCKET_SIZE_MS
+        allBucketKeys.add(bucket)
+        if (!pairBuckets[pair][bucket]) pairBuckets[pair][bucket] = { sum: 0, count: 0 }
+        pairBuckets[pair][bucket].sum += p.bps
+        pairBuckets[pair][bucket].count += 1
+      }
+    }
+
+    const seriesKeys = Object.keys(pairBuckets).sort()
+    const sortedBuckets = Array.from(allBucketKeys).sort((a, b) => a - b)
+
+    const chartData = sortedBuckets.map(bucket => {
+      const row: Record<string, any> = { time: bucket }
+      for (const pair of seriesKeys) {
+        const b = pairBuckets[pair]?.[bucket]
+        row[pair] = b ? Math.round(b.sum / b.count) : 0
+      }
+      return row
+    })
+
+    return { chartData, seriesKeys }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, connections, tick])
+}
+
+const BandwidthChart = ({ jobs, connections, t }: {
+  jobs?: ReplicationJob[]
+  connections?: { id: string; name: string }[]
+  t: any
+}) => {
+  const theme = useTheme()
+  const { chartData, seriesKeys } = useBandwidthData(jobs, connections)
+
+  const hasData = chartData.length > 0 && seriesKeys.length > 0
+
+  return (
+    <Card variant='outlined' sx={{ borderRadius: 2 }}>
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+        <Typography variant='subtitle2' sx={{ fontWeight: 600, mb: 1.5 }}>
+          {t('siteRecovery.dashboard.bandwidthOverTime')}
+        </Typography>
+        {!hasData ? (
+          <Box sx={{ textAlign: 'center', py: 4, opacity: 0.5 }}>
+            <i className='ri-line-chart-line' style={{ fontSize: '1.5rem' }} />
+            <Typography variant='body2' sx={{ mt: 0.5 }}>
+              {t('siteRecovery.dashboard.noBandwidthData')}
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer width='100%' height='100%'>
+              <AreaChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <defs>
+                  {seriesKeys.map((key, i) => (
+                    <linearGradient key={key} id={`bw-grad-${i}`} x1='0' y1='0' x2='0' y2='1'>
+                      <stop offset='5%' stopColor={BANDWIDTH_PALETTE[i % BANDWIDTH_PALETTE.length]} stopOpacity={0.3} />
+                      <stop offset='95%' stopColor={BANDWIDTH_PALETTE[i % BANDWIDTH_PALETTE.length]} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray='3 3' stroke={alpha(theme.palette.divider, 0.5)} />
+                <XAxis
+                  dataKey='time'
+                  type='number'
+                  domain={['dataMin', 'dataMax']}
+                  tickFormatter={(ts: number) => {
+                    const d = new Date(ts)
+                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+                  }}
+                  tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
+                  stroke={theme.palette.divider}
+                  scale='time'
+                />
+                <YAxis
+                  tickFormatter={(v: number) => formatBps(v)}
+                  tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
+                  stroke={theme.palette.divider}
+                  width={70}
+                />
+                <RTooltip
+                  contentStyle={{
+                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 8,
+                    fontSize: 12
+                  }}
+                  labelFormatter={(ts: number) => {
+                    const d = new Date(ts)
+                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+                  }}
+                  formatter={(value: number) => [formatBps(value), undefined]}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                />
+                {seriesKeys.map((key, i) => (
+                  <Area
+                    key={key}
+                    type='monotone'
+                    dataKey={key}
+                    name={key}
+                    stroke={BANDWIDTH_PALETTE[i % BANDWIDTH_PALETTE.length]}
+                    fill={`url(#bw-grad-${i})`}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 3 }}
+                  />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Main Component ─────────────────────────────────────────────────────
+
 interface DashboardTabProps {
   health: ReplicationHealthStatus | undefined
   loading: boolean
+  jobs?: ReplicationJob[]
+  connections?: { id: string; name: string }[]
 }
 
-export default function DashboardTab({ health, loading }: DashboardTabProps) {
+export default function DashboardTab({ health, loading, jobs, connections }: DashboardTabProps) {
   const t = useTranslations()
   const theme = useTheme()
 
@@ -322,6 +504,7 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
           <Skeleton variant='rounded' height={160} />
           <Skeleton variant='rounded' height={160} />
         </Box>
+        <Skeleton variant='rounded' height={300} />
         <Skeleton variant='rounded' height={200} />
       </Stack>
     )
@@ -383,6 +566,9 @@ export default function DashboardTab({ health, loading }: DashboardTabProps) {
           t={t}
         />
       </Box>
+
+      {/* Bandwidth Over Time */}
+      <BandwidthChart jobs={jobs} connections={connections} t={t} />
 
       {/* Recent Activity Timeline */}
       <Card variant='outlined' sx={{ borderRadius: 2 }}>

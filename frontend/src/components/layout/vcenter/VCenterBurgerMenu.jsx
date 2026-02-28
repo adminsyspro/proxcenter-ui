@@ -82,15 +82,18 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
       transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       slotProps={{
         paper: {
+          className: 'no-theme-override',
           sx: {
-            backgroundColor: menuBg,
+            backgroundColor: `${menuBg} !important`,
             border: `1px solid ${menuBorder}`,
             borderRadius: '4px',
             mt: 0.5,
             width: { xs: '95vw', sm: 520, md: 680 },
             maxHeight: '80vh',
             overflow: 'auto',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            color: '#fff !important',
+            '& *': { color: 'inherit' }
           }
         }
       }}

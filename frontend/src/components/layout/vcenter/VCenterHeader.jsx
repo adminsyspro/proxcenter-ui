@@ -337,7 +337,7 @@ const VCenterHeader = () => {
         }}
       >
         {/* LEFT: Logo + Burger */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
           {/* Logo */}
           <Box
             sx={{
@@ -387,10 +387,13 @@ const VCenterHeader = () => {
           </Button>
         </Box>
 
-        {/* CENTER: Search */}
+        {/* CENTER: Search — absolutely centered */}
         <Box
           onClick={() => setSearchOpen(true)}
           sx={{
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
             display: { xs: 'none', lg: 'flex' },
             alignItems: 'center',
             gap: 0.75,
@@ -399,8 +402,7 @@ const VCenterHeader = () => {
             borderRadius: '3px',
             border: `1px solid ${headerBorder}`,
             cursor: 'pointer',
-            width: 260,
-            mx: 2,
+            width: 300,
             transition: 'all 150ms',
             '&:hover': {
               borderColor: accentLight,
@@ -418,7 +420,7 @@ const VCenterHeader = () => {
         </Box>
 
         {/* RIGHT: Icons */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, justifyContent: 'flex-end' }}>
           {/* PXCore Status */}
           {isEnterprise && (
             <Tooltip title={pxcoreInfo.label}>

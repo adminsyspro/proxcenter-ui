@@ -96,11 +96,13 @@ const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[];
   const color = theme.palette.primary.main
   const isLarge = size === 'large'
   const gradientId = `bwGrad-${size}-${data[0]?.ts || 0}`
+  // Shallow copy — recharts may mutate the array internally (React 19 freezes props)
+  const chartData = data.slice()
 
   return (
-    <Box sx={{ width: isLarge ? '100%' : 80, height: isLarge ? 120 : 24, flexShrink: 0 }}>
-      <ResponsiveContainer width='100%' height='100%'>
-        <AreaChart data={data} margin={isLarge ? { top: 4, right: 4, left: 4, bottom: 4 } : { top: 2, right: 2, left: 2, bottom: 2 }}>
+    <Box sx={{ width: isLarge ? '100%' : 80, height: isLarge ? 120 : 24, flexShrink: 0, minWidth: 0, minHeight: 0 }}>
+      <ResponsiveContainer width='100%' height='100%' minWidth={1} minHeight={1}>
+        <AreaChart data={chartData} margin={isLarge ? { top: 4, right: 4, left: 4, bottom: 4 } : { top: 2, right: 2, left: 2, bottom: 2 }}>
           <defs>
             <linearGradient id={gradientId} x1='0' y1='0' x2='0' y2='1'>
               <stop offset='0%' stopColor={color} stopOpacity={0.3} />

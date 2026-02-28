@@ -2163,6 +2163,7 @@
       "rpoTarget": "RPO cible",
       "rpoActual": "RPO actuel",
       "throughput": "Débit",
+      "bandwidth": "Bande passante",
       "actions": "Actions",
       "syncNow": "Synchroniser",
       "resume": "Reprendre",

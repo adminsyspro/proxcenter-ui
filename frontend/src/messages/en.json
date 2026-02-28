@@ -2158,6 +2158,7 @@
       "rpoTarget": "RPO Target",
       "rpoActual": "RPO Actual",
       "throughput": "Throughput",
+      "bandwidth": "Bandwidth",
       "actions": "Actions",
       "syncNow": "Sync Now",
       "resume": "Resume",

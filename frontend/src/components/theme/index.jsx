@@ -374,8 +374,20 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         color: '#49afd9 !important'
       },
 
+      // vCenter horizontal header (VCenterHeader component)
+      '.vcenter-header': {
+        backgroundColor: '#1b2a32 !important',
+        borderBottom: '1px solid #324a5e !important',
+        height: '48px !important',
+        boxShadow: 'none !important'
+      },
+      // Hide the standard horizontal navigation bar when vCenter header is active
+      '.ts-horizontal-layout-header': {
+        boxShadow: 'none !important'
+      },
+
       // Content area background
-      'main, .ts-vertical-layout-content, .ts-vertical-layout-content-wrapper': {
+      'main, .ts-vertical-layout-content, .ts-vertical-layout-content-wrapper, .ts-horizontal-layout-content-wrapper': {
         backgroundColor: `${isLightMode ? '#fafafa' : '#17242b'} !important`
       },
       'body': {

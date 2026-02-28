@@ -190,7 +190,15 @@ return globalThemesConfig.filter(t => t.category === selectedCategory)
   }
 
   const handleGlobalThemeChange = (themeId) => {
-    updateSettings({ globalTheme: themeId })
+    const updates = { globalTheme: themeId }
+
+    if (themeId === 'vcenter') {
+      updates.layout = 'horizontal'
+    } else if (settings.globalTheme === 'vcenter') {
+      updates.layout = 'collapsed'
+    }
+
+    updateSettings(updates)
     showMessage('success', t('settings.savedSuccess'))
   }
 

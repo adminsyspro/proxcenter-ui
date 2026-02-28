@@ -257,6 +257,7 @@ const globalThemesConfig = [
     icon: 'ri-cloud-line',
     category: 'standard',
     tagKeys: ['themes.tags.vmware', 'themes.tags.enterprise'],
+    preferredLayout: 'horizontal',
     preview: {
       cardBg: 'linear-gradient(180deg, #1e2d3d 0%, #10171e 100%)',
       accent: '#0079b8'

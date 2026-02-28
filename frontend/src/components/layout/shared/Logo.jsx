@@ -31,7 +31,7 @@ const LogoText = styled.span`
 `
 
 // Logo SVG ProxCenter - seulement les formes (accent et blanc)
-const LogoIcon = ({ size = 28, accentColor = '#F29221' }) => {
+export const LogoIcon = ({ size = 28, accentColor = '#F29221' }) => {
   // Calculer la hauteur proportionnelle (ratio original: 220x170)
   const height = (size * 170) / 220
   

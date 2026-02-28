@@ -298,12 +298,39 @@ export default function ProtectionTab({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // Throughput history accumulation (frontend-side, resets on refresh)
-  const throughputHistoryRef = useRef<Map<string, ThroughputPoint[]>>(new Map())
+  // Throughput history — persisted in localStorage, 24h rolling window
+  const STORAGE_KEY = 'sr-throughput-history'
+  const MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24h
+
+  const throughputHistoryRef = useRef<Map<string, ThroughputPoint[]>>(null as any)
   const [, forceUpdate] = useState(0)
+
+  // Hydrate from localStorage once on mount
+  if (throughputHistoryRef.current === null) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed: Record<string, ThroughputPoint[]> = JSON.parse(raw)
+        const now = Date.now()
+        const map = new Map<string, ThroughputPoint[]>()
+
+        for (const [id, pts] of Object.entries(parsed)) {
+          const fresh = pts.filter(p => now - p.ts < MAX_AGE_MS)
+          if (fresh.length > 0) map.set(id, fresh)
+        }
+
+        throughputHistoryRef.current = map
+      } else {
+        throughputHistoryRef.current = new Map()
+      }
+    } catch {
+      throughputHistoryRef.current = new Map()
+    }
+  }
 
   useEffect(() => {
     const map = throughputHistoryRef.current
+    const now = Date.now()
 
     for (const job of jobs || []) {
       if (job.status === 'syncing' && job.throughput_bps > 0) {
@@ -312,17 +339,22 @@ export default function ProtectionTab({
         const last = arr[arr.length - 1]
 
         // Only push if enough time has passed (>2s) to avoid duplicates
-        if (!last || Date.now() - last.ts > 2000) {
-          arr.push({ ts: Date.now(), bps: job.throughput_bps })
+        if (!last || now - last.ts > 2000) {
+          arr.push({ ts: now, bps: job.throughput_bps })
 
-          // Cap at 60 entries (~3 minutes at 3s polling)
-          if (arr.length > 60) arr.splice(0, arr.length - 60)
+          // Trim entries older than 24h
+          while (arr.length > 0 && now - arr[0].ts > MAX_AGE_MS) arr.shift()
         }
-      } else if (job.status !== 'syncing') {
-        // Clean up history for jobs that stopped syncing
-        map.delete(job.id)
       }
+      // Don't delete history when sync stops — keep it for the graph
     }
+
+    // Persist to localStorage
+    try {
+      const obj: Record<string, ThroughputPoint[]> = {}
+      for (const [id, pts] of map) obj[id] = pts
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
+    } catch { /* storage full — non-critical */ }
 
     forceUpdate(n => n + 1)
   }, [jobs])
@@ -500,7 +532,7 @@ export default function ProtectionTab({
                 <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
 
                 {/* Bandwidth chart */}
-                {selected.status === 'syncing' && (throughputHistoryRef.current.get(selected.id)?.length || 0) >= 2 && (
+                {(throughputHistoryRef.current.get(selected.id)?.length || 0) >= 2 && (
                   <>
                     <Divider sx={{ my: 2 }} />
                     <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>

@@ -149,7 +149,7 @@ return (
 return n })}>
                   <IconButton size='small'><i className={isExp ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} /></IconButton>
                   <i className={catIcons[cat.id] || 'ri-folder-line'} style={{ margin: '0 8px' }} />
-                  <Typography variant='subtitle2' sx={{ flex: 1 }}>{cat.label}</Typography>
+                  <Typography variant='subtitle2' sx={{ flex: 1 }}>{t(`rbac.categories.${cat.id}`, { defaultValue: cat.label })}</Typography>
                   <Chip size='small' label={`${sel}/${cat.permissions.length}`} color={sel === cat.permissions.length ? 'primary' : 'default'} variant='outlined' sx={{ mr: 1 }} />
                   <Checkbox checked={sel === cat.permissions.length} indeterminate={sel > 0 && sel < cat.permissions.length} onChange={() => toggleCat(cat.id)} onClick={e => e.stopPropagation()} size='small' disabled={role?.is_system} />
                 </Box>
@@ -158,7 +158,7 @@ return n })}>
                     {cat.permissions.map(perm => (
                       <ListItem key={perm.id} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider' }}>
                         <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title={t('rbac.dangerousPermission')} arrow><i className='ri-shield-flash-line' style={{ color: '#f59e0b', fontSize: '1.1rem' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
-                        <ListItemText primary={<code style={{ fontSize: '0.85rem' }}>{perm.name}</code>} secondary={perm.description} />
+                        <ListItemText primary={<code style={{ fontSize: '0.85rem' }}>{perm.name}</code>} secondary={t(`rbac.permDesc.${perm.id}`, { defaultValue: perm.description })} />
                         <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' disabled={role?.is_system} /></ListItemSecondaryAction>
                       </ListItem>
                     ))}
@@ -687,10 +687,10 @@ return }
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>{role.name}</Typography>
+                  <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>{role.is_system ? t(`rbac.roles.${role.id}`, { defaultValue: role.name }) : role.name}</Typography>
                   {role.is_system && <Chip label={t('rbacPage.systemRole')} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem' }} />}
                 </Box>
-                {role.description && <Typography variant='body2' sx={{ opacity: 0.6 }}>{role.description}</Typography>}
+                {role.description && <Typography variant='body2' sx={{ opacity: 0.6 }}>{role.is_system ? t(`rbac.roleDesc.${role.id}`, { defaultValue: role.description }) : role.description}</Typography>}
               </Box>
               <Box>
                 <Tooltip title={role.is_system ? t('common.view') : t('common.edit')}><IconButton size='small' onClick={() => { setSelected(role); setDialogOpen(true) }}><i className={role.is_system ? 'ri-eye-line' : 'ri-edit-line'} /></IconButton></Tooltip>
@@ -880,7 +880,7 @@ return (
       </Typography>
     )},
     { field: 'role', headerName: t('rbac.title'), width: 130, renderCell: (p: any) => (
-      <Chip label={p.row.role.name} size='small' sx={{ bgcolor: alpha(p.row.role.color, 0.15), color: p.row.role.color, fontWeight: 500, height: 24 }} />
+      <Chip label={p.row.role.is_system ? t(`rbac.roles.${p.row.role.id}`, { defaultValue: p.row.role.name }) : p.row.role.name} size='small' sx={{ bgcolor: alpha(p.row.role.color, 0.15), color: p.row.role.color, fontWeight: 500, height: 24 }} />
     )},
     { field: 'scope_type', headerName: t('rbacPage.scope'), width: 140, renderCell: (p: any) => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -1530,13 +1530,13 @@ return () => setPageInfo('', '', '')
                     <Paper key={cat.id} variant='outlined' sx={{ mb: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5, bgcolor: 'action.hover' }}>
                         <i className={catIcons[cat.id] || 'ri-folder-line'} />
-                        <Typography variant='subtitle2'>{cat.label}</Typography>
+                        <Typography variant='subtitle2'>{t(`rbac.categories.${cat.id}`, { defaultValue: cat.label })}</Typography>
                         <Chip label={cat.permissions.length} size='small' sx={{ height: 18 }} />
                       </Box>
                       <Divider />
                       <Box sx={{ p: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                         {cat.permissions.map(p => (
-                          <Tooltip key={p.id} title={p.description}>
+                          <Tooltip key={p.id} title={t(`rbac.permDesc.${p.id}`, { defaultValue: p.description })}>
                             <Chip label={p.name} size='small' variant='outlined' color={p.is_dangerous ? 'warning' : 'default'} icon={p.is_dangerous ? <i className='ri-alert-line' style={{ fontSize: 14 }} /> : undefined} />
                           </Tooltip>
                         ))}

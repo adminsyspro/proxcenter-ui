@@ -38,19 +38,9 @@ export async function GET(req: NextRequest) {
 return acc
     }, {} as Record<string, any[]>)
 
-    // Définir l'ordre et les labels des catégories
-    const categoryLabels: Record<string, string> = {
-      vm: "Machines virtuelles",
-      storage: "Stockage",
-      node: "Nœuds",
-      connection: "Connexions",
-      backup: "Sauvegardes",
-      admin: "Administration"
-    }
-
     const categories = Object.keys(byCategory).map(cat => ({
       id: cat,
-      label: categoryLabels[cat] || cat,
+      label: cat,
       permissions: byCategory[cat]
     }))
 

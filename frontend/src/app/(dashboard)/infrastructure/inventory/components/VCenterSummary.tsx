@@ -140,7 +140,7 @@ function VCenterSummary({
     const hours = Math.floor((secs % 86400) / 3600)
     const mins = Math.floor((secs % 3600) / 60)
 
-    if (days > 0) return `${days}j ${hours}h ${mins}m`
+    if (days > 0) return `${days}d ${hours}h ${mins}m`
     if (hours > 0) return `${hours}h ${mins}m`
     
 return `${mins}m`

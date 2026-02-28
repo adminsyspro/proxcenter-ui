@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 
 import {
   Avatar,
@@ -184,6 +184,7 @@ const QuickSuggestions = ({ onSelect, disabled, t }) => {
 export default function AIChatDrawer({ open, onClose }) {
   const theme = useTheme()
   const t = useTranslations()
+  const locale = useLocale()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -237,7 +238,8 @@ export default function AIChatDrawer({ open, onClose }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage]
+          messages: [...messages, userMessage],
+          locale
         })
       })
       

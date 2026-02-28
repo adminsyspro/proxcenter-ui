@@ -35,15 +35,16 @@ return NextResponse.json({
       
     } else if (settings.provider === 'openai') {
       // Test OpenAI
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const openaiBase = (settings.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+      const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${settings.openaiKey}`
         },
         body: JSON.stringify({
           model: settings.openaiModel,
-          messages: [{ role: 'user', content: 'Réponds en une phrase: Es-tu fonctionnel ?' }],
+          messages: [{ role: 'user', content: 'Reply in one sentence: Are you functional?' }],
           max_tokens: 50
         })
       })

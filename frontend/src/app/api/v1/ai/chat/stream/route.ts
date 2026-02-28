@@ -156,16 +156,17 @@ async function fetchProxmoxData(connections: any[]) {
 }
 
 // Construire le prompt système
-async function buildSystemPrompt() {
+async function buildSystemPrompt(lang: string = 'en') {
+  const isFr = lang === 'fr'
   const connections = await getConnections()
   const alerts = await getActiveAlerts()
   const infraData = await fetchProxmoxData(connections)
-  
+
   const topCpuVMs = [...infraData.vms]
     .filter((vm: any) => vm.status === 'running')
     .sort((a: any, b: any) => parseFloat(b.cpu) - parseFloat(a.cpu))
     .slice(0, 10)
-  
+
   const topMemVMs = [...infraData.vms]
     .filter((vm: any) => vm.status === 'running')
     .sort((a: any, b: any) => parseFloat(b.mem) - parseFloat(a.mem))
@@ -173,80 +174,59 @@ async function buildSystemPrompt() {
 
   const stoppedVMs = infraData.vms.filter((vm: any) => vm.status !== 'running')
   const runningVMs = infraData.vms.filter((vm: any) => vm.status === 'running')
-  
-  let prompt = `Tu es l'assistant IA de ProxCenter, une plateforme de gestion d'infrastructure Proxmox.
 
-IMPORTANT: Tu ne peux PAS exécuter d'actions. Tu peux uniquement analyser et suggérer.
+  let prompt = isFr
+    ? `Tu es l'assistant IA de ProxCenter, une plateforme de gestion d'infrastructure Proxmox.\n\nIMPORTANT: Tu ne peux PAS exécuter d'actions. Tu peux uniquement analyser et suggérer.`
+    : `You are the AI assistant of ProxCenter, a Proxmox infrastructure management platform.\n\nIMPORTANT: You CANNOT execute actions. You can only analyze and suggest.`
 
-=== ÉTAT ACTUEL DE L'INFRASTRUCTURE ===
-
-📊 Résumé:
-- ${infraData.summary.totalVMs} VMs/CTs (${infraData.summary.runningVMs} running, ${infraData.summary.stoppedVMs} stopped)
-- ${infraData.summary.totalNodes} hôtes (${infraData.summary.onlineNodes} online)
-- ${infraData.clusters.length} cluster(s)
-`
+  prompt += `\n\n=== ${isFr ? 'ÉTAT ACTUEL DE L\'INFRASTRUCTURE' : 'CURRENT INFRASTRUCTURE STATE'} ===\n`
+  prompt += `\n📊 ${isFr ? 'Résumé' : 'Summary'}:\n`
+  prompt += `- ${infraData.summary.totalVMs} VMs/CTs (${infraData.summary.runningVMs} running, ${infraData.summary.stoppedVMs} stopped)\n`
+  prompt += `- ${infraData.summary.totalNodes} ${isFr ? 'hôtes' : 'hosts'} (${infraData.summary.onlineNodes} online)\n`
+  prompt += `- ${infraData.clusters.length} cluster(s)\n`
 
   if (infraData.nodes.length > 0) {
-    prompt += `
-🖥️ Hôtes:
-${infraData.nodes.map((n: any) => `- ${n.name}: ${n.status} | CPU: ${n.cpu}% | RAM: ${n.mem}%`).join('\n')}
-`
+    prompt += `\n🖥️ ${isFr ? 'Hôtes' : 'Hosts'}:\n`
+    prompt += infraData.nodes.map((n: any) => `- ${n.name}: ${n.status} | CPU: ${n.cpu}% | RAM: ${n.mem}%`).join('\n') + '\n'
   }
 
   if (topCpuVMs.length > 0) {
-    prompt += `
-🔥 Top 10 CPU:
-${topCpuVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.vmid}) - ${vm.cpu}%`).join('\n')}
-`
+    prompt += `\n🔥 Top 10 CPU:\n`
+    prompt += topCpuVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.vmid}) - ${vm.cpu}%`).join('\n') + '\n'
   }
 
   if (topMemVMs.length > 0) {
-    prompt += `
-💾 Top 10 RAM:
-${topMemVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.vmid}) - ${vm.mem}%`).join('\n')}
-`
+    prompt += `\n💾 Top 10 RAM:\n`
+    prompt += topMemVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.vmid}) - ${vm.mem}%`).join('\n') + '\n'
   }
 
   if (alerts.length > 0) {
-    prompt += `
-⚠️ Alertes (${alerts.length}):
-${alerts.map((a: any) => `- [${a.severity}] ${a.message}`).join('\n')}
-`
+    prompt += `\n⚠️ ${isFr ? 'Alertes' : 'Alerts'} (${alerts.length}):\n`
+    prompt += alerts.map((a: any) => `- [${a.severity}] ${a.message}`).join('\n') + '\n'
   }
 
   if (runningVMs.length > 0) {
     const vmsToShow = runningVMs.slice(0, 20)
-
-    prompt += `
-📋 VMs running (${runningVMs.length}):
-${vmsToShow.map((vm: any) => `- ${vm.name} (${vm.vmid}) sur ${vm.node}`).join('\n')}
-`
+    prompt += `\n📋 VMs running (${runningVMs.length}):\n`
+    prompt += vmsToShow.map((vm: any) => `- ${vm.name} (${vm.vmid}) ${isFr ? 'sur' : 'on'} ${vm.node}`).join('\n') + '\n'
   }
 
-  // VMs arrêtées groupées par cluster
   if (stoppedVMs.length > 0) {
     const byCluster: Record<string, any[]> = {}
-
     stoppedVMs.forEach((vm: any) => {
       if (!byCluster[vm.cluster]) byCluster[vm.cluster] = []
       byCluster[vm.cluster].push(vm)
     })
-    
-    prompt += `
-⏹️ VMs ARRÊTÉES (${stoppedVMs.length} total):
-${Object.entries(byCluster).map(([cluster, vms]) => {
-  return `[${cluster}] (${vms.length}):
-${vms.map((vm: any) => `  - ${vm.name} (${vm.vmid}) sur ${vm.node}`).join('\n')}`
-}).join('\n')}
-`
+    prompt += `\n⏹️ ${isFr ? 'VMs ARRÊTÉES' : 'STOPPED VMs'} (${stoppedVMs.length} total):\n`
+    prompt += Object.entries(byCluster).map(([cluster, vms]) => {
+      return `[${cluster}] (${vms.length}):\n${vms.map((vm: any) => `  - ${vm.name} (${vm.vmid}) ${isFr ? 'sur' : 'on'} ${vm.node}`).join('\n')}`
+    }).join('\n') + '\n'
   }
 
-  prompt += `
-=== INSTRUCTIONS ===
-- Réponds en français
-- Utilise les données ci-dessus
-- Cite les noms exacts
-`
+  prompt += `\n=== INSTRUCTIONS ===\n`
+  prompt += isFr
+    ? `- Réponds en français\n- Utilise les données ci-dessus\n- Cite les noms exacts\n`
+    : `- Respond in English\n- Use the data above\n- Cite exact names\n`
 
   return prompt
 }
@@ -254,25 +234,27 @@ ${vms.map((vm: any) => `  - ${vm.name} (${vm.vmid}) sur ${vm.node}`).join('\n')}
 // POST /api/v1/ai/chat/stream - Chat avec streaming
 export async function POST(request: Request) {
   try {
-    const { messages } = await request.json()
+    const { messages, locale } = await request.json()
+    const lang = locale === 'fr' ? 'fr' : 'en'
     const settings = getAISettings()
-    
+
     if (!settings.enabled) {
-      return NextResponse.json({ 
-        error: 'L\'assistant IA n\'est pas activé.' 
+      return NextResponse.json({
+        error: lang === 'fr'
+          ? 'L\'assistant IA n\'est pas activé.'
+          : 'The AI assistant is not enabled.'
       }, { status: 400 })
     }
-    
-    const systemPrompt = await buildSystemPrompt()
-    
-    const lastUserMessage = messages[messages.length - 1]
 
+    const systemPrompt = await buildSystemPrompt(lang)
+
+    const lastUserMessage = messages[messages.length - 1]
     const contextualizedMessage = `${systemPrompt}
 
-=== QUESTION ===
+=== ${lang === 'fr' ? 'QUESTION' : 'QUESTION'} ===
 ${lastUserMessage.content}
 
-Réponds en utilisant UNIQUEMENT les données ci-dessus.`
+${lang === 'fr' ? 'Réponds en utilisant UNIQUEMENT les données ci-dessus.' : 'Respond using ONLY the data above.'}`
 
     if (settings.provider === 'ollama') {
       const ollamaMessages = [
@@ -356,7 +338,9 @@ return
       // Pour OpenAI et Anthropic, on pourrait aussi implémenter le streaming
       // mais pour l'instant on retourne une erreur
       return NextResponse.json({ 
-        error: 'Le streaming n\'est supporté que pour Ollama.' 
+        error: lang === 'fr'
+          ? 'Le streaming n\'est supporté que pour Ollama.'
+          : 'Streaming is only supported for Ollama.'
       }, { status: 400 })
     }
     

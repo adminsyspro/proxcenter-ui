@@ -369,72 +369,72 @@ export function getDb() {
   // Liste complète des permissions - utilise INSERT OR IGNORE pour ajouter les nouvelles sans dupliquer
   const allPermissions = [
     // VM/CT Operations
-    { id: 'vm.view', name: 'vm.view', category: 'vm', description: 'Voir les VMs et leurs détails' },
-    { id: 'vm.console', name: 'vm.console', category: 'vm', description: 'Accéder à la console VNC/SPICE' },
-    { id: 'vm.start', name: 'vm.start', category: 'vm', description: 'Démarrer une VM' },
-    { id: 'vm.stop', name: 'vm.stop', category: 'vm', description: 'Arrêter une VM' },
-    { id: 'vm.restart', name: 'vm.restart', category: 'vm', description: 'Redémarrer une VM' },
-    { id: 'vm.suspend', name: 'vm.suspend', category: 'vm', description: 'Suspendre/Reprendre une VM' },
-    { id: 'vm.snapshot', name: 'vm.snapshot', category: 'vm', description: 'Créer/Supprimer des snapshots' },
-    { id: 'vm.backup', name: 'vm.backup', category: 'vm', description: 'Sauvegarder/Restaurer une VM' },
-    { id: 'vm.clone', name: 'vm.clone', category: 'vm', description: 'Cloner une VM' },
-    { id: 'vm.migrate', name: 'vm.migrate', category: 'vm', description: 'Migrer une VM', is_dangerous: 1 },
-    { id: 'vm.config', name: 'vm.config', category: 'vm', description: 'Modifier la configuration VM', is_dangerous: 1 },
-    { id: 'vm.delete', name: 'vm.delete', category: 'vm', description: 'Supprimer une VM', is_dangerous: 1 },
-    { id: 'vm.create', name: 'vm.create', category: 'vm', description: 'Créer une nouvelle VM', is_dangerous: 1 },
-    
+    { id: 'vm.view', name: 'vm.view', category: 'vm', description: 'View VMs and their details' },
+    { id: 'vm.console', name: 'vm.console', category: 'vm', description: 'Access VNC/SPICE console' },
+    { id: 'vm.start', name: 'vm.start', category: 'vm', description: 'Start a VM' },
+    { id: 'vm.stop', name: 'vm.stop', category: 'vm', description: 'Stop a VM' },
+    { id: 'vm.restart', name: 'vm.restart', category: 'vm', description: 'Restart a VM' },
+    { id: 'vm.suspend', name: 'vm.suspend', category: 'vm', description: 'Suspend/Resume a VM' },
+    { id: 'vm.snapshot', name: 'vm.snapshot', category: 'vm', description: 'Create/Delete snapshots' },
+    { id: 'vm.backup', name: 'vm.backup', category: 'vm', description: 'Backup/Restore a VM' },
+    { id: 'vm.clone', name: 'vm.clone', category: 'vm', description: 'Clone a VM' },
+    { id: 'vm.migrate', name: 'vm.migrate', category: 'vm', description: 'Migrate a VM', is_dangerous: 1 },
+    { id: 'vm.config', name: 'vm.config', category: 'vm', description: 'Modify VM configuration', is_dangerous: 1 },
+    { id: 'vm.delete', name: 'vm.delete', category: 'vm', description: 'Delete a VM', is_dangerous: 1 },
+    { id: 'vm.create', name: 'vm.create', category: 'vm', description: 'Create a new VM', is_dangerous: 1 },
+
     // Storage Operations
-    { id: 'storage.view', name: 'storage.view', category: 'storage', description: 'Voir les stockages' },
-    { id: 'storage.content', name: 'storage.content', category: 'storage', description: 'Parcourir le contenu du stockage' },
-    { id: 'storage.upload', name: 'storage.upload', category: 'storage', description: 'Uploader des fichiers ISO/templates' },
-    { id: 'storage.delete', name: 'storage.delete', category: 'storage', description: 'Supprimer des fichiers', is_dangerous: 1 },
-    
+    { id: 'storage.view', name: 'storage.view', category: 'storage', description: 'View storages' },
+    { id: 'storage.content', name: 'storage.content', category: 'storage', description: 'Browse storage content' },
+    { id: 'storage.upload', name: 'storage.upload', category: 'storage', description: 'Upload ISO files/templates' },
+    { id: 'storage.delete', name: 'storage.delete', category: 'storage', description: 'Delete files', is_dangerous: 1 },
+
     // Node Operations
-    { id: 'node.view', name: 'node.view', category: 'node', description: 'Voir les nœuds du cluster' },
-    { id: 'node.console', name: 'node.console', category: 'node', description: 'Accéder à la console du nœud' },
-    { id: 'node.services', name: 'node.services', category: 'node', description: 'Gérer les services', is_dangerous: 1 },
-    { id: 'node.network', name: 'node.network', category: 'node', description: 'Configurer le réseau', is_dangerous: 1 },
-    
+    { id: 'node.view', name: 'node.view', category: 'node', description: 'View cluster nodes' },
+    { id: 'node.console', name: 'node.console', category: 'node', description: 'Access node console' },
+    { id: 'node.services', name: 'node.services', category: 'node', description: 'Manage services', is_dangerous: 1 },
+    { id: 'node.network', name: 'node.network', category: 'node', description: 'Configure network', is_dangerous: 1 },
+
     // Cluster/Connection Operations
-    { id: 'connection.view', name: 'connection.view', category: 'connection', description: 'Voir les connexions PVE/PBS' },
-    { id: 'connection.manage', name: 'connection.manage', category: 'connection', description: 'Gérer les connexions', is_dangerous: 1 },
-    
+    { id: 'connection.view', name: 'connection.view', category: 'connection', description: 'View PVE/PBS connections' },
+    { id: 'connection.manage', name: 'connection.manage', category: 'connection', description: 'Manage connections', is_dangerous: 1 },
+
     // Backup Operations
-    { id: 'backup.view', name: 'backup.view', category: 'backup', description: 'Voir les sauvegardes' },
-    { id: 'backup.restore', name: 'backup.restore', category: 'backup', description: 'Restaurer une sauvegarde', is_dangerous: 1 },
-    { id: 'backup.delete', name: 'backup.delete', category: 'backup', description: 'Supprimer une sauvegarde', is_dangerous: 1 },
-    
+    { id: 'backup.view', name: 'backup.view', category: 'backup', description: 'View backups' },
+    { id: 'backup.restore', name: 'backup.restore', category: 'backup', description: 'Restore a backup', is_dangerous: 1 },
+    { id: 'backup.delete', name: 'backup.delete', category: 'backup', description: 'Delete a backup', is_dangerous: 1 },
+
     // Backup Job Operations (scheduled backups)
-    { id: 'backup.job.view', name: 'backup.job.view', category: 'backup', description: 'Voir les jobs de sauvegarde planifiés' },
-    { id: 'backup.job.create', name: 'backup.job.create', category: 'backup', description: 'Créer un job de sauvegarde', is_dangerous: 1 },
-    { id: 'backup.job.edit', name: 'backup.job.edit', category: 'backup', description: 'Modifier un job de sauvegarde', is_dangerous: 1 },
-    { id: 'backup.job.delete', name: 'backup.job.delete', category: 'backup', description: 'Supprimer un job de sauvegarde', is_dangerous: 1 },
-    { id: 'backup.job.run', name: 'backup.job.run', category: 'backup', description: 'Exécuter manuellement un job de sauvegarde' },
-    
+    { id: 'backup.job.view', name: 'backup.job.view', category: 'backup', description: 'View scheduled backup jobs' },
+    { id: 'backup.job.create', name: 'backup.job.create', category: 'backup', description: 'Create a backup job', is_dangerous: 1 },
+    { id: 'backup.job.edit', name: 'backup.job.edit', category: 'backup', description: 'Edit a backup job', is_dangerous: 1 },
+    { id: 'backup.job.delete', name: 'backup.job.delete', category: 'backup', description: 'Delete a backup job', is_dangerous: 1 },
+    { id: 'backup.job.run', name: 'backup.job.run', category: 'backup', description: 'Manually run a backup job' },
+
     // Node Management
-    { id: 'node.manage', name: 'node.manage', category: 'node', description: 'Gérer les nœuds (mises à jour, redémarrage)', is_dangerous: 1 },
+    { id: 'node.manage', name: 'node.manage', category: 'node', description: 'Manage nodes (updates, restart)', is_dangerous: 1 },
 
     // Automation (DRS, Rolling Updates, etc.)
-    { id: 'automation.view', name: 'automation.view', category: 'automation', description: 'Voir les paramètres d\'automatisation et DRS' },
-    { id: 'automation.manage', name: 'automation.manage', category: 'automation', description: 'Configurer l\'automatisation et DRS', is_dangerous: 1 },
-    { id: 'automation.execute', name: 'automation.execute', category: 'automation', description: 'Exécuter des actions d\'automatisation', is_dangerous: 1 },
+    { id: 'automation.view', name: 'automation.view', category: 'automation', description: 'View automation and DRS settings' },
+    { id: 'automation.manage', name: 'automation.manage', category: 'automation', description: 'Configure automation and DRS', is_dangerous: 1 },
+    { id: 'automation.execute', name: 'automation.execute', category: 'automation', description: 'Execute automation actions', is_dangerous: 1 },
 
     // Operations
-    { id: 'events.view', name: 'events.view', category: 'operations', description: 'Voir les événements et logs' },
-    { id: 'alerts.view', name: 'alerts.view', category: 'operations', description: 'Voir les alertes' },
-    { id: 'alerts.manage', name: 'alerts.manage', category: 'operations', description: 'Gérer les alertes (acknowledge, resolve)', is_dangerous: 1 },
-    { id: 'tasks.view', name: 'tasks.view', category: 'operations', description: 'Voir le task center' },
-    { id: 'reports.view', name: 'reports.view', category: 'operations', description: 'Voir les rapports' },
+    { id: 'events.view', name: 'events.view', category: 'operations', description: 'View events and logs' },
+    { id: 'alerts.view', name: 'alerts.view', category: 'operations', description: 'View alerts' },
+    { id: 'alerts.manage', name: 'alerts.manage', category: 'operations', description: 'Manage alerts (acknowledge, resolve)', is_dangerous: 1 },
+    { id: 'tasks.view', name: 'tasks.view', category: 'operations', description: 'View task center' },
+    { id: 'reports.view', name: 'reports.view', category: 'operations', description: 'View reports' },
 
     // Storage Admin
-    { id: 'storage.admin', name: 'storage.admin', category: 'storage', description: 'Accès aux pages Storage Overview et Ceph', is_dangerous: 1 },
+    { id: 'storage.admin', name: 'storage.admin', category: 'storage', description: 'Access Storage Overview and Ceph pages', is_dangerous: 1 },
 
     // Admin Operations
-    { id: 'admin.users', name: 'admin.users', category: 'admin', description: 'Gérer les utilisateurs', is_dangerous: 1 },
-    { id: 'admin.rbac', name: 'admin.rbac', category: 'admin', description: 'Gérer les rôles et permissions', is_dangerous: 1 },
-    { id: 'admin.settings', name: 'admin.settings', category: 'admin', description: 'Modifier les paramètres', is_dangerous: 1 },
-    { id: 'admin.audit', name: 'admin.audit', category: 'admin', description: 'Consulter les logs d\'audit' },
-    { id: 'admin.compliance', name: 'admin.compliance', category: 'admin', description: 'Gérer la conformité et les politiques de sécurité', is_dangerous: 1 },
+    { id: 'admin.users', name: 'admin.users', category: 'admin', description: 'Manage users', is_dangerous: 1 },
+    { id: 'admin.rbac', name: 'admin.rbac', category: 'admin', description: 'Manage roles and permissions', is_dangerous: 1 },
+    { id: 'admin.settings', name: 'admin.settings', category: 'admin', description: 'Modify settings', is_dangerous: 1 },
+    { id: 'admin.audit', name: 'admin.audit', category: 'admin', description: 'View audit logs' },
+    { id: 'admin.compliance', name: 'admin.compliance', category: 'admin', description: 'Manage compliance and security policies', is_dangerous: 1 },
   ]
 
   // Utiliser INSERT OR IGNORE pour ajouter les permissions manquantes sans erreur
@@ -454,18 +454,18 @@ export function getDb() {
     const now = new Date().toISOString()
 
     const roles = [
-      { 
-        id: 'role_super_admin', 
-        name: 'Super Admin', 
-        description: 'Accès total à toutes les fonctionnalités',
+      {
+        id: 'role_super_admin',
+        name: 'Super Admin',
+        description: 'Full access to all features',
         is_system: 1,
         color: '#ef4444',
-        permissions: ['*'] // Wildcard = toutes les permissions
+        permissions: ['*'] // Wildcard = all permissions
       },
       {
         id: 'role_operator',
-        name: 'Opérateur',
-        description: 'Gestion quotidienne des VMs sans accès admin',
+        name: 'Operator',
+        description: 'Day-to-day VM management without admin access',
         is_system: 1,
         color: '#f59e0b',
         permissions: [
@@ -478,7 +478,7 @@ export function getDb() {
       {
         id: 'role_vm_admin',
         name: 'VM Admin',
-        description: 'Administration complète des VMs',
+        description: 'Full VM administration',
         is_system: 1,
         color: '#8b5cf6',
         permissions: [
@@ -491,8 +491,8 @@ export function getDb() {
       },
       {
         id: 'role_viewer',
-        name: 'Lecteur',
-        description: 'Lecture seule sur toutes les ressources',
+        name: 'Viewer',
+        description: 'Read-only access to all resources',
         is_system: 1,
         color: '#3b82f6',
         permissions: [
@@ -501,9 +501,9 @@ export function getDb() {
         ]
       },
       { 
-        id: 'role_vm_user', 
-        name: 'Utilisateur VM', 
-        description: 'Utilisation basique des VMs assignées (console, start/stop)',
+        id: 'role_vm_user',
+        name: 'VM User',
+        description: 'Basic usage of assigned VMs (console, start/stop)',
         is_system: 1,
         color: '#10b981',
         permissions: [

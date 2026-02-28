@@ -59,20 +59,19 @@ const pct = (v: any) => Math.max(0, Math.min(100, Number(v ?? 0)))
 const bytesToGb = (b: any) => Math.round((Number(b || 0) / 1024 / 1024 / 1024) * 10) / 10
 
 const secondsToUptime = (s: any) => {
-  // Si c'est déjà une string formatée (ex: "2j 5h"), la retourner telle quelle
-  if (typeof s === 'string' && s.match(/^\d+[jhdms]/)) return s
-  
+  if (typeof s === 'string' && s.match(/^\d+[dhdms]/)) return s
+
   const sec = Number(s || 0)
 
   if (!sec || isNaN(sec)) return '—'
   const d = Math.floor(sec / 86400)
   const h = Math.floor((sec % 86400) / 3600)
 
-  if (d > 0) return `${d}j ${h}h`
+  if (d > 0) return `${d}d ${h}h`
   const m = Math.floor((sec % 3600) / 60)
 
   if (h > 0) return `${h}h ${m}m`
-  
+
 return `${m}m`
 }
 

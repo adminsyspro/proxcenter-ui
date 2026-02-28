@@ -37,7 +37,7 @@ const secondsToUptime = (s: any) => {
   const d = Math.floor(sec / 86400)
   const h = Math.floor((sec % 86400) / 3600)
 
-  if (d > 0) return `${d}j ${h}h`
+  if (d > 0) return `${d}d ${h}h`
   const m = Math.floor((sec % 3600) / 60)
 
   if (h > 0) return `${h}h ${m}m`

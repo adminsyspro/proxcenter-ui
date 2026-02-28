@@ -1233,6 +1233,16 @@ function AITab() {
                     sx={{ mb: 2 }}
                   />
 
+                  <TextField
+                    fullWidth
+                    label={t('settings.openAiBaseUrl')}
+                    value={settings.openaiBaseUrl || ''}
+                    onChange={e => setSettings(s => ({ ...s, openaiBaseUrl: e.target.value }))}
+                    placeholder='https://api.openai.com/v1'
+                    helperText={t('settings.openAiBaseUrlHelp')}
+                    sx={{ mb: 2 }}
+                  />
+
                   <FormControl fullWidth>
                     <InputLabel>{t('settings.modelLabel')}</InputLabel>
                     <Select

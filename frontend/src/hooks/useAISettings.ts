@@ -20,6 +20,7 @@ interface AISettingsState {
   ollamaUrl: string
   ollamaModel: string
   openaiKey: string
+  openaiBaseUrl: string
   openaiModel: string
   anthropicKey?: string
   anthropicModel?: string
@@ -31,6 +32,7 @@ const defaultSettings: AISettingsState = {
   ollamaUrl: 'http://localhost:11434',
   ollamaModel: 'mistral:7b',
   openaiKey: '',
+  openaiBaseUrl: '',
   openaiModel: 'gpt-4.1-nano',
 }
 

@@ -158,117 +158,157 @@ async function fetchProxmoxData(connections: any[]) {
   return allData
 }
 
-// Construire le prompt système avec le contexte réel
-async function buildSystemPrompt() {
-  const connections = await getConnections()
+// Bilingual prompt strings
+const promptStrings = {
+  en: {
+    intro: 'You are the AI assistant of ProxCenter, a Proxmox infrastructure management platform.',
+    noActions: 'IMPORTANT: You CANNOT execute actions. You can only analyze and suggest. If the user asks for an action, explain what needs to be done but specify they must do it manually via the ProxCenter or Proxmox interface.',
+    stateHeader: '=== CURRENT INFRASTRUCTURE STATE (live data) ===',
+    summary: 'Global summary',
+    totalVMs: (t: number, r: number, s: number) => `${t} VMs/CTs total (${r} running, ${s} stopped)`,
+    hosts: (t: number, o: number) => `${t} host(s) (${o} online)`,
+    clusters: (n: number, names: string) => `${n} cluster(s) configured: ${names || 'none'}`,
+    hostsHeader: 'Proxmox hosts status',
+    online: 'Online', offline: 'Offline',
+    on: 'on',
+    topCpu: 'Top 10 VMs/CTs by CPU usage',
+    topRam: 'Top 10 VMs/CTs by RAM usage',
+    stoppedHeader: (n: number) => `STOPPED VMs/CTs - FULL LIST (${n} total)`,
+    stoppedCluster: (name: string, n: number) => `[${name}] (${n} stopped)`,
+    alertsActive: (n: number) => `Active alerts (${n})`,
+    noAlerts: 'No active alerts.',
+    runningHeader: (total: number, shown: boolean) => `Running VMs/CTs (${total} total${shown ? ', first 20 shown' : ''})`,
+    andMore: (n: number) => `... and ${n} more running VMs/CTs`,
+    instructions: '=== INSTRUCTIONS ===',
+    respondLang: 'Respond in English concisely',
+    useData: 'Use ONLY the data above',
+    citeNames: 'Cite exact VM names and metrics',
+    explainActions: 'For actions, explain the procedure but specify you cannot execute it',
+  },
+  fr: {
+    intro: 'Tu es l\'assistant IA de ProxCenter, une plateforme de gestion d\'infrastructure Proxmox.',
+    noActions: 'IMPORTANT: Tu ne peux PAS exécuter d\'actions. Tu peux uniquement analyser et suggérer. Si l\'utilisateur demande une action, explique ce qu\'il faudrait faire mais précise qu\'il doit le faire manuellement via l\'interface ProxCenter ou Proxmox.',
+    stateHeader: '=== ÉTAT ACTUEL DE L\'INFRASTRUCTURE (données en temps réel) ===',
+    summary: 'Résumé global',
+    totalVMs: (t: number, r: number, s: number) => `${t} VMs/CTs au total (${r} en cours d'exécution, ${s} arrêtées)`,
+    hosts: (t: number, o: number) => `${t} hôte(s) (${o} en ligne)`,
+    clusters: (n: number, names: string) => `${n} cluster(s) configuré(s): ${names || 'aucun'}`,
+    hostsHeader: 'État des hôtes Proxmox',
+    online: 'En ligne', offline: 'Hors ligne',
+    on: 'sur',
+    topCpu: 'Top 10 VMs/CTs par utilisation CPU',
+    topRam: 'Top 10 VMs/CTs par utilisation RAM',
+    stoppedHeader: (n: number) => `VMs/CTs ARRÊTÉES - LISTE COMPLÈTE (${n} total)`,
+    stoppedCluster: (name: string, n: number) => `[${name}] (${n} arrêtées)`,
+    alertsActive: (n: number) => `Alertes actives (${n})`,
+    noAlerts: 'Aucune alerte active.',
+    runningHeader: (total: number, shown: boolean) => `VMs/CTs en cours d'exécution (${total} total${shown ? ', 20 premières affichées' : ''})`,
+    andMore: (n: number) => `... et ${n} autres VMs/CTs en cours d'exécution`,
+    instructions: '=== INSTRUCTIONS ===',
+    respondLang: 'Réponds en français de manière concise',
+    useData: 'Utilise UNIQUEMENT les données ci-dessus',
+    citeNames: 'Cite les noms exacts des VMs et métriques',
+    explainActions: 'Pour les actions, explique la procédure mais précise que tu ne peux pas l\'exécuter',
+  }
+}
 
+async function buildSystemPrompt(lang: string = 'en') {
+  const s = lang === 'fr' ? promptStrings.fr : promptStrings.en
+  const connections = await getConnections()
   const alerts = await getActiveAlerts()
   const infraData = await fetchProxmoxData(connections)
-  
-  // Trier les VMs par CPU pour trouver les plus gourmandes
+
   const topCpuVMs = [...infraData.vms]
     .filter((vm: any) => vm.status === 'running')
     .sort((a: any, b: any) => parseFloat(b.cpu) - parseFloat(a.cpu))
-    .slice(0, 10) // Top 10 CPU
-  
-  // Trier les VMs par RAM
+    .slice(0, 10)
+
   const topMemVMs = [...infraData.vms]
     .filter((vm: any) => vm.status === 'running')
     .sort((a: any, b: any) => parseFloat(b.mem) - parseFloat(a.mem))
-    .slice(0, 10) // Top 10 RAM
+    .slice(0, 10)
 
-  // VMs arrêtées (toutes)
   const stoppedVMs = infraData.vms.filter((vm: any) => vm.status !== 'running')
-  
-  // VMs en cours d'exécution
   const runningVMs = infraData.vms.filter((vm: any) => vm.status === 'running')
-  
-  let prompt = `Tu es l'assistant IA de ProxCenter, une plateforme de gestion d'infrastructure Proxmox.
 
-IMPORTANT: Tu ne peux PAS exécuter d'actions. Tu peux uniquement analyser et suggérer. Si l'utilisateur demande une action, explique ce qu'il faudrait faire mais précise qu'il doit le faire manuellement via l'interface ProxCenter ou Proxmox.
+  let prompt = `${s.intro}
 
-=== ÉTAT ACTUEL DE L'INFRASTRUCTURE (données en temps réel) ===
+${s.noActions}
 
-📊 Résumé global:
-- ${infraData.summary.totalVMs} VMs/CTs au total (${infraData.summary.runningVMs} en cours d'exécution, ${infraData.summary.stoppedVMs} arrêtées)
-- ${infraData.summary.totalNodes} hôte(s) (${infraData.summary.onlineNodes} en ligne)
-- ${infraData.clusters.length} cluster(s) configuré(s): ${infraData.clusters.map((c: any) => c.name).join(', ') || 'aucun'}
+${s.stateHeader}
+
+📊 ${s.summary}:
+- ${s.totalVMs(infraData.summary.totalVMs, infraData.summary.runningVMs, infraData.summary.stoppedVMs)}
+- ${s.hosts(infraData.summary.totalNodes, infraData.summary.onlineNodes)}
+- ${s.clusters(infraData.clusters.length, infraData.clusters.map((c: any) => c.name).join(', '))}
 `
 
   if (infraData.nodes.length > 0) {
     prompt += `
-🖥️ État des hôtes Proxmox:
-${infraData.nodes.map((n: any) => `- ${n.name} (${n.cluster}): ${n.status === 'online' ? '✅ En ligne' : '❌ Hors ligne'} | CPU: ${n.cpu}% | RAM: ${n.mem}% (${n.memUsed}/${n.memTotal} GB)`).join('\n')}
+🖥️ ${s.hostsHeader}:
+${infraData.nodes.map((n: any) => `- ${n.name} (${n.cluster}): ${n.status === 'online' ? `✅ ${s.online}` : `❌ ${s.offline}`} | CPU: ${n.cpu}% | RAM: ${n.mem}% (${n.memUsed}/${n.memTotal} GB)`).join('\n')}
 `
   }
 
   if (topCpuVMs.length > 0) {
     prompt += `
-🔥 Top 10 VMs/CTs par utilisation CPU:
-${topCpuVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) sur ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
+🔥 ${s.topCpu}:
+${topCpuVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
 `
   }
 
   if (topMemVMs.length > 0) {
     prompt += `
-💾 Top 10 VMs/CTs par utilisation RAM:
-${topMemVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) sur ${vm.node} - RAM: ${vm.mem}% (${vm.memUsed}/${vm.memTotal} GB)`).join('\n')}
+💾 ${s.topRam}:
+${topMemVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - RAM: ${vm.mem}% (${vm.memUsed}/${vm.memTotal} GB)`).join('\n')}
 `
   }
 
-  // Liste COMPLÈTE des VMs arrêtées - groupées par cluster pour réduire la taille
   let stoppedVMsSection = ''
-
   if (stoppedVMs.length > 0) {
-    // Grouper par cluster
     const byCluster: Record<string, any[]> = {}
-
     stoppedVMs.forEach((vm: any) => {
       if (!byCluster[vm.cluster]) byCluster[vm.cluster] = []
       byCluster[vm.cluster].push(vm)
     })
-    
     stoppedVMsSection = `
-⏹️ VMs/CTs ARRÊTÉES - LISTE COMPLÈTE (${stoppedVMs.length} total):
+⏹️ ${s.stoppedHeader(stoppedVMs.length)}:
 ${Object.entries(byCluster).map(([cluster, vms]) => {
   return `
-[${cluster}] (${vms.length} arrêtées):
-${vms.map((vm: any) => `  - ${vm.name} (${vm.type} ${vm.vmid}) sur ${vm.node}`).join('\n')}`
+${s.stoppedCluster(cluster, vms.length)}:
+${vms.map((vm: any) => `  - ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node}`).join('\n')}`
 }).join('\n')}
 `
   }
 
   if (alerts.length > 0) {
     prompt += `
-⚠️ Alertes actives (${alerts.length}):
+⚠️ ${s.alertsActive(alerts.length)}:
 ${alerts.map((a: any) => `- [${a.severity?.toUpperCase()}] ${a.message} (${a.entityName || a.entityType})`).join('\n')}
 `
   } else {
     prompt += `
-✅ Aucune alerte active.
+✅ ${s.noAlerts}
 `
   }
 
-  // Liste des VMs en cours d'exécution (limité pour le contexte)
   if (runningVMs.length > 0) {
-    const vmsToShow = runningVMs.slice(0, 20) // Réduit à 20
-
+    const vmsToShow = runningVMs.slice(0, 20)
     prompt += `
-📋 VMs/CTs en cours d'exécution (${runningVMs.length} total${runningVMs.length > 20 ? ', 20 premières affichées' : ''}):
-${vmsToShow.map((vm: any) => `- ${vm.name} (${vm.type} ${vm.vmid}) sur ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
-${runningVMs.length > 20 ? `\n... et ${runningVMs.length - 20} autres VMs/CTs en cours d'exécution` : ''}
+📋 ${s.runningHeader(runningVMs.length, runningVMs.length > 20)}:
+${vmsToShow.map((vm: any) => `- ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
+${runningVMs.length > 20 ? `\n${s.andMore(runningVMs.length - 20)}` : ''}
 `
   }
 
-  // IMPORTANT: VMs arrêtées à la FIN pour que Mistral les voie bien
   prompt += stoppedVMsSection
 
   prompt += `
-=== INSTRUCTIONS ===
-- Réponds en français de manière concise
-- Utilise UNIQUEMENT les données ci-dessus
-- Cite les noms exacts des VMs et métriques
-- Pour les actions, explique la procédure mais précise que tu ne peux pas l'exécuter
+${s.instructions}
+- ${s.respondLang}
+- ${s.useData}
+- ${s.citeNames}
+- ${s.explainActions}
 `
 
   return prompt
@@ -277,27 +317,31 @@ ${runningVMs.length > 20 ? `\n... et ${runningVMs.length - 20} autres VMs/CTs en
 // POST /api/v1/ai/chat - Envoyer un message au LLM
 export async function POST(request: Request) {
   try {
-    const { messages } = await request.json()
+    const { messages, locale } = await request.json()
+    const lang = locale === 'fr' ? 'fr' : 'en'
     const settings = getAISettings()
-    
+
     if (!settings.enabled) {
-      return NextResponse.json({ 
-        error: 'L\'assistant IA n\'est pas activé. Allez dans Paramètres → Intelligence Artificielle pour le configurer.' 
+      return NextResponse.json({
+        error: lang === 'fr'
+          ? 'L\'assistant IA n\'est pas activé. Allez dans Paramètres → Intelligence Artificielle pour le configurer.'
+          : 'The AI assistant is not enabled. Go to Settings → Artificial Intelligence to configure it.'
       }, { status: 400 })
     }
-    
-    const systemPrompt = await buildSystemPrompt()
-    
-    // Pour Ollama, on injecte le contexte dans le premier message utilisateur
-    // car certains modèles ignorent le system prompt
+
+    const systemPrompt = await buildSystemPrompt(lang)
+
     const lastUserMessage = messages[messages.length - 1]
+    const userInstruction = lang === 'fr'
+      ? 'Réponds en utilisant UNIQUEMENT les données de l\'infrastructure ci-dessus. Cite les noms exacts des VMs et leurs métriques.'
+      : 'Respond using ONLY the infrastructure data above. Cite exact VM names and their metrics.'
 
     const contextualizedMessage = `${systemPrompt}
 
-=== QUESTION DE L'UTILISATEUR ===
+=== ${lang === 'fr' ? 'QUESTION DE L\'UTILISATEUR' : 'USER QUESTION'} ===
 ${lastUserMessage.content}
 
-Réponds en utilisant UNIQUEMENT les données de l'infrastructure ci-dessus. Cite les noms exacts des VMs et leurs métriques.`
+${userInstruction}`
 
     if (settings.provider === 'ollama') {
       // Ollama API - contexte injecté dans le message
@@ -342,9 +386,10 @@ return NextResponse.json({
         ...messages
       ]
       
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const openaiBase = (settings.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+      const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${settings.openaiKey}`
         },

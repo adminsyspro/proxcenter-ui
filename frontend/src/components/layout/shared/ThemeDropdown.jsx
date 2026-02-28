@@ -128,7 +128,7 @@ const ThemeDropdown = () => {
         onClose={() => setTooltipOpen(false)}
         open={open ? false : tooltipOpen ? true : false}
       >
-        <IconButton ref={anchorRef} onClick={handleToggle} className='!text-textPrimary'>
+        <IconButton ref={anchorRef} onClick={handleToggle} sx={{ color: 'text.primary' }}>
           <i className={getModeIcon()} />
         </IconButton>
       </Tooltip>

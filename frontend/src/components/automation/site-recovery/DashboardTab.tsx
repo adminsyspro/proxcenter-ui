@@ -306,7 +306,7 @@ const BANDWIDTH_PALETTE = [
   '#E91E63', '#8BC34A', '#FF5722'
 ]
 
-const BUCKET_SIZE_MS = 5 * 60 * 1000 // 5 min
+const BUCKET_SIZE_MS = 30 * 1000 // 30s
 
 function formatBps(bps: number): string {
   if (!bps || bps <= 0) return '0 B/s'
@@ -320,7 +320,7 @@ function useBandwidthData(jobs?: ReplicationJob[], connections?: { id: string; n
 
   // Re-read localStorage every 15s
   useEffect(() => {
-    const iv = setInterval(() => setTick(n => n + 1), 15_000)
+    const iv = setInterval(() => setTick(n => n + 1), 5_000)
     return () => clearInterval(iv)
   }, [])
 

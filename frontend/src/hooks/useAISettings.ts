@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 async function fetchJson(url: string, init?: RequestInit) {
   const r = await fetch(url, init)
@@ -43,6 +43,7 @@ export function useAISettings() {
   const [saving, setSaving] = useState(false)
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadSettings = useCallback(async () => {
     try {
@@ -103,36 +104,65 @@ export function useAISettings() {
     }
   }, [settings])
 
-  const loadOllamaModels = useCallback(async () => {
+  const loadModels = useCallback(async () => {
+    const { provider, ollamaUrl, openaiKey, openaiBaseUrl, anthropicKey } = settings
+
+    // Check required fields per provider
+    if (provider === 'ollama' && !ollamaUrl) return
+    if (provider === 'openai' && !openaiKey) return
+    if (provider === 'anthropic' && !anthropicKey) return
+
     setLoadingModels(true)
 
     try {
-      const res = await fetch(`${settings.ollamaUrl}/api/tags`)
+      const res = await fetch('/api/v1/ai/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, ollamaUrl, openaiKey, openaiBaseUrl, anthropicKey }),
+      })
 
-      if (res.ok) {
-        const json = await res.json()
-        const models = json?.models?.map((m: any) => m.name) || []
+      const json = await res.json()
 
-        setAvailableModels(models)
+      if (json?.models?.length > 0) {
+        setAvailableModels(json.models)
       }
     } catch (e) {
-      console.error('Failed to load Ollama models', e)
+      console.error('Failed to load models', e)
     } finally {
       setLoadingModels(false)
     }
-  }, [settings.ollamaUrl])
+  }, [settings])
 
   // Load settings on mount
   useEffect(() => {
     loadSettings()
   }, [loadSettings])
 
-  // Auto-load Ollama models when provider is ollama
+  // Debounced auto-load models when provider/URL/key change
   useEffect(() => {
-    if (settings.provider === 'ollama' && settings.ollamaUrl) {
-      loadOllamaModels()
+    const { provider, ollamaUrl, openaiKey, anthropicKey } = settings
+
+    // Clear models when conditions not met
+    if (
+      (provider === 'ollama' && !ollamaUrl) ||
+      (provider === 'openai' && !openaiKey) ||
+      (provider === 'anthropic' && !anthropicKey)
+    ) {
+      setAvailableModels([])
+
+      return
     }
-  }, [settings.provider, settings.ollamaUrl, loadOllamaModels])
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(() => {
+      loadModels()
+    }, 500)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [settings.provider, settings.ollamaUrl, settings.openaiKey, settings.openaiBaseUrl, settings.anthropicKey, loadModels])
 
   return {
     settings,
@@ -146,6 +176,6 @@ export function useAISettings() {
     loadSettings,
     saveSettings,
     testConnection,
-    loadOllamaModels,
+    loadModels,
   }
 }

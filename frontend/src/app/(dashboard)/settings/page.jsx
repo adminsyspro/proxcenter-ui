@@ -1067,7 +1067,7 @@ function AITab() {
     loadingModels,
     saveSettings: hookSaveSettings,
     testConnection: hookTestConnection,
-    loadOllamaModels,
+    loadModels,
   } = useAISettings()
 
   const saveSettings = async () => {
@@ -1205,7 +1205,7 @@ function AITab() {
 
                   <Button
                     size='small'
-                    onClick={loadOllamaModels}
+                    onClick={loadModels}
                     disabled={loadingModels}
                     startIcon={<i className='ri-refresh-line' />}
                   >
@@ -1243,19 +1243,38 @@ function AITab() {
                     sx={{ mb: 2 }}
                   />
 
-                  <FormControl fullWidth>
+                  <FormControl fullWidth sx={{ mb: 2 }}>
                     <InputLabel>{t('settings.modelLabel')}</InputLabel>
                     <Select
                       value={settings.openaiModel}
                       label={t('settings.modelLabel')}
                       onChange={e => setSettings(s => ({ ...s, openaiModel: e.target.value }))}
                     >
-                      <MenuItem value='gpt-4.1-nano'>{t('settings.openaiModels.gpt41Nano')}</MenuItem>
-                      <MenuItem value='gpt-4.1-mini'>{t('settings.openaiModels.gpt41Mini')}</MenuItem>
-                      <MenuItem value='gpt-4.1'>{t('settings.openaiModels.gpt41')}</MenuItem>
-                      <MenuItem value='o3-mini'>{t('settings.openaiModels.o3Mini')}</MenuItem>
+                      {availableModels.length > 0 ? (
+                        availableModels.map(m => (
+                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                        ))
+                      ) : (
+                        <>
+                          <MenuItem value='gpt-4.1-nano'>{t('settings.openaiModels.gpt41Nano')}</MenuItem>
+                          <MenuItem value='gpt-4.1-mini'>{t('settings.openaiModels.gpt41Mini')}</MenuItem>
+                          <MenuItem value='gpt-4.1'>{t('settings.openaiModels.gpt41')}</MenuItem>
+                          <MenuItem value='o3-mini'>{t('settings.openaiModels.o3Mini')}</MenuItem>
+                        </>
+                      )}
                     </Select>
                   </FormControl>
+
+                  {loadingModels && <LinearProgress sx={{ mb: 2 }} />}
+
+                  <Button
+                    size='small'
+                    onClick={loadModels}
+                    disabled={loadingModels || !settings.openaiKey}
+                    startIcon={<i className='ri-refresh-line' />}
+                  >
+                    {t('settings.refreshModels')}
+                  </Button>
                 </Box>
               )}
 
@@ -1278,18 +1297,37 @@ function AITab() {
                     sx={{ mb: 2 }}
                   />
 
-                  <FormControl fullWidth>
+                  <FormControl fullWidth sx={{ mb: 2 }}>
                     <InputLabel>{t('settings.modelLabel')}</InputLabel>
                     <Select
                       value={settings.anthropicModel || 'claude-haiku-4-5-20251001'}
                       label={t('settings.modelLabel')}
                       onChange={e => setSettings(s => ({ ...s, anthropicModel: e.target.value }))}
                     >
-                      <MenuItem value='claude-haiku-4-5-20251001'>{t('settings.anthropicModels.haiku')}</MenuItem>
-                      <MenuItem value='claude-sonnet-4-6-20250514'>{t('settings.anthropicModels.sonnet')}</MenuItem>
-                      <MenuItem value='claude-opus-4-6-20250918'>{t('settings.anthropicModels.opus')}</MenuItem>
+                      {availableModels.length > 0 ? (
+                        availableModels.map(m => (
+                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                        ))
+                      ) : (
+                        <>
+                          <MenuItem value='claude-haiku-4-5-20251001'>{t('settings.anthropicModels.haiku')}</MenuItem>
+                          <MenuItem value='claude-sonnet-4-6-20250514'>{t('settings.anthropicModels.sonnet')}</MenuItem>
+                          <MenuItem value='claude-opus-4-6-20250918'>{t('settings.anthropicModels.opus')}</MenuItem>
+                        </>
+                      )}
                     </Select>
                   </FormControl>
+
+                  {loadingModels && <LinearProgress sx={{ mb: 2 }} />}
+
+                  <Button
+                    size='small'
+                    onClick={loadModels}
+                    disabled={loadingModels || !settings.anthropicKey}
+                    startIcon={<i className='ri-refresh-line' />}
+                  >
+                    {t('settings.refreshModels')}
+                  </Button>
                 </Box>
               )}
             </CardContent>

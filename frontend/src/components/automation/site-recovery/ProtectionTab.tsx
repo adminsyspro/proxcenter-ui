@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -8,6 +8,8 @@ import {
   InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography,
   alpha, useTheme
 } from '@mui/material'
+
+import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
 
 import EmptyState from '@/components/EmptyState'
 import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
@@ -87,7 +89,61 @@ const DetailRow = ({ icon, label, value, mono }: { icon: string; label: string; 
   </Box>
 )
 
-const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick: () => void; vmNameMap?: Record<number, string>; t: any }) => {
+type ThroughputPoint = { ts: number; bps: number }
+
+const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[]; size?: 'small' | 'large' }) => {
+  const theme = useTheme()
+  const color = theme.palette.primary.main
+  const isLarge = size === 'large'
+  const gradientId = `bwGrad-${size}-${data[0]?.ts || 0}`
+
+  return (
+    <Box sx={{ width: isLarge ? '100%' : 80, height: isLarge ? 120 : 24, flexShrink: 0 }}>
+      <ResponsiveContainer width='100%' height='100%'>
+        <AreaChart data={data} margin={isLarge ? { top: 4, right: 4, left: 4, bottom: 4 } : { top: 2, right: 2, left: 2, bottom: 2 }}>
+          <defs>
+            <linearGradient id={gradientId} x1='0' y1='0' x2='0' y2='1'>
+              <stop offset='0%' stopColor={color} stopOpacity={0.3} />
+              <stop offset='100%' stopColor={color} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          {isLarge && (
+            <RTooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.[0]) return null
+                const p = payload[0].payload as ThroughputPoint
+
+                return (
+                  <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.75, boxShadow: 2 }}>
+                    <Typography variant='caption' sx={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+                      {formatBytes(p.bps)}/s
+                    </Typography>
+                    <Typography variant='caption' sx={{ display: 'block', color: 'text.secondary', fontSize: '0.6rem' }}>
+                      {new Date(p.ts).toLocaleTimeString()}
+                    </Typography>
+                  </Box>
+                )
+              }}
+              cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: '3 3' }}
+            />
+          )}
+          <Area
+            type='monotone'
+            dataKey='bps'
+            stroke={color}
+            strokeWidth={isLarge ? 1.5 : 1}
+            fill={`url(#${gradientId})`}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </Box>
+  )
+}
+
+const JobCard = ({ job, onClick, vmNameMap, throughputHistory, t }: { job: ReplicationJob; onClick: () => void; vmNameMap?: Record<number, string>; throughputHistory?: ThroughputPoint[]; t: any }) => {
   const theme = useTheme()
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
@@ -159,12 +215,17 @@ const JobCard = ({ job, onClick, vmNameMap, t }: { job: ReplicationJob; onClick:
             {jobLabel(job, vmNameMap)}
           </Typography>
 
-          {/* Syncing progress + throughput (centered in gradient area) */}
+          {/* Syncing progress + throughput + sparkline */}
           {isSyncing && (
-            <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 700, fontSize: '0.75rem', flexShrink: 0 }}>
-              {progress > 0 ? `${Math.round(progress)}%` : '…'}
-              {job.throughput_bps > 0 && <span style={{ fontWeight: 500, marginLeft: 6, opacity: 0.7 }}>{formatBytes(job.throughput_bps)}/s</span>}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+              {throughputHistory && throughputHistory.length >= 2 && (
+                <BandwidthSparkline data={throughputHistory} size='small' />
+              )}
+              <Typography variant='caption' sx={{ color: 'primary.main', fontWeight: 700, fontSize: '0.75rem' }}>
+                {progress > 0 ? `${Math.round(progress)}%` : '…'}
+                {job.throughput_bps > 0 && <span style={{ fontWeight: 500, marginLeft: 6, opacity: 0.7 }}>{formatBytes(job.throughput_bps)}/s</span>}
+              </Typography>
+            </Box>
           )}
 
           {/* RPO */}
@@ -236,6 +297,35 @@ export default function ProtectionTab({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Throughput history accumulation (frontend-side, resets on refresh)
+  const throughputHistoryRef = useRef<Map<string, ThroughputPoint[]>>(new Map())
+  const [, forceUpdate] = useState(0)
+
+  useEffect(() => {
+    const map = throughputHistoryRef.current
+
+    for (const job of jobs || []) {
+      if (job.status === 'syncing' && job.throughput_bps > 0) {
+        if (!map.has(job.id)) map.set(job.id, [])
+        const arr = map.get(job.id)!
+        const last = arr[arr.length - 1]
+
+        // Only push if enough time has passed (>2s) to avoid duplicates
+        if (!last || Date.now() - last.ts > 2000) {
+          arr.push({ ts: Date.now(), bps: job.throughput_bps })
+
+          // Cap at 60 entries (~3 minutes at 3s polling)
+          if (arr.length > 60) arr.splice(0, arr.length - 60)
+        }
+      } else if (job.status !== 'syncing') {
+        // Clean up history for jobs that stopped syncing
+        map.delete(job.id)
+      }
+    }
+
+    forceUpdate(n => n + 1)
+  }, [jobs])
 
   const connMap = useMemo(() => {
     const m: Record<string, string> = {}
@@ -359,7 +449,7 @@ export default function ProtectionTab({
                 {/* Group jobs */}
                 <Stack spacing={1}>
                   {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} vmNameMap={vmNameMap} t={t} />
+                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} vmNameMap={vmNameMap} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
                   ))}
                 </Stack>
               </Box>
@@ -408,6 +498,17 @@ export default function ProtectionTab({
                 <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(computeRpoActual(selected.last_sync))} />
                 <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
                 <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
+
+                {/* Bandwidth chart */}
+                {selected.status === 'syncing' && (throughputHistoryRef.current.get(selected.id)?.length || 0) >= 2 && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
+                      {t('siteRecovery.protection.bandwidth')}
+                    </Typography>
+                    <BandwidthSparkline data={throughputHistoryRef.current.get(selected.id)!} size='large' />
+                  </>
+                )}
 
                 {/* Logs */}
                 <Divider sx={{ my: 2 }} />

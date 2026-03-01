@@ -667,6 +667,13 @@ return () => window.removeEventListener('keydown', onKeyDown)
             </IconButton>
           </Tooltip>
 
+          {/* Toggle to Horizontal Layout */}
+          <Tooltip title={t('navbar.horizontalLayout') || 'Horizontal layout'}>
+            <IconButton size='small' onClick={() => updateSettings({ layout: 'horizontal' })}>
+              <i className='ri-layout-top-line' />
+            </IconButton>
+          </Tooltip>
+
           {/* Profile */}
           <Tooltip title={t('navbar.profile')}>
             <IconButton size='small' onClick={e => setUserAnchor(e.currentTarget)}>

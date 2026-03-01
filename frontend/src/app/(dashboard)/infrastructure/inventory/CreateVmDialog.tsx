@@ -17,6 +17,8 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
@@ -25,6 +27,7 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -209,6 +212,22 @@ return
 return
     }
     
+    setVmidError(null)
+  }
+
+  // Générer le prochain VMID disponible pour la connexion sélectionnée
+  const generateNextVmid = () => {
+    const scopedVms = selectedConnection
+      ? allVms.filter(vm => vm.connId === selectedConnection)
+      : allVms
+    const usedVmids = new Set(scopedVms.map(vm => parseInt(String(vm.vmid), 10)))
+
+    let nextId = 100
+    while (usedVmids.has(nextId)) {
+      nextId++
+    }
+
+    setVmid(String(nextId))
     setVmidError(null)
   }
 
@@ -640,14 +659,27 @@ return
                 <MenuItem value="">({t('common.none')})</MenuItem>
               </Select>
             </FormControl>
-            <TextField 
-              label="VM ID" 
-              value={vmid} 
-              onChange={(e) => handleVmidChange(e.target.value)} 
-              size="small" 
+            <TextField
+              label="VM ID"
+              value={vmid}
+              onChange={(e) => handleVmidChange(e.target.value)}
+              size="small"
               error={!!vmidError}
               helperText={vmidError}
               inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title={t('inventory.createVm.generateVmId')}>
+                        <IconButton size="small" onClick={generateNextVmid} edge="end">
+                          <i className="ri-refresh-line" style={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }
+              }}
             />
             <Box />
             <TextField label={t('inventory.createVm.vmName')} value={vmName} onChange={(e) => setVmName(e.target.value)} size="small" fullWidth />

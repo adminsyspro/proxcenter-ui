@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
+  Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   MenuItem, Select, Stack, TextField, Typography
 } from '@mui/material'
 
@@ -25,43 +25,61 @@ interface VMAssignment {
   vm_name: string
   tier: 1 | 2 | 3
   boot_order: number
+  source_cluster: string
+  target_cluster: string
 }
 
 export default function CreatePlanDialog({ open, onClose, onSubmit, connections, jobs }: CreatePlanDialogProps) {
   const t = useTranslations()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [sourceCluster, setSourceCluster] = useState('')
-  const [targetCluster, setTargetCluster] = useState('')
   const [vmAssignments, setVmAssignments] = useState<VMAssignment[]>([])
 
-  // Flatten VMs from matching replication jobs
-  const availableVMs = useMemo(() => {
-    const matchingJobs = (jobs || []).filter(j =>
-      (!sourceCluster || j.source_cluster === sourceCluster) &&
-      (!targetCluster || j.target_cluster === targetCluster)
-    )
-    const vms: { vm_id: number; vm_name: string; job_id: string }[] = []
-    for (const j of matchingJobs) {
+  // Build connection name map
+  const connMap = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const c of connections) m[c.id] = c.name
+    return m
+  }, [connections])
+
+  // Group VMs by cluster pair from replication jobs
+  const vmsByPair = useMemo(() => {
+    const groups: Record<string, { source: string; target: string; vms: { vm_id: number; vm_name: string }[] }> = {}
+    for (const j of (jobs || [])) {
+      const key = `${j.source_cluster}→${j.target_cluster}`
+      if (!groups[key]) groups[key] = { source: j.source_cluster, target: j.target_cluster, vms: [] }
       const ids = j.vm_ids || []
       const names = j.vm_names || []
       for (let k = 0; k < ids.length; k++) {
-        if (!vms.find(v => v.vm_id === ids[k])) {
-          vms.push({ vm_id: ids[k], vm_name: names[k] || `VM ${ids[k]}`, job_id: j.id })
+        if (!groups[key].vms.find(v => v.vm_id === ids[k])) {
+          groups[key].vms.push({ vm_id: ids[k], vm_name: names[k] || `VM ${ids[k]}` })
         }
       }
     }
-    return vms
-  }, [jobs, sourceCluster, targetCluster])
+    return groups
+  }, [jobs])
 
-  const addVM = (vm: { vm_id: number; vm_name: string }) => {
-    if (vmAssignments.find(v => v.vm_id === vm.vm_id)) return
-    setVmAssignments(prev => [...prev, {
-      vm_id: vm.vm_id,
-      vm_name: vm.vm_name,
-      tier: 3,
-      boot_order: prev.length + 1
-    }])
+  // Determine which cluster pair is locked (from first assigned VM)
+  const lockedPair = useMemo(() => {
+    if (vmAssignments.length === 0) return null
+    return { source: vmAssignments[0].source_cluster, target: vmAssignments[0].target_cluster }
+  }, [vmAssignments])
+
+  const toggleVM = (vm: { vm_id: number; vm_name: string }, source: string, target: string) => {
+    if (vmAssignments.find(v => v.vm_id === vm.vm_id)) {
+      // Remove
+      setVmAssignments(prev => prev.filter(v => v.vm_id !== vm.vm_id).map((v, i) => ({ ...v, boot_order: i + 1 })))
+    } else {
+      // Add
+      setVmAssignments(prev => [...prev, {
+        vm_id: vm.vm_id,
+        vm_name: vm.vm_name,
+        tier: 3,
+        boot_order: prev.length + 1,
+        source_cluster: source,
+        target_cluster: target
+      }])
+    }
   }
 
   const removeVM = (vmId: number) => {
@@ -73,11 +91,12 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
   }
 
   const handleSubmit = () => {
+    if (!lockedPair) return
     onSubmit({
       name,
       description,
-      source_cluster: sourceCluster,
-      target_cluster: targetCluster,
+      source_cluster: lockedPair.source,
+      target_cluster: lockedPair.target,
       vms: vmAssignments.map(v => ({ vm_id: v.vm_id, tier: v.tier, boot_order: v.boot_order }))
     })
     handleClose()
@@ -86,13 +105,12 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
   const handleClose = () => {
     setName('')
     setDescription('')
-    setSourceCluster('')
-    setTargetCluster('')
     setVmAssignments([])
     onClose()
   }
 
   const tierColors = { 1: 'error', 2: 'warning', 3: 'default' } as const
+  const pairEntries = Object.entries(vmsByPair)
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
@@ -120,53 +138,62 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
             rows={2}
           />
 
-          {/* Source Cluster */}
+          {/* Replicated VMs selection */}
           <Box>
-            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createPlan.sourceCluster')}</Typography>
-            <Select value={sourceCluster} onChange={e => setSourceCluster(e.target.value)} size='small' fullWidth displayEmpty>
-              <MenuItem value='' disabled>{t('siteRecovery.createPlan.selectCluster')}</MenuItem>
-              {connections.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
-            </Select>
-          </Box>
+            <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createPlan.selectReplicatedVMs')}</Typography>
 
-          {/* Target Cluster */}
-          <Box>
-            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createPlan.targetCluster')}</Typography>
-            <Select value={targetCluster} onChange={e => setTargetCluster(e.target.value)} size='small' fullWidth displayEmpty>
-              <MenuItem value='' disabled>{t('siteRecovery.createPlan.selectCluster')}</MenuItem>
-              {connections.filter(c => c.id !== sourceCluster).map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
-            </Select>
-          </Box>
-
-          {/* VM Assignment */}
-          <Box>
-            <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createPlan.assignVMs')}</Typography>
-
-            {/* Available VMs from replication jobs */}
-            {availableVMs.length > 0 && (
-              <Box sx={{ mb: 1.5 }}>
-                <Typography variant='caption' sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>
-                  {t('siteRecovery.createPlan.availableVMs')}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                  {availableVMs
-                    .filter(vm => !vmAssignments.find(v => v.vm_id === vm.vm_id))
-                    .map(vm => (
-                      <Chip
-                        key={vm.vm_id}
-                        label={vm.vm_name}
-                        size='small'
-                        onClick={() => addVM(vm)}
-                        icon={<i className='ri-add-line' style={{ fontSize: 14 }} />}
-                        sx={{ cursor: 'pointer' }}
-                      />
-                    ))}
-                </Box>
-              </Box>
+            {pairEntries.length === 0 && (
+              <Typography variant='body2' sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                {t('siteRecovery.createPlan.noReplicatedVMs')}
+              </Typography>
             )}
 
-            {/* Assigned VMs */}
-            {vmAssignments.length > 0 && (
+            {pairEntries.map(([key, group]) => {
+              const pairDisabled = lockedPair !== null && (lockedPair.source !== group.source || lockedPair.target !== group.target)
+              return (
+                <Box key={key} sx={{ mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
+                    <i className='ri-arrow-left-right-line' style={{ fontSize: 14, color: pairDisabled ? '#a1a1aa' : '#3b82f6' }} />
+                    <Typography variant='caption' sx={{ color: pairDisabled ? 'text.disabled' : 'text.secondary', fontWeight: 600 }}>
+                      {connMap[group.source] || group.source} → {connMap[group.target] || group.target}
+                    </Typography>
+                  </Box>
+                  <Stack spacing={0.5}>
+                    {group.vms.map(vm => {
+                      const selected = !!vmAssignments.find(v => v.vm_id === vm.vm_id)
+                      return (
+                        <Box
+                          key={vm.vm_id}
+                          onClick={() => !pairDisabled && toggleVM(vm, group.source, group.target)}
+                          sx={{
+                            display: 'flex', alignItems: 'center', gap: 0.5,
+                            p: 0.5, pl: 0, borderRadius: 1,
+                            cursor: pairDisabled ? 'default' : 'pointer',
+                            opacity: pairDisabled ? 0.4 : 1,
+                            '&:hover': pairDisabled ? {} : { bgcolor: 'action.hover' }
+                          }}
+                        >
+                          <Checkbox size='small' checked={selected} disabled={pairDisabled} sx={{ p: 0.5 }} />
+                          <i className='ri-computer-line' style={{ fontSize: 14, color: '#71717a' }} />
+                          <Typography variant='body2' sx={{ fontWeight: selected ? 600 : 400 }}>
+                            {vm.vm_name}
+                          </Typography>
+                          <Typography variant='caption' sx={{ color: 'text.disabled', ml: 0.5 }}>
+                            ({vm.vm_id})
+                          </Typography>
+                        </Box>
+                      )
+                    })}
+                  </Stack>
+                </Box>
+              )
+            })}
+          </Box>
+
+          {/* Assigned VMs — tier & boot order */}
+          {vmAssignments.length > 0 && (
+            <Box>
+              <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('siteRecovery.createPlan.assignVMs')}</Typography>
               <Stack spacing={0.75}>
                 {vmAssignments.map(vm => (
                   <Box key={vm.vm_id} sx={{
@@ -197,8 +224,8 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
                   </Box>
                 ))}
               </Stack>
-            )}
-          </Box>
+            </Box>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -206,7 +233,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
         <Button
           variant='contained'
           onClick={handleSubmit}
-          disabled={!name || !sourceCluster || !targetCluster || vmAssignments.length === 0}
+          disabled={!name || vmAssignments.length === 0}
         >
           {t('siteRecovery.createPlan.create')}
         </Button>

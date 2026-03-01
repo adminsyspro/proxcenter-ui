@@ -591,7 +591,8 @@
       "reviewSettingsVm": "Vérifiez vos paramètres avant de créer la VM",
       "vmIdMin": "L'ID VM doit être >= 100",
       "vmIdMax": "L'ID VM doit être <= 999999999",
-      "vmIdInUse": "L'ID VM {id} est déjà utilisé"
+      "vmIdInUse": "L'ID VM {id} est déjà utilisé",
+      "generateVmId": "Générer le prochain ID disponible"
     },
     "createLxc": {
       "title": "Créer : Conteneur LXC",
@@ -642,6 +643,7 @@
       "ctIdMin": "L'ID CT doit être >= 100",
       "ctIdMax": "L'ID CT doit être <= 999999999",
       "ctIdInUse": "L'ID CT {id} est déjà utilisé",
+      "generateCtId": "Générer le prochain ID disponible",
       "startAtBoot": "Démarrer au boot",
       "auto": "auto",
       "noVlan": "pas de VLAN",
@@ -2351,11 +2353,9 @@
       "title": "Créer un plan de reprise",
       "name": "Nom du plan",
       "description": "Description",
-      "sourceCluster": "Cluster source",
-      "targetCluster": "Cluster cible",
-      "selectCluster": "Sélectionner un cluster",
-      "assignVMs": "Assigner les VMs",
-      "availableVMs": "VMs disponibles (avec réplication active)",
+      "selectReplicatedVMs": "Sélectionner les VMs répliquées",
+      "noReplicatedVMs": "Aucune VM répliquée trouvée. Créez d'abord un job de réplication.",
+      "assignVMs": "Ordre de démarrage & Tiers",
       "create": "Créer le plan"
     },
     "failover": {

@@ -591,7 +591,8 @@
       "reviewSettingsVm": "Review your settings before creating the VM",
       "vmIdMin": "VM ID must be >= 100",
       "vmIdMax": "VM ID must be <= 999999999",
-      "vmIdInUse": "VM ID {id} is already in use"
+      "vmIdInUse": "VM ID {id} is already in use",
+      "generateVmId": "Generate next available ID"
     },
     "createLxc": {
       "title": "Create: LXC Container",
@@ -642,6 +643,7 @@
       "ctIdMin": "CT ID must be >= 100",
       "ctIdMax": "CT ID must be <= 999999999",
       "ctIdInUse": "CT ID {id} is already in use",
+      "generateCtId": "Generate next available ID",
       "startAtBoot": "Start at boot",
       "auto": "auto",
       "noVlan": "no VLAN",
@@ -2346,11 +2348,9 @@
       "title": "Create Recovery Plan",
       "name": "Plan Name",
       "description": "Description",
-      "sourceCluster": "Source Cluster",
-      "targetCluster": "Target Cluster",
-      "selectCluster": "Select a cluster",
-      "assignVMs": "Assign VMs",
-      "availableVMs": "Available VMs (with active replication)",
+      "selectReplicatedVMs": "Select Replicated VMs",
+      "noReplicatedVMs": "No replicated VMs found. Create a replication job first.",
+      "assignVMs": "Boot Order & Tiers",
       "create": "Create Plan"
     },
     "failover": {

@@ -16,6 +16,8 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
@@ -24,6 +26,7 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -154,6 +157,22 @@ return
 return
     }
     
+    setCtidError(null)
+  }
+
+  // Générer le prochain CTID disponible pour la connexion sélectionnée
+  const generateNextCtid = () => {
+    const scopedVms = selectedConnection
+      ? allVms.filter(vm => vm.connId === selectedConnection)
+      : allVms
+    const usedIds = new Set(scopedVms.map(vm => parseInt(String(vm.vmid), 10)))
+
+    let nextId = 100
+    while (usedIds.has(nextId)) {
+      nextId++
+    }
+
+    setCtid(String(nextId))
     setCtidError(null)
   }
 
@@ -543,14 +562,27 @@ return
               </Select>
             </FormControl>
             
-            <TextField 
-              label="CT ID" 
-              value={ctid} 
-              onChange={(e) => handleCtidChange(e.target.value)} 
-              size="small" 
+            <TextField
+              label="CT ID"
+              value={ctid}
+              onChange={(e) => handleCtidChange(e.target.value)}
+              size="small"
               error={!!ctidError}
               helperText={ctidError}
               inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title={t('inventory.createLxc.generateCtId')}>
+                        <IconButton size="small" onClick={generateNextCtid} edge="end">
+                          <i className="ri-refresh-line" style={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }
+              }}
             />
             <Box />
             

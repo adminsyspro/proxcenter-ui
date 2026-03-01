@@ -78,7 +78,7 @@ return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GiB/s`
 
 function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; message: string; speed: string; eta: string } {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
-    return { progress: 0, message: 'Démarrage...', speed: '', eta: '' }
+    return { progress: 0, message: 'Starting...', speed: '', eta: '' }
   }
 
   const state: MigrationState = {
@@ -92,7 +92,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     currentSpeed: 0,
     averageSpeed: 0,
     eta: -1,
-    message: 'Démarrage...'
+    message: 'Starting...'
   }
 
   // Regex patterns
@@ -123,7 +123,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     // Fin de migration
     if (finishedRegex.test(text)) {
       state.phase = 'completed'
-      state.message = 'Migration terminée avec succès'
+      state.message = 'Migration completed successfully'
       continue
     }
 
@@ -183,7 +183,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
 
     // Tous les mirrors prêts
     if (mirrorReadyRegex.test(text)) {
-      state.message = 'Disques synchronisés'
+      state.message = 'Disks synchronized'
       continue
     }
 
@@ -196,7 +196,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     // Début migration live
     if (liveStartRegex.test(text)) {
       state.phase = 'live'
-      state.message = 'Migration live de la mémoire...'
+      state.message = 'Live memory migration...'
       continue
     }
 
@@ -209,7 +209,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
       state.liveTotalSize = parseSize(liveMatch[3], liveMatch[4])
       state.liveSpeed = parseSize(liveMatch[5], liveMatch[6])
       state.currentSpeed = state.liveSpeed
-      state.message = `Mémoire: ${formatSize(state.liveTransferred)} / ${formatSize(state.liveTotalSize)}`
+      state.message = `Memory: ${formatSize(state.liveTransferred)} / ${formatSize(state.liveTotalSize)}`
       continue
     }
 
@@ -224,19 +224,19 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     // Migration live terminée
     if (liveCompletedRegex.test(text)) {
       state.phase = 'finalizing'
-      state.message = 'Finalisation...'
+      state.message = 'Finalizing...'
       continue
     }
 
     // Messages génériques
     if (text.includes('starting migration of VM')) {
-      state.message = 'Démarrage de la migration...'
+      state.message = 'Starting migration...'
     } else if (text.includes('starting storage migration')) {
       state.phase = 'storage'
-      state.message = 'Migration du stockage...'
+      state.message = 'Storage migration...'
     } else if (text.includes('stopping NBD')) {
       state.phase = 'finalizing'
-      state.message = 'Nettoyage...'
+      state.message = 'Cleaning up...'
     }
   }
 
@@ -305,7 +305,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
 
   if (state.phase === 'storage' || state.phase === 'live') {
     if (totalBytes > 0) {
-      finalMessage = `Transfert: ${formatSize(transferredBytes)} / ${formatSize(totalBytes)}`
+      finalMessage = `Transfer: ${formatSize(transferredBytes)} / ${formatSize(totalBytes)}`
     }
   }
 
@@ -319,11 +319,11 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
 
 function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message: string; speed: string; eta: string } {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
-    return { progress: 0, message: 'Démarrage...', speed: '', eta: '' }
+    return { progress: 0, message: 'Starting...', speed: '', eta: '' }
   }
 
   let progress = 0
-  let message = 'En cours...'
+  let message = 'In progress...'
   let speed = ''
   let eta = ''
 
@@ -349,7 +349,7 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
     const transferMatch = text.match(transferRegex)
 
     if (transferMatch) {
-      message = `Transfert: ${transferMatch[1]} ${transferMatch[2]} / ${transferMatch[3]} ${transferMatch[4]}`
+      message = `Transfer: ${transferMatch[1]} ${transferMatch[2]} / ${transferMatch[3]} ${transferMatch[4]}`
     }
 
     const speedMatch = text.match(speedRegex)
@@ -369,7 +369,7 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
 
     if (text.includes('TASK OK')) {
       progress = 100
-      message = 'Terminé avec succès'
+      message = 'Completed successfully'
     }
   }
 
@@ -439,7 +439,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     if (status?.status === 'stopped') {
       progressData = {
         progress: 100,
-        message: status?.exitstatus === 'OK' ? 'Terminé avec succès' : `Échec: ${status?.exitstatus || 'erreur inconnue'}`,
+        message: status?.exitstatus === 'OK' ? 'Completed successfully' : `Failed: ${status?.exitstatus || 'unknown error'}`,
         speed: '',
         eta: ''
       }

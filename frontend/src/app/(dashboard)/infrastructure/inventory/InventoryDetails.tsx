@@ -4432,9 +4432,9 @@ return vm?.isCluster ?? false
                 variant="filled"
                 icon={
                   data.kindLabel === 'HOST' ? (
-                    <i className="ri-server-fill" style={{ fontSize: 14, marginLeft: 8 }} />
+                    <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
                   ) : data.kindLabel === 'CLUSTER' ? (
-                    <i className="ri-cloud-fill" style={{ fontSize: 14, marginLeft: 8 }} />
+                    <i className="ri-server-fill" style={{ fontSize: 14, marginLeft: 8 }} />
                   ) : undefined
                 }
               />

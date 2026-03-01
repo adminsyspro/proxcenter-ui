@@ -545,7 +545,7 @@ return
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                        <i className="ri-cloud-fill" style={{ fontSize: 16, color: theme.palette.primary.main }} />
+                        <i className="ri-server-fill" style={{ fontSize: 16, color: theme.palette.primary.main }} />
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" fontWeight={600}>
                             {group.connName}

@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Divider,
   IconButton,
   List,
@@ -32,6 +33,9 @@ const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: 
 const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
+import { useLicense } from '@/contexts/LicenseContext'
+import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
+import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
@@ -79,7 +83,12 @@ function RootInventoryView({
 }) {
   const t = useTranslations()
   const theme = useTheme()
-  
+
+  // DRS data (Enterprise only)
+  const { isEnterprise } = useLicense()
+  const { data: drsStatus, isLoading: drsStatusLoading } = useDRSStatus(isEnterprise)
+  const { data: drsMetrics, isLoading: drsMetricsLoading } = useDRSMetrics(isEnterprise)
+
   // Grouper les VMs par cluster (connexion)
   const clusters = useMemo(() => {
     const map = new Map<string, { connId: string; connName: string; vms: AllVmItem[] }>()
@@ -202,6 +211,19 @@ function RootInventoryView({
       .sort((a, b) => Math.max(b.cpu, b.ram) - Math.max(a.cpu, a.ram))
       .slice(0, 3)
   }, [allVms])
+
+  // DRS health score averaged across clusters
+  const drsHealthScore = useMemo(() => {
+    if (!drsMetrics) return null
+    const clusters = Object.values(drsMetrics) as any[]
+    if (clusters.length === 0) return null
+    let total = 0
+    for (const cluster of clusters) {
+      const breakdown = computeDrsHealthScore(cluster.summary, cluster.nodes)
+      total += breakdown.score
+    }
+    return Math.round(total / clusters.length)
+  }, [drsMetrics])
 
   const toggleCluster = (connId: string) => {
     setExpandedClusters(prev => {
@@ -358,7 +380,9 @@ function RootInventoryView({
       {/* Health Overview Cards */}
       <Box sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+        gridTemplateColumns: isEnterprise
+          ? { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', xl: 'repeat(5, 1fr)' }
+          : { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
         gap: 2,
         mb: 2
       }}>
@@ -593,6 +617,86 @@ function RootInventoryView({
             )}
           </CardContent>
         </Card>
+
+        {/* Card 5: DRS Orchestration (Enterprise only) */}
+        {isEnterprise && (
+          <Card variant="outlined" sx={{ p: 0 }}>
+            <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                <Box sx={{
+                  width: 32, height: 32, borderRadius: 1.5,
+                  bgcolor: alpha(theme.palette.success.main, 0.12),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <i className="ri-refresh-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
+                </Box>
+                <Typography variant="subtitle2" fontWeight={700}>DRS Orchestration</Typography>
+              </Stack>
+
+              {(drsStatusLoading || drsMetricsLoading) ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : !drsStatus?.enabled ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 2, opacity: 0.5 }}>
+                  <i className="ri-pause-circle-line" style={{ fontSize: 28, marginBottom: 4 }} />
+                  <Typography variant="caption">Disabled</Typography>
+                </Box>
+              ) : (
+                <Stack spacing={1}>
+                  {/* Health Score + Status */}
+                  {drsHealthScore !== null && (() => {
+                    const scoreColor = drsHealthScore >= 80 ? theme.palette.success.main : drsHealthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main
+                    const scoreLabel = drsHealthScore >= 80 ? 'Healthy' : drsHealthScore >= 50 ? 'Attention' : 'Critical'
+                    const circumference = 2 * Math.PI * 14
+                    const dashLen = (drsHealthScore / 100) * circumference
+
+                    return (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        {/* ScoreRing */}
+                        <Box sx={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                          <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                            <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="3" opacity={0.3} />
+                            <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="3"
+                              strokeDasharray={`${dashLen} ${circumference}`} strokeLinecap="round"
+                              style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+                          </svg>
+                          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, color: scoreColor }}>{drsHealthScore}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography variant="body2" fontWeight={700} sx={{ color: scoreColor }}>{scoreLabel}</Typography>
+                      </Stack>
+                    )
+                  })()}
+
+                  <Divider />
+
+                  {/* Stats */}
+                  <Stack spacing={0.5}>
+                    <Stack direction="row" alignItems="center" spacing={0.75}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main' }} />
+                      <Typography variant="caption" sx={{ opacity: 0.8 }}>{drsStatus?.active_migrations || 0} migrations</Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={0.75}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                      <Typography variant="caption" sx={{ opacity: 0.8 }}>{drsStatus?.recommendations || 0} recommendations</Typography>
+                    </Stack>
+                  </Stack>
+
+                  {/* Mode chip */}
+                  <Chip
+                    size="small"
+                    label={`Mode: ${(drsStatus?.mode || 'manual').charAt(0).toUpperCase() + (drsStatus?.mode || 'manual').slice(1)}`}
+                    color={drsStatus?.mode === 'automatic' ? 'success' : drsStatus?.mode === 'partial' ? 'warning' : 'info'}
+                    variant="outlined"
+                    sx={{ height: 22, fontSize: 11, fontWeight: 600, alignSelf: 'flex-start' }}
+                  />
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </Box>
 
       {/* Séparateur PVE */}

@@ -481,6 +481,9 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         borderColor: `${isLightMode ? '#e8e8e8' : '#333348'} !important`,
         color: `${isLightMode ? '#313131' : '#fafafa'} !important`
       },
+      '.MuiDataGrid-columnSeparator': {
+        color: `${isLightMode ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)'} !important`
+      },
 
       // Virtualized tables / custom tables (only target actual table components, not MuiGrid)
       '.MuiTableContainer-root table, [class*="VirtualTable"], [class*="virtualTable"]': {

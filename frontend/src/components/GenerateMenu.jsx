@@ -48,7 +48,7 @@ export const GenerateVerticalMenu = ({ menuData }) => {
 
       // Check if the current item is a section
       if (menuSectionItem.isSection) {
-        const { children, isSection, permissions, requiredFeature, ...rest } = menuSectionItem
+        const { children, isSection, icon, permissions, requiredFeature, ...rest } = menuSectionItem
 
         // Filtrer les enfants accessibles
         const filteredChildren = filterChildren(children)
@@ -61,8 +61,10 @@ export const GenerateVerticalMenu = ({ menuData }) => {
           return null
         }
 
+        const SectionIcon = icon ? <i className={icon} /> : null
+
         return (
-          <MenuSection key={index} {...rest}>
+          <MenuSection key={index} {...rest} {...(SectionIcon && { icon: SectionIcon })}>
             {renderMenuItems(filteredChildren)}
           </MenuSection>
         )

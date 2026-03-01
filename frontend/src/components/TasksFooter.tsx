@@ -401,7 +401,7 @@ export default function TasksFooter({
           borderRadius: 0,
           borderTop: '1px solid',
           borderColor: 'rgba(231,227,252,0.12)',
-          bgcolor: '#1a1a2e',
+          bgcolor: '#1e1e2d',
           color: 'rgba(231,227,252,0.9)',
           colorScheme: 'dark',
           // Override MUI CSS vars so child components (IconButton, Chip, DataGrid) render dark
@@ -412,7 +412,7 @@ export default function TasksFooter({
           '--mui-palette-action-active': 'rgba(231,227,252,0.6)',
           '--mui-palette-action-hover': 'rgba(231,227,252,0.06)',
           '--mui-palette-action-selected': 'rgba(231,227,252,0.08)',
-          '--mui-palette-background-paper': '#1a1a2e',
+          '--mui-palette-background-paper': '#1e1e2d',
           '--mui-palette-background-default': '#151521',
         }}
       >

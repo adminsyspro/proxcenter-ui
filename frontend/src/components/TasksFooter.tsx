@@ -391,7 +391,7 @@ export default function TasksFooter({
   return (
     <>
       <Paper
-        elevation={8}
+        elevation={0}
         sx={{
           position: 'fixed',
           bottom: 0,
@@ -402,6 +402,7 @@ export default function TasksFooter({
           borderTop: '1px solid',
           borderColor: 'rgba(231,227,252,0.12)',
           bgcolor: '#1e1e2d',
+          backgroundImage: 'none',
           color: 'rgba(231,227,252,0.9)',
           colorScheme: 'dark',
           // Override MUI CSS vars so child components (IconButton, Chip, DataGrid) render dark
@@ -426,11 +427,11 @@ export default function TasksFooter({
             px: 2,
             py: 0.75,
             cursor: 'pointer',
-            bgcolor: alpha(theme.palette.primary.main, 0.08),
+            bgcolor: 'rgba(255,255,255,0.03)',
             borderBottom: expanded ? '1px solid' : 'none',
             borderColor: 'rgba(231,227,252,0.12)',
             '&:hover': {
-              bgcolor: alpha(theme.palette.primary.main, 0.12)
+              bgcolor: 'rgba(255,255,255,0.06)'
             }
           }}
         >

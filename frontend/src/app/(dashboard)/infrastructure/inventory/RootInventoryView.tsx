@@ -365,7 +365,7 @@ function RootInventoryView({
       {/* Health Banner */}
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr auto' }, gap: 3 }}>
             {/* Left: Score + Counters */}
             <Stack direction="row" alignItems="center" spacing={2.5}>
               {/* Score Ring */}
@@ -404,7 +404,34 @@ function RootInventoryView({
               )}
 
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="h6" fontWeight={800} noWrap>Infrastructure Health</Typography>
+                <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+                  <Typography variant="h6" fontWeight={800} noWrap>Infrastructure Health</Typography>
+                  {/* Alert status badge */}
+                  {(() => {
+                    const criticals = predictiveAlerts.filter(a => a.severity === 'critical').length
+                    const warnings = predictiveAlerts.filter(a => a.severity === 'warning').length
+                    if (criticals > 0 || warnings > 0) {
+                      return (
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(criticals > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
+                          <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: criticals > 0 ? theme.palette.error.main : theme.palette.warning.main }} />
+                          <Typography variant="caption" fontWeight={600} sx={{ color: criticals > 0 ? 'error.main' : 'warning.main', fontSize: 11 }}>
+                            {criticals > 0 && `${criticals} critical`}
+                            {criticals > 0 && warnings > 0 && ', '}
+                            {warnings > 0 && `${warnings} warning${warnings > 1 ? 's' : ''}`}
+                          </Typography>
+                        </Stack>
+                      )
+                    }
+                    return (
+                      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(theme.palette.success.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
+                        <i className="ri-shield-check-line" style={{ fontSize: 13, color: theme.palette.success.main }} />
+                        <Typography variant="caption" fontWeight={600} sx={{ color: 'success.main', fontSize: 11 }}>
+                          {t('resources.noAlerts')}
+                        </Typography>
+                      </Stack>
+                    )
+                  })()}
+                </Stack>
                 <Typography variant="body2" sx={{ color: scoreColor, fontWeight: 700, mb: 0.5 }}>{scoreLabel}</Typography>
                 <Stack direction="row" flexWrap="wrap" gap={1.5} sx={{ mt: 0.5 }}>
                   <Typography variant="caption" sx={{ opacity: 0.7 }}>
@@ -437,29 +464,29 @@ function RootInventoryView({
               </Box>
             </Stack>
 
-            {/* Right: Resource Bars */}
-            <Stack spacing={1.5} justifyContent="center">
+            {/* Right: Resource Bars (compact) */}
+            <Stack spacing={1} justifyContent="center" sx={{ width: 160 }}>
               {resourceLoading && !kpis ? (
                 <>
-                  <Skeleton variant="rounded" height={20} />
-                  <Skeleton variant="rounded" height={20} />
-                  <Skeleton variant="rounded" height={20} />
+                  <Skeleton variant="rounded" height={14} />
+                  <Skeleton variant="rounded" height={14} />
+                  <Skeleton variant="rounded" height={14} />
                 </>
               ) : kpis ? (
                 <>
                   {[
                     { label: 'CPU', pct: cpuPct },
                     { label: 'RAM', pct: ramPct },
-                    { label: 'Storage', pct: storePct },
+                    { label: 'Stor.', pct: storePct },
                   ].map(({ label, pct }) => (
-                    <Stack key={label} direction="row" alignItems="center" spacing={1}>
-                      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 42, fontSize: 11 }}>{label}</Typography>
+                    <Stack key={label} direction="row" alignItems="center" spacing={0.75}>
+                      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 28, fontSize: 10 }}>{label}</Typography>
                       <LinearProgress
                         variant="determinate"
                         value={Math.min(100, pct)}
                         sx={{
                           flex: 1,
-                          height: 8,
+                          height: 6,
                           borderRadius: 0,
                           bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                           '& .MuiLinearProgress-bar': {
@@ -468,36 +495,11 @@ function RootInventoryView({
                           },
                         }}
                       />
-                      <Typography variant="caption" fontWeight={700} sx={{ minWidth: 36, textAlign: 'right' }}>
+                      <Typography variant="caption" fontWeight={700} sx={{ minWidth: 28, textAlign: 'right', fontSize: 10 }}>
                         {pct.toFixed(0)}%
                       </Typography>
                     </Stack>
                   ))}
-                  {/* Alert status */}
-                  {(() => {
-                    const criticals = predictiveAlerts.filter(a => a.severity === 'critical').length
-                    const warnings = predictiveAlerts.filter(a => a.severity === 'warning').length
-                    if (criticals > 0 || warnings > 0) {
-                      return (
-                        <Stack direction="row" alignItems="center" spacing={0.75}>
-                          <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: criticals > 0 ? theme.palette.error.main : theme.palette.warning.main }} />
-                          <Typography variant="caption" fontWeight={600} sx={{ color: criticals > 0 ? 'error.main' : 'warning.main' }}>
-                            {criticals > 0 && `${criticals} critical`}
-                            {criticals > 0 && warnings > 0 && ', '}
-                            {warnings > 0 && `${warnings} warning${warnings > 1 ? 's' : ''}`}
-                          </Typography>
-                        </Stack>
-                      )
-                    }
-                    return (
-                      <Stack direction="row" alignItems="center" spacing={0.75}>
-                        <i className="ri-shield-check-line" style={{ fontSize: 13, color: theme.palette.success.main }} />
-                        <Typography variant="caption" fontWeight={600} sx={{ color: 'success.main' }}>
-                          {t('resources.noAlerts')}
-                        </Typography>
-                      </Stack>
-                    )
-                  })()}
                 </>
               ) : null}
             </Stack>

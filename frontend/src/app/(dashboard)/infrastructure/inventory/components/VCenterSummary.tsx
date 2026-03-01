@@ -685,7 +685,7 @@ return `${mins}m`
                   bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
                 }}
               >
-                {kindLabel === 'PBS' ? (
+                {kindLabel === 'PBS' || kindLabel === 'STORAGE' ? (
                   <UsageBar themeColor={primaryColor} label={t('inventory.storageLabel')} used={diskUsed} capacity={diskCap} mode="bytes" />
                 ) : (
                   <>

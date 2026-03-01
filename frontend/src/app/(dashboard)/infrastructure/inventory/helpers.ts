@@ -944,9 +944,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
   return {
     kindLabel: 'STORAGE',
     title: sel.id,
-    subtitle: 'To implement',
+    subtitle: '',
     breadcrumb: ['Infrastructure', 'Inventaire', 'Storage', sel.id],
-    status: 'unknown',
+    status: 'ok',
     tags: [],
     kpis: [],
     properties: [],

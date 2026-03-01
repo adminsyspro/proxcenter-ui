@@ -191,6 +191,20 @@ export default function TasksFooter({
     setIsHydrated(true)
   }, [])
 
+  // Communicate taskbar height to layout via CSS custom property
+  useEffect(() => {
+    if (!isHydrated) return
+    const headerHeight = 36
+    let height = 0
+    if (!hidden) {
+      height = expanded ? headerHeight + maxHeight : headerHeight
+    }
+    document.documentElement.style.setProperty('--taskbar-height', `${height}px`)
+    return () => {
+      document.documentElement.style.setProperty('--taskbar-height', '0px')
+    }
+  }, [hidden, expanded, maxHeight, isHydrated])
+
   // Persist state
   useEffect(() => {
     if (isHydrated) {

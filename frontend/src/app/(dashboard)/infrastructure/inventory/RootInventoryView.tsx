@@ -596,23 +596,23 @@ function RootInventoryView({
         {isEnterprise && (
           <Card variant="outlined" sx={{ p: 0 }}>
             <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <Box sx={{
                   width: 32, height: 32, borderRadius: 1.5,
                   bgcolor: alpha(theme.palette.success.main, 0.12),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                 }}>
                   <i className="ri-refresh-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
                 </Box>
-                <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, minWidth: 0 }}>Distributed Resource Scheduler (DRS)</Typography>
+                <Typography variant="subtitle2" fontWeight={700}>Distributed Resource Scheduler (DRS)</Typography>
                 <Chip
                   size="small"
                   label={`Mode: ${(drsStatus?.mode || 'manual').charAt(0).toUpperCase() + (drsStatus?.mode || 'manual').slice(1)}`}
                   color={drsStatus?.mode === 'automatic' ? 'success' : drsStatus?.mode === 'partial' ? 'warning' : 'info'}
                   variant="outlined"
-                  sx={{ flexShrink: 0, height: 22, fontSize: 11, fontWeight: 600 }}
+                  sx={{ ml: 'auto', flexShrink: 0, height: 22, fontSize: 11, fontWeight: 600 }}
                 />
-              </Stack>
+              </Box>
 
               {(drsStatusLoading || drsMetricsLoading) ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3 }}>

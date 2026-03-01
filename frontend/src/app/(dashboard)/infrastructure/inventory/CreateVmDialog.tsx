@@ -705,11 +705,41 @@ return
                 </FormControl>
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('inventory.createVm.osType')}</InputLabel>
-                  <Select value={guestOsType} onChange={(e) => setGuestOsType(e.target.value)} label={t('inventory.createVm.osType')}>
-                    <MenuItem value="Linux">{t('inventory.createVm.osLinux')}</MenuItem>
-                    <MenuItem value="Windows">{t('inventory.createVm.osWindows')}</MenuItem>
-                    <MenuItem value="Solaris">{t('inventory.createVm.osSolaris')}</MenuItem>
-                    <MenuItem value="Other">{t('inventory.createVm.osOther')}</MenuItem>
+                  <Select
+                    value={guestOsType}
+                    onChange={(e) => setGuestOsType(e.target.value)}
+                    label={t('inventory.createVm.osType')}
+                    renderValue={(val) => (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className={val === 'Linux' ? 'ri-ubuntu-fill' : val === 'Windows' ? 'ri-windows-fill' : val === 'Solaris' ? 'ri-sun-line' : 'ri-question-line'} style={{ fontSize: 18, opacity: 0.8 }} />
+                        {t(`inventory.createVm.os${val}`)}
+                      </Box>
+                    )}
+                  >
+                    <MenuItem value="Linux">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-ubuntu-fill" style={{ fontSize: 18, opacity: 0.8 }} />
+                        {t('inventory.createVm.osLinux')}
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="Windows">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-windows-fill" style={{ fontSize: 18, opacity: 0.8 }} />
+                        {t('inventory.createVm.osWindows')}
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="Solaris">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-sun-line" style={{ fontSize: 18, opacity: 0.8 }} />
+                        {t('inventory.createVm.osSolaris')}
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="Other">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-question-line" style={{ fontSize: 18, opacity: 0.8 }} />
+                        {t('inventory.createVm.osOther')}
+                      </Box>
+                    </MenuItem>
                   </Select>
                 </FormControl>
                 

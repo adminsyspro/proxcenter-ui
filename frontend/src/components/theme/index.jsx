@@ -161,57 +161,6 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       }
     }),
     
-    // ============================================================
-    // TASKBAR FIX - Force proper contrast in light mode
-    // ============================================================
-    ...(isLightMode && {
-      // Barre des tâches en bas - fond blanc/gris clair avec texte très foncé
-      '.ts-vertical-layout-footer, [class*="footer"], [class*="taskbar"], [class*="Taskbar"]': {
-        backgroundColor: '#f8f9fa !important',
-        borderTop: '1px solid #d0d0d0 !important',
-        '& *': {
-          color: '#1a1a1a !important'
-        },
-        '& .MuiTypography-root': {
-          color: '#1a1a1a !important'
-        },
-        '& .MuiChip-root': {
-          color: '#1a1a1a !important'
-        },
-        '& span, & p, & div': {
-          color: '#1a1a1a !important'
-        },
-        '& a': {
-          color: '#0066cc !important'
-        }
-      },
-
-      // Zone des tâches/erreurs - fond clair avec texte foncé
-      '[class*="task"], [class*="Task"]': {
-        backgroundColor: '#ffffff !important',
-        '& *': {
-          color: '#1a1a1a !important'
-        },
-        '& .MuiTypography-root': {
-          color: '#1a1a1a !important'
-        },
-        '& span': {
-          color: '#1a1a1a !important'
-        }
-      },
-
-      // Tableau des tâches
-      '[class*="task"] table, [class*="Task"] table': {
-        backgroundColor: '#ffffff !important',
-        '& th': {
-          color: '#333333 !important',
-          backgroundColor: '#f0f0f0 !important'
-        },
-        '& td': {
-          color: '#1a1a1a !important'
-        }
-      }
-    }),
     
     // Apply card styles globally - mais PAS aux cartes qui ont un style inline ou une classe spécifique
     '.MuiCard-root:not([style*="background"]):not(.no-theme-override)': {

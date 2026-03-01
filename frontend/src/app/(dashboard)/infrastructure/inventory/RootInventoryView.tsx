@@ -436,11 +436,11 @@ function RootInventoryView({
                         sx={{
                           flex: 1,
                           height: 8,
-                          borderRadius: 1,
+                          borderRadius: 0,
                           bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                           '& .MuiLinearProgress-bar': {
                             bgcolor: 'primary.main',
-                            borderRadius: 1,
+                            borderRadius: 0,
                           },
                         }}
                       />

@@ -428,8 +428,8 @@ function RootInventoryView({
                     { label: 'RAM', pct: ramPct },
                     { label: 'Storage', pct: storePct },
                   ].map(({ label, pct }) => (
-                    <Stack key={label} direction="row" alignItems="center" spacing={1.5}>
-                      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 52 }}>{label}</Typography>
+                    <Stack key={label} direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 42, fontSize: 11 }}>{label}</Typography>
                       <LinearProgress
                         variant="determinate"
                         value={Math.min(100, pct)}
@@ -449,10 +449,31 @@ function RootInventoryView({
                       </Typography>
                     </Stack>
                   ))}
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Typography variant="caption" sx={{ opacity: 0.6 }}>Efficiency:</Typography>
-                    <Typography variant="caption" fontWeight={700}>{kpis.efficiency}%</Typography>
-                  </Stack>
+                  {/* Alert status */}
+                  {(() => {
+                    const criticals = predictiveAlerts.filter(a => a.severity === 'critical').length
+                    const warnings = predictiveAlerts.filter(a => a.severity === 'warning').length
+                    if (criticals > 0 || warnings > 0) {
+                      return (
+                        <Stack direction="row" alignItems="center" spacing={0.75}>
+                          <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: criticals > 0 ? theme.palette.error.main : theme.palette.warning.main }} />
+                          <Typography variant="caption" fontWeight={600} sx={{ color: criticals > 0 ? 'error.main' : 'warning.main' }}>
+                            {criticals > 0 && `${criticals} critical`}
+                            {criticals > 0 && warnings > 0 && ', '}
+                            {warnings > 0 && `${warnings} warning${warnings > 1 ? 's' : ''}`}
+                          </Typography>
+                        </Stack>
+                      )
+                    }
+                    return (
+                      <Stack direction="row" alignItems="center" spacing={0.75}>
+                        <i className="ri-shield-check-line" style={{ fontSize: 13, color: theme.palette.success.main }} />
+                        <Typography variant="caption" fontWeight={600} sx={{ color: 'success.main' }}>
+                          {t('resources.noAlerts')}
+                        </Typography>
+                      </Stack>
+                    )
+                  })()}
                 </>
               ) : null}
             </Stack>

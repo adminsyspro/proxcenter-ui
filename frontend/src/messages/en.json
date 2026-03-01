@@ -247,7 +247,8 @@
       "security": "Security / Zero Trust",
       "backup": "Backups",
       "storage": "Storage",
-      "monitoring": "Monitoring"
+      "monitoring": "Monitoring",
+      "automation": "Automation"
     },
     "widgetNames": {
       "kpiClusters": "Clusters / Nodes",
@@ -272,7 +273,9 @@
       "vmStatusWaffle": "VM Status (Waffle)",
       "resourceTrends": "Resource Trends",
       "infraGlobalChart": "Infra CPU/RAM",
-      "vmHeatmap": "VM Heatmap"
+      "vmHeatmap": "VM Heatmap",
+      "drsStatus": "DRS Status",
+      "siteRecovery": "Site Recovery"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number of clusters and nodes",
@@ -297,7 +300,29 @@
       "vmStatusWaffle": "Waffle view of VMs by cluster and status",
       "resourceTrends": "CPU/RAM evolution over 1h, 24h or 7d",
       "infraGlobalChart": "Per-node CPU/RAM across all infrastructure",
-      "vmHeatmap": "CPU/RAM heatmap of all VMs"
+      "vmHeatmap": "CPU/RAM heatmap of all VMs",
+      "drsStatus": "DRS status, active migrations and recommendations",
+      "siteRecovery": "VM protection, RPO compliance and replication status"
+    },
+    "widgetDrs": {
+      "automatic": "Automatic",
+      "partial": "Partial",
+      "manual": "Manual",
+      "disabled": "Disabled",
+      "activeMigrations": "Active migrations",
+      "recommendations": "Recommendations",
+      "mode": "Mode"
+    },
+    "widgetSr": {
+      "connected": "Connected",
+      "degraded": "Degraded",
+      "disconnected": "Disconnected",
+      "noJobs": "No replication jobs",
+      "coverage": "Protection coverage",
+      "rpoCompliance": "RPO Compliance",
+      "jobs": "Jobs",
+      "syncing": "Syncing",
+      "errors": "Errors"
     }
   },
   "alerts": {

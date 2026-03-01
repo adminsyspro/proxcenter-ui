@@ -39,6 +39,10 @@ const InfraGlobalChartWidget = dynamic(() => import('./widgets/InfraGlobalChartW
 // VM Heatmap (CPU/RAM utilization grid)
 const VmHeatmapWidget = dynamic(() => import('./widgets/VmHeatmapWidget'), { ssr: false })
 
+// Enterprise: DRS & Site Recovery
+const DrsStatusWidget = dynamic(() => import('./widgets/DrsStatusWidget'), { ssr: false })
+const SiteRecoveryWidget = dynamic(() => import('./widgets/SiteRecoveryWidget'), { ssr: false })
+
 export const WIDGET_REGISTRY = {
   'kpi-clusters': {
     type: 'kpi-clusters',
@@ -301,6 +305,32 @@ export const WIDGET_REGISTRY = {
     maxSize: { w: 12, h: 8 },
     component: VmHeatmapWidget,
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ENTERPRISE: AUTOMATION & ORCHESTRATION
+  // ═══════════════════════════════════════════════════════════════════════════
+  'drs-status': {
+    type: 'drs-status',
+    name: 'DRS Status',
+    description: 'Status DRS, migrations actives et recommandations',
+    icon: 'ri-swap-line',
+    category: 'automation',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 6, h: 6 },
+    component: DrsStatusWidget,
+  },
+  'site-recovery': {
+    type: 'site-recovery',
+    name: 'Site Recovery',
+    description: 'Protection VMs, conformité RPO et status réplication',
+    icon: 'ri-shield-star-line',
+    category: 'automation',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 6, h: 6 },
+    component: SiteRecoveryWidget,
+  },
 }
 
 export const WIDGET_CATEGORIES = [
@@ -310,6 +340,7 @@ export const WIDGET_CATEGORIES = [
   { id: 'backup', name: 'Sauvegardes', icon: 'ri-shield-check-line' },
   { id: 'storage', name: 'Stockage', icon: 'ri-hard-drive-2-line' },
   { id: 'monitoring', name: 'Monitoring', icon: 'ri-alarm-warning-line' },
+  { id: 'automation', name: 'Automation', icon: 'ri-robot-2-line' },
 ]
 
 export function getWidgetsByCategory(category) {

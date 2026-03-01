@@ -38,7 +38,7 @@ const Header = () => {
   return (
     <>
       {/* Force dark color scheme on the header — identical to dark theme rendering */}
-      <div data-mui-color-scheme='dark'>
+      <div data-dark=''>
         <LayoutHeader>
           <Navbar>
             {/* Logo + Burger on the left */}

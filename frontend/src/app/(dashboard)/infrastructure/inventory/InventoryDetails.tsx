@@ -2795,6 +2795,11 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
         const payload = await fetchDetails(selection)
 
         if (!alive) return
+        if (!payload) {
+          // root selection — no details to display
+          setLoading(false)
+          return
+        }
         setData(payload)
         setLocalTags(payload.tags || [])
       } catch (e: any) {

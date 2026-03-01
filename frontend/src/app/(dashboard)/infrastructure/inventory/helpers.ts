@@ -271,7 +271,10 @@ export async function fetchRrd(connectionId: string, path: string, timeframe: Rr
 return asArray<any>(safeJson<any>(json))
 }
 
-export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload> {
+export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
+  // Root selection doesn't have details — skip fetching
+  if (sel.type === 'root') return null
+
   const lastUpdated = new Date().toLocaleString()
 
   if (sel.type === 'cluster') {

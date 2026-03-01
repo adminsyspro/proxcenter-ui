@@ -2358,7 +2358,7 @@ return (
               itemId={`cluster:${clu.connId}`}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: '#F29221' }} />
+                  <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14 }} />
                   <span style={{ fontSize: 14 }}>{clu.name}</span>
                   {/* Warning Ceph */}
                   {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (

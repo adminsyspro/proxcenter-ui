@@ -721,7 +721,7 @@ function RootInventoryView({
                   style={{ fontSize: 20, opacity: 0.7 }} 
                 />
                 {isRealCluster
-                  ? <i className="ri-server-fill" style={{ fontSize: 18, color: '#F29221' }} />
+                  ? <i className="ri-server-fill" style={{ fontSize: 18 }} />
                   : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18 }} />
                 }
                 <Typography fontWeight={700}>{cluster.connName}</Typography>

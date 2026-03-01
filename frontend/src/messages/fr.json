@@ -1193,8 +1193,8 @@
     "datastorePrefix": "Datastore"
   },
   "drs": {
-    "title": "DRS",
-    "subtitle": "Distributed Resource Scheduler",
+    "title": "Distributed Resource Scheduler (DRS)",
+    "subtitle": "",
     "sharedStorageOnly": "Stockage partagé uniquement",
     "localStorageDetected": "Stockage local détecté",
     "sharedStorageSafe": "Stockage partagé - migration sûre",

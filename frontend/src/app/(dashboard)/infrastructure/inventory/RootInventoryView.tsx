@@ -131,16 +131,28 @@ function RootInventoryView({
   const scoreCircumference = 2 * Math.PI * 14
   const scoreDashLen = (healthScore / 100) * scoreCircumference
 
-  // Build score tooltip from breakdown
-  const scoreTooltip = useMemo(() => {
-    if (!healthBreakdown) return ''
-    const lines: string[] = [`Score: ${healthScore}/100`]
-    const entries = Object.entries(healthBreakdown) as [string, { penalty: number; reason: string }][]
-    for (const [key, { penalty, reason }] of entries) {
-      if (penalty !== 0) lines.push(`${key.toUpperCase()}: ${penalty > 0 ? '+' : ''}${penalty} (${reason})`)
-    }
-    return lines.join('\n')
-  }, [healthScore, healthBreakdown])
+  // Translate breakdown reasons (same logic as Resources page GlobalHealthScore)
+  const trReason = (reason: string) => reason
+    .replace(/\(critical\)/g, `(${t('resources.critical')})`)
+    .replace(/\(warning\)/g, `(${t('resources.attention')})`)
+    .replace(/\(underused\)/g, `(${t('resources.underused')})`)
+    .replace(/\(excellent\)/g, `(${t('resources.scoreExcellent')})`)
+    .replace(/\(good\)/g, `(${t('resources.scoreGood')})`)
+    .replace(/^No alerts$/, t('resources.noAlerts'))
+    .replace(/(\d+) critical/, `$1 ${t('resources.critical')}`)
+    .replace(/(\d+) warning/, `$1 ${t('resources.attention')}`)
+
+  // Build score tooltip rows from breakdown
+  const scoreTooltipRows = useMemo(() => {
+    if (!healthBreakdown) return null
+    return [
+      { label: 'CPU', reason: healthBreakdown.cpu.reason, penalty: healthBreakdown.cpu.penalty },
+      { label: 'RAM', reason: healthBreakdown.ram.reason, penalty: healthBreakdown.ram.penalty },
+      { label: t('resources.storageLabel'), reason: healthBreakdown.storage.reason, penalty: healthBreakdown.storage.penalty },
+      { label: t('resources.alerts'), reason: healthBreakdown.alerts.reason, penalty: healthBreakdown.alerts.penalty },
+      { label: t('resources.efficiency'), reason: healthBreakdown.efficiency.reason, penalty: healthBreakdown.efficiency.penalty },
+    ]
+  }, [healthBreakdown, t])
 
   // Grouper les VMs par cluster (connexion)
   const clusters = useMemo(() => {
@@ -361,7 +373,19 @@ function RootInventoryView({
                 <Skeleton variant="circular" width={64} height={64} sx={{ flexShrink: 0 }} />
               ) : (
                 <MuiTooltip
-                  title={<span style={{ whiteSpace: 'pre-line', fontSize: 12 }}>{scoreTooltip}</span>}
+                  title={scoreTooltipRows ? (
+                    <Box sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.75 }}>{t('resources.scoreCalculation')}</Typography>
+                      {scoreTooltipRows.map(row => (
+                        <Box key={row.label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 0.25 }}>
+                          <span>{row.label}: {trReason(row.reason)}</span>
+                          <span style={{ fontWeight: 700, opacity: 0.8 }}>
+                            {row.penalty === 0 ? 'OK' : row.penalty > 0 ? `+${row.penalty}` : row.penalty}
+                          </span>
+                        </Box>
+                      ))}
+                    </Box>
+                  ) : ''}
                   arrow
                   placement="bottom"
                 >

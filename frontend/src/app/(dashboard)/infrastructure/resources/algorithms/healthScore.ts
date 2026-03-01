@@ -83,15 +83,8 @@ export function calculateHealthScoreWithDetails(
   else { breakdown.efficiency = { penalty: 0, reason: `${eff}%` } }
   score += breakdown.efficiency.penalty
 
-  // ===== Stopped VMs (max -10 points) =====
-  const stoppedRatio = kpis.vms.total > 0 ? kpis.vms.stopped / kpis.vms.total : 0
-  const stoppedPct = Math.round(stoppedRatio * 100)
-  if (stoppedRatio > 0.4) { breakdown.stoppedVms = { penalty: -10, reason: `${stoppedPct}% stopped` } }
-  else if (stoppedRatio > 0.3) { breakdown.stoppedVms = { penalty: -7, reason: `${stoppedPct}% stopped` } }
-  else if (stoppedRatio > 0.25) { breakdown.stoppedVms = { penalty: -4, reason: `${stoppedPct}% stopped` } }
-  else if (stoppedRatio > 0.2) { breakdown.stoppedVms = { penalty: -2, reason: `${stoppedPct}% stopped` } }
-  else { breakdown.stoppedVms = { penalty: 0, reason: `${stoppedPct}% stopped` } }
-  score += breakdown.stoppedVms.penalty
+  // ===== Stopped VMs — no penalty (stopped VMs are normal: templates, standby, dev, etc.) =====
+  breakdown.stoppedVms = { penalty: 0, reason: '' }
 
   return { score: Math.max(0, Math.min(100, Math.round(score))), breakdown }
 }

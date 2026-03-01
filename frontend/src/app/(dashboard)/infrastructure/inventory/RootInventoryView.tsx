@@ -583,13 +583,13 @@ function RootInventoryView({
                 }}>
                   <i className="ri-refresh-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
                 </Box>
-                <Typography variant="subtitle2" fontWeight={700}>Distributed Resource Scheduler (DRS)</Typography>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, minWidth: 0 }}>Distributed Resource Scheduler (DRS)</Typography>
                 <Chip
                   size="small"
                   label={`Mode: ${(drsStatus?.mode || 'manual').charAt(0).toUpperCase() + (drsStatus?.mode || 'manual').slice(1)}`}
                   color={drsStatus?.mode === 'automatic' ? 'success' : drsStatus?.mode === 'partial' ? 'warning' : 'info'}
                   variant="outlined"
-                  sx={{ ml: 'auto', height: 22, fontSize: 11, fontWeight: 600 }}
+                  sx={{ flexShrink: 0, height: 22, fontSize: 11, fontWeight: 600 }}
                 />
               </Stack>
 

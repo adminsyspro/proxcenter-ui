@@ -1884,18 +1884,10 @@ return next
   }, [clusters, connectionNames])
 
   return (
-    <EnterpriseGuard requiredFeature={Features.DRS} featureName={t('drs.title')}>
+    <EnterpriseGuard requiredFeature={Features.DRS} featureName={`${t('drs.title')} (${t('drs.subtitle')})`}>
       <Box sx={{ p: 3 }}>
         {/* Header Actions */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, mb: 3 }}>
-          <Chip
-            icon={<i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
-            label={`Mode: ${(status?.mode || 'manual').toUpperCase()}`}
-            size="small"
-            color={status?.mode === 'automatic' ? 'success' : status?.mode === 'partial' ? 'warning' : 'info'}
-            variant="outlined"
-            sx={{ mr: 'auto', fontWeight: 600 }}
-          />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 3 }}>
           <IconButton onClick={handleRefresh} size="small">
             <RefreshIcon />
           </IconButton>

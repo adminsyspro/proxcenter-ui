@@ -12,6 +12,7 @@ import {
   CircularProgress,
   Divider,
   IconButton,
+  LinearProgress,
   List,
   ListItem,
   ListItemIcon,
@@ -19,6 +20,7 @@ import {
   Menu,
   MenuItem,
   Select,
+  Skeleton,
   Stack,
   Tab,
   Table,
@@ -41,6 +43,10 @@ import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
 import type { InventorySelection } from './types'
+import { useResourceData } from '../resources/hooks/useResourceData'
+import { calculateImprovedPredictions } from '../resources/algorithms/improvedPrediction'
+import { calculateHealthScoreWithDetails } from '../resources/algorithms/healthScore'
+import type { PredictiveAlert } from '../resources/types'
 
 function RootInventoryView({
   allVms,
@@ -88,6 +94,51 @@ function RootInventoryView({
   const { isEnterprise } = useLicense()
   const { data: drsStatus, isLoading: drsStatusLoading } = useDRSStatus(isEnterprise)
   const { data: drsMetrics, isLoading: drsMetricsLoading } = useDRSMetrics(isEnterprise)
+
+  // Resource data for health banner
+  const { kpis, trends, loading: resourceLoading } = useResourceData()
+
+  // Predictive alerts
+  const predictiveAlerts = useMemo(() => {
+    if (!kpis || !trends || trends.length === 0) return [] as PredictiveAlert[]
+    const { alerts } = calculateImprovedPredictions(kpis, trends)
+    return alerts
+  }, [kpis, trends])
+
+  // Filter to only warning/critical alerts
+  const filteredAlerts = useMemo(() =>
+    predictiveAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning'),
+    [predictiveAlerts])
+
+  // Health score
+  const healthScore = useMemo(() => {
+    if (!kpis) return 0
+    return calculateHealthScoreWithDetails(kpis, predictiveAlerts).score
+  }, [kpis, predictiveAlerts])
+
+  // Resource percentages for bars
+  const cpuPct = kpis ? kpis.cpu.used : 0
+  const ramPct = kpis ? kpis.ram.used : 0
+  const storePct = kpis && kpis.storage.total > 0 ? (kpis.storage.used / kpis.storage.total) * 100 : 0
+
+  // Health score display
+  const scoreColor = healthScore >= 80 ? theme.palette.success.main
+    : healthScore >= 60 ? theme.palette.warning.main
+    : healthScore >= 40 ? '#f97316'
+    : theme.palette.error.main
+
+  const scoreLabel = healthScore >= 80 ? t('resources.scoreExcellent')
+    : healthScore >= 60 ? t('resources.scoreGood')
+    : healthScore >= 40 ? t('resources.scoreMonitoring')
+    : t('resources.critical')
+
+  const scoreCircumference = 2 * Math.PI * 14
+  const scoreDashLen = (healthScore / 100) * scoreCircumference
+
+  const barColor = (pct: number) =>
+    pct >= 85 ? theme.palette.error.main
+    : pct >= 70 ? theme.palette.warning.main
+    : theme.palette.success.main
 
   // Grouper les VMs par cluster (connexion)
   const clusters = useMemo(() => {
@@ -187,9 +238,6 @@ function RootInventoryView({
     return { running, stopped, other, total: allVms.length }
   }, [allVms])
   
-  // Global resource stats
-  const globalStats = useMemo(() => calculateStats(allVms), [allVms])
-
   // VM type split (QEMU vs LXC)
   const vmTypeSplit = useMemo(() => {
     const qemu = allVms.filter(vm => vm.type === 'qemu').length
@@ -300,80 +348,157 @@ function RootInventoryView({
 
   return (
     <Box sx={{ height: '100%', overflow: 'auto', p: 2.5 }}>
-      {/* Header */}
+      {/* Health Banner */}
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
-            <Stack direction="row" alignItems="center" spacing={2}>
-              <Box
-                component="img"
-                src={theme.palette.mode === 'dark' ? '/images/proxcenter-logo-dark.svg' : '/images/proxcenter-logo-light.svg'}
-                alt="ProxCenter"
-                sx={{ width: 40, height: 40 }}
-              />
-              <Box>
-                <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: 1 }}>PROXCENTER</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {clusters.length > 1 ? t('inventory.clustersCount', { count: clusters.length }) : t('inventory.clusterCount', { count: clusters.length })} • {hosts.length} {t('inventory.nodes')} • {vmStats.total} VMs{pbsServers && pbsServers.length > 0 ? ` • ${pbsServers.length} PBS` : ''}
-                </Typography>
-              </Box>
-            </Stack>
-            
-            {/* Stats rapides */}
-            <Stack direction="row" spacing={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" fontWeight={900} color="success.main">{vmStats.running}</Typography>
-                <Typography variant="caption" color="text.secondary">{t('inventory.running')}</Typography>
-              </Box>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" fontWeight={900} color="text.disabled">{vmStats.stopped}</Typography>
-                <Typography variant="caption" color="text.secondary">{t('inventory.stopped')}</Typography>
-              </Box>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" fontWeight={900} color="primary.main">{hosts.length}</Typography>
-                <Typography variant="caption" color="text.secondary">{t('inventory.nodes')}</Typography>
-              </Box>
-              {pbsServers && pbsServers.length > 0 && (
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h4" fontWeight={900} sx={{ color: '#2196f3' }}>{pbsServers.length}</Typography>
-                  <Typography variant="caption" color="text.secondary">PBS</Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+            {/* Left: Score + Counters */}
+            <Stack direction="row" alignItems="center" spacing={2.5}>
+              {/* Score Ring */}
+              {resourceLoading && !kpis ? (
+                <Skeleton variant="circular" width={64} height={64} sx={{ flexShrink: 0 }} />
+              ) : (
+                <Box sx={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
+                  <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                    <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="2.5" opacity={0.3} />
+                    <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="2.5"
+                      strokeDasharray={`${scoreDashLen} ${scoreCircumference}`} strokeLinecap="round"
+                      style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+                  </svg>
+                  <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography sx={{ fontWeight: 900, fontSize: 16, color: scoreColor }}>{healthScore}</Typography>
+                  </Box>
                 </Box>
               )}
+
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h6" fontWeight={800} noWrap>Infrastructure Health</Typography>
+                <Typography variant="body2" sx={{ color: scoreColor, fontWeight: 700, mb: 0.5 }}>{scoreLabel}</Typography>
+                <Stack direction="row" flexWrap="wrap" gap={1.5} sx={{ mt: 0.5 }}>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    <i className="ri-cloud-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                    {clusters.length} {clusters.length > 1 ? 'clusters' : 'cluster'}
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    <i className="ri-server-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                    {hosts.length} nodes
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    <i className="ri-play-fill" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle', color: theme.palette.success.main }} />
+                    {vmStats.running} {t('inventory.running')}
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    <i className="ri-stop-fill" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                    {vmStats.stopped} {t('inventory.stopped')}
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    <i className="ri-instance-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                    {vmStats.total} VMs
+                  </Typography>
+                  {pbsServers && pbsServers.length > 0 && (
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                      <i className="ri-hard-drive-2-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                      {pbsServers.length} PBS
+                    </Typography>
+                  )}
+                </Stack>
+              </Box>
             </Stack>
-            
-            {/* Actions */}
-            <Stack direction="row" spacing={1}>
-              {onCreateVm && (
-                <Button
-                  size="small"
-                  variant="contained"
-                  startIcon={<i className="ri-add-line" />}
-                  onClick={onCreateVm}
-                  sx={{ textTransform: 'none' }}
-                >
-                  {t('common.create')} VM
-                </Button>
-              )}
-              {onCreateLxc && (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<i className="ri-add-line" />}
-                  onClick={onCreateLxc}
-                  sx={{ textTransform: 'none' }}
-                >
-                  {t('common.create')} LXC
-                </Button>
-              )}
-              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-              <IconButton size="small" onClick={expandAll} title={t('common.expandAll')}>
-                <i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />
-              </IconButton>
-              <IconButton size="small" onClick={collapseAll} title={t('common.collapseAll')}>
-                <i className="ri-collapse-diagonal-line" style={{ fontSize: 16 }} />
-              </IconButton>
+
+            {/* Right: Resource Bars */}
+            <Stack spacing={1.5} justifyContent="center">
+              {resourceLoading && !kpis ? (
+                <>
+                  <Skeleton variant="rounded" height={20} />
+                  <Skeleton variant="rounded" height={20} />
+                  <Skeleton variant="rounded" height={20} />
+                </>
+              ) : kpis ? (
+                <>
+                  {[
+                    { label: 'CPU', pct: cpuPct },
+                    { label: 'RAM', pct: ramPct },
+                    { label: 'Storage', pct: storePct },
+                  ].map(({ label, pct }) => (
+                    <Stack key={label} direction="row" alignItems="center" spacing={1.5}>
+                      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 52 }}>{label}</Typography>
+                      <LinearProgress
+                        variant="determinate"
+                        value={Math.min(100, pct)}
+                        sx={{
+                          flex: 1,
+                          height: 8,
+                          borderRadius: 1,
+                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                          '& .MuiLinearProgress-bar': {
+                            bgcolor: barColor(pct),
+                            borderRadius: 1,
+                          },
+                        }}
+                      />
+                      <Typography variant="caption" fontWeight={700} sx={{ minWidth: 36, textAlign: 'right' }}>
+                        {pct.toFixed(0)}%
+                      </Typography>
+                    </Stack>
+                  ))}
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="caption" sx={{ opacity: 0.6 }}>Efficiency:</Typography>
+                    <Typography variant="caption" fontWeight={700}>{kpis.efficiency}%</Typography>
+                  </Stack>
+                </>
+              ) : null}
             </Stack>
-          </Stack>
+          </Box>
+
+          {/* Bottom: Alerts + Actions */}
+          {(filteredAlerts.length > 0 || onCreateVm || onCreateLxc) && (
+            <>
+              <Divider sx={{ my: 1.5 }} />
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr auto' }, gap: 2, alignItems: 'center' }}>
+                {/* Predictive Alerts */}
+                {filteredAlerts.length > 0 ? (
+                  <Stack spacing={0.5}>
+                    {filteredAlerts.slice(0, 3).map((alert, i) => (
+                      <Stack key={i} direction="row" alignItems="center" spacing={1}>
+                        <Box sx={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          bgcolor: alert.severity === 'critical' ? theme.palette.error.main : theme.palette.warning.main,
+                          flexShrink: 0,
+                        }} />
+                        <Typography variant="caption">
+                          {alert.resource.toUpperCase()}{' '}
+                          {alert.daysToThreshold !== null
+                            ? `> ${alert.threshold}% in ${alert.daysToThreshold}d`
+                            : `trending ${alert.trend}`}
+                        </Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                ) : <Box />}
+
+                {/* Action Buttons */}
+                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                  {onCreateVm && (
+                    <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={onCreateVm} sx={{ textTransform: 'none' }}>
+                      {t('common.create')} VM
+                    </Button>
+                  )}
+                  {onCreateLxc && (
+                    <Button size="small" variant="outlined" startIcon={<i className="ri-add-line" />} onClick={onCreateLxc} sx={{ textTransform: 'none' }}>
+                      {t('common.create')} LXC
+                    </Button>
+                  )}
+                  <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                  <IconButton size="small" onClick={expandAll} title={t('common.expandAll')}>
+                    <i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />
+                  </IconButton>
+                  <IconButton size="small" onClick={collapseAll} title={t('common.collapseAll')}>
+                    <i className="ri-collapse-diagonal-line" style={{ fontSize: 16 }} />
+                  </IconButton>
+                </Stack>
+              </Box>
+            </>
+          )}
         </CardContent>
       </Card>
       
@@ -381,143 +506,12 @@ function RootInventoryView({
       <Box sx={{
         display: 'grid',
         gridTemplateColumns: isEnterprise
-          ? { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', xl: 'repeat(5, 1fr)' }
-          : { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+          ? { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }
+          : { xs: '1fr', sm: 'repeat(2, 1fr)' },
         gap: 2,
         mb: 2
       }}>
-        {/* Card 1: Resource Usage - Donut gauges */}
-        <Card variant="outlined" sx={{ p: 0 }}>
-          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Box sx={{
-                width: 32, height: 32, borderRadius: 1.5,
-                bgcolor: alpha(theme.palette.info.main, 0.12),
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <i className="ri-cpu-line" style={{ fontSize: 18, color: theme.palette.info.main }} />
-              </Box>
-              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.resourceUsage')}</Typography>
-            </Stack>
-            <Stack direction="row" justifyContent="space-around" alignItems="center">
-              {/* CPU gauge */}
-              {(() => {
-                const cpuColor = globalStats.avgCpu > 90 ? theme.palette.error.main : globalStats.avgCpu > 70 ? theme.palette.warning.main : theme.palette.info.main
-                const cpuData = [
-                  { value: globalStats.avgCpu },
-                  { value: Math.max(0, 100 - globalStats.avgCpu) },
-                ]
-                return (
-                  <Box sx={{ position: 'relative', width: 80, height: 80 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={cpuData} cx="50%" cy="50%" innerRadius={26} outerRadius={36} startAngle={90} endAngle={-270} dataKey="value" stroke="none">
-                          <Cell fill={cpuColor} />
-                          <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                      <Typography variant="caption" fontWeight={800} sx={{ fontSize: 13, color: cpuColor, lineHeight: 1 }}>
-                        {globalStats.avgCpu.toFixed(0)}%
-                      </Typography>
-                    </Box>
-                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: -0.5, opacity: 0.7, fontSize: 11 }}>CPU</Typography>
-                  </Box>
-                )
-              })()}
-              {/* RAM gauge */}
-              {(() => {
-                const ramColor = globalStats.avgRam > 90 ? theme.palette.error.main : globalStats.avgRam > 70 ? theme.palette.warning.main : theme.palette.secondary.main
-                const ramData = [
-                  { value: globalStats.avgRam },
-                  { value: Math.max(0, 100 - globalStats.avgRam) },
-                ]
-                return (
-                  <Box sx={{ position: 'relative', width: 80, height: 80 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={ramData} cx="50%" cy="50%" innerRadius={26} outerRadius={36} startAngle={90} endAngle={-270} dataKey="value" stroke="none">
-                          <Cell fill={ramColor} />
-                          <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                      <Typography variant="caption" fontWeight={800} sx={{ fontSize: 13, color: ramColor, lineHeight: 1 }}>
-                        {globalStats.avgRam.toFixed(0)}%
-                      </Typography>
-                    </Box>
-                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: -0.5, opacity: 0.7, fontSize: 11 }}>RAM</Typography>
-                  </Box>
-                )
-              })()}
-            </Stack>
-          </CardContent>
-        </Card>
-
-        {/* Card 2: VM Distribution - Donut chart */}
-        <Card variant="outlined" sx={{ p: 0 }}>
-          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Box sx={{
-                width: 32, height: 32, borderRadius: 1.5,
-                bgcolor: alpha(theme.palette.success.main, 0.12),
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <i className="ri-pie-chart-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
-              </Box>
-              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmDistribution')}</Typography>
-            </Stack>
-            <Stack direction="row" alignItems="center" justifyContent="center" spacing={2}>
-              <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        ...(vmStats.running > 0 ? [{ name: t('inventory.health.running'), value: vmStats.running }] : []),
-                        ...(vmStats.stopped > 0 ? [{ name: t('inventory.health.stopped'), value: vmStats.stopped }] : []),
-                        ...(vmStats.other > 0 ? [{ name: t('inventory.health.other'), value: vmStats.other }] : []),
-                        ...(vmStats.total === 0 ? [{ name: 'empty', value: 1 }] : []),
-                      ]}
-                      cx="50%" cy="50%" innerRadius={28} outerRadius={40}
-                      dataKey="value" stroke="none" paddingAngle={vmStats.total > 0 ? 3 : 0}
-                    >
-                      {vmStats.running > 0 && <Cell fill={theme.palette.success.main} />}
-                      {vmStats.stopped > 0 && <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)'} />}
-                      {vmStats.other > 0 && <Cell fill={theme.palette.warning.main} />}
-                      {vmStats.total === 0 && <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                  <Typography variant="caption" fontWeight={800} sx={{ fontSize: 15, lineHeight: 1 }}>{vmStats.total}</Typography>
-                </Box>
-              </Box>
-              <Stack spacing={0.5}>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.running')}</Typography>
-                  <Typography variant="caption" fontWeight={700}>{vmStats.running}</Typography>
-                </Stack>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)' }} />
-                  <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.stopped')}</Typography>
-                  <Typography variant="caption" fontWeight={700}>{vmStats.stopped}</Typography>
-                </Stack>
-                {vmStats.other > 0 && (
-                  <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
-                    <Typography variant="caption" sx={{ opacity: 0.8 }}>{t('inventory.health.other')}</Typography>
-                    <Typography variant="caption" fontWeight={700}>{vmStats.other}</Typography>
-                  </Stack>
-                )}
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-
-        {/* Card 3: VM Type Split - Donut chart */}
+        {/* Card: VM Type Split - Donut chart */}
         <Card variant="outlined" sx={{ p: 0 }}>
           <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
@@ -618,7 +612,7 @@ function RootInventoryView({
           </CardContent>
         </Card>
 
-        {/* Card 5: DRS Orchestration (Enterprise only) */}
+        {/* Card 5: DRS (Enterprise only) */}
         {isEnterprise && (
           <Card variant="outlined" sx={{ p: 0 }}>
             <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
@@ -630,7 +624,14 @@ function RootInventoryView({
                 }}>
                   <i className="ri-refresh-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
                 </Box>
-                <Typography variant="subtitle2" fontWeight={700}>DRS Orchestration</Typography>
+                <Typography variant="subtitle2" fontWeight={700}>Distributed Resource Scheduler (DRS)</Typography>
+                <Chip
+                  size="small"
+                  label={`Mode: ${(drsStatus?.mode || 'manual').charAt(0).toUpperCase() + (drsStatus?.mode || 'manual').slice(1)}`}
+                  color={drsStatus?.mode === 'automatic' ? 'success' : drsStatus?.mode === 'partial' ? 'warning' : 'info'}
+                  variant="outlined"
+                  sx={{ ml: 'auto', height: 22, fontSize: 11, fontWeight: 600 }}
+                />
               </Stack>
 
               {(drsStatusLoading || drsMetricsLoading) ? (
@@ -684,14 +685,6 @@ function RootInventoryView({
                     </Stack>
                   </Stack>
 
-                  {/* Mode chip */}
-                  <Chip
-                    size="small"
-                    label={`Mode: ${(drsStatus?.mode || 'manual').charAt(0).toUpperCase() + (drsStatus?.mode || 'manual').slice(1)}`}
-                    color={drsStatus?.mode === 'automatic' ? 'success' : drsStatus?.mode === 'partial' ? 'warning' : 'info'}
-                    variant="outlined"
-                    sx={{ height: 22, fontSize: 11, fontWeight: 600, alignSelf: 'flex-start' }}
-                  />
                 </Stack>
               )}
             </CardContent>

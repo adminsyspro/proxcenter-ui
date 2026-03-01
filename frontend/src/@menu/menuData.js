@@ -13,6 +13,7 @@ export const menuData = (t = (key) => key) => [
   {
     isSection: true,
     label: t('navigation.infrastructure'),
+    icon: 'ri-server-line',
     children: [
       {
         label: t('navigation.inventory'),
@@ -56,6 +57,7 @@ export const menuData = (t = (key) => key) => [
   {
     isSection: true,
     label: t('navigation.orchestration'),
+    icon: 'ri-robot-line',
     permissions: ['vm.migrate', 'vm.config'], // Section nécessite au moins une de ces permissions
     requiredFeature: 'drs', // Whole section requires DRS feature
     children: [
@@ -93,6 +95,7 @@ export const menuData = (t = (key) => key) => [
   {
     isSection: true,
     label: t('navigation.operations'),
+    icon: 'ri-pulse-line',
     children: [
       {
         label: t('navigation.events'),
@@ -127,6 +130,7 @@ export const menuData = (t = (key) => key) => [
   {
     isSection: true,
     label: t('navigation.securityAccess'),
+    icon: 'ri-shield-keyhole-line',
     permissions: ['admin.users', 'admin.rbac', 'admin.audit', 'admin.compliance'], // Section admin
     children: [
       {
@@ -161,6 +165,7 @@ export const menuData = (t = (key) => key) => [
   {
     isSection: true,
     label: t('navigation.settings'),
+    icon: 'ri-settings-4-line',
     permissions: ['admin.settings', 'connection.manage'],
     children: [
       {

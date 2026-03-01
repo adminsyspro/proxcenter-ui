@@ -42,6 +42,12 @@ const buildDarkOverrideCSS = (theme) => {
   lines.push(`--border-color: ${darkCSS['--mui-palette-divider'] || 'rgba(231,227,252,0.12)'};`)
   lines.push('color-scheme: dark;')
 
+  // Force solid background — prevent blur/opacity from making header semi-transparent
+  // (themeConfig.navbar.blur causes 85% opacity which blends with the light page behind)
+  const paperColor = darkCSS['--mui-palette-background-paper'] || '#1E1E2D'
+  lines.push(`background-color: ${paperColor} !important;`)
+  lines.push('backdrop-filter: none !important;')
+
   return lines.join('\n')
 }
 

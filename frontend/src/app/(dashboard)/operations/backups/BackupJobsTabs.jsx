@@ -16,6 +16,7 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -1638,34 +1639,48 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
   const theme = useTheme()
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState(0)
+  const [expanded, setExpanded] = useState(false)
 
   return (
     <Card variant="outlined">
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <i className="ri-calendar-schedule-line" style={{ fontSize: 22, color: theme.palette.primary.main }} />
-          <Typography variant="h6">{t('backups.backupJobs')}</Typography>
-        </Box>
-        
-        <Tabs 
-          value={activeTab} 
-          onChange={(_, v) => setActiveTab(v)}
-          sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+      <CardContent sx={{ '&:last-child': { pb: expanded ? 2 : 1 } }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+          onClick={() => setExpanded(!expanded)}
         >
-          <Tab 
-            icon={<i className="ri-server-line" style={{ fontSize: 18 }} />}
-            iconPosition="start"
-            label={`PVE (${pveConnections.length})`}
-          />
-          <Tab 
-            icon={<i className="ri-archive-line" style={{ fontSize: 18 }} />}
-            iconPosition="start"
-            label={`PBS (${pbsConnections.length})`}
-          />
-        </Tabs>
-        
-        {activeTab === 0 && <PveJobsTab pveConnections={pveConnections} />}
-        {activeTab === 1 && <PbsJobsTab pbsConnections={pbsConnections} />}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className="ri-calendar-schedule-line" style={{ fontSize: 22, color: theme.palette.primary.main }} />
+            <Typography variant="h6">{t('backups.backupJobs')}</Typography>
+          </Box>
+          <IconButton size="small">
+            <i
+              className={expanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'}
+              style={{ fontSize: 20 }}
+            />
+          </IconButton>
+        </Box>
+
+        <Collapse in={expanded}>
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            sx={{ mt: 2, mb: 3, borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab
+              icon={<i className="ri-server-line" style={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label={`PVE (${pveConnections.length})`}
+            />
+            <Tab
+              icon={<i className="ri-archive-line" style={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label={`PBS (${pbsConnections.length})`}
+            />
+          </Tabs>
+
+          {activeTab === 0 && <PveJobsTab pveConnections={pveConnections} />}
+          {activeTab === 1 && <PbsJobsTab pbsConnections={pbsConnections} />}
+        </Collapse>
       </CardContent>
     </Card>
   )

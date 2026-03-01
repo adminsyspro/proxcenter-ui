@@ -48,6 +48,9 @@ const buildDarkOverrideCSS = (theme) => {
   lines.push(`background-color: ${paperColor} !important;`)
   lines.push('backdrop-filter: none !important;')
 
+  // Set the inherited text color so all children (menu items, icons, etc.) get dark-mode text
+  lines.push(`color: ${darkCSS['--mui-palette-text-primary'] || 'rgba(231,227,252,0.9)'};`)
+
   return lines.join('\n')
 }
 

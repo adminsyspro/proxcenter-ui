@@ -400,8 +400,20 @@ export default function TasksFooter({
           zIndex: 1200, // Above sidebar (1100)
           borderRadius: 0,
           borderTop: '1px solid',
-          borderColor: 'divider',
-          bgcolor: theme.palette.mode === 'dark' ? '#1a1a2e' : 'background.paper',
+          borderColor: 'rgba(231,227,252,0.12)',
+          bgcolor: '#1a1a2e',
+          color: 'rgba(231,227,252,0.9)',
+          colorScheme: 'dark',
+          // Override MUI CSS vars so child components (IconButton, Chip, DataGrid) render dark
+          '--mui-palette-text-primary': 'rgba(231,227,252,0.9)',
+          '--mui-palette-text-secondary': 'rgba(231,227,252,0.7)',
+          '--mui-palette-text-disabled': 'rgba(231,227,252,0.4)',
+          '--mui-palette-divider': 'rgba(231,227,252,0.12)',
+          '--mui-palette-action-active': 'rgba(231,227,252,0.6)',
+          '--mui-palette-action-hover': 'rgba(231,227,252,0.06)',
+          '--mui-palette-action-selected': 'rgba(231,227,252,0.08)',
+          '--mui-palette-background-paper': '#1a1a2e',
+          '--mui-palette-background-default': '#151521',
         }}
       >
         {/* Header */}
@@ -414,15 +426,11 @@ export default function TasksFooter({
             px: 2,
             py: 0.75,
             cursor: 'pointer',
-            bgcolor: theme.palette.mode === 'dark'
-              ? alpha(theme.palette.primary.main, 0.08)
-              : alpha(theme.palette.primary.main, 0.04),
+            bgcolor: alpha(theme.palette.primary.main, 0.08),
             borderBottom: expanded ? '1px solid' : 'none',
-            borderColor: 'divider',
+            borderColor: 'rgba(231,227,252,0.12)',
             '&:hover': {
-              bgcolor: theme.palette.mode === 'dark'
-                ? alpha(theme.palette.primary.main, 0.12)
-                : alpha(theme.palette.primary.main, 0.08)
+              bgcolor: alpha(theme.palette.primary.main, 0.12)
             }
           }}
         >
@@ -520,7 +528,7 @@ return ''
                 sx={{
                   border: 'none',
                   '& .MuiDataGrid-columnHeaders': {
-                    bgcolor: theme.palette.mode === 'dark' ? '#12121f' : 'grey.100',
+                    bgcolor: '#12121f',
                     borderBottom: '1px solid',
                     borderColor: 'divider',
                     minHeight: '36px !important',
@@ -542,9 +550,7 @@ return ''
                   '& .MuiDataGrid-cell': {
                     py: 0.5,
                     borderBottom: '1px solid',
-                    borderColor: theme.palette.mode === 'dark'
-                      ? 'rgba(255,255,255,0.05)'
-                      : 'rgba(0,0,0,0.05)'
+                    borderColor: 'rgba(255,255,255,0.05)'
                   },
                   '& .row-running': {
                     bgcolor: alpha(theme.palette.primary.main, 0.05)

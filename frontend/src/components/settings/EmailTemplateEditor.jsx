@@ -567,7 +567,7 @@ export default function EmailTemplateEditor() {
                     sx={{ 
                       p: 4, 
                       overflow: 'hidden',
-                      background: 'linear-gradient(135deg, #1e1e2e 0%, #2d2d3f 100%)',
+                      background: 'linear-gradient(135deg, #1e1e2d 0%, #2d2d3f 100%)',
                       minHeight: 500,
                       borderRadius: 2
                     }}

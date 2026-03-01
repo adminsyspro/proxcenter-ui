@@ -20,7 +20,7 @@ const VCenterBurgerMenu = ({ anchorEl, open, onClose }) => {
 
   // vCenter exact colors (dark charcoal/indigo)
   const primaryColor = theme.palette.primary.main
-  const menuBg = '#1e1e2e'
+  const menuBg = '#1e1e2d'
   const menuBorder = '#333348'
   const menuHover = '#3a3a52'
   const accentLight = theme.palette.primary.light || primaryColor

@@ -259,7 +259,7 @@ const globalThemesConfig = [
     tagKeys: ['themes.tags.vmware', 'themes.tags.enterprise'],
     preferredLayout: 'horizontal',
     preview: {
-      cardBg: 'linear-gradient(180deg, #1e1e2e 0%, #14142a 100%)',
+      cardBg: 'linear-gradient(180deg, #1e1e2d 0%, #14142a 100%)',
       accent: '#0079b8'
     },
     styles: {
@@ -295,7 +295,7 @@ const globalThemesConfig = [
       primaryLight: '#49afd9',
 
       // Navigation — vSphere Client 8 charcoal header
-      navBg: '#1e1e2e',
+      navBg: '#1e1e2d',
       navBgDark: '#14142a',
       navText: '#ffffff',
       navHover: '#3a3a52',
@@ -309,7 +309,7 @@ const globalThemesConfig = [
     cssOverrides: {
       dark: {
         // Header — vSphere Client 8 charcoal/indigo
-        '--vcenter-header-bg': '#1e1e2e',
+        '--vcenter-header-bg': '#1e1e2d',
         '--vcenter-nav-bg': '#14142a',
         '--vcenter-nav-hover': '#3a3a52',
         '--vcenter-nav-active': '#0079b8',
@@ -317,7 +317,7 @@ const globalThemesConfig = [
 
         // Content
         '--vcenter-content-bg': '#14142a',
-        '--vcenter-card-bg': '#1e1e2e',
+        '--vcenter-card-bg': '#1e1e2d',
         '--vcenter-card-border': '#333348',
 
         // Accent
@@ -330,7 +330,7 @@ const globalThemesConfig = [
       },
       light: {
         // Header stays dark like vCenter
-        '--vcenter-header-bg': '#1e1e2e',
+        '--vcenter-header-bg': '#1e1e2d',
         '--vcenter-nav-bg': '#14142a',
         '--vcenter-nav-hover': '#3a3a52',
         '--vcenter-nav-active': '#0079b8',

@@ -312,7 +312,7 @@ const VCenterHeader = () => {
 
   // vCenter exact header colors (dark charcoal/indigo — matches vSphere Client 8)
   const primaryColor = theme.palette.primary.main
-  const headerBg = '#1e1e2e'
+  const headerBg = '#1e1e2d'
   const headerBorder = '#333348'
   const headerHover = '#3a3a52'
   const accentLight = theme.palette.primary.light || primaryColor

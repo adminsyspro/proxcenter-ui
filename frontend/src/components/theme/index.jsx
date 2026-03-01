@@ -318,11 +318,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
     ...(globalTheme.id === 'vcenter' && {
       // Header - VMware dark blue-grey (toujours sombre, même en light mode)
       '.ts-vertical-layout-header, .ts-horizontal-layout-header': {
-        backgroundColor: '#1e1e2e !important',
+        backgroundColor: '#1e1e2d !important',
         borderBottom: '1px solid #333348 !important'
       },
       '.ts-vertical-layout-navbar, .ts-horizontal-layout-navbar': {
-        backgroundColor: '#1e1e2e !important'
+        backgroundColor: '#1e1e2d !important'
       },
       '.ts-vertical-layout-navbar *, .ts-horizontal-layout-navbar *': {
         color: '#fafafa !important'
@@ -395,7 +395,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       },
       // Burger menu popover — always dark regardless of light/dark mode
       '.vcenter-burger-menu > .MuiPaper-root': {
-        backgroundColor: '#1e1e2e !important',
+        backgroundColor: '#1e1e2d !important',
         color: '#fff !important',
         border: '1px solid #333348 !important'
       },
@@ -417,7 +417,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
 
       // Cards VMware style
       '.MuiCard-root, .MuiPaper-root:not(.no-theme-override)': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`,
         borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiCardContent-root, .MuiCardHeader-root': {
@@ -428,7 +428,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // TABLES - VMware style - TOUS les tableaux
       // ============================================================
       '.MuiTable-root, .MuiTableContainer-root, table': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`
       },
       '.MuiTableHead-root, thead': {
         backgroundColor: `${isLightMode ? '#f4f6f8' : '#14142a'} !important`
@@ -443,10 +443,10 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         letterSpacing: '0.03em !important'
       },
       '.MuiTableBody-root, tbody': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`
       },
       '.MuiTableBody-root .MuiTableRow-root, tbody tr': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`,
         '&:hover': {
           backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
         }
@@ -461,7 +461,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
 
       // DataGrid (si utilisé)
       '.MuiDataGrid-root': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`,
         borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiDataGrid-columnHeaders': {
@@ -469,7 +469,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiDataGrid-row': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`,
         '&:hover': {
           backgroundColor: `${isLightMode ? '#f0f7ff' : '#2a2a42'} !important`
         }
@@ -487,14 +487,14 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
 
       // Virtualized tables / custom tables (only target actual table components, not MuiGrid)
       '.MuiTableContainer-root table, [class*="VirtualTable"], [class*="virtualTable"]': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`
       },
 
       // ============================================================
       // INPUTS & FORM CONTROLS - VMware style
       // ============================================================
       '.MuiOutlinedInput-root': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`,
         '& .MuiOutlinedInput-notchedOutline': {
           borderColor: `${isLightMode ? '#e0e0e0' : '#333348'} !important`
         },
@@ -513,7 +513,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         color: `${isLightMode ? '#737373' : '#9a9a9a'} !important`
       },
       '.MuiSelect-select': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`
       },
 
       // ============================================================
@@ -591,7 +591,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // DIALOGS & MENUS - VMware style
       // ============================================================
       '.MuiDialog-paper, .MuiPopover-paper:not(.no-theme-override), .MuiMenu-paper': {
-        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#ffffff' : '#1e1e2d'} !important`,
         border: `1px solid ${isLightMode ? '#e0e0e0' : '#333348'} !important`
       },
       '.MuiMenuItem-root': {
@@ -632,7 +632,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // TOOLTIPS - VMware style
       // ============================================================
       '.MuiTooltip-tooltip': {
-        backgroundColor: `${isLightMode ? '#313131' : '#1e1e2e'} !important`,
+        backgroundColor: `${isLightMode ? '#313131' : '#1e1e2d'} !important`,
         color: '#fafafa !important',
         border: `1px solid ${isLightMode ? '#313131' : '#333348'} !important`,
         fontSize: '12px !important'

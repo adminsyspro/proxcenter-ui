@@ -528,12 +528,16 @@ return ''
                 }}
                 sx={{
                   border: 'none',
+                  '--DataGrid-rowBorderColor': 'rgba(231,227,252,0.08)',
+                  '--DataGrid-containerBackground': '#12121f',
                   '& .MuiDataGrid-columnHeaders': {
                     bgcolor: '#12121f',
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
+                    borderBottom: '1px solid rgba(231,227,252,0.08)',
                     minHeight: '36px !important',
                     maxHeight: '36px !important',
+                  },
+                  '& .MuiDataGrid-columnSeparator': {
+                    display: 'none',
                   },
                   '& .MuiDataGrid-columnHeader': {
                     py: 0.5
@@ -550,8 +554,7 @@ return ''
                   },
                   '& .MuiDataGrid-cell': {
                     py: 0.5,
-                    borderBottom: '1px solid',
-                    borderColor: 'rgba(255,255,255,0.05)'
+                    borderBottom: '1px solid rgba(231,227,252,0.08)',
                   },
                   '& .row-running': {
                     bgcolor: alpha(theme.palette.primary.main, 0.05)

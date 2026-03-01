@@ -105,15 +105,11 @@ function RootInventoryView({
     return alerts
   }, [kpis, trends])
 
-  // Filter to only warning/critical alerts
-  const filteredAlerts = useMemo(() =>
-    predictiveAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning'),
-    [predictiveAlerts])
-
   // Health score
-  const healthScore = useMemo(() => {
-    if (!kpis) return 0
-    return calculateHealthScoreWithDetails(kpis, predictiveAlerts).score
+  const { healthScore, healthBreakdown } = useMemo(() => {
+    if (!kpis) return { healthScore: 0, healthBreakdown: null }
+    const result = calculateHealthScoreWithDetails(kpis, predictiveAlerts)
+    return { healthScore: result.score, healthBreakdown: result.breakdown }
   }, [kpis, predictiveAlerts])
 
   // Resource percentages for bars
@@ -135,10 +131,16 @@ function RootInventoryView({
   const scoreCircumference = 2 * Math.PI * 14
   const scoreDashLen = (healthScore / 100) * scoreCircumference
 
-  const barColor = (pct: number) =>
-    pct >= 85 ? theme.palette.error.main
-    : pct >= 70 ? theme.palette.warning.main
-    : theme.palette.success.main
+  // Build score tooltip from breakdown
+  const scoreTooltip = useMemo(() => {
+    if (!healthBreakdown) return ''
+    const lines: string[] = [`Score: ${healthScore}/100`]
+    const entries = Object.entries(healthBreakdown) as [string, { penalty: number; reason: string }][]
+    for (const [key, { penalty, reason }] of entries) {
+      if (penalty !== 0) lines.push(`${key.toUpperCase()}: ${penalty > 0 ? '+' : ''}${penalty} (${reason})`)
+    }
+    return lines.join('\n')
+  }, [healthScore, healthBreakdown])
 
   // Grouper les VMs par cluster (connexion)
   const clusters = useMemo(() => {
@@ -358,17 +360,23 @@ function RootInventoryView({
               {resourceLoading && !kpis ? (
                 <Skeleton variant="circular" width={64} height={64} sx={{ flexShrink: 0 }} />
               ) : (
-                <Box sx={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
-                  <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                    <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="2.5" opacity={0.3} />
-                    <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="2.5"
-                      strokeDasharray={`${scoreDashLen} ${scoreCircumference}`} strokeLinecap="round"
-                      style={{ transition: 'stroke-dasharray 0.6s ease' }} />
-                  </svg>
-                  <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography sx={{ fontWeight: 900, fontSize: 16, color: scoreColor }}>{healthScore}</Typography>
+                <MuiTooltip
+                  title={<span style={{ whiteSpace: 'pre-line', fontSize: 12 }}>{scoreTooltip}</span>}
+                  arrow
+                  placement="bottom"
+                >
+                  <Box sx={{ position: 'relative', width: 64, height: 64, flexShrink: 0, cursor: 'help' }}>
+                    <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                      <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="2.5" opacity={0.3} />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="2.5"
+                        strokeDasharray={`${scoreDashLen} ${scoreCircumference}`} strokeLinecap="round"
+                        style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+                    </svg>
+                    <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Typography sx={{ fontWeight: 900, fontSize: 16, color: scoreColor }}>{healthScore}</Typography>
+                    </Box>
                   </Box>
-                </Box>
+                </MuiTooltip>
               )}
 
               <Box sx={{ minWidth: 0 }}>
@@ -431,7 +439,7 @@ function RootInventoryView({
                           borderRadius: 1,
                           bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                           '& .MuiLinearProgress-bar': {
-                            bgcolor: barColor(pct),
+                            bgcolor: 'primary.main',
                             borderRadius: 1,
                           },
                         }}
@@ -450,55 +458,6 @@ function RootInventoryView({
             </Stack>
           </Box>
 
-          {/* Bottom: Alerts + Actions */}
-          {(filteredAlerts.length > 0 || onCreateVm || onCreateLxc) && (
-            <>
-              <Divider sx={{ my: 1.5 }} />
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr auto' }, gap: 2, alignItems: 'center' }}>
-                {/* Predictive Alerts */}
-                {filteredAlerts.length > 0 ? (
-                  <Stack spacing={0.5}>
-                    {filteredAlerts.slice(0, 3).map((alert, i) => (
-                      <Stack key={i} direction="row" alignItems="center" spacing={1}>
-                        <Box sx={{
-                          width: 8, height: 8, borderRadius: '50%',
-                          bgcolor: alert.severity === 'critical' ? theme.palette.error.main : theme.palette.warning.main,
-                          flexShrink: 0,
-                        }} />
-                        <Typography variant="caption">
-                          {alert.resource.toUpperCase()}{' '}
-                          {alert.daysToThreshold !== null
-                            ? `> ${alert.threshold}% in ${alert.daysToThreshold}d`
-                            : `trending ${alert.trend}`}
-                        </Typography>
-                      </Stack>
-                    ))}
-                  </Stack>
-                ) : <Box />}
-
-                {/* Action Buttons */}
-                <Stack direction="row" spacing={1} justifyContent="flex-end">
-                  {onCreateVm && (
-                    <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={onCreateVm} sx={{ textTransform: 'none' }}>
-                      {t('common.create')} VM
-                    </Button>
-                  )}
-                  {onCreateLxc && (
-                    <Button size="small" variant="outlined" startIcon={<i className="ri-add-line" />} onClick={onCreateLxc} sx={{ textTransform: 'none' }}>
-                      {t('common.create')} LXC
-                    </Button>
-                  )}
-                  <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-                  <IconButton size="small" onClick={expandAll} title={t('common.expandAll')}>
-                    <i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />
-                  </IconButton>
-                  <IconButton size="small" onClick={collapseAll} title={t('common.collapseAll')}>
-                    <i className="ri-collapse-diagonal-line" style={{ fontSize: 16 }} />
-                  </IconButton>
-                </Stack>
-              </Box>
-            </>
-          )}
         </CardContent>
       </Card>
       
@@ -644,8 +603,7 @@ function RootInventoryView({
                   <Typography variant="caption">Disabled</Typography>
                 </Box>
               ) : (
-                <Stack spacing={1}>
-                  {/* Health Score + Status */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 1 }}>
                   {drsHealthScore !== null && (() => {
                     const scoreColor = drsHealthScore >= 80 ? theme.palette.success.main : drsHealthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main
                     const scoreLabel = drsHealthScore >= 80 ? 'Healthy' : drsHealthScore >= 50 ? 'Attention' : 'Critical'
@@ -653,39 +611,24 @@ function RootInventoryView({
                     const dashLen = (drsHealthScore / 100) * circumference
 
                     return (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        {/* ScoreRing */}
-                        <Box sx={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                      <Stack alignItems="center" spacing={0.5}>
+                        {/* ScoreRing — larger */}
+                        <Box sx={{ position: 'relative', width: 72, height: 72, flexShrink: 0 }}>
                           <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                            <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="3" opacity={0.3} />
-                            <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="3"
+                            <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="2.5" opacity={0.3} />
+                            <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="2.5"
                               strokeDasharray={`${dashLen} ${circumference}`} strokeLinecap="round"
                               style={{ transition: 'stroke-dasharray 0.6s ease' }} />
                           </svg>
                           <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, color: scoreColor }}>{drsHealthScore}</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 800, color: scoreColor }}>{drsHealthScore}</Typography>
                           </Box>
                         </Box>
                         <Typography variant="body2" fontWeight={700} sx={{ color: scoreColor }}>{scoreLabel}</Typography>
                       </Stack>
                     )
                   })()}
-
-                  <Divider />
-
-                  {/* Stats */}
-                  <Stack spacing={0.5}>
-                    <Stack direction="row" alignItems="center" spacing={0.75}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main' }} />
-                      <Typography variant="caption" sx={{ opacity: 0.8 }}>{drsStatus?.active_migrations || 0} migrations</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" spacing={0.75}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
-                      <Typography variant="caption" sx={{ opacity: 0.8 }}>{drsStatus?.recommendations || 0} recommendations</Typography>
-                    </Stack>
-                  </Stack>
-
-                </Stack>
+                </Box>
               )}
             </CardContent>
           </Card>

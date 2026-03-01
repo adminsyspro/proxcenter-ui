@@ -668,7 +668,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
           </Tooltip>
 
           {/* Toggle to Horizontal Layout */}
-          <Tooltip title={t('navbar.horizontalLayout') || 'Horizontal layout'}>
+          <Tooltip title={t('navbar.horizontalLayout')}>
             <IconButton size='small' onClick={() => updateSettings({ layout: 'horizontal' })}>
               <i className='ri-layout-top-line' />
             </IconButton>

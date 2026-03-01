@@ -34,13 +34,25 @@ const Header = () => {
   }
 
   const accentColor = theme.palette.primary.main
+  const isDark = theme.palette.mode === 'dark'
+
+  // Dark header bar styling — always dark background, even in light theme
+  const darkHeaderOverrides = !isDark ? `
+    background-color: #2f3349 !important;
+    color: #fff !important;
+    & .MuiTypography-root { color: inherit !important; }
+    & .MuiIconButton-root { color: rgba(255,255,255,0.85) !important; }
+    & .MuiIconButton-root:hover { background-color: rgba(255,255,255,0.08) !important; }
+    & .MuiAvatar-root { color: #fff !important; }
+    & .ri-search-line, & .ri-menu-line { color: inherit !important; }
+  ` : ''
 
   return (
     <>
-      <LayoutHeader>
+      <LayoutHeader overrideStyles={darkHeaderOverrides}>
         <Navbar>
           {/* Logo + Burger on the left */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 2, color: !isDark ? '#fff' : 'inherit' }}>
             {/* Logo */}
             <Box
               sx={{
@@ -48,7 +60,8 @@ const Header = () => {
                 alignItems: 'center',
                 gap: 1,
                 cursor: 'pointer',
-                mr: 0.5
+                mr: 0.5,
+                color: !isDark ? '#fff' : 'text.primary'
               }}
               onClick={() => router.push('/home')}
             >
@@ -59,7 +72,8 @@ const Header = () => {
                   fontWeight: 700,
                   letterSpacing: '0.02em',
                   textTransform: 'uppercase',
-                  display: { xs: 'none', sm: 'block' }
+                  display: { xs: 'none', sm: 'block' },
+                  color: 'inherit'
                 }}
               >
                 ProxCenter
@@ -78,10 +92,10 @@ const Header = () => {
                 px: 1,
                 py: 0.5,
                 borderRadius: 1,
-                color: 'text.secondary',
+                color: !isDark ? 'rgba(255,255,255,0.75)' : 'text.secondary',
                 '&:hover': {
-                  bgcolor: 'action.hover',
-                  color: 'text.primary'
+                  bgcolor: !isDark ? 'rgba(255,255,255,0.08)' : 'action.hover',
+                  color: !isDark ? '#fff' : 'text.primary'
                 }
               }}
             >

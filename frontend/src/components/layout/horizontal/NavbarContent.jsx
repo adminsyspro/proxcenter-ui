@@ -348,35 +348,37 @@ const NavbarContent = () => {
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 1, px: 2 }}>
-        {/* Search bar */}
-        <Box
-          onClick={() => setSearchOpen(true)}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.75,
-            px: 1.5,
-            py: 0.5,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-            cursor: 'pointer',
-            width: 300,
-            transition: 'all 0.2s',
-            '&:hover': {
-              borderColor: 'primary.main',
-              bgcolor: 'action.hover'
-            }
-          }}
-        >
-          <i className='ri-search-line' style={{ opacity: 0.5, fontSize: '1rem' }} />
-          <Typography variant='body2' sx={{ opacity: 0.5, flex: 1, fontSize: '0.8rem', userSelect: 'none' }}>
-            {t('navbar.search')}...
-          </Typography>
-          <Typography variant='caption' sx={{ opacity: 0.3, fontSize: '0.65rem', fontFamily: 'monospace' }}>
-            Ctrl+K
-          </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 1, px: 2, position: 'relative' }}>
+        {/* Search bar - Centered absolutely */}
+        <Box sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
+          <Box
+            onClick={() => setSearchOpen(true)}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'rgba(255,255,255,0.2)',
+              cursor: 'pointer',
+              width: 300,
+              transition: 'all 0.2s',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'rgba(255,255,255,0.05)'
+              }
+            }}
+          >
+            <i className='ri-search-line' style={{ opacity: 0.5, fontSize: '1rem' }} />
+            <Typography variant='body2' sx={{ opacity: 0.5, flex: 1, fontSize: '0.8rem', userSelect: 'none' }}>
+              {t('navbar.search')}...
+            </Typography>
+            <Typography variant='caption' sx={{ opacity: 0.3, fontSize: '0.65rem', fontFamily: 'monospace' }}>
+              Ctrl+K
+            </Typography>
+          </Box>
         </Box>
 
         {/* RIGHT ICONS */}
@@ -493,7 +495,7 @@ const NavbarContent = () => {
           </Tooltip>
 
           {/* Toggle to Vertical Layout */}
-          <Tooltip title={t('navbar.verticalLayout') || 'Vertical layout'}>
+          <Tooltip title={t('navbar.verticalLayout')}>
             <IconButton size='small' onClick={() => updateSettings({ layout: 'vertical' })}>
               <i className='ri-layout-left-line' />
             </IconButton>

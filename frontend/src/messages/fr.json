@@ -183,7 +183,9 @@
     "searchPlaceholder": "Tape pour chercher… (Clusters, Nœuds, VMs)",
     "searchTip": "Astuce : Ctrl/Cmd + K pour ouvrir, ESC pour fermer.",
     "french": "Français",
-    "english": "English"
+    "english": "English",
+    "horizontalLayout": "Disposition horizontale",
+    "verticalLayout": "Disposition verticale"
   },
   "pxcore": {
     "operational": "PXCore opérationnel",

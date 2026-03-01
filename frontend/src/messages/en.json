@@ -183,7 +183,9 @@
     "searchPlaceholder": "Type to search… (Clusters, Nodes, VMs)",
     "searchTip": "Tip: Ctrl/Cmd + K to open, ESC to close.",
     "french": "Français",
-    "english": "English"
+    "english": "English",
+    "horizontalLayout": "Horizontal layout",
+    "verticalLayout": "Vertical layout"
   },
   "pxcore": {
     "operational": "PXCore operational",

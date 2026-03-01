@@ -1,7 +1,7 @@
 const menuRootStyles = theme => {
   return {
     '& > ul > li:not(:last-of-type)': {
-      marginInlineEnd: theme.spacing(2)
+      marginInlineEnd: theme.spacing(0.5)
     }
   }
 }

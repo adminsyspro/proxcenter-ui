@@ -7,7 +7,8 @@ import { menuClasses } from '@menu/utils/menuClasses'
 const menuItemStyles = (theme, iconClass) => ({
   root: ({ level }) => ({
     ...(level === 0 && {
-      borderRadius: 50
+      borderRadius: 0,
+      alignSelf: 'stretch'
     }),
     [`&.${menuClasses.open} > .${menuClasses.button}`]: {
       backgroundColor: 'var(--mui-palette-action-selected) !important'
@@ -38,19 +39,26 @@ const menuItemStyles = (theme, iconClass) => ({
       }
     }
   }),
-  button: {
+  button: ({ level }) => ({
     paddingInline: theme.spacing(4),
-    '&:not(:has(.MuiChip-root))': {
-      paddingBlock: theme.spacing(2)
-    },
-    '&:has(.MuiChip-root)': {
-      paddingBlock: theme.spacing(1.75)
-    },
+    ...(level === 0
+      ? {
+          paddingBlock: 0,
+          height: '100%'
+        }
+      : {
+          '&:not(:has(.MuiChip-root))': {
+            paddingBlock: theme.spacing(2)
+          },
+          '&:has(.MuiChip-root)': {
+            paddingBlock: theme.spacing(1.75)
+          }
+        }),
     [`&:not(.${menuClasses.active}):hover, &:not(.${menuClasses.active}):focus-visible, &:not(.${menuClasses.active})[aria-expanded="true"]`]:
       {
         backgroundColor: 'var(--mui-palette-action-hover)'
       }
-  },
+  }),
   icon: ({ level }) => ({
     marginInlineEnd: theme.spacing(2),
     ...(level < 2 ? { fontSize: '1.375rem' } : { fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }),

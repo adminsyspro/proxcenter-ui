@@ -684,7 +684,7 @@ function RootInventoryView({
 
       {/* Séparateur PVE */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <i className="ri-server-fill" style={{ fontSize: 16, color: '#F29221' }} />
+        <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16 }} />
         <Typography variant="subtitle2" fontWeight={700} sx={{ opacity: 0.7 }}>{t('inventory.proxmoxVe')}</Typography>
         <Box sx={{ flex: 1, height: 1, bgcolor: 'divider', ml: 1 }} />
       </Box>
@@ -720,7 +720,10 @@ function RootInventoryView({
                   className={isClusterCollapsed ? "ri-arrow-right-s-line" : "ri-arrow-down-s-line"} 
                   style={{ fontSize: 20, opacity: 0.7 }} 
                 />
-                <i className={isRealCluster ? "ri-cloud-fill" : "ri-server-fill"} style={{ fontSize: 18, color: '#F29221' }} />
+                {isRealCluster
+                  ? <i className="ri-server-fill" style={{ fontSize: 18, color: '#F29221' }} />
+                  : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18 }} />
+                }
                 <Typography fontWeight={700}>{cluster.connName}</Typography>
                 <Chip 
                   size="small" 
@@ -777,7 +780,7 @@ function RootInventoryView({
                             className={isHostCollapsed ? "ri-arrow-right-s-line" : "ri-arrow-down-s-line"} 
                             style={{ fontSize: 18, opacity: 0.7 }} 
                           />
-                          <i className="ri-server-fill" style={{ fontSize: 16, opacity: 0.7 }} />
+                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, opacity: 0.7 }} />
                           <Typography 
                             variant="body2" 
                             fontWeight={600}

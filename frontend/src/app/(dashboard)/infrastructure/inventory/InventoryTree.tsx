@@ -1799,7 +1799,7 @@ return (
                     '&:hover': { bgcolor: 'action.hover' }
                   }}>
                   <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
-                  <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.7 }} />
+                  <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.7 }} />
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>{host.node}</Typography>
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>({host.vms.length})</Typography>
                   <Typography variant="caption" sx={{ opacity: 0.4, ml: 'auto' }}>{host.connName}</Typography>
@@ -2233,7 +2233,7 @@ return (
         {/* Séparateur Proxmox VE */}
         {filteredClusters.length > 0 && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, opacity: 0.6 }}>
-            <i className="ri-server-fill" style={{ fontSize: 12, color: '#F29221' }} />
+            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 12, height: 12 }} />
             <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Proxmox VE
             </Typography>
@@ -2261,7 +2261,7 @@ return (
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <StatusIcon status={n.status} type="node" maintenance={n.maintenance} />
-                    <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: n.maintenance ? '#ff9800' : undefined }} />
+                    <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: n.maintenance ? 1 : 0.8, filter: n.maintenance ? 'hue-rotate(-30deg) saturate(2)' : undefined }} />
                     <span style={{ fontSize: 14 }}>{clu.name}</span>
                     <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
                     {/* Warning Ceph */}
@@ -2358,7 +2358,7 @@ return (
               itemId={`cluster:${clu.connId}`}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-cloud-fill' style={{ opacity: 0.8, fontSize: 14, color: '#F29221' }} />
+                  <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: '#F29221' }} />
                   <span style={{ fontSize: 14 }}>{clu.name}</span>
                   {/* Warning Ceph */}
                   {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
@@ -2385,7 +2385,7 @@ return (
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <StatusIcon status={n.status} type="node" maintenance={n.maintenance} />
-                      <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14, color: n.maintenance ? '#ff9800' : undefined }} />
+                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: n.maintenance ? 1 : 0.8, filter: n.maintenance ? 'hue-rotate(-30deg) saturate(2)' : undefined }} />
                       <span style={{ fontSize: 14 }}>{n.node}</span>
                       <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
                     </Box>

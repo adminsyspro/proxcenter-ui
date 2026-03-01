@@ -361,13 +361,13 @@ const NavbarContent = () => {
               py: 0.5,
               borderRadius: 2,
               border: '1px solid',
-              borderColor: 'rgba(255,255,255,0.2)',
+              borderColor: 'divider',
               cursor: 'pointer',
               width: 300,
               transition: 'all 0.2s',
               '&:hover': {
                 borderColor: 'primary.main',
-                bgcolor: 'rgba(255,255,255,0.05)'
+                bgcolor: 'action.hover'
               }
             }}
           >

@@ -34,81 +34,71 @@ const Header = () => {
   }
 
   const accentColor = theme.palette.primary.main
-  const isDark = theme.palette.mode === 'dark'
-
-  // Dark header bar styling — always dark background, even in light theme
-  const darkHeaderOverrides = !isDark ? `
-    background-color: #2f3349 !important;
-    color: #fff !important;
-    & .MuiTypography-root { color: inherit !important; }
-    & .MuiIconButton-root { color: rgba(255,255,255,0.85) !important; }
-    & .MuiIconButton-root:hover { background-color: rgba(255,255,255,0.08) !important; }
-    & .MuiAvatar-root { color: #fff !important; }
-    & .ri-search-line, & .ri-menu-line { color: inherit !important; }
-  ` : ''
 
   return (
     <>
-      <LayoutHeader overrideStyles={darkHeaderOverrides}>
-        <Navbar>
-          {/* Logo + Burger on the left */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 2, color: !isDark ? '#fff' : 'inherit' }}>
-            {/* Logo */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                cursor: 'pointer',
-                mr: 0.5,
-                color: !isDark ? '#fff' : 'text.primary'
-              }}
-              onClick={() => router.push('/home')}
-            >
-              <LogoIcon size={26} accentColor={accentColor} />
-              <Typography
+      {/* Force dark color scheme on the header — identical to dark theme rendering */}
+      <div data-mui-color-scheme='dark'>
+        <LayoutHeader>
+          <Navbar>
+            {/* Logo + Burger on the left */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 2 }}>
+              {/* Logo */}
+              <Box
                 sx={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  letterSpacing: '0.02em',
-                  textTransform: 'uppercase',
-                  display: { xs: 'none', sm: 'block' },
-                  color: 'inherit'
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  cursor: 'pointer',
+                  mr: 0.5,
+                  color: 'text.primary'
+                }}
+                onClick={() => router.push('/home')}
+              >
+                <LogoIcon size={26} accentColor={accentColor} />
+                <Typography
+                  sx={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    letterSpacing: '0.02em',
+                    textTransform: 'uppercase',
+                    display: { xs: 'none', sm: 'block' }
+                  }}
+                >
+                  ProxCenter
+                </Typography>
+              </Box>
+
+              {/* Burger button */}
+              <Button
+                size='small'
+                onClick={(e) => setBurgerAnchor(e.currentTarget)}
+                sx={{
+                  textTransform: 'none',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  minWidth: 'auto',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                  color: 'text.secondary',
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                    color: 'text.primary'
+                  }
                 }}
               >
-                ProxCenter
-              </Typography>
+                <i className='ri-menu-line' style={{ fontSize: 18, marginRight: 4 }} />
+                <Box component='span' sx={{ display: { xs: 'none', sm: 'inline' } }}>Menu</Box>
+              </Button>
             </Box>
 
-            {/* Burger button */}
-            <Button
-              size='small'
-              onClick={(e) => setBurgerAnchor(e.currentTarget)}
-              sx={{
-                textTransform: 'none',
-                fontSize: 12,
-                fontWeight: 500,
-                minWidth: 'auto',
-                px: 1,
-                py: 0.5,
-                borderRadius: 1,
-                color: !isDark ? 'rgba(255,255,255,0.75)' : 'text.secondary',
-                '&:hover': {
-                  bgcolor: !isDark ? 'rgba(255,255,255,0.08)' : 'action.hover',
-                  color: !isDark ? '#fff' : 'text.primary'
-                }
-              }}
-            >
-              <i className='ri-menu-line' style={{ fontSize: 18, marginRight: 4 }} />
-              <Box component='span' sx={{ display: { xs: 'none', sm: 'inline' } }}>Menu</Box>
-            </Button>
-          </Box>
-
-          {/* NavbarContent (search, icons, profile, etc.) */}
-          <NavbarContent />
-        </Navbar>
-        {!isBreakpointReached && <Navigation />}
-      </LayoutHeader>
+            {/* NavbarContent (search, icons, profile, etc.) */}
+            <NavbarContent />
+          </Navbar>
+          {!isBreakpointReached && <Navigation />}
+        </LayoutHeader>
+      </div>
       {isBreakpointReached && <Navigation />}
 
       {/* Burger Menu Popover */}

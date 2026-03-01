@@ -14,6 +14,8 @@ const StyledMain = styled.main`
   display: flex;
   flex-direction: column;
   transition: padding-bottom 0.2s ease;
+  overflow-y: auto;
+  min-block-size: 0;
 
   ${({ isContentCompact }) =>
     isContentCompact &&

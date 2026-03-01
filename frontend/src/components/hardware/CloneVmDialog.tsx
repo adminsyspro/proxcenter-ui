@@ -22,6 +22,9 @@ import {
   CircularProgress,
   Divider,
   Chip,
+  IconButton,
+  InputAdornment,
+  Tooltip,
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
@@ -54,21 +57,33 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
 
   // Form fields
   const [targetNode, setTargetNode] = useState(currentNode)
-  const [newVmid, setNewVmid] = useState(nextVmid)
+  const [newVmid, setNewVmid] = useState<number | ''>('' )
   const [name, setName] = useState('')
   const [targetStorage, setTargetStorage] = useState('')
   const [format, setFormat] = useState('qcow2')
   const [pool, setPool] = useState('')
   const [fullClone, setFullClone] = useState(true)
 
+  // Generate a random available VMID
+  const generateRandomVmid = () => {
+    const existing = new Set(existingVmids)
+    let id: number
+
+    do {
+      id = Math.floor(Math.random() * (999999 - 100 + 1)) + 100
+    } while (existing.has(id))
+
+    setNewVmid(id)
+  }
+
   // Validation du VMID
   const vmidError = useMemo(() => {
-    if (!newVmid) return t('hardware.vmIdRequired')
+    if (newVmid === '' || newVmid === 0) return t('hardware.vmIdRequired')
     if (newVmid < 100) return t('hardware.vmIdMinimum')
     if (newVmid > 999999999) return t('hardware.vmIdTooLarge')
     if (existingVmids.includes(newVmid)) return t('hardware.vmIdAlreadyUsed', { id: newVmid })
 
-return null
+    return null
   }, [newVmid, existingVmids, t])
 
   // Charger les nodes du cluster
@@ -182,7 +197,7 @@ return null
   useEffect(() => {
     if (open) {
       setTargetNode(currentNode)
-      setNewVmid(nextVmid)
+      setNewVmid('')
       setName('')
       setTargetStorage('')
       setFormat('qcow2')
@@ -205,10 +220,9 @@ return currentScore > bestScore ? current : best
   }
 
   const handleClone = async () => {
-    if (vmidError) {
-      setError(vmidError)
-
-return
+    if (newVmid === '' || vmidError) {
+      setError(vmidError || t('hardware.vmIdRequired'))
+      return
     }
 
     setCloning(true)
@@ -217,7 +231,7 @@ return
     try {
       await onClone({
         targetNode,
-        newVmid,
+        newVmid: newVmid as number,
         name,
         targetStorage: targetStorage || undefined,
         format: targetStorage ? format : undefined,
@@ -360,11 +374,23 @@ return
             label="VM ID"
             type="number"
             value={newVmid}
-            onChange={(e) => setNewVmid(parseInt(e.target.value) || 0)}
+            onChange={(e) => setNewVmid(e.target.value === '' ? '' : (parseInt(e.target.value) || 0))}
             inputProps={{ min: 100, max: 999999999 }}
+            placeholder={t('hardware.vmIdPlaceholder')}
             required
-            error={!!vmidError}
-            helperText={vmidError}
+            error={newVmid !== '' && !!vmidError}
+            helperText={newVmid !== '' ? vmidError : undefined}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title={t('hardware.generateVmId')}>
+                    <IconButton size="small" onClick={generateRandomVmid} edge="end">
+                      <i className="ri-dice-line" style={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                </InputAdornment>
+              )
+            }}
           />
 
           {/* Format */}
@@ -446,7 +472,7 @@ return
         <Button
           variant="contained"
           onClick={handleClone}
-          disabled={cloning || !!vmidError}
+          disabled={cloning || newVmid === '' || !!vmidError}
           startIcon={cloning ? <CircularProgress size={16} /> : <i className="ri-file-copy-line" />}
         >
           {cloning ? t('hardware.cloning') : t('hardware.clone')}

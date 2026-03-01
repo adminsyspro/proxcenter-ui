@@ -357,7 +357,7 @@ return { total, errors, warnings, running }
   )
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%', minHeight: 0 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
       {/* Header Actions */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0 }}>
         <Button

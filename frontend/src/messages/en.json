@@ -2851,6 +2851,8 @@
     "localMigration": "Local migration",
     "cloneTitle": "Clone VM {vmName} ({vmid})",
     "vmIdRequired": "VM ID required",
+    "vmIdPlaceholder": "Enter or generate a VM ID",
+    "generateVmId": "Generate random available ID",
     "vmIdTooLarge": "VM ID too large",
     "optional": "(optional)",
     "none": "(None)",

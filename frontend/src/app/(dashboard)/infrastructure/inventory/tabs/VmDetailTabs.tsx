@@ -2131,7 +2131,18 @@ return (
 
                   {/* Timeline des snapshots */}
                   {!snapshotsLoading && (
-                    <>
+                    <Box sx={{ position: 'relative' }}>
+                      {/* Overlay loader during create/delete/rollback */}
+                      {snapshotActionBusy && (
+                        <Box sx={{
+                          position: 'absolute', inset: 0, zIndex: 2,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.6)',
+                          borderRadius: 1, backdropFilter: 'blur(2px)'
+                        }}>
+                          <CircularProgress size={28} />
+                        </Box>
+                      )}
                       {snapshots.filter(s => s.name !== 'current').length === 0 ? (
                         <Card variant="outlined" sx={{ textAlign: 'center', py: 4, bgcolor: 'transparent' }}>
                           <i className="ri-camera-off-line" style={{ fontSize: 48, opacity: 0.2 }} />
@@ -2311,7 +2322,7 @@ return (
                             })}
                         </Box>
                       )}
-                    </>
+                    </Box>
                   )}
 
                   {/* Info */}

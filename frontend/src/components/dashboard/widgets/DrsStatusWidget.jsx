@@ -1,16 +1,57 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, Chip, CircularProgress, alpha, Stack } from '@mui/material'
-import { useLicense, Features } from '@/contexts/LicenseContext'
-import { useDRSStatus, useDRSRecommendations } from '@/hooks/useDRS'
+import { useLicense } from '@/contexts/LicenseContext'
+import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
+import { computeDrsHealthScore } from '@/lib/utils/drs-health'
+
+function ScoreRing({ score, size = 56 }) {
+  const color = score >= 80 ? 'var(--mui-palette-success-main)' : score >= 50 ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-error-main)'
+  const circumference = 2 * Math.PI * 14 // r=14
+  const dashLen = (score / 100) * circumference
+
+  return (
+    <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+        <circle cx="18" cy="18" r="14" fill="none"
+          stroke="var(--mui-palette-divider)" strokeWidth="3" opacity={0.3} />
+        <circle cx="18" cy="18" r="14" fill="none"
+          stroke={color} strokeWidth="3"
+          strokeDasharray={`${dashLen} ${circumference}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+      </svg>
+      <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant='body2' sx={{ fontWeight: 800, fontSize: 13, color }}>
+          {score}
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
 
 function DrsStatusWidget({ data, loading, config }) {
   const t = useTranslations()
   const { isEnterprise } = useLicense()
   const { data: status, isLoading: statusLoading } = useDRSStatus(isEnterprise)
-  const { data: recs, isLoading: recsLoading } = useDRSRecommendations(isEnterprise)
+  const { data: metricsData, isLoading: metricsLoading } = useDRSMetrics(isEnterprise)
+
+  // Compute average health score across all clusters
+  const healthScore = useMemo(() => {
+    if (!metricsData) return null
+    const clusters = Object.values(metricsData)
+    if (clusters.length === 0) return null
+
+    let total = 0
+    for (const cluster of clusters) {
+      const breakdown = computeDrsHealthScore(cluster.summary, cluster.nodes)
+      total += breakdown.score
+    }
+    return Math.round(total / clusters.length)
+  }, [metricsData])
 
   if (!isEnterprise) {
     return (
@@ -21,7 +62,7 @@ function DrsStatusWidget({ data, loading, config }) {
     )
   }
 
-  if (statusLoading) {
+  if (statusLoading || metricsLoading) {
     return (
       <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress size={24} />
@@ -33,7 +74,6 @@ function DrsStatusWidget({ data, loading, config }) {
   const mode = status?.mode || 'manual'
   const recommendations = status?.recommendations || 0
   const activeMigrations = status?.active_migrations || 0
-  const pending = status?.pending_count || 0
 
   const modeColor = mode === 'automatic' ? 'success.main' : mode === 'partial' ? 'warning.main' : 'info.main'
   const modeLabel = mode === 'automatic' ? t('dashboard.widgetDrs.automatic') : mode === 'partial' ? t('dashboard.widgetDrs.partial') : t('dashboard.widgetDrs.manual')
@@ -61,74 +101,56 @@ function DrsStatusWidget({ data, loading, config }) {
         </Box>
       ) : (
         <Stack spacing={1} sx={{ flex: 1 }}>
-          {/* Active Migrations */}
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1,
-            bgcolor: (theme) => alpha(theme.palette.primary.main, activeMigrations > 0 ? 0.1 : 0.04),
-            border: '1px solid',
-            borderColor: (theme) => alpha(theme.palette.primary.main, activeMigrations > 0 ? 0.25 : 0.1)
-          }}>
+          {/* Health Score */}
+          {healthScore !== null && (
             <Box sx={{
-              width: 28, height: 28, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.15), flexShrink: 0
+              display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1,
+              bgcolor: (theme) => alpha(
+                healthScore >= 80 ? theme.palette.success.main : healthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main,
+                0.06
+              ),
+              border: '1px solid',
+              borderColor: (theme) => alpha(
+                healthScore >= 80 ? theme.palette.success.main : healthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main,
+                0.15
+              )
             }}>
-              <i className='ri-swap-line' style={{ fontSize: 14, color: 'var(--mui-palette-primary-main)' }} />
+              <ScoreRing score={healthScore} size={44} />
+              <Box>
+                <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9, display: 'block' }}>
+                  {t('dashboard.widgetDrs.healthScore')}
+                </Typography>
+                <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  {healthScore >= 80 ? t('dashboard.widgetDrs.healthy') : healthScore >= 50 ? t('dashboard.widgetDrs.attention') : t('dashboard.widgetDrs.critical')}
+                </Typography>
+              </Box>
             </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9 }}>
-                {t('dashboard.widgetDrs.activeMigrations')}
-              </Typography>
-              <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                {activeMigrations}
-              </Typography>
-            </Box>
-          </Box>
+          )}
 
-          {/* Recommendations */}
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1,
-            bgcolor: (theme) => alpha(theme.palette.warning.main, recommendations > 0 ? 0.1 : 0.04),
-            border: '1px solid',
-            borderColor: (theme) => alpha(theme.palette.warning.main, recommendations > 0 ? 0.25 : 0.1)
-          }}>
+          {/* Stats row */}
+          <Stack direction='row' spacing={0.75}>
             <Box sx={{
-              width: 28, height: 28, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              bgcolor: (theme) => alpha(theme.palette.warning.main, 0.15), flexShrink: 0
+              flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
+              bgcolor: (theme) => alpha(theme.palette.primary.main, activeMigrations > 0 ? 0.12 : 0.05)
             }}>
-              <i className='ri-lightbulb-line' style={{ fontSize: 14, color: 'var(--mui-palette-warning-main)' }} />
+              <Typography variant='h6' sx={{ fontWeight: 900, lineHeight: 1, color: 'primary.main' }}>{activeMigrations}</Typography>
+              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 8 }}>{t('dashboard.widgetDrs.migrations')}</Typography>
             </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9 }}>
-                {t('dashboard.widgetDrs.recommendations')}
-              </Typography>
-              <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                {recommendations}
-              </Typography>
-            </Box>
-          </Box>
-
-          {/* Mode */}
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1,
-            bgcolor: (theme) => alpha(theme.palette.success.main, 0.04),
-            border: '1px solid',
-            borderColor: (theme) => alpha(theme.palette.success.main, 0.1)
-          }}>
             <Box sx={{
-              width: 28, height: 28, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              bgcolor: (theme) => alpha(theme.palette.success.main, 0.15), flexShrink: 0
+              flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
+              bgcolor: (theme) => alpha(theme.palette.warning.main, recommendations > 0 ? 0.12 : 0.05)
             }}>
-              <i className='ri-settings-3-line' style={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />
+              <Typography variant='h6' sx={{ fontWeight: 900, lineHeight: 1, color: recommendations > 0 ? 'warning.main' : 'text.secondary' }}>{recommendations}</Typography>
+              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 8 }}>{t('dashboard.widgetDrs.recs')}</Typography>
             </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9 }}>
-                {t('dashboard.widgetDrs.mode')}
-              </Typography>
-              <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2, color: modeColor }}>
-                {modeLabel}
-              </Typography>
+            <Box sx={{
+              flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
+              bgcolor: (theme) => alpha(theme.palette.success.main, 0.05)
+            }}>
+              <Typography variant='h6' sx={{ fontWeight: 900, lineHeight: 1, color: modeColor }}>{modeLabel.slice(0, 4)}</Typography>
+              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 8 }}>{t('dashboard.widgetDrs.mode')}</Typography>
             </Box>
-          </Box>
+          </Stack>
         </Stack>
       )}
     </Box>

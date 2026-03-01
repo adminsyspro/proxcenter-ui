@@ -1,15 +1,55 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, Chip, CircularProgress, alpha, Stack } from '@mui/material'
 import { useLicense } from '@/contexts/LicenseContext'
 import { useReplicationHealth } from '@/hooks/useSiteRecovery'
 
+function ScoreRing({ score, size = 56 }) {
+  const color = score >= 80 ? 'var(--mui-palette-success-main)' : score >= 50 ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-error-main)'
+  const circumference = 2 * Math.PI * 14
+  const dashLen = (score / 100) * circumference
+
+  return (
+    <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+        <circle cx="18" cy="18" r="14" fill="none"
+          stroke="var(--mui-palette-divider)" strokeWidth="3" opacity={0.3} />
+        <circle cx="18" cy="18" r="14" fill="none"
+          stroke={color} strokeWidth="3"
+          strokeDasharray={`${dashLen} ${circumference}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+      </svg>
+      <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant='body2' sx={{ fontWeight: 800, fontSize: 13, color }}>
+          {score}
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
+
 function SiteRecoveryWidget({ data, loading, config }) {
   const t = useTranslations()
   const { isEnterprise } = useLicense()
   const { data: health, isLoading: healthLoading } = useReplicationHealth(isEnterprise)
+
+  // Composite SR score: weighted average of coverage (40%), RPO compliance (40%), error rate (20%)
+  const srScore = useMemo(() => {
+    if (!health?.kpis) return null
+    const kpis = health.kpis
+    const totalVMs = (kpis.protected_vms || 0) + (kpis.unprotected_vms || 0)
+    const coveragePct = totalVMs > 0 ? (kpis.protected_vms / totalVMs) * 100 : 0
+    const rpoPct = kpis.rpo_compliance || 0
+    const totalJobs = kpis.total_jobs || 0
+    const errorRate = totalJobs > 0 ? ((kpis.error_count || 0) / totalJobs) * 100 : 0
+    const errorScore = Math.max(0, 100 - errorRate * 10) // each error costs 10pts
+
+    return Math.round(coveragePct * 0.4 + rpoPct * 0.4 + errorScore * 0.2)
+  }, [health])
 
   if (!isEnterprise) {
     return (
@@ -74,63 +114,61 @@ function SiteRecoveryWidget({ data, loading, config }) {
       </Box>
 
       <Stack spacing={1} sx={{ flex: 1 }}>
-        {/* Protection Coverage - mini donut + stats */}
-        <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1,
-          bgcolor: (theme) => alpha(coveragePct >= 80 ? theme.palette.success.main : coveragePct >= 50 ? theme.palette.warning.main : theme.palette.error.main, 0.06),
-          border: '1px solid',
-          borderColor: (theme) => alpha(coveragePct >= 80 ? theme.palette.success.main : coveragePct >= 50 ? theme.palette.warning.main : theme.palette.error.main, 0.15)
-        }}>
-          {/* Mini circular gauge */}
-          <Box sx={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
-            <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-              <circle cx="18" cy="18" r="14" fill="none"
-                stroke="var(--mui-palette-divider)" strokeWidth="3" opacity={0.3} />
-              <circle cx="18" cy="18" r="14" fill="none"
-                stroke={coveragePct >= 80 ? 'var(--mui-palette-success-main)' : coveragePct >= 50 ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-error-main)'}
-                strokeWidth="3"
-                strokeDasharray={`${coveragePct * 0.88} 100`}
-                strokeLinecap="round"
-              />
-            </svg>
-            <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Typography variant='caption' sx={{ fontWeight: 800, fontSize: 9 }}>
-                {coveragePct}%
+        {/* Protection Score */}
+        {srScore !== null && (
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1,
+            bgcolor: (theme) => alpha(
+              srScore >= 80 ? theme.palette.success.main : srScore >= 50 ? theme.palette.warning.main : theme.palette.error.main,
+              0.06
+            ),
+            border: '1px solid',
+            borderColor: (theme) => alpha(
+              srScore >= 80 ? theme.palette.success.main : srScore >= 50 ? theme.palette.warning.main : theme.palette.error.main,
+              0.15
+            )
+          }}>
+            <ScoreRing score={srScore} size={44} />
+            <Box>
+              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9, display: 'block' }}>
+                {t('dashboard.widgetSr.protectionScore')}
+              </Typography>
+              <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                {srScore >= 80 ? t('dashboard.widgetSr.healthy') : srScore >= 50 ? t('dashboard.widgetSr.attention') : t('dashboard.widgetSr.critical')}
               </Typography>
             </Box>
           </Box>
-          <Box>
-            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9, display: 'block' }}>
-              {t('dashboard.widgetSr.coverage')}
-            </Typography>
-            <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-              {protectedVMs} / {totalVMs} VMs
-            </Typography>
-          </Box>
-        </Box>
+        )}
 
-        {/* RPO Compliance */}
-        <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1,
-          bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
-          border: '1px solid',
-          borderColor: (theme) => alpha(theme.palette.primary.main, 0.1)
-        }}>
+        {/* Coverage + RPO row */}
+        <Stack direction='row' spacing={0.75}>
           <Box sx={{
-            width: 28, height: 28, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.15), flexShrink: 0
+            flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
+            bgcolor: (theme) => alpha(
+              coveragePct >= 80 ? theme.palette.success.main : coveragePct >= 50 ? theme.palette.warning.main : theme.palette.error.main,
+              0.08
+            )
           }}>
-            <i className='ri-timer-line' style={{ fontSize: 14, color: 'var(--mui-palette-primary-main)' }} />
+            <Typography variant='h6' sx={{
+              fontWeight: 900, lineHeight: 1,
+              color: coveragePct >= 80 ? 'success.main' : coveragePct >= 50 ? 'warning.main' : 'error.main'
+            }}>{coveragePct}%</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 8 }}>{t('dashboard.widgetSr.coverage')}</Typography>
           </Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 9 }}>
-              {t('dashboard.widgetSr.rpoCompliance')}
-            </Typography>
-            <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2, color: rpoCompliance >= 90 ? 'success.main' : rpoCompliance >= 60 ? 'warning.main' : 'error.main' }}>
-              {rpoCompliance}%
-            </Typography>
+          <Box sx={{
+            flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
+            bgcolor: (theme) => alpha(
+              rpoCompliance >= 90 ? theme.palette.success.main : rpoCompliance >= 60 ? theme.palette.warning.main : theme.palette.error.main,
+              0.08
+            )
+          }}>
+            <Typography variant='h6' sx={{
+              fontWeight: 900, lineHeight: 1,
+              color: rpoCompliance >= 90 ? 'success.main' : rpoCompliance >= 60 ? 'warning.main' : 'error.main'
+            }}>{rpoCompliance}%</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: 8 }}>RPO</Typography>
           </Box>
-        </Box>
+        </Stack>
 
         {/* Jobs row */}
         <Stack direction='row' spacing={0.75}>

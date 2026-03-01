@@ -313,15 +313,25 @@
       "disabled": "Désactivé",
       "activeMigrations": "Migrations actives",
       "recommendations": "Recommandations",
-      "mode": "Mode"
+      "mode": "Mode",
+      "healthScore": "Score de santé",
+      "healthy": "Sain",
+      "attention": "Attention requise",
+      "critical": "Critique",
+      "migrations": "Migrations",
+      "recs": "Reco"
     },
     "widgetSr": {
       "connected": "Connecté",
       "degraded": "Dégradé",
       "disconnected": "Déconnecté",
       "noJobs": "Aucun job de réplication",
-      "coverage": "Couverture de protection",
+      "coverage": "Couverture",
       "rpoCompliance": "Conformité RPO",
+      "protectionScore": "Score de protection",
+      "healthy": "Sain",
+      "attention": "Attention requise",
+      "critical": "Critique",
       "jobs": "Jobs",
       "syncing": "En sync",
       "errors": "Erreurs"

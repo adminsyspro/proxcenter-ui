@@ -1951,16 +1951,6 @@ return next
         >
           {t('drsPage.evaluate')}
         </Button>
-        <Button
-          variant="outlined"
-          color="warning"
-          size="small"
-          startIcon={actionLoading === 'enforce-rules' ? <CircularProgress size={16} /> : <i className="ri-shield-check-line" style={{ fontSize: 18 }} />}
-          onClick={handleEnforceRules}
-          disabled={!!actionLoading}
-        >
-          {t('drsPage.enforceRules')}
-        </Button>
       </Box>
 
       {/* KPI Dashboard */}
@@ -2341,6 +2331,19 @@ return next
             </FormControl>
           )}
           
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Button
+              variant="outlined"
+              color="warning"
+              size="small"
+              startIcon={actionLoading === 'enforce-rules' ? <CircularProgress size={16} /> : <i className="ri-shield-check-line" style={{ fontSize: 18 }} />}
+              onClick={handleEnforceRules}
+              disabled={!!actionLoading}
+            >
+              {t('drsPage.enforceRules')}
+            </Button>
+          </Box>
+
           <AffinityRulesManager
             rules={affinityRules.filter(r => r.connectionId === selectedCluster)}
             vms={allVMs.filter(v => v.connectionId === selectedCluster)}

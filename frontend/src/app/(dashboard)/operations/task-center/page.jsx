@@ -31,6 +31,7 @@ import {
   Typography
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const ErrorIcon = (props) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
@@ -434,7 +435,7 @@ export default function JobsPage() {
   const [q, setQ] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 })
 
   // Dialog state
   const [selectedJob, setSelectedJob] = useState(null)
@@ -609,28 +610,127 @@ export default function JobsPage() {
 
       {/* Stats */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
+        {/* Total — full distribution donut */}
         <Card variant='outlined'>
-          <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.total')}</Typography>
-            <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.total}</Typography>
+          <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { value: stats.running || 0 },
+                      { value: stats.pending || 0 },
+                      { value: stats.failed || 0 },
+                      { value: Math.max(0, (stats.total || 0) - (stats.running || 0) - (stats.pending || 0) - (stats.failed || 0)) }
+                    ]}
+                    dataKey="value"
+                    cx="50%" cy="50%"
+                    innerRadius={14} outerRadius={24}
+                    strokeWidth={0}
+                    startAngle={90} endAngle={-270}
+                  >
+                    <Cell fill="#2196f3" />
+                    <Cell fill="#ff9800" />
+                    <Cell fill="#f44336" />
+                    <Cell fill="#4caf50" />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </Box>
+            <Box>
+              <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.total')}</Typography>
+              <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.total}</Typography>
+            </Box>
           </CardContent>
         </Card>
+
+        {/* Running */}
         <Card variant='outlined'>
-          <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.running')}</Typography>
-            <Typography variant='h5' sx={{ fontWeight: 700, color: 'info.main' }}>{stats.running}</Typography>
+          <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { value: stats.running || 0 },
+                      { value: Math.max(0, (stats.total || 0) - (stats.running || 0)) }
+                    ]}
+                    dataKey="value"
+                    cx="50%" cy="50%"
+                    innerRadius={14} outerRadius={24}
+                    strokeWidth={0}
+                    startAngle={90} endAngle={-270}
+                  >
+                    <Cell fill="#2196f3" />
+                    <Cell fill="rgba(255,255,255,0.08)" />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </Box>
+            <Box>
+              <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.running')}</Typography>
+              <Typography variant='h5' sx={{ fontWeight: 700, color: 'info.main' }}>{stats.running}</Typography>
+            </Box>
           </CardContent>
         </Card>
+
+        {/* Pending */}
         <Card variant='outlined'>
-          <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.pending')}</Typography>
-            <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.pending}</Typography>
+          <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { value: stats.pending || 0 },
+                      { value: Math.max(0, (stats.total || 0) - (stats.pending || 0)) }
+                    ]}
+                    dataKey="value"
+                    cx="50%" cy="50%"
+                    innerRadius={14} outerRadius={24}
+                    strokeWidth={0}
+                    startAngle={90} endAngle={-270}
+                  >
+                    <Cell fill="#ff9800" />
+                    <Cell fill="rgba(255,255,255,0.08)" />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </Box>
+            <Box>
+              <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.pending')}</Typography>
+              <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.pending}</Typography>
+            </Box>
           </CardContent>
         </Card>
+
+        {/* Failed */}
         <Card variant='outlined'>
-          <CardContent sx={{ py: 1.5, px: 2 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.failed')}</Typography>
-            <Typography variant='h5' sx={{ fontWeight: 700, color: 'error.main' }}>{stats.failed}</Typography>
+          <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { value: stats.failed || 0 },
+                      { value: Math.max(0, (stats.total || 0) - (stats.failed || 0)) }
+                    ]}
+                    dataKey="value"
+                    cx="50%" cy="50%"
+                    innerRadius={14} outerRadius={24}
+                    strokeWidth={0}
+                    startAngle={90} endAngle={-270}
+                  >
+                    <Cell fill="#f44336" />
+                    <Cell fill="rgba(255,255,255,0.08)" />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </Box>
+            <Box>
+              <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.failed')}</Typography>
+              <Typography variant='h5' sx={{ fontWeight: 700, color: 'error.main' }}>{stats.failed}</Typography>
+            </Box>
           </CardContent>
         </Card>
       </Box>
@@ -721,7 +821,7 @@ export default function JobsPage() {
               getRowId={(row) => row.id || `${row.type}-${row.name}-${row.startedAt}`}
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
-              pageSizeOptions={[10, 25, 50]}
+              pageSizeOptions={[20, 50, 100]}
               disableRowSelectionOnClick
               density='compact'
               loading={isValidating}

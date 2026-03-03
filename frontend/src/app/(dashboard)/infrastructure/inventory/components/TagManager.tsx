@@ -19,7 +19,7 @@ import {
 import { tagColor } from '../helpers'
 
 const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const CloseIcon = ({ fontSize, sx, style, ...rest }: any) => <i className="ri-close-line" style={{ fontSize: fontSize === 'small' ? 18 : 20, color: sx?.color, ...style }} {...rest} />
+const CloseIcon = ({ fontSize, sx, style, className, ...rest }: any) => <i className={`ri-close-line${className ? ` ${className}` : ''}`} style={{ fontSize: fontSize === 'small' ? 18 : 20, color: sx?.color, ...style }} {...rest} />
 
 type TagManagerProps = {
   tags: string[]

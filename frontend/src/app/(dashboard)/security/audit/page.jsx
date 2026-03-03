@@ -21,6 +21,7 @@ import {
   Typography,
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -196,32 +197,76 @@ function StatsCards({ logs, t }) {
     }
   }, [logs])
 
+  const DonutCard = ({ title, value, total, color }) => {
+    const remainder = Math.max(0, total - value)
+
+    return (
+      <Card variant='outlined'>
+        <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+            <ResponsiveContainer width='100%' height='100%'>
+              <PieChart>
+                <Pie
+                  data={[{ value: value || 0 }, { value: remainder || 1 }]}
+                  dataKey='value'
+                  cx='50%' cy='50%'
+                  innerRadius={14} outerRadius={24}
+                  strokeWidth={0}
+                  startAngle={90} endAngle={-270}
+                >
+                  <Cell fill={color} />
+                  <Cell fill='rgba(255,255,255,0.08)' />
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </Box>
+          <Box>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{title}</Typography>
+            <Typography variant='h5' sx={{ fontWeight: 700 }}>{value}</Typography>
+          </Box>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const totalSegments = [
+    { value: stats.today, color: '#2196f3' },
+    { value: stats.failures, color: '#f44336' },
+    { value: stats.auth, color: '#7c3aed' },
+    { value: Math.max(0, stats.total - stats.today - stats.failures - stats.auth), color: '#4caf50' },
+  ].filter(s => s.value > 0)
+
+  if (totalSegments.length === 0) totalSegments.push({ value: 1, color: 'rgba(255,255,255,0.08)' })
+
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
       <Card variant='outlined'>
-        <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.totalEvents')}</Typography>
-          <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.total}</Typography>
+        <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+            <ResponsiveContainer width='100%' height='100%'>
+              <PieChart>
+                <Pie
+                  data={totalSegments}
+                  dataKey='value'
+                  cx='50%' cy='50%'
+                  innerRadius={14} outerRadius={24}
+                  strokeWidth={0}
+                  startAngle={90} endAngle={-270}
+                >
+                  {totalSegments.map((s, i) => <Cell key={i} fill={s.color} />)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </Box>
+          <Box>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.totalEvents')}</Typography>
+            <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.total}</Typography>
+          </Box>
         </CardContent>
       </Card>
-      <Card variant='outlined'>
-        <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.today')}</Typography>
-          <Typography variant='h5' sx={{ fontWeight: 700, color: 'info.main' }}>{stats.today}</Typography>
-        </CardContent>
-      </Card>
-      <Card variant='outlined'>
-        <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('common.error')}</Typography>
-          <Typography variant='h5' sx={{ fontWeight: 700, color: 'error.main' }}>{stats.failures}</Typography>
-        </CardContent>
-      </Card>
-      <Card variant='outlined'>
-        <CardContent sx={{ py: 1.5, px: 2 }}>
-          <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.categories.authentication')}</Typography>
-          <Typography variant='h5' sx={{ fontWeight: 700 }}>{stats.auth}</Typography>
-        </CardContent>
-      </Card>
+      <DonutCard title={t('audit.today')} value={stats.today} total={stats.total} color='#2196f3' />
+      <DonutCard title={t('common.error')} value={stats.failures} total={stats.total} color='#f44336' />
+      <DonutCard title={t('audit.categories.authentication')} value={stats.auth} total={stats.total} color='#7c3aed' />
     </Box>
   )
 }

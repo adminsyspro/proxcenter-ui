@@ -21,6 +21,7 @@ import {
   Typography
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense } from '@/contexts/LicenseContext'
@@ -109,33 +110,64 @@ return (
   )
 }
 
-function StatCard({ title, value, color, icon }) {
+function DonutStatCard({ title, value, total, color }) {
+  const remainder = Math.max(0, total - value)
+
   return (
-    <Card variant='outlined' sx={{ height: '100%' }}>
-      <CardContent sx={{ py: 1.5, px: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 2,
-              bgcolor: color ? `${color}.main` : 'action.hover',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: 0.8
-            }}
-          >
-            <i className={icon} style={{ fontSize: 20, color: '#fff' }} />
-          </Box>
-          <Box>
-            <Typography variant='h5' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-              {value}
-            </Typography>
-            <Typography variant='caption' sx={{ opacity: 0.6 }}>
-              {title}
-            </Typography>
-          </Box>
+    <Card variant='outlined'>
+      <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+          <ResponsiveContainer width='100%' height='100%'>
+            <PieChart>
+              <Pie
+                data={[{ value: value || 0 }, { value: remainder || 1 }]}
+                dataKey='value'
+                cx='50%' cy='50%'
+                innerRadius={14} outerRadius={24}
+                strokeWidth={0}
+                startAngle={90} endAngle={-270}
+              >
+                <Cell fill={color} />
+                <Cell fill='rgba(255,255,255,0.08)' />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </Box>
+        <Box>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{title}</Typography>
+          <Typography variant='h5' sx={{ fontWeight: 700 }}>{value}</Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DonutTotalCard({ title, value, segments }) {
+  const data = segments.filter(s => s.value > 0)
+  if (data.length === 0) data.push({ value: 1, color: 'rgba(255,255,255,0.08)' })
+
+  return (
+    <Card variant='outlined'>
+      <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+          <ResponsiveContainer width='100%' height='100%'>
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey='value'
+                cx='50%' cy='50%'
+                innerRadius={14} outerRadius={24}
+                strokeWidth={0}
+                startAngle={90} endAngle={-270}
+              >
+                {data.map((s, i) => <Cell key={i} fill={s.color} />)}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </Box>
+        <Box>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{title}</Typography>
+          <Typography variant='h5' sx={{ fontWeight: 700 }}>{value}</Typography>
         </Box>
       </CardContent>
     </Card>
@@ -381,10 +413,18 @@ return { total, errors, warnings, running }
 
       {/* Stats */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, flexShrink: 0 }}>
-        <StatCard title={t('common.total')} value={stats.total} icon='ri-list-check' color='primary' />
-        <StatCard title={t('jobs.running')} value={stats.running} icon='ri-loader-4-line' color='info' />
-        <StatCard title={t('alerts.warnings')} value={stats.warnings} icon='ri-alert-line' color='warning' />
-        <StatCard title={t('common.error')} value={stats.errors} icon='ri-error-warning-line' color='error' />
+        <DonutTotalCard
+          title={t('common.total')} value={stats.total}
+          segments={[
+            { value: stats.running, color: '#2196f3' },
+            { value: stats.warnings, color: '#ff9800' },
+            { value: stats.errors, color: '#f44336' },
+            { value: Math.max(0, stats.total - stats.running - stats.warnings - stats.errors), color: '#4caf50' },
+          ]}
+        />
+        <DonutStatCard title={t('jobs.running')} value={stats.running} total={stats.total} color='#2196f3' />
+        <DonutStatCard title={t('alerts.warnings')} value={stats.warnings} total={stats.total} color='#ff9800' />
+        <DonutStatCard title={t('common.error')} value={stats.errors} total={stats.total} color='#f44336' />
       </Box>
 
       {/* Filtres + Table */}

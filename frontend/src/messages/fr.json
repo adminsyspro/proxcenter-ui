@@ -29,6 +29,7 @@
     "select": "Sélectionner",
     "actions": "Actions",
     "status": "Statut",
+    "version": "Version",
     "name": "Nom",
     "description": "Description",
     "type": "Type",

@@ -172,6 +172,43 @@ function ConnectionStatus({ connection, autoTest = false, onNodesLoaded }) {
   )
 }
 
+/* ==================== ConnectionVersion ==================== */
+
+function ConnectionVersion({ connection }) {
+  const [version, setVersion] = useState(null)
+
+  useEffect(() => {
+    if (!connection?.id) return
+    const endpoint = connection.type === 'pbs'
+      ? `/api/v1/pbs/${connection.id}/status`
+      : `/api/v1/connections/${connection.id}/version`
+
+    fetch(endpoint)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json) return
+        const data = json.data || json
+        const ver = data.version || ''
+        const rel = data.release ? `-${data.release}` : ''
+        if (ver) setVersion(`${ver}${rel}`)
+      })
+      .catch(() => {})
+  }, [connection?.id, connection?.type])
+
+  if (!version) {
+    return <Typography variant='caption' sx={{ opacity: 0.3 }}>—</Typography>
+  }
+
+  return (
+    <Chip
+      size='small'
+      label={version}
+      variant='outlined'
+      sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}
+    />
+  )
+}
+
 /* ==================== ConnectionsTab Component ==================== */
 
 function ConnectionsTab() {
@@ -354,6 +391,17 @@ function ConnectionsTab() {
         )
       },
       {
+        field: 'version',
+        headerName: t('common.version'),
+        width: 120,
+        sortable: false,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <ConnectionVersion connection={params.row} />
+          </Box>
+        )
+      },
+      {
         field: 'hosts',
         headerName: t('settings.nodesHeader'),
         width: 200,
@@ -503,6 +551,17 @@ function ConnectionsTab() {
         width: 160,
         renderCell: params => (
           <ConnectionStatus connection={params.row} autoTest={true} />
+        )
+      },
+      {
+        field: 'version',
+        headerName: t('common.version'),
+        width: 120,
+        sortable: false,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <ConnectionVersion connection={{ ...params.row, type: 'pbs' }} />
+          </Box>
         )
       },
       {

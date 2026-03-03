@@ -3149,7 +3149,7 @@ return
         if (replicationRes?.ok) {
           try {
             const json = await replicationRes.json()
-            jobs = (json.data || json || []).filter((j: any) => String(j.guest) === String(vmid))
+            jobs = (json.data?.jobs || []).filter((j: any) => String(j.guest) === String(vmid))
           } catch {}
         }
         

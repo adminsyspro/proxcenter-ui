@@ -117,14 +117,17 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
 
     try {
       const newTags = tags.filter(t => t !== tagToRemove)
-      const tagsString = newTags.join(';')
-      
+      // Si plus aucun tag, Proxmox requiert `delete=tags` plutôt que `tags=` (chaîne vide ignorée)
+      const body = newTags.length > 0
+        ? { tags: newTags.join(';') }
+        : { delete: 'tags' }
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tags: tagsString })
+          body: JSON.stringify(body)
         }
       )
       

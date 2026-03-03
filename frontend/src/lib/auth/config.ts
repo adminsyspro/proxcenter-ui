@@ -386,7 +386,7 @@ export function getAuthOptions(): NextAuthOptions {
     id: 'oidc',
     name: oidcConfig.providerName || 'SSO',
     type: 'oauth',
-    wellKnown: oidcConfig.authorizationUrl ? undefined : `${oidcConfig.issuerUrl}/.well-known/openid-configuration`,
+    wellKnown: oidcConfig.authorizationUrl ? undefined : `${oidcConfig.issuerUrl.replace(/\/+$/, '')}/.well-known/openid-configuration`,
     authorization: oidcConfig.authorizationUrl ? {
       url: oidcConfig.authorizationUrl,
       params: { scope: oidcConfig.scopes },

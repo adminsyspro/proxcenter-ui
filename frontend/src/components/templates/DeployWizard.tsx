@@ -201,13 +201,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
   useEffect(() => {
     if (!connectionId || !node) { setStorages([]); return }
 
-    // Fetch storages that support images content
+    // Fetch file-based storages (content types are auto-enabled by the deploy route)
     fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/storages`)
       .then(r => r.json())
       .then(res => {
-        const stList = (res.data || []).filter((s: any) =>
-          (s.content?.includes('images') || s.content?.includes('rootdir')) && isFileBasedStorage(s.type)
-        )
+        const stList = (res.data || []).filter((s: any) => isFileBasedStorage(s.type) && s.enabled !== 0)
         setStorages(stList)
         setStorage(stList.length > 0 ? stList[0].storage : '')
       })

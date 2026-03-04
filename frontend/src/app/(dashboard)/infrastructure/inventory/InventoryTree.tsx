@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 
@@ -517,6 +517,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
   // Controlled tree expansion state
   const [manualExpandedItems, setManualExpandedItems] = useState<string[]>(['root:root'])
+  const programmaticExpand = useRef(false)
   const [isHydrated, setIsHydrated] = useState(false)
 
   // Sections collapsed (pour les modes hosts, pools, tags)
@@ -1245,16 +1246,20 @@ return items
 
   // Expand/Collapse all for tree mode
   const expandAll = useCallback(() => {
+    programmaticExpand.current = true
     const items: string[] = ['root:root']
     clusters.forEach(clu => {
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => items.push(`node:${clu.connId}:${n.node}`))
     })
     setManualExpandedItems(items)
+    requestAnimationFrame(() => { programmaticExpand.current = false })
   }, [clusters])
 
   const collapseAll = useCallback(() => {
-    setManualExpandedItems(['root:root'])
+    programmaticExpand.current = true
+    setManualExpandedItems([])
+    requestAnimationFrame(() => { programmaticExpand.current = false })
   }, [])
 
   // Expand/Collapse all for grouped modes (hosts, pools, tags)
@@ -2317,7 +2322,7 @@ return (
           selectedItems={selectedItemId || 'root:root'}
           expandedItems={search.trim() ? ['root:root', ...expandedItems] : manualExpandedItems}
           onExpandedItemsChange={(_event, itemIds) => {
-            if (!search.trim()) setManualExpandedItems(itemIds)
+            if (!search.trim() && !programmaticExpand.current) setManualExpandedItems(itemIds)
           }}
           onSelectedItemsChange={(_event, ids) => {
             const picked = Array.isArray(ids) ? ids[0] : ids

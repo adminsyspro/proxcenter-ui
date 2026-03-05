@@ -27,7 +27,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useChanges } from '@/hooks/useChanges'
@@ -110,10 +110,77 @@ const actionConfig = {
   stopped: { icon: 'ri-stop-circle-line', color: 'error', chartColor: '#ec407a', label: 'changes.actionStopped' }
 }
 
-const RESOURCE_COLORS = ['#4fc3f7', '#81c784', '#ffb74d', '#ce93d8', '#90a4ae']
+/* --------------------------------
+   Stat cards (same style as events page)
+-------------------------------- */
+
+function DonutStatCard({ title, value, total, color }) {
+  const remainder = Math.max(0, total - value)
+
+  return (
+    <Card variant='outlined'>
+      <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+          <ResponsiveContainer width='100%' height='100%'>
+            <PieChart>
+              <Pie
+                data={[{ value: value || 0 }, { value: remainder || 1 }]}
+                dataKey='value'
+                cx='50%' cy='50%'
+                innerRadius={14} outerRadius={24}
+                strokeWidth={0}
+                startAngle={90} endAngle={-270}
+              >
+                <Cell fill={color} />
+                <Cell fill='rgba(255,255,255,0.08)' />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </Box>
+        <Box>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{title}</Typography>
+          <Typography variant='h5' sx={{ fontWeight: 700 }}>{value}</Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DonutTotalCard({ title, value, segments }) {
+  const data = segments.filter(s => s.value > 0)
+
+  if (data.length === 0) data.push({ value: 1, color: 'rgba(255,255,255,0.08)' })
+
+  return (
+    <Card variant='outlined'>
+      <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
+          <ResponsiveContainer width='100%' height='100%'>
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey='value'
+                cx='50%' cy='50%'
+                innerRadius={14} outerRadius={24}
+                strokeWidth={0}
+                startAngle={90} endAngle={-270}
+              >
+                {data.map((s, i) => <Cell key={i} fill={s.color} />)}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </Box>
+        <Box>
+          <Typography variant='caption' sx={{ opacity: 0.6 }}>{title}</Typography>
+          <Typography variant='h5' sx={{ fontWeight: 700 }}>{value}</Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
 
 /* --------------------------------
-   Components
+   Timeline components
 -------------------------------- */
 
 function FieldDiff({ field }) {
@@ -195,7 +262,6 @@ function TimelineEntry({ change, t }) {
 
       {/* Content */}
       <Box sx={{ flex: 1, pb: 3, minWidth: 0 }}>
-        {/* Header */}
         <Box
           sx={{
             display: 'flex',
@@ -265,7 +331,6 @@ function TimelineEntry({ change, t }) {
           </Box>
         </Box>
 
-        {/* Expandable field diffs */}
         {hasFields && (
           <Collapse in={expanded}>
             <Box
@@ -289,22 +354,6 @@ function TimelineEntry({ change, t }) {
   )
 }
 
-function CustomPieTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null
-
-  const { name, value, fill } = payload[0]
-
-  return (
-    <Box sx={{ bgcolor: 'background.paper', px: 1.5, py: 0.75, borderRadius: 1, boxShadow: 2, border: 1, borderColor: 'divider' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: fill }} />
-        <Typography variant='caption' fontWeight={600}>{name}</Typography>
-        <Typography variant='caption' sx={{ opacity: 0.6 }}>{value}</Typography>
-      </Box>
-    </Box>
-  )
-}
-
 /* --------------------------------
    Page
 -------------------------------- */
@@ -314,12 +363,9 @@ export default function ChangesPage() {
 
   usePageTitle(t('changes.title'))
 
-  // Filters
   const [resourceType, setResourceType] = useState('')
   const [action, setAction] = useState('')
   const [search, setSearch] = useState('')
-
-  // Dialogs
   const [purgeOpen, setPurgeOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [purging, setPurging] = useState(false)
@@ -330,9 +376,20 @@ export default function ChangesPage() {
   const { data: settingsData, mutate: mutateSettings } = useSWRFetch('/api/v1/changes/settings')
 
   const changes = response?.data || []
-
-  // Load retention from settings
   const currentRetention = settingsData?.retentionDays || 30
+
+  // Stats
+  const stats = useMemo(() => {
+    const byType = {}
+    const byAction = {}
+
+    for (const c of changes) {
+      byType[c.resourceType] = (byType[c.resourceType] || 0) + 1
+      byAction[c.action] = (byAction[c.action] || 0) + 1
+    }
+
+    return { total: changes.length, byType, byAction }
+  }, [changes])
 
   // Group by day
   const groupedChanges = useMemo(() => {
@@ -368,31 +425,6 @@ export default function ChangesPage() {
 
     return groups
   }, [changes, search, t])
-
-  // Stats for pie charts
-  const { byTypePie, byActionPie, total } = useMemo(() => {
-    const byType = {}
-    const byAction = {}
-
-    for (const c of changes) {
-      byType[c.resourceType] = (byType[c.resourceType] || 0) + 1
-      byAction[c.action] = (byAction[c.action] || 0) + 1
-    }
-
-    const byTypePie = Object.entries(byType).map(([key, value], i) => ({
-      name: resourceTypeConfig[key]?.label || key,
-      value,
-      fill: resourceTypeConfig[key]?.color || RESOURCE_COLORS[i % RESOURCE_COLORS.length]
-    }))
-
-    const byActionPie = Object.entries(byAction).map(([key, value]) => ({
-      name: t(actionConfig[key]?.label || key),
-      value,
-      fill: actionConfig[key]?.chartColor || '#90a4ae'
-    }))
-
-    return { byTypePie, byActionPie, total: changes.length }
-  }, [changes, t])
 
   const handlePurge = useCallback(async () => {
     setPurging(true)
@@ -434,118 +466,65 @@ export default function ChangesPage() {
   if (isLoading) return <CardsSkeleton count={3} />
 
   return (
-    <Stack spacing={3}>
-      {/* Stats row: pie chart + summary */}
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        {/* Main stat card with pie charts */}
-        <Card sx={{ flex: 2, minWidth: 300 }}>
-          <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Box>
-                <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('changes.totalChanges')}</Typography>
-                <Typography variant='h4' fontWeight={700}>{total}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Tooltip title={t('changes.settings')}>
-                  <IconButton size='small' onClick={handleOpenSettings}>
-                    <i className='ri-settings-3-line' style={{ fontSize: 18 }} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title={t('changes.purge')}>
-                  <IconButton size='small' color='error' onClick={() => setPurgeOpen(true)} disabled={total === 0}>
-                    <i className='ri-delete-bin-line' style={{ fontSize: 18 }} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
+      {/* Header Actions */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexShrink: 0 }}>
+        <Tooltip title={t('changes.retentionInfo', { days: currentRetention })}>
+          <Button
+            variant='outlined'
+            size='small'
+            startIcon={<i className='ri-settings-3-line' />}
+            onClick={handleOpenSettings}
+          >
+            {t('changes.settings')}
+          </Button>
+        </Tooltip>
+        <Button
+          variant='outlined'
+          size='small'
+          color='error'
+          startIcon={<i className='ri-delete-bin-line' />}
+          onClick={() => setPurgeOpen(true)}
+          disabled={stats.total === 0}
+        >
+          {t('changes.purge')}
+        </Button>
+        <Button
+          variant='outlined'
+          size='small'
+          startIcon={<i className='ri-refresh-line' />}
+          onClick={() => mutate()}
+          disabled={isLoading}
+        >
+          {t('common.refresh')}
+        </Button>
+      </Box>
 
-            {total > 0 && (
-              <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                {/* By resource type */}
-                <Box sx={{ flex: 1, textAlign: 'center' }}>
-                  <Typography variant='caption' sx={{ opacity: 0.5, mb: 1, display: 'block' }}>
-                    {t('changes.byResourceType')}
-                  </Typography>
-                  <ResponsiveContainer width='100%' height={120}>
-                    <PieChart>
-                      <Pie
-                        data={byTypePie}
-                        cx='50%'
-                        cy='50%'
-                        innerRadius={30}
-                        outerRadius={50}
-                        paddingAngle={2}
-                        dataKey='value'
-                        stroke='none'
-                      >
-                        {byTypePie.map((entry, i) => (
-                          <Cell key={i} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip content={<CustomPieTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap', mt: 0.5 }}>
-                    {byTypePie.map(entry => (
-                      <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.fill }} />
-                        <Typography variant='caption' sx={{ opacity: 0.7 }}>
-                          {entry.name} ({entry.value})
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-
-                {/* By action type */}
-                <Box sx={{ flex: 1, textAlign: 'center' }}>
-                  <Typography variant='caption' sx={{ opacity: 0.5, mb: 1, display: 'block' }}>
-                    {t('changes.byAction')}
-                  </Typography>
-                  <ResponsiveContainer width='100%' height={120}>
-                    <PieChart>
-                      <Pie
-                        data={byActionPie}
-                        cx='50%'
-                        cy='50%'
-                        innerRadius={30}
-                        outerRadius={50}
-                        paddingAngle={2}
-                        dataKey='value'
-                        stroke='none'
-                      >
-                        {byActionPie.map((entry, i) => (
-                          <Cell key={i} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip content={<CustomPieTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap', mt: 0.5 }}>
-                    {byActionPie.map(entry => (
-                      <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.fill }} />
-                        <Typography variant='caption' sx={{ opacity: 0.7 }}>
-                          {entry.name} ({entry.value})
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              </Box>
-            )}
-
-            <Typography variant='caption' sx={{ opacity: 0.4, display: 'block', mt: 1.5 }}>
-              {t('changes.retentionInfo', { days: currentRetention })}
-            </Typography>
-          </CardContent>
-        </Card>
+      {/* Stats row - same style as events page */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, flexShrink: 0 }}>
+        <DonutTotalCard
+          title={t('changes.totalChanges')}
+          value={stats.total}
+          segments={Object.entries(stats.byType).map(([key]) => ({
+            value: stats.byType[key],
+            color: resourceTypeConfig[key]?.color || '#90a4ae'
+          }))}
+        />
+        {Object.entries(stats.byType).map(([key, value]) => (
+          <DonutStatCard
+            key={key}
+            title={resourceTypeConfig[key]?.label || key}
+            value={value}
+            total={stats.total}
+            color={resourceTypeConfig[key]?.color || '#90a4ae'}
+          />
+        ))}
       </Box>
 
       {/* Filters */}
-      <Card>
+      <Card variant='outlined' sx={{ flexShrink: 0 }}>
         <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Stack direction='row' spacing={1.5} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField
               size='small'
               placeholder={t('changes.search')}
@@ -588,7 +567,7 @@ export default function ChangesPage() {
                 <MenuItem value='migrated'>{t('changes.actionMigrated')}</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </Stack>
         </CardContent>
       </Card>
 
@@ -605,11 +584,10 @@ export default function ChangesPage() {
           description={t('changes.emptyDescription')}
         />
       ) : (
-        <Card>
+        <Card variant='outlined' sx={{ flex: 1, overflow: 'auto' }}>
           <CardContent>
             {groupedChanges.map(group => (
               <Box key={group.dayKey}>
-                {/* Day separator */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, mt: 1 }}>
                   <Typography
                     variant='overline'
@@ -622,7 +600,6 @@ export default function ChangesPage() {
                   <Chip size='small' label={group.changes.length} sx={{ height: 20, fontSize: '0.65rem' }} />
                 </Box>
 
-                {/* Changes in this day */}
                 {group.changes.map(change => (
                   <TimelineEntry key={change.id} change={change} t={t} />
                 ))}
@@ -640,7 +617,7 @@ export default function ChangesPage() {
         </DialogTitle>
         <DialogContent>
           <Typography variant='body2'>
-            {t('changes.purgeDescription', { count: total })}
+            {t('changes.purgeDescription', { count: stats.total })}
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -688,6 +665,6 @@ export default function ChangesPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Stack>
+    </Box>
   )
 }

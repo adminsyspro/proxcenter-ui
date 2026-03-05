@@ -907,7 +907,7 @@ export default function VmDetailTabs(props: any) {
                           <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                               <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <i className="ri-network-line" style={{ fontSize: 20 }} />
+                                <i className="ri-global-line" style={{ fontSize: 20 }} />
                                 {t('inventory.tabs.network')} ({data.networkInfo?.length || 0})
                               </Typography>
                               <Button
@@ -947,7 +947,7 @@ export default function VmDetailTabs(props: any) {
                                   }}
                                 >
                                   <ListItemIcon sx={{ minWidth: 40 }}>
-                                    <i className="ri-ethernet-fill" style={{ fontSize: 24, color: 'var(--mui-palette-info-main)' }} />
+                                    <i className="ri-router-fill" style={{ fontSize: 24, opacity: 0.7 }} />
                                   </ListItemIcon>
                                   <ListItemText
                                     primary={

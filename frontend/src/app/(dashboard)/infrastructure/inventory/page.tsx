@@ -202,7 +202,14 @@ export default function InventoryPage() {
         
         // Mettre à jour la référence
         prevMigratingVmsRef.current = migrations
-        setMigratingVms(migrations)
+
+        // Only update state if the set of migrating VMs actually changed
+        setMigratingVms(prev => {
+          const prevIds = prev.map(m => `${m.connId}:${m.vmid}`).sort().join(',')
+          const nextIds = migrations.map(m => `${m.connId}:${m.vmid}`).sort().join(',')
+
+          return prevIds === nextIds ? prev : migrations
+        })
       } catch (e) {
         console.error('Error fetching running tasks:', e)
       }

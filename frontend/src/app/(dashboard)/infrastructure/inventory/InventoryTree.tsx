@@ -1170,8 +1170,14 @@ return () => {
 
   const selectedItemId = selected ? itemKey(selected) : undefined
 
-  // État de recherche
+  // État de recherche (debounced)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput), 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   // Filtrer les clusters/nodes/vms selon la recherche
   const filteredClusters = useMemo(() => {
@@ -1533,8 +1539,8 @@ return favorites.has(vmKey)
           <TextField
             size='small'
             placeholder={t('common.search')}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             sx={{
               flex: 1,
               '& .MuiOutlinedInput-root': {
@@ -1551,9 +1557,9 @@ return favorites.has(vmKey)
                   <SearchIcon sx={{ fontSize: 18, opacity: 0.6 }} />
                 </InputAdornment>
               ),
-              endAdornment: search ? (
+              endAdornment: searchInput ? (
                 <InputAdornment position='end'>
-                  <IconButton size='small' onClick={() => setSearch('')} sx={{ p: 0.25 }}>
+                  <IconButton size='small' onClick={() => { setSearchInput(''); setSearch('') }} sx={{ p: 0.25 }}>
                     <ClearIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </InputAdornment>
@@ -1692,7 +1698,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, search, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, manualExpandedItems, collapsedSections]
+    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, manualExpandedItems, collapsedSections]
   )
 
   return (
@@ -1728,13 +1734,10 @@ return favorites.has(vmKey)
               const isPendingAction = isVmPendingAction(vm.connId, vm.vmid)
 
               
-return (
-              <Tooltip 
-                key={vmKey}
-                title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                placement="right"
-              >
+return (() => {
+              const vmContent = (
               <Box
+                key={vmKey}
                 data-vmkey={vmKey}
                 onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                 onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
@@ -1795,8 +1798,9 @@ return (
                   )}
                 </Box>
               </Box>
-              </Tooltip>
-            )})
+              )
+              return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+            })()})
           )}
         </Box>
       ) : viewMode === 'favorites' ? (
@@ -1820,13 +1824,10 @@ return (
               const isPendingAction = isVmPendingAction(vm.connId, vm.vmid)
 
               
-return (
-              <Tooltip 
-                key={vmKey}
-                title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                placement="right"
-              >
+return (() => {
+              const vmContent = (
               <Box
+                key={vmKey}
                 data-vmkey={vmKey}
                 onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                 onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
@@ -1852,8 +1853,8 @@ return (
                     e.stopPropagation()
                     toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)
                   }}
-                  sx={{ 
-                    p: 0.25, 
+                  sx={{
+                    p: 0.25,
                     color: '#ffc107',
                     '&:hover': { color: '#ff9800' }
                   }}
@@ -1871,8 +1872,9 @@ return (
                   )}
                 </Box>
               </Box>
-              </Tooltip>
-            )})
+              )
+              return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+            })()})
           )}
         </Box>
       ) : viewMode === 'hosts' ? (
@@ -1925,14 +1927,9 @@ return (
                   const isMigrating = isVmMigrating(vm.connId, vm.vmid)
                   const isPendingAction = isVmPendingAction(vm.connId, vm.vmid)
 
-                  
-return (
-                  <Tooltip 
-                    key={vmKey}
-                    title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                    placement="right"
-                  >
+                  const vmContent = (
                   <Box
+                    key={vmKey}
                     data-vmkey={vmKey}
                     onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
@@ -1959,8 +1956,8 @@ return (
                         e.stopPropagation()
                         toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)
                       }}
-                      sx={{ 
-                        p: 0.25, 
+                      sx={{
+                        p: 0.25,
                         opacity: isFav ? 1 : 0,
                         transition: 'opacity 0.2s',
                         color: isFav ? '#ffc107' : 'text.secondary',
@@ -1988,8 +1985,8 @@ return (
                       </Tooltip>
                     )}
                   </Box>
-                  </Tooltip>
                   )
+                  return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
                 })}
               </Box>
             )})
@@ -2044,14 +2041,9 @@ return (
                   const isMigrating = isVmMigrating(vm.connId, vm.vmid)
                   const isPendingAction = isVmPendingAction(vm.connId, vm.vmid)
 
-                  
-return (
-                  <Tooltip 
-                    key={vmKey}
-                    title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                    placement="right"
-                  >
+                  const vmContent = (
                   <Box
+                    key={vmKey}
                     data-vmkey={vmKey}
                     onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
@@ -2078,8 +2070,8 @@ return (
                         e.stopPropagation()
                         toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)
                       }}
-                      sx={{ 
-                        p: 0.25, 
+                      sx={{
+                        p: 0.25,
                         opacity: isFav ? 1 : 0,
                         transition: 'opacity 0.2s',
                         color: isFav ? '#ffc107' : 'text.secondary',
@@ -2107,8 +2099,8 @@ return (
                       </Tooltip>
                     )}
                   </Box>
-                  </Tooltip>
                   )
+                  return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
                 })}
               </Box>
             )})
@@ -2165,13 +2157,11 @@ return (
                   const isPendingAction = isVmPendingAction(vm.connId, vm.vmid)
 
                   
-return (
-                  <Tooltip 
-                    key={`${vmKey}-${tag}`}
-                    title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                    placement="right"
-                  >
+return (() => {
+                  const tagVmKey = `${vmKey}-${tag}`
+                  const vmContent = (
                   <Box
+                    key={tagVmKey}
                     data-vmkey={vmKey}
                     onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
@@ -2198,8 +2188,8 @@ return (
                         e.stopPropagation()
                         toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)
                       }}
-                      sx={{ 
-                        p: 0.25, 
+                      sx={{
+                        p: 0.25,
                         opacity: isFav ? 1 : 0,
                         transition: 'opacity 0.2s',
                         color: isFav ? '#ffc107' : 'text.secondary',
@@ -2227,8 +2217,9 @@ return (
                       </Tooltip>
                     )}
                   </Box>
-                  </Tooltip>
                   )
+                  return isMigrating ? <Tooltip key={tagVmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+                  })()
                 })}
               </Box>
             )})
@@ -2249,13 +2240,10 @@ return (
               const isMigrating = isVmMigrating(vm.connId, vm.vmid)
 
               
-return (
-              <Tooltip 
-                key={vmKey}
-                title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                placement="right"
-              >
+return (() => {
+              const vmContent = (
               <Box
+                key={vmKey}
                 data-vmkey={vmKey}
                 onClick={() => !isMigrating && onSelect({ type: 'vm', id: vmKey })}
                 onContextMenu={(e) => !isMigrating && handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template)}
@@ -2282,8 +2270,8 @@ return (
                     e.stopPropagation()
                     toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)
                   }}
-                  sx={{ 
-                    p: 0.25, 
+                  sx={{
+                    p: 0.25,
                     opacity: isFav ? 1 : 0,
                     transition: 'opacity 0.2s',
                     color: isFav ? '#ffc107' : 'text.secondary',
@@ -2300,9 +2288,9 @@ return (
                   <Chip label={vm.type === 'lxc' ? 'LXC' : 'VM'} size="small" sx={{ height: 16, fontSize: 10 }} />
                 </Box>
               </Box>
-              </Tooltip>
               )
-            })
+              return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+            })()})
           )}
         </Box>
       ) : (
@@ -2417,13 +2405,10 @@ return (
                   const isMigrating = isVmMigrating(clu.connId, vm.vmid)
                   const isPendingAction = isVmPendingAction(clu.connId, vm.vmid)
 
-                  return (
-                  <Tooltip
-                    key={`${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
-                    title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                    placement="right"
-                  >
+                  const treeVmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
+                  const vmContent = (
                   <TreeItem
+                    key={treeVmKey}
                     itemId={`vm:${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
                     disabled={isMigrating}
                     onContextMenu={(e) => !isMigrating && handleContextMenu(e, clu.connId, n.node, vm.type, vm.vmid, vm.name, vm.status, clu.isCluster, vm.template)}
@@ -2476,8 +2461,9 @@ return (
                       </Box>
                     }
                   />
-                  </Tooltip>
-                )})}
+                  )
+                  return isMigrating ? <Tooltip key={treeVmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+                })}
               </TreeItem>
             )
           }
@@ -2528,13 +2514,9 @@ return (
                     const isMigrating = isVmMigrating(clu.connId, vm.vmid)
                     const isPendingAction = isVmPendingAction(clu.connId, vm.vmid)
 
-                    return (
-                    <Tooltip
-                      key={`${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
-                      title={isMigrating ? t('audit.actions.migrate') + "..." : ""}
-                      placement="right"
-                    >
+                    const vmContent = (
                     <TreeItem
+                      key={vmKey}
                       itemId={`vm:${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
                       disabled={isMigrating}
                       onContextMenu={(e) => !isMigrating && handleContextMenu(e, clu.connId, n.node, vm.type, vm.vmid, vm.name, vm.status, clu.isCluster, vm.template)}
@@ -2586,8 +2568,9 @@ return (
                         </Box>
                       }
                     />
-                    </Tooltip>
-                  )})}
+                    )
+                    return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+                  })}
                 </TreeItem>
               ))}
             </TreeItem>

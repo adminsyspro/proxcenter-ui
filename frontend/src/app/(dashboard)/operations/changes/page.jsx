@@ -501,7 +501,7 @@ export default function ChangesPage() {
       </Box>
 
       {/* Stats row - same style as events page */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, flexShrink: 0 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, flexShrink: 0 }}>
         <DonutTotalCard
           title={t('changes.totalChanges')}
           value={stats.total}
@@ -510,15 +510,9 @@ export default function ChangesPage() {
             color: resourceTypeConfig[key]?.color || '#90a4ae'
           }))}
         />
-        {Object.entries(stats.byType).map(([key, value]) => (
-          <DonutStatCard
-            key={key}
-            title={resourceTypeConfig[key]?.label || key}
-            value={value}
-            total={stats.total}
-            color={resourceTypeConfig[key]?.color || '#90a4ae'}
-          />
-        ))}
+        <DonutStatCard title='VM' value={stats.byType.vm || 0} total={stats.total} color='#4fc3f7' />
+        <DonutStatCard title='Container' value={stats.byType.ct || 0} total={stats.total} color='#81c784' />
+        <DonutStatCard title={t('changes.actionConfigChanged')} value={stats.byAction.config_changed || 0} total={stats.total} color='#42a5f5' />
       </Box>
 
       {/* Filters */}

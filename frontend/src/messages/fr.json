@@ -4754,6 +4754,18 @@
     "emptyTitle": "Aucun changement détecté",
     "emptyDescription": "Les modifications de configuration apparaîtront ici au fur et à mesure qu'elles seront détectées sur votre infrastructure Proxmox.",
     "recentChanges": "Changements récents",
-    "viewAll": "Voir tous les changements"
+    "viewAll": "Voir tous les changements",
+    "byResourceType": "Par type de ressource",
+    "byAction": "Par action",
+    "purge": "Purger tous les changements",
+    "purgeTitle": "Purger tous les changements",
+    "purgeDescription": "Cela supprimera définitivement les {count} changements suivis. Cette action est irréversible.",
+    "purgeConfirm": "Tout purger",
+    "settings": "Paramètres",
+    "settingsTitle": "Paramètres du suivi des changements",
+    "retentionDescription": "Les changements plus anciens que la période de rétention seront automatiquement supprimés.",
+    "retentionDays": "Rétention",
+    "retentionInfo": "Rétention : {days} jours",
+    "days": "jours"
   }
 }

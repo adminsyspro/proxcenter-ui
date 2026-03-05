@@ -30,3 +30,19 @@ export async function GET(req: Request) {
     )
   }
 }
+
+export async function DELETE() {
+  try {
+    const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    if (permError) return permError
+
+    const data = await orchestratorFetch<any>('/changes', { method: 'DELETE' })
+
+    return NextResponse.json(data)
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error?.message || 'Server error' },
+      { status: 500 }
+    )
+  }
+}

@@ -4748,6 +4748,18 @@
     "emptyTitle": "No changes detected yet",
     "emptyDescription": "Configuration changes will appear here as they are detected on your Proxmox infrastructure.",
     "recentChanges": "Recent Changes",
-    "viewAll": "View all changes"
+    "viewAll": "View all changes",
+    "byResourceType": "By resource type",
+    "byAction": "By action",
+    "purge": "Purge all changes",
+    "purgeTitle": "Purge all changes",
+    "purgeDescription": "This will permanently delete all {count} tracked changes. This action cannot be undone.",
+    "purgeConfirm": "Purge all",
+    "settings": "Settings",
+    "settingsTitle": "Change Tracking Settings",
+    "retentionDescription": "Changes older than the retention period will be automatically deleted.",
+    "retentionDays": "Retention",
+    "retentionInfo": "Retention: {days} days",
+    "days": "days"
   }
 }

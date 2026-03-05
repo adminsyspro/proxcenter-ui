@@ -4752,6 +4752,8 @@
     "actionMigrated": "Migré",
     "actionHardwareChanged": "Matériel modifié",
     "actionNetworkChanged": "Réseau modifié",
+    "actionSnapshotCreated": "Snapshot créé",
+    "actionSnapshotDeleted": "Snapshot supprimé",
     "actionSnapshotModified": "Snapshot modifié",
     "emptyTitle": "Aucun changement détecté",
     "emptyDescription": "Les modifications de configuration apparaîtront ici au fur et à mesure qu'elles seront détectées sur votre infrastructure Proxmox.",

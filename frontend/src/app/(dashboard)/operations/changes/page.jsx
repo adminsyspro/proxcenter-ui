@@ -105,6 +105,8 @@ const actionConfig = {
   config_changed: { icon: 'ri-settings-3-line', color: 'info', chartColor: '#42a5f5', label: 'changes.actionConfigChanged' },
   hardware_changed: { icon: 'ri-cpu-line', color: 'warning', chartColor: '#ffa726', label: 'changes.actionHardwareChanged' },
   network_changed: { icon: 'ri-wifi-line', color: 'info', chartColor: '#29b6f6', label: 'changes.actionNetworkChanged' },
+  snapshot_created: { icon: 'ri-camera-line', color: 'success', chartColor: '#66bb6a', label: 'changes.actionSnapshotCreated' },
+  snapshot_deleted: { icon: 'ri-camera-off-line', color: 'error', chartColor: '#ef5350', label: 'changes.actionSnapshotDeleted' },
   snapshot_modified: { icon: 'ri-camera-switch-line', color: 'info', chartColor: '#7e57c2', label: 'changes.actionSnapshotModified' },
   migrated: { icon: 'ri-swap-box-line', color: 'warning', chartColor: '#ff7043', label: 'changes.actionMigrated' },
 }
@@ -557,6 +559,8 @@ export default function ChangesPage() {
                 <MenuItem value='config_changed'>{t('changes.actionConfigChanged')}</MenuItem>
                 <MenuItem value='hardware_changed'>{t('changes.actionHardwareChanged')}</MenuItem>
                 <MenuItem value='network_changed'>{t('changes.actionNetworkChanged')}</MenuItem>
+                <MenuItem value='snapshot_created'>{t('changes.actionSnapshotCreated')}</MenuItem>
+                <MenuItem value='snapshot_deleted'>{t('changes.actionSnapshotDeleted')}</MenuItem>
                 <MenuItem value='snapshot_modified'>{t('changes.actionSnapshotModified')}</MenuItem>
                 <MenuItem value='migrated'>{t('changes.actionMigrated')}</MenuItem>
               </Select>

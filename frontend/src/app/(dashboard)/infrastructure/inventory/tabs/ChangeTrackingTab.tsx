@@ -75,6 +75,8 @@ const actionConfig: Record<string, { icon: string; color: 'info' | 'success' | '
   config_changed: { icon: 'ri-settings-3-line', color: 'info', label: 'changes.actionConfigChanged' },
   hardware_changed: { icon: 'ri-cpu-line', color: 'warning', label: 'changes.actionHardwareChanged' },
   network_changed: { icon: 'ri-wifi-line', color: 'info', label: 'changes.actionNetworkChanged' },
+  snapshot_created: { icon: 'ri-camera-line', color: 'success', label: 'changes.actionSnapshotCreated' },
+  snapshot_deleted: { icon: 'ri-camera-off-line', color: 'error', label: 'changes.actionSnapshotDeleted' },
   snapshot_modified: { icon: 'ri-camera-switch-line', color: 'info', label: 'changes.actionSnapshotModified' },
   migrated: { icon: 'ri-swap-box-line', color: 'warning', label: 'changes.actionMigrated' },
 }

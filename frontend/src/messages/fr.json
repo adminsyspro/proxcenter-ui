@@ -458,6 +458,7 @@
     },
     "noNotes": "Aucune note pour cette VM. Cliquez sur \"Modifier\" pour en ajouter.",
     "saveCpuChanges": "Sauvegarder les modifications CPU",
+    "noDiskInserted": "Aucun disque inséré",
     "saveMemoryChanges": "Sauvegarder les modifications RAM",
     "deleteSnapshot": "Supprimer le snapshot",
     "deleteSnapshotDesc": "Supprime le snapshot (ne supprime pas les données actuelles)",

@@ -697,13 +697,16 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             const storagePart = parts[0].split(':')
             const sizeMatch = diskStr.match(/size=(\d+[GMT]?)/i)
 
+            const isCdrom = diskStr.includes('media=cdrom') || storagePart[0] === 'none'
+
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',
-              size: sizeMatch ? sizeMatch[1] : 'unknown',
-              format: diskStr.includes('format=') ? diskStr.match(/format=(\w+)/)?.[1] : 'raw',
+              size: isCdrom ? '-' : (sizeMatch ? sizeMatch[1] : 'unknown'),
+              format: isCdrom ? 'cdrom' : (diskStr.includes('format=') ? diskStr.match(/format=(\w+)/)?.[1] : 'raw'),
               cache: diskStr.match(/cache=(\w+)/)?.[1],
               iothread: diskStr.includes('iothread=1'),
+              isCdrom,
             })
           }
         })

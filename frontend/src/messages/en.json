@@ -458,6 +458,7 @@
     },
     "noNotes": "No notes for this VM. Click \"Edit\" to add one.",
     "saveCpuChanges": "Save CPU changes",
+    "noDiskInserted": "No disk inserted",
     "saveMemoryChanges": "Save memory changes",
     "deleteSnapshot": "Delete snapshot",
     "deleteSnapshotDesc": "Deletes the snapshot (does not delete current data)",

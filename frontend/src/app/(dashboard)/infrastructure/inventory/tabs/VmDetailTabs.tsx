@@ -538,49 +538,40 @@ export default function VmDetailTabs(props: any) {
                           
                           {/* Sockets Slider */}
                           <Box sx={{ mb: 3 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                              <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
+                            <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.sockets')}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <Slider
+                                value={cpuSockets}
+                                onChange={(_, val) => setCpuSockets(val as number)}
+                                min={1}
+                                max={4}
+                                step={1}
+                                marks={[
+                                  { value: 1, label: '1' },
+                                  { value: 2, label: '2' },
+                                  { value: 3, label: '3' },
+                                  { value: 4, label: '4' },
+                                ]}
+                                valueLabelDisplay="auto"
+                                sx={{ flex: 1 }}
+                              />
                               <TextField
                                 size="small"
                                 type="number"
                                 value={cpuSockets}
                                 onChange={(e) => setCpuSockets(Number(e.target.value))}
-                                sx={{ width: 100 }}
+                                sx={{ width: 80, flexShrink: 0 }}
                                 inputProps={{ min: 1, max: 4 }}
                               />
                             </Box>
-                            <Slider
-                              value={cpuSockets}
-                              onChange={(_, val) => setCpuSockets(val as number)}
-                              min={1}
-                              max={4}
-                              step={1}
-                              marks={[
-                                { value: 1, label: '1' },
-                                { value: 2, label: '2' },
-                                { value: 3, label: '3' },
-                                { value: 4, label: '4' },
-                              ]}
-                              valueLabelDisplay="auto"
-                            />
                           </Box>
 
                           {/* Cores Slider */}
                           <Box sx={{ mb: 3 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                              <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
-                              <TextField
-                                size="small"
-                                type="number"
-                                value={cpuCores}
-                                onChange={(e) => setCpuCores(Math.max(1, Number(e.target.value)))}
-                                sx={{ width: 100 }}
-                                inputProps={{ min: 1 }}
-                              />
-                            </Box>
+                            <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.coresPerSocket')}</Typography>
                             {(() => {
                               const hostCores = data.nodeCapacity?.maxCpu || 32
-                              const sliderMax = Math.min(hostCores, 64) // Limiter à 64 pour le slider
+                              const sliderMax = Math.min(hostCores, 64)
                               const marks = [
                                 { value: 1, label: '1' },
                                 ...(sliderMax >= 8 ? [{ value: Math.floor(sliderMax / 4), label: String(Math.floor(sliderMax / 4)) }] : []),
@@ -588,15 +579,26 @@ export default function VmDetailTabs(props: any) {
                                 { value: sliderMax, label: String(sliderMax) },
                               ]
                               return (
-                                <Slider
-                                  value={Math.min(cpuCores, sliderMax)}
-                                  onChange={(_, val) => setCpuCores(val as number)}
-                                  min={1}
-                                  max={sliderMax}
-                                  step={1}
-                                  marks={marks}
-                                  valueLabelDisplay="auto"
-                                />
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Slider
+                                    value={Math.min(cpuCores, sliderMax)}
+                                    onChange={(_, val) => setCpuCores(val as number)}
+                                    min={1}
+                                    max={sliderMax}
+                                    step={1}
+                                    marks={marks}
+                                    valueLabelDisplay="auto"
+                                    sx={{ flex: 1 }}
+                                  />
+                                  <TextField
+                                    size="small"
+                                    type="number"
+                                    value={cpuCores}
+                                    onChange={(e) => setCpuCores(Math.max(1, Number(e.target.value)))}
+                                    sx={{ width: 80, flexShrink: 0 }}
+                                    inputProps={{ min: 1 }}
+                                  />
+                                </Box>
                               )
                             })()}
                           </Box>
@@ -635,25 +637,26 @@ export default function VmDetailTabs(props: any) {
                             />
                             {cpuLimitEnabled && (
                               <Box sx={{ mt: 2 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="body2" fontWeight={600}>{t('inventory.cpuLimit')}</Typography>
+                                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.cpuLimit')}</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Slider
+                                    value={cpuLimit}
+                                    onChange={(_, val) => setCpuLimit(val as number)}
+                                    min={0}
+                                    max={128}
+                                    step={0.5}
+                                    valueLabelDisplay="auto"
+                                    sx={{ flex: 1 }}
+                                  />
                                   <TextField
                                     size="small"
                                     type="number"
                                     value={cpuLimit}
                                     onChange={(e) => setCpuLimit(Number(e.target.value))}
-                                    sx={{ width: 100 }}
+                                    sx={{ width: 80, flexShrink: 0 }}
                                     inputProps={{ min: 0, max: 128, step: 0.5 }}
                                   />
                                 </Box>
-                                <Slider
-                                  value={cpuLimit}
-                                  onChange={(_, val) => setCpuLimit(val as number)}
-                                  min={0}
-                                  max={128}
-                                  step={0.5}
-                                  valueLabelDisplay="auto"
-                                />
                                 <Typography variant="caption" color="text.secondary">
                                   {t('inventory.cpuLimitHint', { max: cpuSockets * cpuCores })}
                                 </Typography>
@@ -712,23 +715,10 @@ export default function VmDetailTabs(props: any) {
                           
                           {/* RAM Slider */}
                           <Box sx={{ mb: 3 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                              <Typography variant="body2" fontWeight={600}>{t('inventoryPage.memory')}</Typography>
-                              <TextField
-                                size="small"
-                                type="number"
-                                value={(memory / 1024).toFixed(0)}
-                                onChange={(e) => setMemory(Math.max(512, Number(e.target.value) * 1024))}
-                                InputProps={{
-                                  endAdornment: <InputAdornment position="end">GB</InputAdornment>,
-                                }}
-                                sx={{ width: 120 }}
-                                inputProps={{ min: 0.5 }}
-                              />
-                            </Box>
+                            <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventoryPage.memory')}</Typography>
                             {(() => {
                               const hostMemGb = Math.floor((data.nodeCapacity?.maxMem || 64 * 1024 * 1024 * 1024) / (1024 * 1024 * 1024))
-                              const sliderMax = Math.min(hostMemGb, 128) // Limiter à 128 GB pour le slider
+                              const sliderMax = Math.min(hostMemGb, 128)
                               const step = sliderMax > 32 ? 2 : 1
                               const marks = [
                                 { value: 1, label: '1 GB' },
@@ -737,16 +727,30 @@ export default function VmDetailTabs(props: any) {
                                 { value: sliderMax, label: `${sliderMax} GB` },
                               ]
                               return (
-                                <Slider
-                                  value={Math.min(memory / 1024, sliderMax)}
-                                  onChange={(_, val) => setMemory((val as number) * 1024)}
-                                  min={1}
-                                  max={sliderMax}
-                                  step={step}
-                                  marks={marks}
-                                  valueLabelDisplay="auto"
-                                  valueLabelFormat={(v) => `${v} GB`}
-                                />
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Slider
+                                    value={Math.min(memory / 1024, sliderMax)}
+                                    onChange={(_, val) => setMemory((val as number) * 1024)}
+                                    min={1}
+                                    max={sliderMax}
+                                    step={step}
+                                    marks={marks}
+                                    valueLabelDisplay="auto"
+                                    valueLabelFormat={(v) => `${v} GB`}
+                                    sx={{ flex: 1 }}
+                                  />
+                                  <TextField
+                                    size="small"
+                                    type="number"
+                                    value={(memory / 1024).toFixed(0)}
+                                    onChange={(e) => setMemory(Math.max(512, Number(e.target.value) * 1024))}
+                                    InputProps={{
+                                      endAdornment: <InputAdornment position="end">GB</InputAdornment>,
+                                    }}
+                                    sx={{ width: 110, flexShrink: 0 }}
+                                    inputProps={{ min: 0.5 }}
+                                  />
+                                </Box>
                               )
                             })()}
                           </Box>
@@ -764,8 +768,18 @@ export default function VmDetailTabs(props: any) {
                             />
                             {balloonEnabled && (
                               <Box sx={{ mt: 2 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="body2" fontWeight={600}>{t('inventory.minMemoryBalloon')}</Typography>
+                                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.minMemoryBalloon')}</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Slider
+                                    value={balloon / 1024}
+                                    onChange={(_, val) => setBalloon((val as number) * 1024)}
+                                    min={0}
+                                    max={memory / 1024}
+                                    step={1}
+                                    valueLabelDisplay="auto"
+                                    valueLabelFormat={(v) => `${v} GB`}
+                                    sx={{ flex: 1 }}
+                                  />
                                   <TextField
                                     size="small"
                                     type="number"
@@ -774,19 +788,10 @@ export default function VmDetailTabs(props: any) {
                                     InputProps={{
                                       endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                     }}
-                                    sx={{ width: 120 }}
+                                    sx={{ width: 110, flexShrink: 0 }}
                                     inputProps={{ min: 0, max: memory / 1024 }}
                                   />
                                 </Box>
-                                <Slider
-                                  value={balloon / 1024}
-                                  onChange={(_, val) => setBalloon((val as number) * 1024)}
-                                  min={0}
-                                  max={memory / 1024}
-                                  step={1}
-                                  valueLabelDisplay="auto"
-                                  valueLabelFormat={(v) => `${v} GB`}
-                                />
                                 <Typography variant="caption" color="text.secondary">
                                   {t('inventory.balloonMinHint')}
                                 </Typography>
@@ -864,7 +869,7 @@ export default function VmDetailTabs(props: any) {
                                   }}
                                 >
                                   <ListItemIcon sx={{ minWidth: 40 }}>
-                                    <i className="ri-hard-drive-2-fill" style={{ fontSize: 24, opacity: 0.7 }} />
+                                    <i className={disk.isCdrom ? "ri-disc-fill" : "ri-hard-drive-2-fill"} style={{ fontSize: 24, opacity: 0.7 }} />
                                   </ListItemIcon>
                                   <ListItemText
                                     primary={
@@ -872,14 +877,23 @@ export default function VmDetailTabs(props: any) {
                                         <Typography variant="body2" fontWeight={600}>
                                           {disk.id}
                                         </Typography>
-                                        <Chip label={disk.size} size="small" sx={{ height: 20, fontSize: 11 }} />
+                                        {disk.isCdrom ? (
+                                          <Chip label="CD-ROM" size="small" color="secondary" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                                        ) : (
+                                          <Chip label={disk.size} size="small" sx={{ height: 20, fontSize: 11 }} />
+                                        )}
                                       </Box>
                                     }
                                     secondary={
                                       <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                                        {disk.storage} • {disk.format || 'raw'}
-                                        {disk.cache && ` • Cache: ${disk.cache}`}
-                                        {disk.iothread && ' • IOThread'}
+                                        {disk.isCdrom
+                                          ? (disk.storage === 'none' ? t('inventory.noDiskInserted') : disk.storage)
+                                          : <>
+                                              {disk.storage} • {disk.format || 'raw'}
+                                              {disk.cache && ` • Cache: ${disk.cache}`}
+                                              {disk.iothread && ' • IOThread'}
+                                            </>
+                                        }
                                       </Typography>
                                     }
                                   />

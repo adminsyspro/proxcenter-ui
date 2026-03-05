@@ -64,14 +64,25 @@ export async function POST(
       }
     )
     
-    return NextResponse.json({ 
-      success: true, 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "update",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id, disk, size },
+    })
+
+    return NextResponse.json({
+      success: true,
       data: result,
       message: `Disque ${disk} redimensionné de ${size}`
     })
   } catch (e: any) {
     console.error('Error resizing disk:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

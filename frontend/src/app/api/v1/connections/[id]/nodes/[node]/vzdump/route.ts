@@ -61,14 +61,25 @@ export async function POST(
       }
     )
     
-    return NextResponse.json({ 
-      success: true, 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "backup",
+      category: "backups",
+      resourceType: "vm",
+      resourceId: String(vmid),
+      details: { node, connectionId: id, storage, mode },
+    })
+
+    return NextResponse.json({
+      success: true,
       data: result,
       message: `Sauvegarde de VM ${vmid} lancée`
     })
   } catch (e: any) {
     console.error('Error creating backup:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

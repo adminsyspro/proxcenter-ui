@@ -208,6 +208,17 @@ export async function POST(
       }
     )
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "migrate",
+      category: 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { sourceNode: node, targetNode, targetCluster: targetConn.name, connectionId: id, online },
+    })
+
     return NextResponse.json({
       success: true,
       data: result, // UPID de la tâche

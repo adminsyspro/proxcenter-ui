@@ -84,6 +84,17 @@ export async function POST(
       method: 'POST',
     })
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "restore",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: connId, snapshotName: snapname },
+    })
+
     return NextResponse.json({
       data: {
         success: true,
@@ -93,7 +104,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error("Snapshot rollback error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -142,6 +153,17 @@ export async function PUT(
       }
     })
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "update",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: connId, snapshotName: snapname, description },
+    })
+
     return NextResponse.json({
       data: {
         success: true,
@@ -150,7 +172,7 @@ export async function PUT(
     })
   } catch (e: any) {
     console.error("Snapshot update error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

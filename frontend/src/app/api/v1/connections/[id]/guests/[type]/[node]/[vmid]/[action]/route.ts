@@ -73,6 +73,17 @@ export async function POST(_req: Request, ctx: RouteContext) {
     // Invalider le cache inventaire pour que le prochain appel reflète le changement
     invalidateInventoryCache()
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: action as any,
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id },
+    })
+
     return NextResponse.json({
       data: result,
       node,
@@ -81,7 +92,7 @@ export async function POST(_req: Request, ctx: RouteContext) {
     })
   } catch (e: any) {
     console.error(`[guest/action] Error:`, e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

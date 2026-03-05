@@ -73,20 +73,10 @@ const resourceTypeConfig: Record<string, { icon: string; color: string; label: s
 
 const actionConfig: Record<string, { icon: string; color: 'info' | 'success' | 'error' | 'warning'; label: string }> = {
   config_changed: { icon: 'ri-settings-3-line', color: 'info', label: 'changes.actionConfigChanged' },
-  created: { icon: 'ri-add-circle-line', color: 'success', label: 'changes.actionCreated' },
-  deleted: { icon: 'ri-delete-bin-line', color: 'error', label: 'changes.actionDeleted' },
-  migrated: { icon: 'ri-swap-box-line', color: 'warning', label: 'changes.actionMigrated' },
-  started: { icon: 'ri-play-circle-line', color: 'success', label: 'changes.actionStarted' },
-  stopped: { icon: 'ri-stop-circle-line', color: 'error', label: 'changes.actionStopped' },
-  restarted: { icon: 'ri-restart-line', color: 'warning', label: 'changes.actionRestarted' },
-  suspended: { icon: 'ri-pause-circle-line', color: 'warning', label: 'changes.actionSuspended' },
-  resumed: { icon: 'ri-play-circle-line', color: 'success', label: 'changes.actionResumed' },
-  cloned: { icon: 'ri-file-copy-line', color: 'info', label: 'changes.actionCloned' },
-  snapshot_created: { icon: 'ri-camera-line', color: 'info', label: 'changes.actionSnapshotCreated' },
-  snapshot_deleted: { icon: 'ri-camera-off-line', color: 'warning', label: 'changes.actionSnapshotDeleted' },
-  snapshot_rollback: { icon: 'ri-history-line', color: 'warning', label: 'changes.actionSnapshotRollback' },
+  hardware_changed: { icon: 'ri-cpu-line', color: 'warning', label: 'changes.actionHardwareChanged' },
+  network_changed: { icon: 'ri-wifi-line', color: 'info', label: 'changes.actionNetworkChanged' },
   snapshot_modified: { icon: 'ri-camera-switch-line', color: 'info', label: 'changes.actionSnapshotModified' },
-  backup: { icon: 'ri-hard-drive-2-line', color: 'info', label: 'changes.actionBackup' }
+  migrated: { icon: 'ri-swap-box-line', color: 'warning', label: 'changes.actionMigrated' },
 }
 
 /* --------------------------------

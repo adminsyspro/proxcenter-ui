@@ -45,6 +45,17 @@ export async function POST(
 
     invalidateInventoryCache()
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "update",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id, action: 'convert_to_template' },
+    })
+
     return NextResponse.json({
       data: result,
       message: "Convert to template operation started"

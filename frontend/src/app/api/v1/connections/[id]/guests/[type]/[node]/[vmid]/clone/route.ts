@@ -69,13 +69,24 @@ export async function POST(
 
     invalidateInventoryCache()
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "clone",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id, newVmId: body.newid, newName: body.name },
+    })
+
     return NextResponse.json({
       data: result,
       message: `Clone operation started`
     })
   } catch (e: any) {
     console.error('Error cloning VM:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

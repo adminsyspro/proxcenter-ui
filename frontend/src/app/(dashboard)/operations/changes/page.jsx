@@ -103,20 +103,10 @@ const resourceTypeConfig = {
 
 const actionConfig = {
   config_changed: { icon: 'ri-settings-3-line', color: 'info', chartColor: '#42a5f5', label: 'changes.actionConfigChanged' },
-  created: { icon: 'ri-add-circle-line', color: 'success', chartColor: '#66bb6a', label: 'changes.actionCreated' },
-  deleted: { icon: 'ri-delete-bin-line', color: 'error', chartColor: '#ef5350', label: 'changes.actionDeleted' },
-  migrated: { icon: 'ri-swap-box-line', color: 'warning', chartColor: '#ffa726', label: 'changes.actionMigrated' },
-  started: { icon: 'ri-play-circle-line', color: 'success', chartColor: '#26a69a', label: 'changes.actionStarted' },
-  stopped: { icon: 'ri-stop-circle-line', color: 'error', chartColor: '#ec407a', label: 'changes.actionStopped' },
-  restarted: { icon: 'ri-restart-line', color: 'warning', chartColor: '#ffb74d', label: 'changes.actionRestarted' },
-  suspended: { icon: 'ri-pause-circle-line', color: 'warning', chartColor: '#ab47bc', label: 'changes.actionSuspended' },
-  resumed: { icon: 'ri-play-circle-line', color: 'success', chartColor: '#26a69a', label: 'changes.actionResumed' },
-  cloned: { icon: 'ri-file-copy-line', color: 'info', chartColor: '#29b6f6', label: 'changes.actionCloned' },
-  snapshot_created: { icon: 'ri-camera-line', color: 'info', chartColor: '#5c6bc0', label: 'changes.actionSnapshotCreated' },
-  snapshot_deleted: { icon: 'ri-camera-off-line', color: 'warning', chartColor: '#ff7043', label: 'changes.actionSnapshotDeleted' },
-  snapshot_rollback: { icon: 'ri-history-line', color: 'warning', chartColor: '#ffa726', label: 'changes.actionSnapshotRollback' },
+  hardware_changed: { icon: 'ri-cpu-line', color: 'warning', chartColor: '#ffa726', label: 'changes.actionHardwareChanged' },
+  network_changed: { icon: 'ri-wifi-line', color: 'info', chartColor: '#29b6f6', label: 'changes.actionNetworkChanged' },
   snapshot_modified: { icon: 'ri-camera-switch-line', color: 'info', chartColor: '#7e57c2', label: 'changes.actionSnapshotModified' },
-  backup: { icon: 'ri-hard-drive-2-line', color: 'info', chartColor: '#78909c', label: 'changes.actionBackup' }
+  migrated: { icon: 'ri-swap-box-line', color: 'warning', chartColor: '#ff7043', label: 'changes.actionMigrated' },
 }
 
 /* --------------------------------
@@ -565,17 +555,10 @@ export default function ChangesPage() {
               >
                 <MenuItem value=''>{t('changes.allActions')}</MenuItem>
                 <MenuItem value='config_changed'>{t('changes.actionConfigChanged')}</MenuItem>
-                <MenuItem value='created'>{t('changes.actionCreated')}</MenuItem>
-                <MenuItem value='deleted'>{t('changes.actionDeleted')}</MenuItem>
+                <MenuItem value='hardware_changed'>{t('changes.actionHardwareChanged')}</MenuItem>
+                <MenuItem value='network_changed'>{t('changes.actionNetworkChanged')}</MenuItem>
+                <MenuItem value='snapshot_modified'>{t('changes.actionSnapshotModified')}</MenuItem>
                 <MenuItem value='migrated'>{t('changes.actionMigrated')}</MenuItem>
-                <MenuItem value='started'>{t('changes.actionStarted')}</MenuItem>
-                <MenuItem value='stopped'>{t('changes.actionStopped')}</MenuItem>
-                <MenuItem value='restarted'>{t('changes.actionRestarted')}</MenuItem>
-                <MenuItem value='snapshot_created'>{t('changes.actionSnapshotCreated')}</MenuItem>
-                <MenuItem value='snapshot_deleted'>{t('changes.actionSnapshotDeleted')}</MenuItem>
-                <MenuItem value='snapshot_rollback'>{t('changes.actionSnapshotRollback')}</MenuItem>
-                <MenuItem value='cloned'>{t('changes.actionCloned')}</MenuItem>
-                <MenuItem value='backup'>{t('changes.actionBackup')}</MenuItem>
               </Select>
             </FormControl>
           </Stack>

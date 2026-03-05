@@ -87,14 +87,25 @@ export async function DELETE(
       { method: "DELETE" }
     )
 
-    return NextResponse.json({ 
-      success: true, 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "delete",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id },
+    })
+
+    return NextResponse.json({
+      success: true,
       data: result,
-      message: `VM ${vmid} supprimée avec succès` 
+      message: `VM ${vmid} supprimée avec succès`
     })
   } catch (e: any) {
     console.error("[DELETE VM] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

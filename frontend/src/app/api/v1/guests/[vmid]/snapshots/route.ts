@@ -163,6 +163,17 @@ export async function POST(
       }
     })
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "snapshot",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: connId, snapshotName: name },
+    })
+
     return NextResponse.json({
       data: {
         success: true,
@@ -172,7 +183,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error("Snapshot create error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -215,6 +226,17 @@ export async function DELETE(
       method: 'DELETE',
     })
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "delete",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: connId, snapshotName: snapname },
+    })
+
     return NextResponse.json({
       data: {
         success: true,
@@ -224,7 +246,7 @@ export async function DELETE(
     })
   } catch (e: any) {
     console.error("Snapshot delete error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

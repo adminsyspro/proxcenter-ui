@@ -85,6 +85,17 @@ export async function POST(
     
     invalidateInventoryCache()
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "migrate",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { sourceNode: node, targetNode: target, connectionId: id, online },
+    })
+
     return NextResponse.json({
       success: true,
       data: result,
@@ -92,7 +103,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error('Error migrating VM:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

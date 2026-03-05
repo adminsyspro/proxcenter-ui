@@ -72,14 +72,25 @@ export async function POST(
       }
     )
     
-    return NextResponse.json({ 
-      success: true, 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "update",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id, disk, targetStorage: storage },
+    })
+
+    return NextResponse.json({
+      success: true,
       data: result,
       message: `Déplacement du disque ${disk} vers ${storage} lancé`
     })
   } catch (e: any) {
     console.error('Error moving disk:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

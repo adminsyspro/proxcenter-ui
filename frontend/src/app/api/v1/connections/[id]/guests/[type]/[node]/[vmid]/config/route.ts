@@ -183,10 +183,21 @@ export async function PUT(
       }
     )
 
+    // Audit
+    const { audit } = await import("@/lib/audit")
+
+    await audit({
+      action: "update",
+      category: type === 'lxc' ? 'containers' : 'vms',
+      resourceType: type,
+      resourceId: vmid,
+      details: { node, connectionId: id, fields: Object.keys(body).filter(k => allowedFields.has(k) || /^net\d+$/.test(k) || /^(scsi|virtio|ide|sata)\d+$/.test(k)) },
+    })
+
     return NextResponse.json({ data: result, success: true })
   } catch (e: any) {
     console.error("[PUT config] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

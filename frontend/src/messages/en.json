@@ -783,6 +783,7 @@
     "tabHighAvailability": "High Availability",
     "tabStorage": "Storage",
     "tabFirewall": "Firewall",
+    "tabChangeTracking": "Changes",
     "tabRollingUpdate": "Rolling Update",
     "tabNetwork": "Network",
     "tabCertificates": "Certificates",

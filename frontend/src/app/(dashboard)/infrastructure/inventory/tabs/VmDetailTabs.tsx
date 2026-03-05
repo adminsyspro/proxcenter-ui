@@ -52,6 +52,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'rec
 import { formatBytes } from '@/utils/format'
 import { formatDateTime } from '@/lib/i18n/date'
 import VmFirewallTab from '@/components/VmFirewallTab'
+import ChangeTrackingTab from './ChangeTrackingTab'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
 const AddNetworkDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddNetworkDialog })), { ssr: false })
@@ -346,6 +347,14 @@ export default function VmDetailTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabs.firewall')}
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-git-commit-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabChangeTracking')}
                     </Box>
                   }
                 />
@@ -3182,6 +3191,15 @@ return (
                   vmType={data.vmType as 'qemu' | 'lxc'}
                   vmid={parseInt(parseVmId(selection.id).vmid)}
                   vmName={data.name}
+                />
+              )}
+
+              {/* ==================== ONGLET CHANGE TRACKING (11 si cluster, 10 sinon) ==================== */}
+              {((selectedVmIsCluster && detailTab === 11) || (!selectedVmIsCluster && detailTab === 10)) && selection?.type === 'vm' && (
+                <ChangeTrackingTab
+                  connectionId={parseVmId(selection.id).connId}
+                  resourceType={data.vmType === 'lxc' ? 'ct' : 'vm'}
+                  resourceId={parseVmId(selection.id).vmid}
                 />
               )}
 

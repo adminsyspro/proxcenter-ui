@@ -48,6 +48,7 @@ import { formatBytes } from '@/utils/format'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
+import ChangeTrackingTab from './ChangeTrackingTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
 
@@ -403,6 +404,15 @@ export default function NodeTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-vip-crown-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabSubscription')}
+                    </Box>
+                  }
+                />
+                {/* Onglet Change Tracking */}
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-git-commit-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabChangeTracking')}
                     </Box>
                   }
                 />
@@ -3233,6 +3243,14 @@ export default function NodeTabs(props: any) {
                       </Stack>
                     )}
                   </Box>
+                )}
+
+                {/* Onglet Change Tracking - Index 12 pour cluster, Index 13 pour standalone */}
+                {((nodeTab === 12 && data.clusterName) || (nodeTab === 13 && !data.clusterName)) && (
+                  <ChangeTrackingTab
+                    connectionId={parseNodeId(selection?.id || '').connId}
+                    node={parseNodeId(selection?.id || '').node}
+                  />
                 )}
               </CardContent>
             </Card>

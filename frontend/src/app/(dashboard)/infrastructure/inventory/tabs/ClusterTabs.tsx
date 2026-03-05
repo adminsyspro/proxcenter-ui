@@ -50,6 +50,7 @@ import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
+import ChangeTrackingTab from './ChangeTrackingTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
@@ -447,6 +448,14 @@ export default function ClusterTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabCluster')}
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-git-commit-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabChangeTracking')}
                     </Box>
                   }
                 />
@@ -3221,6 +3230,13 @@ export default function ClusterTabs(props: any) {
                       </Stack>
                     )}
                   </Box>
+                )}
+
+                {/* Onglet Change Tracking - Index 13 */}
+                {clusterTab === 13 && (
+                  <ChangeTrackingTab
+                    connectionId={selection?.id || ''}
+                  />
                 )}
               </CardContent>
             </Card>

@@ -6,6 +6,8 @@ export function useChanges(params?: {
   resourceType?: string
   connectionId?: string
   action?: string
+  resourceId?: string
+  node?: string
   from?: string
   to?: string
 }) {
@@ -16,6 +18,8 @@ export function useChanges(params?: {
   if (params?.resourceType) searchParams.set('resourceType', params.resourceType)
   if (params?.connectionId) searchParams.set('connectionId', params.connectionId)
   if (params?.action) searchParams.set('action', params.action)
+  if (params?.resourceId) searchParams.set('resourceId', params.resourceId)
+  if (params?.node) searchParams.set('node', params.node)
   if (params?.from) searchParams.set('from', params.from)
   if (params?.to) searchParams.set('to', params.to)
 

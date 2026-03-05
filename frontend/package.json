@@ -32,7 +32,7 @@
     "@mui/x-tree-view": "^8.27.1",
     "@novnc/novnc": "^1.5.0",
     "@prisma/adapter-better-sqlite3": "^7.2.0",
-    "@prisma/client": "^7.2.0",
+    "@prisma/client": "^7.4.2",
     "@tanstack/react-virtual": "^3.13.19",
     "@types/leaflet": "^1.9.21",
     "@xterm/addon-attach": "^0.12.0",

@@ -367,7 +367,17 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 jours
   },
-  secret: process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production",
+  secret: (() => {
+    const secret = process.env.NEXTAUTH_SECRET
+    if (!secret) {
+      console.warn("[AUTH] ⚠ NEXTAUTH_SECRET is not set. Using an insecure default. Sessions will be vulnerable to tampering. Set NEXTAUTH_SECRET to a random 32+ character string.")
+      return "your-secret-key-change-in-production"
+    }
+    if (secret.length < 16) {
+      console.warn("[AUTH] ⚠ NEXTAUTH_SECRET is too short (< 16 chars). Use a random 32+ character string for production.")
+    }
+    return secret
+  })(),
 }
 
 /**

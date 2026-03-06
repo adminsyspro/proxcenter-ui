@@ -39,5 +39,11 @@ fi
 echo "[entrypoint] Initializing database..."
 node db-migrate.js
 
+# Security checks
+if [ -z "$NEXTAUTH_SECRET" ]; then
+  echo "[entrypoint] ⚠ WARNING: NEXTAUTH_SECRET is not set. Sessions will use an insecure default key."
+  echo "[entrypoint]   Generate one with: openssl rand -base64 32"
+fi
+
 echo "[entrypoint] Starting..."
 exec "$@"

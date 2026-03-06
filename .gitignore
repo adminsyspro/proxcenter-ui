@@ -32,7 +32,6 @@ package-lock.json
 config/orchestrator.yaml
 !config/orchestrator.yaml.example
 config/prometheus.yml
-config/grafana/
 
 # Data directories
 data/

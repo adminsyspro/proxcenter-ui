@@ -28,7 +28,7 @@
     "@mui/lab": "7.0.1-beta.19",
     "@mui/material": "7.3.8",
     "@mui/material-nextjs": "7.3.8",
-    "@mui/x-data-grid": "^8.23.0",
+    "@mui/x-data-grid": "^8.27.4",
     "@mui/x-tree-view": "^8.27.1",
     "@novnc/novnc": "^1.5.0",
     "@prisma/adapter-better-sqlite3": "^7.2.0",

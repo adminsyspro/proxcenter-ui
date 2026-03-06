@@ -28,6 +28,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  ListSubheader,
   MenuItem,
   Select,
   Slider,
@@ -61,6 +62,8 @@ interface NodeInfo {
   version: string
   vms: number
   status: 'online' | 'offline'
+  ip?: string | null
+  sshAddress?: string | null
 }
 
 interface UpdateInfo {
@@ -231,6 +234,13 @@ export default function RollingUpdateWizard({
   // SSH check
   const [sshNotConfigured, setSshNotConfigured] = useState(false)
 
+  // SSH address overrides per node
+  const [nodeNetworks, setNodeNetworks] = useState<Record<string, Array<{ ip: string; iface: string; gateway: string }>>>({})
+  const [nodeHostIds, setNodeHostIds] = useState<Record<string, string>>({})
+  const [sshAddresses, setSshAddresses] = useState<Record<string, string>>({})
+  const [sshCustomInputs, setSshCustomInputs] = useState<Record<string, string>>({})
+  const [sshSaving, setSshSaving] = useState<Record<string, boolean>>({})
+
   // Execution state
   const [rollingUpdate, setRollingUpdate] = useState<RollingUpdate | null>(null)
   const [executionError, setExecutionError] = useState<string | null>(null)
@@ -280,6 +290,81 @@ export default function RollingUpdateWizard({
 
     return () => { cancelled = true }
   }, [open, connectionId])
+
+  // Fetch node network interfaces + SSH address overrides when wizard opens
+  useEffect(() => {
+    if (!open || !connectionId || nodes.length === 0) return
+    let cancelled = false
+
+    // 1. Fetch nodes API (gives us sshAddress + hostId per node)
+    fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`)
+      .then(res => res.json())
+      .then(json => {
+        if (cancelled) return
+        const nodesData = json.data || []
+        const hostIds: Record<string, string> = {}
+        const addresses: Record<string, string> = {}
+        const networks: Record<string, Array<{ ip: string; iface: string; gateway: string }>> = {}
+
+        for (const n of nodesData) {
+          const name = n.node || n.name
+          if (!name) continue
+          if (n.hostId) hostIds[name] = n.hostId
+          if (n.sshAddress) addresses[name] = n.sshAddress
+        }
+
+        setNodeHostIds(hostIds)
+        setSshAddresses(addresses)
+
+        // 2. Fetch network interfaces per node from Proxmox API
+        Promise.all(
+          nodes.filter(n => n.status === 'online').map(n =>
+            fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(n.node)}/network`)
+              .then(res => res.json())
+              .then(json => {
+                if (cancelled) return
+                const ifaces = (json.data || [])
+                  .filter((iface: any) => iface.address && !iface.address.startsWith('127.'))
+                  .map((iface: any) => ({
+                    ip: (iface.address || '').split('/')[0],
+                    iface: iface.iface || '',
+                    gateway: iface.gateway || '',
+                  }))
+                networks[n.node] = ifaces
+              })
+              .catch(() => {})
+          )
+        ).then(() => {
+          if (!cancelled) setNodeNetworks(networks)
+        })
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [open, connectionId, nodes.length])
+
+  // Save SSH address override for a node
+  const saveSshAddress = useCallback(async (nodeName: string, address: string) => {
+    const hostId = nodeHostIds[nodeName]
+    if (!hostId) return
+    setSshSaving(prev => ({ ...prev, [nodeName]: true }))
+    try {
+      const res = await fetch(`/api/v1/hosts/${hostId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sshAddress: address || null }),
+      })
+      if (res.ok) {
+        setSshAddresses(prev => {
+          const next = { ...prev }
+          if (address) next[nodeName] = address
+          else delete next[nodeName]
+          return next
+        })
+      }
+    } catch {}
+    finally { setSshSaving(prev => ({ ...prev, [nodeName]: false })) }
+  }, [nodeHostIds])
 
   // Run preflight check
   const runPreflightCheck = useCallback(async () => {
@@ -582,7 +667,20 @@ export default function RollingUpdateWizard({
                               )}
                             </Box>
                           }
-                          secondary={nodeUpdates[node]?.version || '—'}
+                          secondary={
+                            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <span>{nodeUpdates[node]?.version || '—'}</span>
+                              {sshAddresses[node] && (
+                                <Chip
+                                  icon={<i className="ri-ssh-line" style={{ fontSize: 12 }} />}
+                                  label={sshAddresses[node]}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ height: 18, fontSize: 10, '& .MuiChip-icon': { fontSize: 12, ml: 0.5 } }}
+                                />
+                              )}
+                            </Box>
+                          }
                         />
                       </ListItem>
                     )
@@ -601,6 +699,113 @@ export default function RollingUpdateWizard({
                 })()}
               </CardContent>
             </Card>
+
+            {/* SSH Address Overrides */}
+            {!sshNotConfigured && nodeOrder.length > 0 && (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                    <i className="ri-ssh-line" style={{ marginRight: 8 }} />
+                    {t('updates.sshAddresses')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                    {t('updates.sshAddressesDescription')}
+                  </Typography>
+
+                  <Stack spacing={1.5}>
+                    {nodeOrder.filter(n => !excludedNodes.includes(n)).map(nodeName => {
+                      const interfaces = nodeNetworks[nodeName] || []
+                      const currentAddress = sshAddresses[nodeName] || ''
+                      const isKnownIp = interfaces.some(i => i.ip === currentAddress)
+                      const isCustom = !!currentAddress && !isKnownIp
+                      const selectValue = !currentAddress ? '__auto__' : isCustom ? '__custom__' : currentAddress
+
+                      return (
+                        <Box key={nodeName} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2" sx={{ minWidth: 100, fontWeight: 600 }}>
+                            {nodeName}
+                          </Typography>
+
+                          <FormControl size="small" sx={{ minWidth: 220 }}>
+                            <Select
+                              value={selectValue}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                if (val === '__auto__') {
+                                  saveSshAddress(nodeName, '')
+                                  setSshCustomInputs(prev => { const n = { ...prev }; delete n[nodeName]; return n })
+                                } else if (val === '__custom__') {
+                                  setSshCustomInputs(prev => ({ ...prev, [nodeName]: currentAddress || '' }))
+                                } else {
+                                  saveSshAddress(nodeName, val)
+                                  setSshCustomInputs(prev => { const n = { ...prev }; delete n[nodeName]; return n })
+                                }
+                              }}
+                              sx={{ '& .MuiSelect-select': { fontFamily: 'monospace', fontSize: 13 } }}
+                              disabled={sshSaving[nodeName]}
+                            >
+                              <MenuItem value="__auto__">
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <i className="ri-radar-line" style={{ fontSize: 14, opacity: 0.6 }} />
+                                  <span>{t('updates.sshAutoDetect')}</span>
+                                </Box>
+                              </MenuItem>
+
+                              {interfaces.length > 0 && (
+                                <ListSubheader sx={{ fontSize: 11 }}>{t('updates.sshNodeInterfaces')}</ListSubheader>
+                              )}
+
+                              {interfaces.map(({ ip, iface, gateway }) => (
+                                <MenuItem key={ip} value={ip}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography sx={{ fontFamily: 'monospace', fontSize: 13 }}>{ip}</Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {iface}{gateway ? ` (gw)` : ''}
+                                    </Typography>
+                                  </Box>
+                                </MenuItem>
+                              ))}
+
+                              <ListSubheader sx={{ fontSize: 11 }}>{t('updates.sshOther')}</ListSubheader>
+                              <MenuItem value="__custom__">
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <i className="ri-edit-line" style={{ fontSize: 14, opacity: 0.6 }} />
+                                  <span>{t('updates.sshCustomAddress')}</span>
+                                </Box>
+                              </MenuItem>
+                            </Select>
+                          </FormControl>
+
+                          {selectValue === '__custom__' && (
+                            <>
+                              <TextField
+                                size="small"
+                                placeholder={t('updates.sshAddressPlaceholder')}
+                                value={sshCustomInputs[nodeName] || ''}
+                                onChange={(e) => setSshCustomInputs(prev => ({ ...prev, [nodeName]: e.target.value }))}
+                                sx={{ flex: 1, '& input': { fontFamily: 'monospace', fontSize: 13 } }}
+                              />
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={!sshCustomInputs[nodeName]?.trim() || sshSaving[nodeName]}
+                                onClick={() => saveSshAddress(nodeName, sshCustomInputs[nodeName]?.trim() || '')}
+                              >
+                                {sshSaving[nodeName] ? <CircularProgress size={16} /> : 'OK'}
+                              </Button>
+                            </>
+                          )}
+
+                          {sshSaving[nodeName] && selectValue !== '__custom__' && (
+                            <CircularProgress size={16} />
+                          )}
+                        </Box>
+                      )
+                    })}
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Basic options */}
             <Card variant="outlined">

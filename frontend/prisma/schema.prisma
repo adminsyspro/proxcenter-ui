@@ -46,6 +46,7 @@ model ManagedHost {
   connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   node         String
   ip           String?
+  sshAddress   String?
   displayName  String?
   enabled      Boolean     @default(true)
   notes        String?

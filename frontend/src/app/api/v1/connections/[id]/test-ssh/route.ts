@@ -145,6 +145,15 @@ export async function POST(
       }, { status: 500 })
     }
 
+    // Fetch SSH address overrides
+    const managedHosts = await prisma.managedHost.findMany({
+      where: { connectionId: id },
+      select: { node: true, sshAddress: true },
+    })
+    const sshOverrides = new Map(
+      managedHosts.filter(h => h.sshAddress).map(h => [h.node, h.sshAddress!])
+    )
+
     const port = connection.sshPort || 22
     const user = connection.sshUser || 'root'
 
@@ -153,7 +162,7 @@ export async function POST(
         const nodeName = n.node || n.name
         if (!nodeName) return null
 
-        const ip = await getNodeIp(conn, nodeName)
+        const ip = sshOverrides.get(nodeName) || await getNodeIp(conn, nodeName)
 
         try {
           const result = await executeSSHDirect({

@@ -40,6 +40,17 @@ export async function POST(req: Request) {
       )
     }
 
+    // Fetch per-node SSH address overrides from ManagedHost
+    const managedHosts = await prisma.managedHost.findMany({
+      where: { connectionId },
+      select: { node: true, sshAddress: true },
+    })
+
+    const sshOverrides: Record<string, string> = {}
+    for (const h of managedHosts) {
+      if (h.sshAddress) sshOverrides[h.node] = h.sshAddress
+    }
+
     // Build SSH credentials if enabled
     let sshCredentials: any = null
     
@@ -73,12 +84,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // Add SSH credentials to the config
+    // Add SSH credentials and overrides to the config
     const payload = {
       ...body,
       config: {
         ...body.config,
         ssh_credentials: sshCredentials,
+        ...(Object.keys(sshOverrides).length > 0 && { ssh_overrides: sshOverrides }),
       },
     }
 

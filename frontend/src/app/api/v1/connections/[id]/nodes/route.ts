@@ -109,5 +109,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // Non-blocking — don't break the API response
   }
 
-  return NextResponse.json({ data: enrichedNodes, connectedNode })
+  // Fetch SSH address overrides from ManagedHost
+  let sshOverrides: Record<string, { sshAddress: string | null; hostId: string }> = {}
+  try {
+    const hosts = await prisma.managedHost.findMany({
+      where: { connectionId: id },
+      select: { id: true, node: true, sshAddress: true },
+    })
+    for (const h of hosts) {
+      sshOverrides[h.node] = { sshAddress: h.sshAddress, hostId: h.id }
+    }
+  } catch {}
+
+  const nodesWithSsh = enrichedNodes.map((n: any) => ({
+    ...n,
+    sshAddress: sshOverrides[n.node || n.name]?.sshAddress || null,
+    hostId: sshOverrides[n.node || n.name]?.hostId || null,
+  }))
+
+  return NextResponse.json({ data: nodesWithSsh, connectedNode })
 }

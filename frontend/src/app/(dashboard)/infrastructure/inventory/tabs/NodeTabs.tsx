@@ -49,6 +49,7 @@ import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
+import { useLicense, Features } from '@/contexts/LicenseContext'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
 
@@ -198,6 +199,9 @@ export default function NodeTabs(props: any) {
     nodeLocalVms,
     setNodeLocalVms,
   } = props
+
+  const { hasFeature } = useLicense()
+  const changeTrackingAvailable = hasFeature(Features.CHANGE_TRACKING)
 
   // Ceph OSD Flags state for Node Ceph OSD sub-tab
   const [nodeCephOsdFlags, setNodeCephOsdFlags] = useState<string[]>([])
@@ -409,10 +413,26 @@ export default function NodeTabs(props: any) {
                 />
                 {/* Onglet Change Tracking */}
                 <Tab
+                  disabled={!changeTrackingAvailable}
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: changeTrackingAvailable ? 1 : 0.4 }}>
                       <i className="ri-git-commit-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabChangeTracking')}
+                      {!changeTrackingAvailable && (
+                        <Chip
+                          size="small"
+                          label="Enterprise"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                            ml: 0.5,
+                            '& .MuiChip-label': { px: 0.75 }
+                          }}
+                        />
+                      )}
                     </Box>
                   }
                 />

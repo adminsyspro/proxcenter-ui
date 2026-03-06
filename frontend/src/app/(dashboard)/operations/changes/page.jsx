@@ -30,6 +30,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useChanges } from '@/hooks/useChanges'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
@@ -361,8 +362,19 @@ function TimelineEntry({ change, t }) {
 
 export default function ChangesPage() {
   const t = useTranslations()
+  const { hasFeature, loading: licenseLoading } = useLicense()
 
   usePageTitle(t('changes.title'))
+
+  if (!licenseLoading && !hasFeature(Features.CHANGE_TRACKING)) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Alert severity="warning" sx={{ maxWidth: 500, mx: 'auto' }}>
+          {t('license.enterpriseRequired')}
+        </Alert>
+      </Box>
+    )
+  }
 
   const [resourceType, setResourceType] = useState('')
   const [action, setAction] = useState('')

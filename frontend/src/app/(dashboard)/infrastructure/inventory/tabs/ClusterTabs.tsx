@@ -452,10 +452,26 @@ export default function ClusterTabs(props: any) {
                   }
                 />
                 <Tab
+                  disabled={!hasFeature(Features.CHANGE_TRACKING)}
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: hasFeature(Features.CHANGE_TRACKING) ? 1 : 0.4 }}>
                       <i className="ri-git-commit-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabChangeTracking')}
+                      {!hasFeature(Features.CHANGE_TRACKING) && (
+                        <Chip
+                          size="small"
+                          label="Enterprise"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            bgcolor: 'primary.main',
+                            color: 'primary.contrastText',
+                            ml: 0.5,
+                            '& .MuiChip-label': { px: 0.75 }
+                          }}
+                        />
+                      )}
                     </Box>
                   }
                 />

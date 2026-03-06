@@ -107,7 +107,8 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.changes'),
         icon: 'ri-git-commit-line',
         href: '/operations/changes',
-        permissions: ['events.view']
+        permissions: ['events.view'],
+        requiredFeature: 'change_tracking'
       },
       {
         label: t('navigation.alerts'),

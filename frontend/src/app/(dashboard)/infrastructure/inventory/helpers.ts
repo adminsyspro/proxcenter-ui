@@ -316,14 +316,17 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     const runningVMs = guests.filter((g: any) => g.status === 'running').length
     const totalVMs = guests.length
 
-    let totalCpu = 0
+    let totalCpuWeighted = 0
+    let totalCpuCores = 0
     let totalMem = 0
     let totalMaxMem = 0
     let totalDisk = 0
     let totalMaxDisk = 0
 
     for (const n of nodes) {
-      totalCpu += Number(n.cpu ?? 0)
+      const cores = Number(n.maxcpu ?? 0)
+      totalCpuWeighted += Number(n.cpu ?? 0) * cores
+      totalCpuCores += cores
       totalMem += Number(n.mem ?? 0)
       totalMaxMem += Number(n.maxmem ?? 0)
     }
@@ -348,7 +351,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
       }
     }
 
-    const avgCpuPct = nodes.length > 0 ? cpuPct(totalCpu / nodes.length) : 0
+    const avgCpuPct = totalCpuCores > 0 ? Math.round((totalCpuWeighted / totalCpuCores) * 100) : 0
     const memPctVal = totalMaxMem > 0 ? pct(totalMem, totalMaxMem) : 0
     const diskPctVal = totalMaxDisk > 0 ? pct(totalDisk, totalMaxDisk) : 0
 

@@ -45,8 +45,9 @@ export default function SiteRecoveryPage() {
   const { isEnterprise } = useLicense()
   const { setPageInfo } = usePageTitle()
 
-  // Tab state
+  // Tab state — default to Simulation (4) when not enough Ceph clusters
   const [tab, setTab] = useState(0)
+  const [tabInitialized, setTabInitialized] = useState(false)
 
   // Dialog states
   const [createJobOpen, setCreateJobOpen] = useState(false)
@@ -99,6 +100,14 @@ export default function SiteRecoveryPage() {
   const cephClusterCount = connections.filter(c => c.hasCeph).length
   const hasEnoughCephClusters = cephClusterCount >= 2
   const connectionsLoaded = !!connectionsData
+
+  // Default to Simulation tab when not enough Ceph clusters
+  useEffect(() => {
+    if (connectionsLoaded && !tabInitialized) {
+      if (!hasEnoughCephClusters) setTab(4)
+      setTabInitialized(true)
+    }
+  }, [connectionsLoaded, hasEnoughCephClusters, tabInitialized])
 
   // All VMs for create job dialog
   const allVMs = useMemo(() =>
@@ -279,73 +288,28 @@ export default function SiteRecoveryPage() {
 
   return (
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
-      {connectionsLoaded && !hasEnoughCephClusters ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-          {/* Icon cluster */}
-          <Box sx={{ position: 'relative', width: 120, height: 120, mb: 3 }}>
-            <Box sx={{
-              position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-              width: 80, height: 80, borderRadius: '50%',
-              bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <i className="ri-database-2-line" style={{ fontSize: 36, opacity: 0.25 }} />
-            </Box>
-            <Box sx={{
-              position: 'absolute', top: 0, right: 6,
-              width: 36, height: 36, borderRadius: '50%',
-              bgcolor: 'background.paper', border: '2px solid', borderColor: 'divider',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <i className="ri-shield-star-line" style={{ fontSize: 18, opacity: 0.35 }} />
-            </Box>
-            <Box sx={{
-              position: 'absolute', bottom: 2, left: 4,
-              width: 36, height: 36, borderRadius: '50%',
-              bgcolor: 'background.paper', border: '2px solid', borderColor: 'divider',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <i className="ri-refresh-line" style={{ fontSize: 18, opacity: 0.35 }} />
-            </Box>
-          </Box>
-
-          <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
-            {cephClusterCount === 0 ? t('siteRecovery.noCeph') : t('siteRecovery.oneCeph')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420, textAlign: 'center', mb: 3 }}>
-            {cephClusterCount === 0 ? t('siteRecovery.noCephDesc') : t('siteRecovery.oneCephDesc')}
-          </Typography>
-
-          {/* Feature hints */}
-          <Box sx={{ display: 'flex', gap: 3 }}>
-            {[
-              { icon: 'ri-refresh-line', label: t('siteRecovery.noCephFeatureReplication') },
-              { icon: 'ri-file-shield-2-line', label: t('siteRecovery.noCephFeatureRecovery') },
-              { icon: 'ri-alarm-warning-line', label: t('siteRecovery.noCephFeatureEmergency') },
-            ].map((f) => (
-              <Box key={f.icon} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: 0.5 }}>
-                <i className={f.icon} style={{ fontSize: 16 }} />
-                <Typography variant="caption">{f.label}</Typography>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      ) : (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Tabs + Actions */}
         <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
           <Tabs
             value={tab}
-            onChange={(_, v) => setTab(v)}
+            onChange={(_, v) => {
+              // Only allow switching to disabled tabs if they require Ceph
+              if (!hasEnoughCephClusters && v !== 4) return
+              setTab(v)
+            }}
             sx={{ flex: 1 }}
           >
           <Tab
             icon={<i className='ri-dashboard-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.dashboard')}
+            disabled={!hasEnoughCephClusters}
           />
           <Tab
             icon={<i className='ri-refresh-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
+            disabled={!hasEnoughCephClusters}
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {t('siteRecovery.tabs.replication')}
@@ -359,11 +323,13 @@ export default function SiteRecoveryPage() {
             icon={<i className='ri-file-shield-2-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.recoveryPlans')}
+            disabled={!hasEnoughCephClusters}
           />
           <Tab
             icon={<i className='ri-alarm-warning-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.emergencyDR')}
+            disabled={!hasEnoughCephClusters}
           />
           <Tab
             icon={<i className='ri-test-tube-line' style={{ fontSize: 18 }} />}
@@ -371,6 +337,7 @@ export default function SiteRecoveryPage() {
             label={t('siteRecovery.tabs.simulation')}
           />
         </Tabs>
+          {hasEnoughCephClusters && (
           <Box sx={{ display: 'flex', gap: 1, ml: 'auto', pl: 2 }}>
             <Button
               variant='outlined'
@@ -389,14 +356,15 @@ export default function SiteRecoveryPage() {
               {t('siteRecovery.createJob.title')}
             </Button>
           </Box>
+          )}
         </Box>
 
         {/* Tab Content */}
-        {tab === 0 && (
+        {tab === 0 && hasEnoughCephClusters && (
           <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} />
         )}
 
-        {tab === 1 && (
+        {tab === 1 && hasEnoughCephClusters && (
           <ProtectionTab
             jobs={jobs || []}
             loading={jobsLoading}
@@ -413,7 +381,7 @@ export default function SiteRecoveryPage() {
           />
         )}
 
-        {tab === 2 && (
+        {tab === 2 && hasEnoughCephClusters && (
           <RecoveryPlansTab
             plans={plans || []}
             loading={plansLoading}
@@ -429,7 +397,7 @@ export default function SiteRecoveryPage() {
           />
         )}
 
-        {tab === 3 && (
+        {tab === 3 && hasEnoughCephClusters && (
           <EmergencyDRTab
             jobs={jobs || []}
             plans={plans || []}
@@ -477,7 +445,6 @@ export default function SiteRecoveryPage() {
           connections={connections}
         />
       </Box>
-      )}
     </EnterpriseGuard>
   )
 }

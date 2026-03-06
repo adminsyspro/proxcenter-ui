@@ -153,6 +153,8 @@ try {
     { table: 'ManagedHost', column: 'tags',        type: 'TEXT' },
     // SSH sudo option (2026-03-02)
     { table: 'Connection', column: 'sshUseSudo', type: 'INTEGER DEFAULT 0' },
+    // SSH address override per node (2026-03-06)
+    { table: 'ManagedHost', column: 'sshAddress', type: 'TEXT' },
   ]
 
   let applied = 0

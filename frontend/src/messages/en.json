@@ -131,6 +131,7 @@
     "password": "Password",
     "rememberMe": "Remember me",
     "forgotPassword": "Forgot password?",
+    "capsLockOn": "Caps Lock is on",
     "loggingIn": "Signing in...",
     "login": "Sign in",
     "logout": "Sign out",
@@ -3028,6 +3029,11 @@
       "validationSuccess": "All checks passed - ready to migrate",
       "disks": "{count} disk ({size} GiB)",
       "disksPlural": "{count} disks ({size} GiB)"
+    },
+    "cdrom": {
+      "useIso": "Use CD/DVD disc image file (ISO)",
+      "usePhysical": "Use physical CD/DVD Drive",
+      "noMedia": "Do not use any media"
     }
   },
   "ldap": {

@@ -131,6 +131,7 @@
     "password": "Mot de passe",
     "rememberMe": "Se souvenir de moi",
     "forgotPassword": "Mot de passe oublié ?",
+    "capsLockOn": "Verrouillage majuscules activé",
     "loggingIn": "Connexion...",
     "login": "Se connecter",
     "logout": "Déconnexion",
@@ -3033,6 +3034,11 @@
       "validationSuccess": "Toutes les vérifications sont passées - prêt à migrer",
       "disks": "{count} disque ({size} Gio)",
       "disksPlural": "{count} disques ({size} Gio)"
+    },
+    "cdrom": {
+      "useIso": "Utiliser une image CD/DVD (ISO)",
+      "usePhysical": "Utiliser le lecteur CD/DVD physique",
+      "noMedia": "Ne pas utiliser de média"
     }
   },
   "ldap": {

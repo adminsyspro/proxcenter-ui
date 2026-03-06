@@ -10,6 +10,17 @@ import { ImageCatalogTab, BlueprintsTab, DeploymentsTab, DeployWizard } from '@/
 import { TableSkeleton } from '@/components/skeletons'
 import { getImageBySlug } from '@/lib/templates/cloudImages'
 
+/** Resolve image slug: built-in or fetch from catalog API (custom images) */
+async function resolveImage(slug: string): Promise<CloudImage | null> {
+  const builtIn = getImageBySlug(slug)
+  if (builtIn) return builtIn
+  try {
+    const res = await fetch('/api/v1/templates/catalog')
+    const data = await res.json()
+    return (data.data?.images || []).find((img: any) => img.slug === slug) || null
+  } catch { return null }
+}
+
 export default function TemplatesPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
@@ -34,8 +45,8 @@ export default function TemplatesPage() {
     setWizardOpen(true)
   }, [])
 
-  const handleDeployBlueprint = useCallback((blueprint: any) => {
-    const image = getImageBySlug(blueprint.imageSlug)
+  const handleDeployBlueprint = useCallback(async (blueprint: any) => {
+    const image = await resolveImage(blueprint.imageSlug)
     setSelectedImage(image || null)
     setSelectedBlueprint(blueprint)
     setWizardOpen(true)
@@ -47,8 +58,8 @@ export default function TemplatesPage() {
     setSelectedBlueprint(null)
   }, [])
 
-  const handleRetryDeployment = useCallback((deployment: any) => {
-    const image = deployment.imageSlug ? getImageBySlug(deployment.imageSlug) : null
+  const handleRetryDeployment = useCallback(async (deployment: any) => {
+    const image = deployment.imageSlug ? await resolveImage(deployment.imageSlug) : null
     setSelectedImage(image || null)
 
     // Build a prefill object from the deployment's saved config

@@ -110,6 +110,32 @@ model Alert {
   @@map("alerts")
 }
 
+model CustomImage {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  vendor            String   @default("custom")
+  version           String   @default("")
+  arch              String   @default("amd64")
+  format            String   @default("qcow2")
+  sourceType        String   @default("url") @map("source_type") // "url" or "volume"
+  downloadUrl       String?  @map("download_url")
+  checksumUrl       String?  @map("checksum_url")
+  volumeId          String?  @map("volume_id") // e.g. "local:import/golden-ubuntu.qcow2"
+  defaultDiskSize   String   @default("20G") @map("default_disk_size")
+  minMemory         Int      @default(512) @map("min_memory")
+  recommendedMemory Int      @default(2048) @map("recommended_memory")
+  minCores          Int      @default(1) @map("min_cores")
+  recommendedCores  Int      @default(2) @map("recommended_cores")
+  ostype            String   @default("l26")
+  tags              String?
+  createdBy         String?  @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("custom_images")
+}
+
 model Blueprint {
   id          String   @id @default(cuid())
   name        String

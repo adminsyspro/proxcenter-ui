@@ -158,6 +158,63 @@ export const moveDiskSchema = z.object({
   format: z.string().optional(),
 })
 
+// ─── Custom Images ──────────────────────────────────────────────────────────
+
+/** POST /api/v1/templates/custom-images — create a custom image */
+export const createCustomImageSchema = z.object({
+  name: z.string().min(1, 'name is required').max(100).transform(s => s.trim()),
+  vendor: z.string().max(50).default('custom').transform(s => s.trim()),
+  version: z.string().max(50).default('').transform(s => s.trim()),
+  arch: z.string().max(20).default('amd64').transform(s => s.trim()),
+  format: z.enum(['qcow2', 'raw', 'vmdk', 'img']).default('qcow2'),
+  sourceType: z.enum(['url', 'volume']),
+  downloadUrl: z.string().url().nullable().optional(),
+  checksumUrl: z.string().url().nullable().optional(),
+  volumeId: z.string().max(200).nullable().optional(),
+  defaultDiskSize: z.string().regex(/^\d+G$/, 'Must be like "20G"').default('20G'),
+  minMemory: z.number().int().min(128).max(1048576).default(512),
+  recommendedMemory: z.number().int().min(128).max(1048576).default(2048),
+  minCores: z.number().int().min(1).max(128).default(1),
+  recommendedCores: z.number().int().min(1).max(128).default(2),
+  ostype: z.string().max(20).default('l26'),
+  tags: z.string().max(200).nullable().optional(),
+}).superRefine((data, ctx) => {
+  if (data.sourceType === 'url' && !data.downloadUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'downloadUrl is required when sourceType is "url"',
+      path: ['downloadUrl'],
+    })
+  }
+  if (data.sourceType === 'volume' && !data.volumeId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'volumeId is required when sourceType is "volume"',
+      path: ['volumeId'],
+    })
+  }
+})
+
+/** PUT /api/v1/templates/custom-images/[id] — update a custom image */
+export const updateCustomImageSchema = z.object({
+  name: z.string().min(1).max(100).transform(s => s.trim()).optional(),
+  vendor: z.string().max(50).transform(s => s.trim()).optional(),
+  version: z.string().max(50).transform(s => s.trim()).optional(),
+  arch: z.string().max(20).transform(s => s.trim()).optional(),
+  format: z.enum(['qcow2', 'raw', 'vmdk', 'img']).optional(),
+  sourceType: z.enum(['url', 'volume']).optional(),
+  downloadUrl: z.string().url().nullable().optional(),
+  checksumUrl: z.string().url().nullable().optional(),
+  volumeId: z.string().max(200).nullable().optional(),
+  defaultDiskSize: z.string().regex(/^\d+G$/).optional(),
+  minMemory: z.number().int().min(128).max(1048576).optional(),
+  recommendedMemory: z.number().int().min(128).max(1048576).optional(),
+  minCores: z.number().int().min(1).max(128).optional(),
+  recommendedCores: z.number().int().min(1).max(128).optional(),
+  ostype: z.string().max(20).optional(),
+  tags: z.string().max(200).nullable().optional(),
+})
+
 // ─── Templates / Blueprints ──────────────────────────────────────────────────
 
 /** POST /api/v1/templates/blueprints — create a blueprint */

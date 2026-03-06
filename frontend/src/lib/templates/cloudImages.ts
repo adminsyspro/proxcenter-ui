@@ -183,3 +183,46 @@ export function getImageBySlug(slug: string): CloudImage | undefined {
 export function getImagesByVendor(vendor: string): CloudImage[] {
   return CLOUD_IMAGES.filter(img => img.vendor === vendor)
 }
+
+/** Convert a CustomImage DB record into a CloudImage-compatible object */
+export function customImageToCloudImage(ci: {
+  slug: string
+  name: string
+  vendor: string
+  version: string
+  arch: string
+  format: string
+  sourceType: string
+  downloadUrl: string | null
+  checksumUrl: string | null
+  volumeId: string | null
+  defaultDiskSize: string
+  minMemory: number
+  recommendedMemory: number
+  minCores: number
+  recommendedCores: number
+  ostype: string
+  tags: string | null
+}): CloudImage & { sourceType: string; volumeId: string | null; isCustom: true } {
+  return {
+    slug: ci.slug,
+    name: ci.name,
+    vendor: ci.vendor,
+    version: ci.version,
+    arch: ci.arch,
+    format: ci.format,
+    downloadUrl: ci.downloadUrl || '',
+    checksumUrl: ci.checksumUrl || null,
+    defaultDiskSize: ci.defaultDiskSize,
+    minMemory: ci.minMemory,
+    recommendedMemory: ci.recommendedMemory,
+    minCores: ci.minCores,
+    recommendedCores: ci.recommendedCores,
+    ostype: ci.ostype,
+    tags: ci.tags ? ci.tags.split(';').filter(Boolean) : ['custom'],
+    logoIcon: VENDORS.find(v => v.id === ci.vendor)?.icon || 'ri-image-line',
+    sourceType: ci.sourceType,
+    volumeId: ci.volumeId,
+    isCustom: true,
+  }
+}

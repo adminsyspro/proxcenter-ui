@@ -1,6 +1,6 @@
 'use client'
 
-import { Box, Card, CardContent, Chip, Typography, Button, Tooltip } from '@mui/material'
+import { Box, Card, CardContent, Chip, Typography, Button, Tooltip, IconButton } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
@@ -9,10 +9,17 @@ import VendorLogo from './VendorLogo'
 interface ImageCardProps {
   image: CloudImage
   onDeploy: (image: CloudImage) => void
+  isCustom?: boolean
+  onEdit?: (image: CloudImage) => void
+  onDelete?: (image: CloudImage) => void
 }
 
-export default function ImageCard({ image, onDeploy }: ImageCardProps) {
+export default function ImageCard({ image, onDeploy, isCustom, onEdit, onDelete }: ImageCardProps) {
   const t = useTranslations()
+
+  const sourceLabel = (image as any).sourceType === 'volume'
+    ? (image as any).volumeId || 'volume'
+    : (() => { try { return new URL(image.downloadUrl).hostname } catch { return image.downloadUrl } })()
 
   return (
     <Card
@@ -29,7 +36,7 @@ export default function ImageCard({ image, onDeploy }: ImageCardProps) {
       }}
     >
       <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5, p: 2 }}>
-        {/* Header: icon + name */}
+        {/* Header: icon + name + custom actions */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
             sx={{
@@ -50,8 +57,33 @@ export default function ImageCard({ image, onDeploy }: ImageCardProps) {
             </Typography>
             <Typography variant="caption" sx={{ opacity: 0.6 }}>
               {image.arch} &middot; {image.format}
+              {isCustom && (
+                <>
+                  {' '}&middot;{' '}
+                  <Chip
+                    label={(image as any).sourceType === 'volume' ? t('templates.catalog.volume') : t('templates.catalog.customLabel')}
+                    size="small"
+                    color={(image as any).sourceType === 'volume' ? 'info' : 'secondary'}
+                    sx={{ height: 16, fontSize: '0.6rem', ml: 0.5 }}
+                  />
+                </>
+              )}
             </Typography>
           </Box>
+          {isCustom && (
+            <Box sx={{ display: 'flex', flexShrink: 0 }}>
+              {onEdit && (
+                <IconButton size="small" onClick={() => onEdit(image)} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
+                  <i className="ri-edit-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              )}
+              {onDelete && (
+                <IconButton size="small" onClick={() => onDelete(image)} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              )}
+            </Box>
+          )}
         </Box>
 
         {/* Tags */}
@@ -88,14 +120,16 @@ export default function ImageCard({ image, onDeploy }: ImageCardProps) {
           </Typography>
         </Box>
 
-        {/* Source URL */}
-        <Tooltip title={image.downloadUrl} arrow>
+        {/* Source */}
+        <Tooltip title={(image as any).sourceType === 'volume' ? ((image as any).volumeId || '') : image.downloadUrl} arrow>
           <Typography
             variant="caption"
-            component="a"
-            href={image.downloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            {...((image as any).sourceType !== 'volume' && image.downloadUrl ? {
+              component: 'a' as const,
+              href: image.downloadUrl,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+            } : {})}
             sx={{
               opacity: 0.5,
               fontSize: '0.6rem',
@@ -110,8 +144,8 @@ export default function ImageCard({ image, onDeploy }: ImageCardProps) {
               whiteSpace: 'nowrap',
             }}
           >
-            <i className="ri-external-link-line" style={{ fontSize: 10, flexShrink: 0 }} />
-            {(() => { try { return new URL(image.downloadUrl).hostname } catch { return image.downloadUrl } })()}
+            <i className={(image as any).sourceType === 'volume' ? 'ri-hard-drive-2-line' : 'ri-external-link-line'} style={{ fontSize: 10, flexShrink: 0 }} />
+            {sourceLabel}
           </Typography>
         </Tooltip>
 

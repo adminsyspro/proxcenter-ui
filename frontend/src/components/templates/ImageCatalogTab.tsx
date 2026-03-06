@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Box,
+  Button,
   TextField,
   InputAdornment,
   ToggleButton,
@@ -16,6 +17,7 @@ import { VENDORS } from '@/lib/templates/cloudImages'
 import ImageCard from './ImageCard'
 import VendorLogo from './VendorLogo'
 import EmptyState from '@/components/EmptyState'
+import CustomImageDialog from './CustomImageDialog'
 
 interface ImageCatalogTabProps {
   onDeploy: (image: CloudImage) => void
@@ -23,20 +25,26 @@ interface ImageCatalogTabProps {
 
 export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
   const t = useTranslations()
-  const [images, setImages] = useState<CloudImage[]>([])
+  const [images, setImages] = useState<(CloudImage & { isCustom?: boolean })[]>([])
+  const [vendors, setVendors] = useState(VENDORS as readonly { id: string; name: string; icon: string }[])
   const [loading, setLoading] = useState(true)
   const [vendorFilter, setVendorFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editImage, setEditImage] = useState<any>(null)
 
-  useEffect(() => {
+  const fetchCatalog = () => {
     fetch('/api/v1/templates/catalog')
       .then(r => r.json())
       .then(res => {
         setImages(res.data?.images || [])
+        if (res.data?.vendors) setVendors(res.data.vendors)
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { fetchCatalog() }, [])
 
   const filtered = useMemo(() => {
     let result = images
@@ -53,6 +61,37 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
     }
     return result
   }, [images, vendorFilter, search])
+
+  const handleDialogClose = (saved?: boolean) => {
+    setDialogOpen(false)
+    setEditImage(null)
+    if (saved) fetchCatalog()
+  }
+
+  const handleEdit = (image: any) => {
+    // Fetch full custom image data from API
+    if (!image.isCustom) return
+    fetch(`/api/v1/templates/custom-images`)
+      .then(r => r.json())
+      .then(res => {
+        const match = (res.data || []).find((ci: any) => ci.slug === image.slug)
+        if (match) {
+          setEditImage(match)
+          setDialogOpen(true)
+        }
+      })
+      .catch(() => {})
+  }
+
+  const handleDelete = async (image: any) => {
+    if (!image.isCustom) return
+    // Find the custom image ID
+    const res = await fetch('/api/v1/templates/custom-images').then(r => r.json())
+    const match = (res.data || []).find((ci: any) => ci.slug === image.slug)
+    if (!match) return
+    await fetch(`/api/v1/templates/custom-images/${match.id}`, { method: 'DELETE' })
+    fetchCatalog()
+  }
 
   if (loading) {
     return (
@@ -96,13 +135,23 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
           <ToggleButton value="all">
             <Typography variant="caption">{t('common.all')}</Typography>
           </ToggleButton>
-          {VENDORS.map(v => (
+          {vendors.map(v => (
             <ToggleButton key={v.id} value={v.id} sx={{ gap: 0.5 }}>
               <VendorLogo vendor={v.id} size={18} />
               <Typography variant="caption">{v.name}</Typography>
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+        <Box sx={{ ml: 'auto' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<i className="ri-add-line" style={{ fontSize: 16 }} />}
+            onClick={() => { setEditImage(null); setDialogOpen(true) }}
+          >
+            {t('templates.catalog.addCustom')}
+          </Button>
+        </Box>
       </Box>
 
       {/* Image grid */}
@@ -122,10 +171,23 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
           }}
         >
           {filtered.map(image => (
-            <ImageCard key={image.slug} image={image} onDeploy={onDeploy} />
+            <ImageCard
+              key={image.slug}
+              image={image}
+              onDeploy={onDeploy}
+              isCustom={!!(image as any).isCustom}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           ))}
         </Box>
       )}
+
+      <CustomImageDialog
+        open={dialogOpen}
+        onClose={handleDialogClose}
+        editData={editImage}
+      />
     </Box>
   )
 }

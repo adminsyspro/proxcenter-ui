@@ -144,7 +144,7 @@ importers:
         specifier: ^2.4.1
         version: 2.4.1(react@19.2.1)
       undici:
-        specifier: ^7.18.1
+        specifier: ^7.22.0
         version: 7.22.0
       ws:
         specifier: ^8.19.0

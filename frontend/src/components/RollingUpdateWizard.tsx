@@ -344,9 +344,6 @@ export default function RollingUpdateWizard({
 
   // Save SSH address override for a node (optimistic update)
   const saveSshAddress = useCallback(async (nodeName: string, address: string) => {
-    const hostId = nodeHostIds[nodeName]
-    if (!hostId) return
-
     // Optimistic: update state immediately so the select reflects the choice
     setSshAddresses(prev => {
       const next = { ...prev }
@@ -354,6 +351,10 @@ export default function RollingUpdateWizard({
       else delete next[nodeName]
       return next
     })
+
+    // Persist to backend if we have a hostId
+    const hostId = nodeHostIds[nodeName]
+    if (!hostId) return
 
     setSshSaving(prev => ({ ...prev, [nodeName]: true }))
     try {

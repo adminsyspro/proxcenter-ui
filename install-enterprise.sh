@@ -229,6 +229,7 @@ setup_proxcenter() {
     log_info "Generating secrets..."
     APP_SECRET=$(openssl rand -hex 32)
     NEXTAUTH_SECRET=$(openssl rand -hex 32)
+    ORCHESTRATOR_API_KEY=$(openssl rand -hex 32)
 
     # Get server IP
     SERVER_IP=$(hostname -I | awk '{print $1}' | head -1)
@@ -257,6 +258,7 @@ LICENSE_KEY=${LICENSE_KEY:-}
 
 # Orchestrator
 ORCHESTRATOR_URL=http://orchestrator:8080
+ORCHESTRATOR_API_KEY=$ORCHESTRATOR_API_KEY
 EOF
 
     # Create orchestrator config

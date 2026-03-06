@@ -2042,18 +2042,22 @@ return
     if (!selectedBackup || !selection) return
 
     // Vérifier si c'est une image disque (non explorable)
-    const fileName = (archiveName || '').replace(/^\//, '')
-    const isRawDiskImage = fileName && (
-      fileName.endsWith('.img.fidx') ||
-      fileName.endsWith('.img.didx') ||
-      fileName.endsWith('.raw.fidx') ||
-      fileName.endsWith('.raw.didx') ||
-      fileName.endsWith('.img') ||
-      /^drive-.*\.(img|raw)\.?(fidx|didx)$/i.test(fileName) ||
-      // Any drive-* entry that is NOT a pxar archive
-      (/^drive-/i.test(fileName) && !fileName.includes('.pxar'))
+    // Le nom peut être en clair ou en base64 (PBS via PVE file-restore)
+    let fileName = (archiveName || '').replace(/^\//, '')
+    try {
+      if (/^[A-Za-z0-9+/]+=*$/.test(fileName) && fileName.length >= 8) {
+        const decoded = atob(fileName)
+        if (/^[\x20-\x7E]+$/.test(decoded)) fileName = decoded.replace(/^\//, '')
+      }
+    } catch {}
+    const isRawDisk = (s: string) => s && (
+      s.endsWith('.img.fidx') || s.endsWith('.img.didx') ||
+      s.endsWith('.raw.fidx') || s.endsWith('.raw.didx') ||
+      s.endsWith('.img') ||
+      /^drive-.*\.(img|raw)\.?(fidx|didx)$/i.test(s) ||
+      (/^drive-/i.test(s) && !s.includes('.pxar'))
     )
-    if (isRawDiskImage) {
+    if (isRawDisk(fileName)) {
       setExplorerError(t('inventory.rawDiskNotBrowsable'))
       return
     }

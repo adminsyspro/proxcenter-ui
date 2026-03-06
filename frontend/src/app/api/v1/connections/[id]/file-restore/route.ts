@@ -68,14 +68,22 @@ export async function GET(
     const volumeId = volume.includes(':') ? volume : `${storage}:${volume}`
 
     // Vérifier si le chemin cible une image disque brute (non explorable)
-    // Ex: /drive-scsi0.img.fidx, /drive-virtio0.raw.fidx
+    // Le premier segment peut être en clair (drive-scsi0.img.fidx) ou en base64
     const firstSegment = filepath.split('/').filter(Boolean)[0] || ''
-    if (
-      firstSegment.endsWith('.img.fidx') ||
-      firstSegment.endsWith('.raw.fidx') ||
-      firstSegment.endsWith('.img.didx') ||
-      firstSegment.endsWith('.raw.didx')
-    ) {
+    let decodedSegment = firstSegment
+    // Tenter un décodage base64 si ça ressemble à du base64
+    if (/^[A-Za-z0-9+/]+=*$/.test(firstSegment) && firstSegment.length >= 8) {
+      try {
+        const d = Buffer.from(firstSegment, 'base64').toString('utf-8')
+        if (/^[\x20-\x7E]+$/.test(d)) decodedSegment = d.replace(/^\//, '')
+      } catch {}
+    }
+    const isRawDisk = (s: string) =>
+      s.endsWith('.img.fidx') || s.endsWith('.raw.fidx') ||
+      s.endsWith('.img.didx') || s.endsWith('.raw.didx') ||
+      (/^drive-/i.test(s) && !s.includes('.pxar'))
+
+    if (isRawDisk(firstSegment) || isRawDisk(decodedSegment)) {
       return NextResponse.json({
         error: "Raw disk images (.img.fidx) cannot be browsed via file-restore. Only filesystem archives (.pxar) are supported.",
         code: "RAW_DISK_NOT_BROWSABLE"
@@ -128,8 +136,20 @@ export async function GET(
       const isHardlink = entry.type === 'h'
       const isVirtual = entry.type === 'v'
 
+      // PVE peut retourner filepath en base64 pour les backups PBS
+      // Préférer text (toujours lisible), sinon décoder filepath si c'est du base64
+      let name = entry.text || entry.filepath || entry.filename || ''
+      if (!entry.text && entry.filepath && /^[A-Za-z0-9+/]+=*$/.test(entry.filepath) && entry.filepath.length >= 8) {
+        try {
+          const decoded = Buffer.from(entry.filepath, 'base64').toString('utf-8')
+          if (/^[\x20-\x7E]+$/.test(decoded)) {
+            name = decoded.replace(/^\//, '')
+          }
+        } catch {}
+      }
+
       return {
-        name: entry.filepath || entry.text || entry.filename,
+        name,
         type: isVirtual ? 'virtual' : isDir ? 'directory' : isSymlink ? 'symlink' : isHardlink ? 'hardlink' : 'file',
         size: entry.size || 0,
         sizeFormatted: formatBytes(entry.size || 0),

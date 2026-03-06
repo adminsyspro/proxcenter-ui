@@ -117,12 +117,9 @@ function ResourcesGaugesWidget({ data, loading }) {
       />
       <GaugeChart
         value={resources.storagePct}
-        provisionedValue={resources.provStoragePct}
         label={t('storage.title')}
         subtitle={`${t('dashboard.widgets.used')}: ${resources.storageUsedFormatted || '0'} / ${resources.storageMaxFormatted || '0'}`}
-        provisionedSubtitle={`${t('dashboard.widgets.provisioned')}: ${resources.provDiskFormatted || '0'} (${resources.provStoragePct || 0}%)`}
         color={primaryColor}
-        provisionedColor={provColor}
       />
     </Box>
   )

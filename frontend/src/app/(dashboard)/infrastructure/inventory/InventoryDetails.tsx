@@ -205,7 +205,8 @@ export default function InventoryDetails({
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
-  const [migNetworkBridge, setMigNetworkBridge] = useState('vmbr0')
+  const [migNetworkBridge, setMigNetworkBridge] = useState('')
+  const [migBridges, setMigBridges] = useState<any[]>([])
   const [migStartAfter, setMigStartAfter] = useState(false)
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
@@ -465,6 +466,15 @@ return next
       if (storages.length > 0) {
         const localLvm = storages.find((s: any) => s.storage === 'local-lvm')
         setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
+      }
+    }).catch(() => {})
+    // Also fetch network bridges
+    fetch(`/api/v1/connections/${migTargetConn}/nodes/${migTargetNode}/network`).then(r => r.json()).then(d => {
+      const bridges = (d.data || d || []).filter((iface: any) => iface.type === 'bridge')
+      setMigBridges(bridges)
+      if (bridges.length > 0) {
+        const vmbr0 = bridges.find((b: any) => b.iface === 'vmbr0')
+        setMigNetworkBridge(vmbr0 ? 'vmbr0' : bridges[0].iface)
       }
     }).catch(() => {})
   }, [migTargetConn, migTargetNode])
@@ -6746,10 +6756,14 @@ return
                     select label="Network Bridge" size="small" fullWidth
                     value={migNetworkBridge}
                     onChange={e => setMigNetworkBridge(e.target.value)}
+                    disabled={!migTargetNode || migBridges.length === 0}
                   >
-                    <MenuItem value="vmbr0">vmbr0 (default)</MenuItem>
-                    <MenuItem value="vmbr1">vmbr1</MenuItem>
-                    <MenuItem value="vmbr2">vmbr2</MenuItem>
+                    <MenuItem value="" disabled>Select bridge...</MenuItem>
+                    {migBridges.map((b: any) => (
+                      <MenuItem key={b.iface} value={b.iface}>
+                        {b.iface}{b.comments ? ` (${b.comments})` : ''}{b.cidr ? ` — ${b.cidr}` : ''}
+                      </MenuItem>
+                    ))}
                   </TextField>
                   <FormControlLabel
                     control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}

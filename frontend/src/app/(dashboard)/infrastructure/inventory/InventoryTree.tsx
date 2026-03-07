@@ -7,11 +7,12 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
 import { 
-  Alert, 
+  Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -2621,7 +2622,11 @@ return (
 
         {/* Séparateur Proxmox VE */}
         {filteredClusters.length > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, opacity: 0.6 }}>
+          <Box
+            onClick={() => toggleSection('pve')}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, opacity: 0.6, cursor: 'pointer', userSelect: 'none', '&:hover': { opacity: 0.9 } }}
+          >
+            <i className={collapsedSections.has('pve') ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 14, flexShrink: 0 }} />
             <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 12, height: 12 }} />
             <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Proxmox VE
@@ -2636,6 +2641,7 @@ return (
           </Box>
         )}
 
+        <Collapse in={!collapsedSections.has('pve')}>
         {filteredClusters.map(clu => {
           // Pour un standalone (1 seul node), on affiche directement le node sans niveau cluster
           if (!clu.isCluster && clu.nodes.length === 1) {
@@ -2810,12 +2816,17 @@ return (
             </TreeItem>
           )
         })}
+        </Collapse>
 
         {/* Serveurs PBS (Proxmox Backup Server) */}
         {pbsServers.length > 0 && (
           <>
             {/* Séparateur Proxmox Backup Server */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, mt: 1, opacity: 0.6 }}>
+            <Box
+              onClick={() => toggleSection('pbs')}
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, mt: 1, opacity: 0.6, cursor: 'pointer', userSelect: 'none', '&:hover': { opacity: 0.9 } }}
+            >
+              <i className={collapsedSections.has('pbs') ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 14, flexShrink: 0 }} />
               <i className="ri-hard-drive-2-fill" style={{ fontSize: 12, color: '#2196f3' }} />
               <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Proxmox Backup Server
@@ -2824,7 +2835,8 @@ return (
                 ({pbsServers.length} PBS, {pbsServers.reduce((acc, p) => acc + p.stats.backupCount, 0)} backups)
               </Typography>
             </Box>
-            
+
+            <Collapse in={!collapsedSections.has('pbs')}>
             {pbsServers.map(pbs => (
               <TreeItem
                 key={`pbs:${pbs.connId}`}
@@ -2886,12 +2898,13 @@ return (
                 ))}
               </TreeItem>
             ))}
+            </Collapse>
           </>
         )}
 
         {/* External Hypervisors (VMware, Hyper-V, XCP-NG) — migration targets */}
         {(() => {
-          const hypervisorConfig: Record<string, { label: string; icon: string; color: string; logo?: string }> = {
+          const hypervisorConfig: Record<string, { label: string; icon: string; color: string }> = {
             vmware: { label: 'VMware ESXi', icon: 'ri-cloud-line', color: '#638C1C' },
             hyperv: { label: 'Microsoft Hyper-V', icon: 'ri-microsoft-line', color: '#00BCF2' },
             xcpng: { label: 'XCP-NG', icon: 'ri-server-line', color: '#00ADB5' },
@@ -2905,10 +2918,15 @@ return (
 
           return Object.entries(grouped).map(([type, conns]) => {
             const cfg = hypervisorConfig[type] || { label: type, icon: 'ri-server-line', color: '#999' }
+            const sectionKey = `ext-${type}`
             return (
-              <React.Fragment key={`ext-${type}`}>
-                {/* Section header */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, mt: 1, opacity: 0.6 }}>
+              <React.Fragment key={sectionKey}>
+                {/* Section header — same style as PVE / PBS */}
+                <Box
+                  onClick={() => toggleSection(sectionKey)}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1, py: 0.5, mt: 1, opacity: 0.6, cursor: 'pointer', userSelect: 'none', '&:hover': { opacity: 0.9 } }}
+                >
+                  <i className={collapsedSections.has(sectionKey) ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 14, flexShrink: 0 }} />
                   <i className={cfg.icon} style={{ fontSize: 12, color: cfg.color }} />
                   <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {cfg.label}
@@ -2918,18 +2936,20 @@ return (
                   </Typography>
                   <Chip label={t('common.comingSoon')} size="small" sx={{ height: 14, fontSize: '0.55rem', ml: 0.5 }} />
                 </Box>
-                {conns.map(conn => (
-                  <TreeItem
-                    key={`ext:${conn.id}`}
-                    itemId={`ext:${conn.id}`}
-                    label={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: 0.6 }}>
-                        <i className={cfg.icon} style={{ fontSize: 14, color: cfg.color }} />
-                        <span style={{ fontSize: 14 }}>{conn.name}</span>
-                      </Box>
-                    }
-                  />
-                ))}
+                <Collapse in={!collapsedSections.has(sectionKey)}>
+                  {conns.map(conn => (
+                    <TreeItem
+                      key={`ext:${conn.id}`}
+                      itemId={`ext:${conn.id}`}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: 0.6 }}>
+                          <i className={cfg.icon} style={{ fontSize: 14, color: cfg.color }} />
+                          <span style={{ fontSize: 14 }}>{conn.name}</span>
+                        </Box>
+                      }
+                    />
+                  ))}
+                </Collapse>
               </React.Fragment>
             )
           })

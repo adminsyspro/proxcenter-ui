@@ -1474,143 +1474,181 @@ return next
     }
   }, [propFavorites])
 
+  // Helper: convert raw cluster from API into TreeCluster
+  const mapClusterToTree = useCallback((cluster: any): TreeCluster => ({
+    connId: cluster.id,
+    name: cluster.name || cluster.id,
+    isCluster: cluster.isCluster,
+    cephHealth: cluster.cephHealth,
+    sshEnabled: cluster.sshEnabled,
+    nodes: (cluster.nodes || []).map((node: any) => ({
+      node: node.node,
+      status: node.status,
+      ip: node.ip,
+      maintenance: node.maintenance,
+      vms: (node.guests || []).map((guest: any) => ({
+        type: String(guest.type || 'qemu'),
+        vmid: String(guest.vmid),
+        name: guest.name || `${guest.type}:${guest.vmid}`,
+        status: guest.status,
+        cpu: guest.cpu,
+        mem: guest.mem,
+        maxmem: guest.maxmem,
+        disk: guest.disk,
+        maxdisk: guest.maxdisk,
+        pool: guest.pool || null,
+        tags: guest.tags || null,
+        template: guest.template === 1 || guest.template === true,
+        hastate: guest.hastate,
+        hagroup: guest.hagroup
+      }))
+    }))
+  }), [])
+
+  // Helper: convert raw PBS from API into TreePbsServer
+  const mapPbsToTree = useCallback((pbs: any): TreePbsServer => ({
+    connId: pbs.id,
+    name: pbs.name || pbs.id,
+    status: pbs.status || 'offline',
+    version: pbs.version,
+    uptime: pbs.uptime,
+    datastores: (pbs.datastores || []).map((ds: any) => ({
+      name: ds.name,
+      path: ds.path,
+      comment: ds.comment,
+      total: ds.total || 0,
+      used: ds.used || 0,
+      available: ds.available || 0,
+      usagePercent: ds.usagePercent || 0,
+      backupCount: ds.backupCount || 0,
+      vmCount: ds.vmCount || 0,
+      ctCount: ds.ctCount || 0,
+      hostCount: ds.hostCount || 0,
+    })),
+    stats: pbs.stats || { totalSize: 0, totalUsed: 0, datastoreCount: 0, backupCount: 0 }
+  }), [])
+
+  // Sort clusters: multi-node first, then alphabetical
+  const sortClusters = useCallback((arr: TreeCluster[]) => {
+    return [...arr].sort((a, b) => {
+      if (a.isCluster && !b.isCluster) return -1
+      if (!a.isCluster && b.isCluster) return 1
+      return a.name.localeCompare(b.name)
+    })
+  }, [])
+
   useEffect(() => {
     let alive = true
+    let eventSource: EventSource | null = null
 
-    async function load() {
-      setLoading(true)
+    function loadStream() {
       setError(null)
 
-      try {
-        // Utiliser l'API agrégée pour charger tout l'arbre en une seule requête
-        // reloadTick > 0 = refresh manuel ou post-action → bypass le cache serveur
-        const url = reloadTick > 0 ? '/api/v1/inventory?refresh=true' : '/api/v1/inventory'
-        const res = await fetch(url)
+      const url = reloadTick > 0 ? '/api/v1/inventory/stream?refresh=true' : '/api/v1/inventory/stream'
+      eventSource = new EventSource(url)
 
-        if (!res.ok) throw new Error(`HTTP ${res.status} sur /inventory`)
-        const json = await res.json()
-        
-        if (json.error) {
-          throw new Error(json.error)
-        }
+      let gotFirstData = false
+      // Accumulate streamed data — update state progressively on first load,
+      // or replace all at once on refresh to avoid flicker
+      const isRefresh = reloadTick > 0
+      const accClusters: TreeCluster[] = []
+      const accPbs: TreePbsServer[] = []
 
-        const data = json.data
-        const clusters = data?.clusters || []
-        const pbsData = data?.pbsServers || []
-        const externalData = data?.externalHypervisors || []
-
-        // Transformer les données de l'API en format TreeCluster
-        const built: TreeCluster[] = clusters.map((cluster: any) => ({
-          connId: cluster.id,
-          name: cluster.name || cluster.id,
-          isCluster: cluster.isCluster,
-          cephHealth: cluster.cephHealth,
-          sshEnabled: cluster.sshEnabled,
-          nodes: (cluster.nodes || []).map((node: any) => ({
-            node: node.node,
-            status: node.status,
-            ip: node.ip,
-            maintenance: node.maintenance,
-            vms: (node.guests || []).map((guest: any) => ({
-              type: String(guest.type || 'qemu'),
-              vmid: String(guest.vmid),
-              name: guest.name || `${guest.type}:${guest.vmid}`,
-              status: guest.status,
-              cpu: guest.cpu,
-              mem: guest.mem,
-              maxmem: guest.maxmem,
-              disk: guest.disk,
-              maxdisk: guest.maxdisk,
-              pool: guest.pool || null,
-              tags: guest.tags || null,
-              template: guest.template === 1 || guest.template === true,
-              hastate: guest.hastate,
-              hagroup: guest.hagroup
-            }))
-          }))
-        }))
-
-        // Trier: clusters d'abord, puis standalones, le tout par nom
-        built.sort((a, b) => {
-          // Les clusters (multi-nodes) en premier
-          if (a.isCluster && !b.isCluster) return -1
-          if (!a.isCluster && b.isCluster) return 1
-
-          // Ensuite tri alphabétique par nom
-          return a.name.localeCompare(b.name)
-        })
-
-        // Transformer les données PBS en format TreePbsServer
-        const builtPbs: TreePbsServer[] = pbsData.map((pbs: any) => ({
-          connId: pbs.id,
-          name: pbs.name || pbs.id,
-          status: pbs.status || 'offline',
-          version: pbs.version,
-          uptime: pbs.uptime,
-          datastores: (pbs.datastores || []).map((ds: any) => ({
-            name: ds.name,
-            path: ds.path,
-            comment: ds.comment,
-            total: ds.total || 0,
-            used: ds.used || 0,
-            available: ds.available || 0,
-            usagePercent: ds.usagePercent || 0,
-            backupCount: ds.backupCount || 0,
-            vmCount: ds.vmCount || 0,
-            ctCount: ds.ctCount || 0,
-            hostCount: ds.hostCount || 0,
-          })),
-          stats: pbs.stats || { totalSize: 0, totalUsed: 0, datastoreCount: 0, backupCount: 0 }
-        }))
-
-        // Trier PBS par nom
-        builtPbs.sort((a, b) => a.name.localeCompare(b.name))
-
-        // Fetch VMs for each VMware connection in parallel
-        const vmwareConns = (externalData || []).filter((h: any) => h.type === 'vmware')
-        if (vmwareConns.length > 0) {
-          const vmPromises = vmwareConns.map(async (conn: any) => {
-            try {
-              const vmRes = await fetch(`/api/v1/vmware/${encodeURIComponent(conn.id)}/vms`)
-              if (vmRes.ok) {
-                const vmJson = await vmRes.json()
-                return { id: conn.id, vms: vmJson?.data?.vms || [] }
-              }
-            } catch { /* ignore */ }
-            return { id: conn.id, vms: [] }
-          })
-          const vmResults = await Promise.all(vmPromises)
-          const vmMap = new Map(vmResults.map(r => [r.id, r.vms]))
-          for (const h of externalData) {
-            if (h.type === 'vmware' && vmMap.has(h.id)) {
-              h.vms = vmMap.get(h.id)
-            }
-          }
-        }
-
-        if (!alive) return
-        setClusters(built)
-        setPbsServers(builtPbs)
-        setExternalHypervisors(externalData)
-      } catch (e: any) {
-        if (!alive) return
-        setError(e?.message || String(e))
+      if (!isRefresh) {
         setClusters([])
         setPbsServers([])
         setExternalHypervisors([])
-      } finally {
-        if (!alive) return
-        setLoading(false)
+        setLoading(true)
       }
+
+      eventSource.addEventListener('cluster', (e) => {
+        if (!alive) return
+        try {
+          const cluster = JSON.parse(e.data)
+          const tree = mapClusterToTree(cluster)
+          accClusters.push(tree)
+          if (!gotFirstData) { gotFirstData = true; setLoading(false) }
+          // On first load, update progressively so user sees items appear
+          if (!isRefresh) setClusters(sortClusters([...accClusters]))
+        } catch { /* ignore malformed event */ }
+      })
+
+      eventSource.addEventListener('pbs', (e) => {
+        if (!alive) return
+        try {
+          const pbs = JSON.parse(e.data)
+          const tree = mapPbsToTree(pbs)
+          accPbs.push(tree)
+          if (!gotFirstData) { gotFirstData = true; setLoading(false) }
+          if (!isRefresh) setPbsServers([...accPbs].sort((a, b) => a.name.localeCompare(b.name)))
+        } catch { /* ignore */ }
+      })
+
+      eventSource.addEventListener('external', (e) => {
+        if (!alive) return
+        try {
+          const externalData = JSON.parse(e.data)
+          setExternalHypervisors(externalData)
+
+          // Fetch VMware VMs in parallel
+          const vmwareConns = (externalData || []).filter((h: any) => h.type === 'vmware')
+          if (vmwareConns.length > 0) {
+            Promise.all(vmwareConns.map(async (conn: any) => {
+              try {
+                const vmRes = await fetch(`/api/v1/vmware/${encodeURIComponent(conn.id)}/vms`)
+                if (vmRes.ok) {
+                  const vmJson = await vmRes.json()
+                  return { id: conn.id, vms: vmJson?.data?.vms || [] }
+                }
+              } catch { /* ignore */ }
+              return { id: conn.id, vms: [] }
+            })).then(vmResults => {
+              if (!alive) return
+              const vmMap = new Map(vmResults.map(r => [r.id, r.vms]))
+              setExternalHypervisors((prev: any[]) =>
+                prev.map((h: any) => h.type === 'vmware' && vmMap.has(h.id) ? { ...h, vms: vmMap.get(h.id) } : h)
+              )
+            })
+          }
+        } catch { /* ignore */ }
+      })
+
+      eventSource.addEventListener('done', () => {
+        if (!alive) return
+        if (!gotFirstData) setLoading(false)
+        // On refresh, swap all data at once to avoid flicker
+        if (isRefresh) {
+          setClusters(sortClusters([...accClusters]))
+          setPbsServers([...accPbs].sort((a, b) => a.name.localeCompare(b.name)))
+        }
+        eventSource?.close()
+        eventSource = null
+      })
+
+      eventSource.addEventListener('error', (e) => {
+        if (!alive) return
+        try {
+          const err = JSON.parse((e as any).data || '{}')
+          setError(err.message || 'Connection error')
+        } catch {
+          if (!gotFirstData) {
+            setError('Failed to load inventory')
+            setLoading(false)
+          }
+        }
+        eventSource?.close()
+        eventSource = null
+      })
     }
 
-    load()
+    loadStream()
 
-    
-return () => {
+    return () => {
       alive = false
+      eventSource?.close()
+      eventSource = null
     }
-  }, [reloadTick])
+  }, [reloadTick, mapClusterToTree, mapPbsToTree, sortClusters])
 
   const selectedItemId = selected ? itemKey(selected) : undefined
 

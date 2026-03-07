@@ -3357,7 +3357,7 @@ return (
           <Divider key="divider3" />,
 
           /* --- Console / Migrate / Unlock --- */
-          contextMenu?.isCluster && (
+          contextMenu?.isCluster ? (
             <MenuItem
               key="migrate"
               onClick={() => {
@@ -3372,7 +3372,7 @@ return (
               </ListItemIcon>
               <ListItemText>{t('audit.actions.migrate')}</ListItemText>
             </MenuItem>
-          ),
+          ) : null,
 
           <MenuItem key="console" onClick={handleOpenConsole} disabled={actionBusy}>
             <ListItemIcon>
@@ -3381,14 +3381,14 @@ return (
             <ListItemText>{t('inventory.console')}</ListItemText>
           </MenuItem>,
 
-          contextMenu?.sshEnabled && (
+          contextMenu?.sshEnabled ? (
             <MenuItem key="unlock" onClick={handleUnlock} disabled={actionBusy || unlocking}>
               <ListItemIcon>
                 <i className="ri-lock-unlock-line" style={{ fontSize: 20, color: '#f59e0b' }} />
               </ListItemIcon>
               <ListItemText>{t('inventory.unlock')}</ListItemText>
             </MenuItem>
-          )
+          ) : null
         ]}
       </Menu>
 

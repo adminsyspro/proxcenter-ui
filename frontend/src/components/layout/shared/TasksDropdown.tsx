@@ -508,7 +508,7 @@ return () => window.removeEventListener('focus', handleFocus)
 
         {/* Recent Changes section */}
         {recentChanges.length > 0 && (
-          <>
+          <Box>
             <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
               <i className="ri-git-commit-line" style={{ fontSize: 16, opacity: 0.6 }} />
               <Typography variant="subtitle2" fontWeight={600} sx={{ opacity: 0.8 }}>
@@ -558,7 +558,7 @@ return () => window.removeEventListener('focus', handleFocus)
                 </Box>
               ))}
             </Box>
-          </>
+          </Box>
         )}
 
         {/* Footer */}

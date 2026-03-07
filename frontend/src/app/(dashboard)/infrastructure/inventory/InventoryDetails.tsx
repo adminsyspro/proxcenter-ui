@@ -5642,9 +5642,10 @@ return vm?.isCluster ?? false
                             <TableCell align="center" onClick={e => e.stopPropagation()}>
                               <Button
                                 size="small"
-                                variant="contained"
-                                sx={{ textTransform: 'none', fontSize: 11, height: 28, bgcolor: '#E65100', '&:hover': { bgcolor: '#BF360C' } }}
-                                startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />}
+                                variant="outlined"
+                                color="primary"
+                                sx={{ textTransform: 'none', fontSize: 10, height: 24, minWidth: 0, px: 1.5 }}
+                                startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} />}
                                 onClick={() => setEsxiMigrateVm({
                                   vmid: vm.vmid, name: vm.name || vm.vmid, connId: data.esxiHostInfo!.connectionId,
                                   connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
@@ -5671,30 +5672,43 @@ return vm?.isCluster ?? false
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
 
             return (
-              <Stack spacing={2}>
-                {/* VM Summary Bar */}
+              <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
+                {/* VM Summary Bar + Migrate button */}
                 <Card variant="outlined" sx={{ borderRadius: 2 }}>
                   <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className="ri-cpu-line" style={{ fontSize: 14, opacity: 0.5 }} />
-                        <Typography variant="body2" fontWeight={600}>{vm.numCPU} vCPU</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <i className="ri-cpu-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                          <Typography variant="body2" fontWeight={600}>{vm.numCPU} vCPU</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <i className="ri-ram-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                          <Typography variant="body2" fontWeight={600}>{memGB} GB RAM</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                          <Typography variant="body2" fontWeight={600}>{diskGB} GB disk</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <i className="ri-terminal-box-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                          <Typography variant="body2" sx={{ opacity: 0.7 }}>{vm.guestOS || 'Unknown OS'}</Typography>
+                        </Box>
                       </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className="ri-ram-line" style={{ fontSize: 14, opacity: 0.5 }} />
-                        <Typography variant="body2" fontWeight={600}>{memGB} GB RAM</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.5 }} />
-                        <Typography variant="body2" fontWeight={600}>{diskGB} GB disk</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className="ri-terminal-box-line" style={{ fontSize: 14, opacity: 0.5 }} />
-                        <Typography variant="body2" sx={{ opacity: 0.7 }}>{vm.guestOS || 'Unknown OS'}</Typography>
-                      </Box>
-                      {vm.toolsStatus && (
-                        <Chip size="small" label={vm.toolsStatus === 'toolsOk' ? 'VMware Tools OK' : vm.toolsStatus === 'toolsNotInstalled' ? 'No VMware Tools' : 'Tools: ' + vm.toolsStatus} sx={{ height: 20, fontSize: 10 }} />
-                      )}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                        sx={{ textTransform: 'none', fontSize: 11, height: 28, minWidth: 0, px: 1.5, whiteSpace: 'nowrap', flexShrink: 0 }}
+                        startIcon={<i className="ri-play-circle-line" style={{ fontSize: 14 }} />}
+                        onClick={() => setEsxiMigrateVm({
+                          vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
+                          connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
+                          committed: vm.committed, guestOS: vm.guestOS,
+                        })}
+                      >
+                        Start Migration
+                      </Button>
                     </Box>
                   </CardContent>
                 </Card>
@@ -5703,119 +5717,113 @@ return vm?.isCluster ?? false
                 <Card variant="outlined" sx={{ borderRadius: 2 }}>
                   <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <i className="ri-swap-line" style={{ fontSize: 18, color: '#E65100' }} />
+                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
+                        <i className="ri-swap-line" style={{ fontSize: 16, color: '#E65100' }} />
                         Migration to Proxmox VE
                       </Typography>
-                      <Chip size="small" label="Not Started" sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: 'action.disabledBackground', color: 'text.secondary' }} />
                     </Box>
 
                     {/* Migration flow visual */}
-                    <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                    <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                       <Box sx={{ textAlign: 'center' }}>
-                        <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: 'rgba(99,140,28,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1 }}>
-                          <img src="/images/esxi-logo.svg" alt="" width={32} height={32} />
+                        <Box sx={{ width: 44, height: 44, borderRadius: 1.5, bgcolor: 'rgba(99,140,28,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 0.5 }}>
+                          <img src="/images/esxi-logo.svg" alt="" width={24} height={24} />
                         </Box>
-                        <Typography variant="caption" fontWeight={600}>ESXi</Typography>
-                        <Typography variant="caption" sx={{ display: 'block', opacity: 0.5, fontSize: 10 }}>{vm.name}</Typography>
+                        <Typography variant="caption" fontWeight={600} sx={{ fontSize: 11 }}>ESXi</Typography>
+                        <Typography variant="caption" sx={{ display: 'block', opacity: 0.5, fontSize: 9 }}>{vm.name}</Typography>
                       </Box>
-                      <Box sx={{ flex: 1, maxWidth: 200, position: 'relative' }}>
+                      <Box sx={{ flex: 1, maxWidth: 160, position: 'relative' }}>
                         <Divider sx={{ borderStyle: 'dashed' }} />
                         <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', bgcolor: 'background.paper', px: 1 }}>
-                          <i className="ri-arrow-right-line" style={{ fontSize: 20, opacity: 0.4 }} />
+                          <i className="ri-arrow-right-line" style={{ fontSize: 18, opacity: 0.4 }} />
                         </Box>
                       </Box>
                       <Box sx={{ textAlign: 'center' }}>
-                        <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: 'rgba(230,81,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1 }}>
-                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={32} height={32} />
+                        <Box sx={{ width: 44, height: 44, borderRadius: 1.5, bgcolor: 'rgba(230,81,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 0.5 }}>
+                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={24} height={24} />
                         </Box>
-                        <Typography variant="caption" fontWeight={600}>Proxmox VE</Typography>
-                        <Typography variant="caption" sx={{ display: 'block', opacity: 0.5, fontSize: 10 }}>Target</Typography>
+                        <Typography variant="caption" fontWeight={600} sx={{ fontSize: 11 }}>Proxmox VE</Typography>
+                        <Typography variant="caption" sx={{ display: 'block', opacity: 0.5, fontSize: 9 }}>Target</Typography>
                       </Box>
-                    </Box>
-
-                    {/* Action button */}
-                    <Box sx={{ px: 2, pb: 2, display: 'flex', justifyContent: 'center' }}>
-                      <Button
-                        variant="contained"
-                        size="large"
-                        sx={{ textTransform: 'none', px: 4, bgcolor: '#E65100', '&:hover': { bgcolor: '#BF360C' } }}
-                        startIcon={<i className="ri-play-circle-line" />}
-                        onClick={() => setEsxiMigrateVm({
-                          vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
-                          connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
-                          committed: vm.committed, guestOS: vm.guestOS,
-                        })}
-                      >
-                        Start Migration to Proxmox
-                      </Button>
                     </Box>
                   </CardContent>
                 </Card>
 
-                {/* Transfer Metrics (placeholder) */}
-                <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                {/* Transfer Metrics with fake data */}
+                <Card variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <i className="ri-line-chart-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
+                        <i className="ri-line-chart-line" style={{ fontSize: 16, opacity: 0.7 }} />
                         Transfer Metrics
                       </Typography>
                     </Box>
-                    <Box sx={{ p: 4, textAlign: 'center' }}>
-                      <i className="ri-bar-chart-grouped-line" style={{ fontSize: 48, opacity: 0.15 }} />
-                      <Typography variant="body2" sx={{ opacity: 0.4, mt: 1 }}>Transfer speed, ETA, and progress graphs will appear here during migration</Typography>
+                    <Box sx={{ p: 2, flex: 1 }}>
+                      {/* Progress */}
+                      <Box sx={{ mb: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                          <Typography variant="caption" color="text.secondary">Overall Progress</Typography>
+                          <Typography variant="caption" fontWeight={700}>68%</Typography>
+                        </Box>
+                        <LinearProgress variant="determinate" value={68} sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { borderRadius: 3 } }} />
+                      </Box>
+
+                      {/* Metrics grid */}
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                        <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Transfer Speed</Typography>
+                          <Typography variant="body2" fontWeight={700}>245 MB/s</Typography>
+                        </Box>
+                        <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>ETA</Typography>
+                          <Typography variant="body2" fontWeight={700}>~4 min 32s</Typography>
+                        </Box>
+                        <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Transferred</Typography>
+                          <Typography variant="body2" fontWeight={700}>13.6 GB <Typography component="span" variant="caption" color="text.secondary">/ 20 GB</Typography></Typography>
+                        </Box>
+                        <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Elapsed</Typography>
+                          <Typography variant="body2" fontWeight={700}>2 min 18s</Typography>
+                        </Box>
+                      </Box>
+
+                      {/* Fake speed graph bars */}
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mb: 0.5, display: 'block' }}>Transfer Speed (last 60s)</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 48 }}>
+                          {[35, 42, 55, 60, 48, 72, 68, 80, 75, 90, 85, 78, 92, 88, 95, 82, 70, 65, 88, 92, 78, 85, 90, 72, 68, 80, 85, 90, 88, 82].map((v, i) => (
+                            <Box key={i} sx={{ flex: 1, height: `${v}%`, bgcolor: 'primary.main', borderRadius: '2px 2px 0 0', opacity: 0.6 + (v / 250) }} />
+                          ))}
+                        </Box>
+                      </Box>
                     </Box>
                   </CardContent>
                 </Card>
 
-                {/* Migration Logs (placeholder) */}
-                <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                {/* Migration Logs with fake data */}
+                <Card variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <i className="ri-terminal-box-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
+                        <i className="ri-terminal-box-line" style={{ fontSize: 16, opacity: 0.7 }} />
                         Migration Logs
                       </Typography>
                     </Box>
-                    <Box sx={{ p: 2, bgcolor: 'background.default', fontFamily: 'monospace', fontSize: 12, minHeight: 120, maxHeight: 300, overflow: 'auto', borderRadius: '0 0 8px 8px' }}>
-                      <Typography variant="body2" sx={{ fontFamily: 'inherit', fontSize: 'inherit', opacity: 0.3, fontStyle: 'italic' }}>
-                        Migration logs will stream here in real-time...
-                      </Typography>
+                    <Box sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, flex: 1, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8 }}>
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:01]</Box> Connecting to ESXi host 10.99.99.199...<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:02]</Box> <Box component="span" sx={{ color: 'success.main' }}>✓</Box> Authenticated as root<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:02]</Box> Retrieving VM configuration for &quot;{vm.name}&quot;...<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:03]</Box> <Box component="span" sx={{ color: 'success.main' }}>✓</Box> VM config retrieved ({vm.numCPU} vCPU, {memGB} GB RAM, {diskGB} GB disk)<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:03]</Box> Converting VMDK → QCOW2 format...<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:04]</Box> Connecting to Proxmox VE target node...<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:05]</Box> <Box component="span" sx={{ color: 'success.main' }}>✓</Box> Target storage &quot;local-lvm&quot; available (156 GB free)<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:05]</Box> Starting disk transfer: [scsi0] {vm.name}.vmdk ({diskGB} GB)<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:32:06]</Box> Transfer in progress... 245 MB/s<br />
+                      <Box component="span" sx={{ color: 'text.secondary' }}>[14:34:18]</Box> <Box component="span" sx={{ color: 'warning.main' }}>⟳</Box> Transferred 13.6 GB / {diskGB} GB (68%)<br />
                     </Box>
                   </CardContent>
                 </Card>
-
-                {/* VM Details (collapsed) */}
-                <Accordion variant="outlined" sx={{ borderRadius: '8px !important', '&:before': { display: 'none' } }}>
-                  <AccordionSummary expandIcon={<i className="ri-arrow-down-s-line" style={{ fontSize: 18 }} />}>
-                    <Typography fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className="ri-information-line" style={{ fontSize: 16, opacity: 0.6 }} />
-                      Source VM Details
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ p: 0, borderTop: '1px solid', borderColor: 'divider' }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-                      {[
-                        { k: 'Guest OS', v: vm.guestOS || 'N/A' },
-                        { k: 'Hardware Version', v: vm.vmxVersion || 'N/A' },
-                        { k: 'Firmware', v: (vm.firmware || 'bios').toUpperCase() },
-                        { k: 'VMware Tools', v: vm.toolsStatus === 'toolsOk' ? 'Running' : vm.toolsStatus === 'toolsNotInstalled' ? 'Not Installed' : vm.toolsStatus || 'N/A' },
-                        { k: 'UUID', v: vm.uuid || 'N/A' },
-                        ...(vm.ipAddress ? [{ k: 'IP Address', v: vm.ipAddress }] : []),
-                        ...(vm.hostName ? [{ k: 'Hostname', v: vm.hostName }] : []),
-                        { k: 'Snapshots', v: `${vm.snapshotCount || 0}` },
-                        ...(vm.disks || []).map((d: any, i: number) => ({ k: `Disk ${i + 1}`, v: `${d.label} — ${formatBytes(d.capacityBytes)}${d.thinProvisioned ? ' (Thin)' : ''}` })),
-                        ...(vm.networks || []).map((n: any, i: number) => ({ k: `NIC ${i + 1}`, v: `${n.label} — ${n.macAddress} (${n.network})` })),
-                      ].map((row, i) => (
-                        <Box key={i} sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                          <Typography variant="caption" sx={{ opacity: 0.5, whiteSpace: 'nowrap' }}>{row.k}</Typography>
-                          <Typography variant="caption" fontWeight={600} sx={{ textAlign: 'right', wordBreak: 'break-all' }}>{row.v}</Typography>
-                        </Box>
-                      ))}
-                    </Box>
-                  </AccordionDetails>
-                </Accordion>
               </Stack>
             )
           })()}

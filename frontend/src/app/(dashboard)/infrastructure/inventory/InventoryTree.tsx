@@ -796,7 +796,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const favorites = propFavorites ?? localFavorites
   
   // Mode d'affichage: 'tree' (arbre), 'vms' (liste VMs), 'hosts' (par hôte), 'pools' (par pool), 'tags' (par tag), 'favorites' (favoris)
-  const [internalViewMode, setInternalViewMode] = useState<ViewMode>(controlledViewMode ?? 'vms')
+  const [internalViewMode, setInternalViewMode] = useState<ViewMode>(controlledViewMode ?? 'tree')
   
   // Utiliser le viewMode contrôlé s'il est fourni, sinon l'état interne
   const viewMode = controlledViewMode ?? internalViewMode
@@ -841,9 +841,6 @@ return next
   // Hydrate from localStorage
   useEffect(() => {
     try {
-      const savedView = localStorage.getItem('inventoryViewMode')
-      if (savedView && controlledViewMode === undefined) setInternalViewMode(savedView as ViewMode)
-
       const savedExpanded = localStorage.getItem('inventoryExpandedItems')
       if (savedExpanded) setManualExpandedItems(JSON.parse(savedExpanded))
 
@@ -853,10 +850,10 @@ return next
     setIsHydrated(true)
   }, [])
 
-  // Persist viewMode
+  // Persist viewMode (only when not externally controlled)
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryViewMode', viewMode)
-  }, [viewMode, isHydrated])
+    if (isHydrated && controlledViewMode === undefined) localStorage.setItem('inventoryViewMode', viewMode)
+  }, [viewMode, isHydrated, controlledViewMode])
 
   // Persist expandedItems
   useEffect(() => {

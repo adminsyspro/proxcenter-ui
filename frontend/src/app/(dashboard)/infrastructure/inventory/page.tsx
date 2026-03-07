@@ -47,7 +47,6 @@ export default function InventoryPage() {
 
   // RBAC scope profile — determines default view & allowed view modes
   const { defaultViewMode, allowedViewModes, loading: rbacLoading } = useRBACScopeProfile()
-  const rbacDefaultApplied = useRef(false)
 
   // Mode de vue actuel et listes de données
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
@@ -70,10 +69,10 @@ export default function InventoryPage() {
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
   const [enrichedData, setEnrichedData] = useState<Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }>>({})
 
-  // Apply RBAC-aware default view mode (once, before deep-link takes over)
+  // Apply RBAC-aware default view mode — re-apply when defaultViewMode changes
+  // (RBAC may initially return 'vms' before roles load, then settle to 'tree' for admins)
   useEffect(() => {
-    if (rbacLoading || rbacDefaultApplied.current) return
-    rbacDefaultApplied.current = true
+    if (rbacLoading) return
     setViewMode(defaultViewMode)
 
     if (defaultViewMode === 'tree') {

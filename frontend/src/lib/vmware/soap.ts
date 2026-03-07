@@ -33,7 +33,8 @@ export async function soapRequest(
   const res = await fetch(`${baseUrl}/sdk`, opts)
   const text = await res.text()
   if (!res.ok && !text.includes("returnval")) {
-    throw new Error(`SOAP error ${res.status}: ${text.substring(0, 200)}`)
+    const fault = text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1]
+    throw new Error(`SOAP error ${res.status}: ${fault || text.substring(0, 500)}`)
   }
   const rawCookie = res.headers.get("set-cookie") || ""
   return { text, cookie: rawCookie.split(";")[0] || "" }
@@ -139,7 +140,8 @@ export async function soapPowerOffVm(session: SoapSession, vmid: string): Promis
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
   if (result.text.includes("faultstring") && !result.text.includes("InvalidPowerState")) {
-    throw new Error("Failed to power off VM")
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+    throw new Error(`Failed to power off VM: ${fault}`)
   }
 
   // Wait for power off (poll power state)

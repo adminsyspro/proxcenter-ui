@@ -168,9 +168,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Check VM is powered off
     if (vmConfig.powerState === "poweredOn") {
-      await appendLog(jobId, "VM is powered on — powering off for cold migration...", "warn")
-      await soapSession && await import("@/lib/vmware/soap").then(m => m.soapPowerOffVm(soapSession!, config.sourceVmId))
-      await appendLog(jobId, "VM powered off", "success")
+      await appendLog(jobId, "VM is powered on — attempting to power off for cold migration...", "warn")
+      try {
+        await soapSession && await import("@/lib/vmware/soap").then(m => m.soapPowerOffVm(soapSession!, config.sourceVmId))
+        await appendLog(jobId, "VM powered off", "success")
+      } catch (e: any) {
+        const msg = e?.message || String(e)
+        if (msg.includes("license") || msg.includes("prohibits")) {
+          throw new Error("VM is powered on and ESXi license does not allow API power operations. Please power off the VM manually in the ESXi interface before retrying.")
+        }
+        throw e
+      }
     }
 
     // Check snapshots
@@ -214,7 +222,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     await updateJob(jobId, "creating_vm")
     await appendLog(jobId, "Allocating VMID on Proxmox cluster...")
 
-    targetVmid = await pveFetch<number>(pveConn, "/cluster/nextid")
+    targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
     await updateJob(jobId, "creating_vm", { targetVmid })
     await appendLog(jobId, `Allocated VMID ${targetVmid}`)
 
@@ -278,7 +286,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       const scsiSlot = `scsi${i}`
 
-      // Phase 1: Download VMDK from ESXi
+      // Phase 1: Download VMDK from ESXi with real-time progress
       await appendLog(jobId, `Downloading VMDK from ESXi (${diskSizeGB} GB)...`)
       await updateJob(jobId, "transferring", {
         currentStep: `downloading_disk_${i + 1}`,
@@ -287,28 +295,83 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         totalBytes: BigInt(disk.capacityBytes),
       })
 
-      const dlResult = await executeSSHWithTimeout(
+      // Start curl in background on PVE node, write PID to file for tracking
+      const pidFile = `${tmpFile}.pid`
+      const statsFile = `${tmpFile}.stats`
+      const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
-        `curl -sk -b "${soapCookie}" -o "${tmpFile}.vmdk" -w '{"speed":%{speed_download},"size":%{size_download},"time":%{time_total}}' "${vmdkUrl}"`,
-        14400000
+        `nohup bash -c 'curl -sk -b "${soapCookie}" -o "${tmpFile}.vmdk" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total}}'"'"' "${vmdkUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
       )
-      if (!dlResult.success) {
-        await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk"`)
-        throw new Error(`Download failed: ${dlResult.error}`)
+      if (!startDl.success || !startDl.output?.trim()) {
+        throw new Error(`Failed to start download: ${startDl.error}`)
       }
+      const curlPid = startDl.output.trim()
+      await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
 
-      // Parse curl stats
-      const curlStats = dlResult.output?.match(/\{[^}]+\}/)
-      let downloadedBytes = disk.capacityBytes
+      // Poll file size every 3s for real-time progress
+      const totalBytes = disk.capacityBytes
+      let downloadedBytes = 0
       let downloadSpeed = ""
       let downloadTime = 0
-      if (curlStats) {
-        try {
-          const stats = JSON.parse(curlStats[0])
-          downloadedBytes = stats.size || disk.capacityBytes
-          downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
-          downloadTime = stats.time || 0
-        } catch {}
+      const startTime = Date.now()
+
+      while (true) {
+        if (isCancelled(jobId)) {
+          await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+          throw new Error("Migration cancelled")
+        }
+
+        await new Promise(r => setTimeout(r, 3000))
+
+        // Check if download is complete (exit code file exists)
+        const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
+        const isRunning = exitCheck.output?.trim() === "RUNNING"
+
+        // Get current file size
+        const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
+        const currentSize = parseInt(sizeResult.output?.trim() || "0", 10) || 0
+        downloadedBytes = currentSize
+
+        // Calculate speed
+        const elapsed = (Date.now() - startTime) / 1000
+        const speedBps = elapsed > 0 ? currentSize / elapsed : 0
+        downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
+
+        // Calculate progress for this disk
+        const diskProgress = totalBytes > 0 ? Math.min(Math.round((currentSize / totalBytes) * 100), 99) : 0
+        const overallProgress = Math.round((i / vmConfig.disks.length) * 100 + (diskProgress / vmConfig.disks.length))
+
+        await updateJob(jobId, "transferring", {
+          bytesTransferred: BigInt(currentSize),
+          transferSpeed: downloadSpeed,
+          progress: overallProgress,
+        })
+
+        if (!isRunning) {
+          const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+          if (exitCode !== 0) {
+            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+            throw new Error(`Download failed with exit code ${exitCode}`)
+          }
+
+          // Parse curl stats from stats file
+          const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
+          const curlStats = statsContent.output?.match(/\{[^}]+\}/)
+          if (curlStats) {
+            try {
+              const stats = JSON.parse(curlStats[0])
+              downloadedBytes = stats.size || currentSize
+              downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
+              downloadTime = stats.time || elapsed
+            } catch {}
+          } else {
+            downloadTime = elapsed
+          }
+
+          // Cleanup pid/stats files
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+          break
+        }
       }
 
       await updateJob(jobId, "transferring", {

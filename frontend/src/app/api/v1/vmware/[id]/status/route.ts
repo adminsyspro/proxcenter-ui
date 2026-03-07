@@ -84,11 +84,51 @@ export async function GET(
       if (conn.insecureTLS) {
         logoutOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
       }
+      // Fetch license info before logout
+      let licenseEdition = 'unknown'
+      let licenseFull = false
+      try {
+        const licBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrieveProperties>
+      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>LicenseManager</urn:type><urn:pathSet>licenses</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="LicenseManager">ha-license-manager</urn:obj></urn:objectSet>
+      </urn:specSet>
+    </urn:RetrieveProperties>
+  </soapenv:Body>
+</soapenv:Envelope>`
+        const licOpts: any = {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '"urn:vim25/8.0"', ...(cookie ? { Cookie: cookie } : {}) },
+          signal: AbortSignal.timeout(10000),
+        }
+        if (conn.insecureTLS) {
+          licOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
+        }
+        const licRes = await fetch(`${esxiUrl}/sdk`, { ...licOpts, body: licBody })
+        const licText = await licRes.text()
+        // editionKey values:
+        //   Free: "esxiFree", "esx.hypervisor.cpuPackageCoreLimited", "esx.hypervisor"
+        //   Paid: "esxiStandard", "esxiEnterprise", "esxiEnterprisePlus", "esxiEssentials"
+        //   Eval: contains "eval" or "Evaluation"
+        const editionMatch = licText.match(/<editionKey>([^<]+)<\/editionKey>/)
+        if (editionMatch) licenseEdition = editionMatch[1]
+        const freeEditions = ['esxiFree', 'esx.hypervisor.cpuPackageCoreLimited', 'esx.hypervisor']
+        const isFree = freeEditions.some(e => licText.includes(e))
+        const isEval = licenseEdition.toLowerCase().includes('eval') || licText.includes('>Evaluation<')
+        licenseFull = !isFree || isEval
+      } catch {
+        // License check failed — assume free to be safe
+      }
+
       fetch(`${esxiUrl}/sdk`, { ...logoutOpts, body: logoutBody }).catch(() => {})
 
       // Extract version info
       const version = text.match(/<fullName>([^<]*)<\/fullName>/)?.[1]
-      return NextResponse.json({ data: { status: 'online', host: esxiUrl, version } })
+      return NextResponse.json({ data: { status: 'online', host: esxiUrl, version, licenseEdition, licenseFull } })
     }
 
     // Host responded but login unclear

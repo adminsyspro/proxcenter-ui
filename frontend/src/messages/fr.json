@@ -1105,7 +1105,18 @@
       "close": "Fermer",
       "retry": "Réessayer",
       "free": "libre",
-      "progress": "Progression"
+      "progress": "Progression",
+      "migrationType": "Type de migration",
+      "migrationTypeCold": "Migration à froid (Hors ligne)",
+      "migrationTypeColdDesc": "La VM est éteinte pendant tout le transfert. Méthode la plus fiable.",
+      "migrationTypeNearLive": "Migration quasi-live",
+      "migrationTypeNearLiveDesc": "Courte interruption uniquement lors du basculement final. Les disques sont pré-synchronisés pendant que la VM tourne.",
+      "migrationTypeLive": "Migration live (Sans interruption)",
+      "migrationTypeLiveDesc": "La VM reste active pendant toute la migration. Nécessite un stockage partagé ou une réplication continue.",
+      "nearLiveMigrationInfo": "La VM restera en fonctionnement pendant la synchronisation initiale des disques. Une brève interruption aura lieu lors du basculement final pour transférer les dernières modifications.",
+      "liveMigrationInfo": "La VM restera en fonctionnement pendant toute la migration sans interruption. Cela nécessite un matériel compatible et peut prendre plus de temps.",
+      "sshRequired": "SSH n'est pas configuré sur la connexion Proxmox cible. L'accès SSH est nécessaire pour transférer les disques et configurer la VM. Veuillez activer SSH dans les paramètres de connexion.",
+      "requiresLicensedEsxi": "Nécessite un hôte ESXi avec licence (accès API en écriture requis pour les snapshots et CBT)"
     }
   },
   "storage": {

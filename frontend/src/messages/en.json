@@ -1100,7 +1100,18 @@
       "close": "Close",
       "retry": "Retry",
       "free": "free",
-      "progress": "Progress"
+      "progress": "Progress",
+      "migrationType": "Migration Type",
+      "migrationTypeCold": "Cold Migration (Offline)",
+      "migrationTypeColdDesc": "VM is powered off during the entire transfer. Most reliable method.",
+      "migrationTypeNearLive": "Near-Live Migration",
+      "migrationTypeNearLiveDesc": "Short downtime only during final cutover. Disk data is pre-synced while VM runs.",
+      "migrationTypeLive": "Live Migration (No Downtime)",
+      "migrationTypeLiveDesc": "VM stays running throughout. Requires shared storage or continuous replication.",
+      "nearLiveMigrationInfo": "The VM will remain running during initial disk sync. A brief downtime occurs during final cutover to transfer the last changes.",
+      "liveMigrationInfo": "The VM will remain running throughout the migration with no downtime. This requires compatible hardware and may take longer.",
+      "sshRequired": "SSH is not configured on the target Proxmox connection. SSH access is required to transfer disks and configure the VM. Please enable SSH in the connection settings.",
+      "requiresLicensedEsxi": "Requires a licensed ESXi host (API write access needed for snapshots and CBT)"
     }
   },
   "storage": {

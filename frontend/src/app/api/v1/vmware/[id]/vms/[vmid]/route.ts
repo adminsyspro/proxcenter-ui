@@ -229,6 +229,7 @@ export async function GET(
           disks,
           networks,
           snapshotCount,
+          connectionId: conn.id,
           connectionName: conn.name,
         }
       })

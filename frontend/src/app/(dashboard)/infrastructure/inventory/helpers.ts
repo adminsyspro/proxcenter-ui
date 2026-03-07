@@ -1080,6 +1080,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         hostType: conn.type || 'vmware',
         baseUrl: conn.baseUrl || '',
         version,
+        licenseFull: statusData?.data?.licenseFull ?? false,
         vms,
       },
     }
@@ -1090,9 +1091,14 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const [connId, ...vmidParts] = sel.id.split(':')
     const vmid = vmidParts.join(':')
 
-    const vmR = await fetch(`/api/v1/vmware/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store' })
+    const [vmR, statusR] = await Promise.all([
+      fetch(`/api/v1/vmware/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store' }),
+      fetch(`/api/v1/vmware/${encodeURIComponent(connId)}/status`, { cache: 'no-store' }).catch(() => null),
+    ])
     const vmJson = await vmR.json().catch(() => ({}))
     const vm = vmJson?.data || {}
+    const statusJson = statusR?.ok ? await statusR.json().catch(() => ({})) : {}
+    vm.licenseFull = statusJson?.data?.licenseFull ?? false
 
     if (vmR.status === 404) {
       return {

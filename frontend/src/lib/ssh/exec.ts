@@ -105,7 +105,13 @@ export async function executeSSH(
     }
 
     const err = await res.json().catch(() => ({}))
-    return { success: false, error: err?.error || res.statusText }
+    const errMsg = err?.error || res.statusText
+    // If orchestrator rejects the command (whitelist), fall through to direct ssh2
+    if (errMsg.includes('not allowed') || errMsg.includes('not permitted') || res.status === 403) {
+      console.log(`[ssh] orchestrator rejected command, falling back to ssh2 for ${nodeIp}`)
+    } else {
+      return { success: false, error: errMsg }
+    }
   } catch {
     // Orchestrator unreachable – fall through to ssh2
     console.log(`[ssh] orchestrator unavailable, falling back to ssh2 for ${nodeIp}`)

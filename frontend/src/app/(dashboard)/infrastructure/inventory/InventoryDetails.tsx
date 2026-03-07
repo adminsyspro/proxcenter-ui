@@ -203,13 +203,14 @@ export default function InventoryDetails({
   const [savingMemory, setSavingMemory] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [exitMaintenanceDialogOpen, setExitMaintenanceDialogOpen] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
   const [migNetworkBridge, setMigNetworkBridge] = useState('')
   const [migBridges, setMigBridges] = useState<any[]>([])
   const [migStartAfter, setMigStartAfter] = useState(false)
+  const [migType, setMigType] = useState<'cold' | 'near-live' | 'live'>('cold')
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
@@ -4170,7 +4171,7 @@ return vm?.isCluster ?? false
   }, [selection, allVms])
 
   return (
-    <Box sx={{ p: selection && selection.type !== 'root' ? 2.5 : 0, width: '100%', height: '100%' }}>
+    <Box sx={{ p: selection && selection.type !== 'root' ? 2.5 : 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {progress}
 
       {error ? (
@@ -5755,7 +5756,7 @@ return vm?.isCluster ?? false
                                 onClick={() => setEsxiMigrateVm({
                                   vmid: vm.vmid, name: vm.name || vm.vmid, connId: data.esxiHostInfo!.connectionId,
                                   connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
-                                  committed: vm.committed, guestOS: vm.guest_OS,
+                                  committed: vm.committed, guestOS: vm.guest_OS, licenseFull: data.esxiHostInfo!.licenseFull,
                                 })}
                               >
                                 {t('inventoryPage.esxiMigration.migrate')}
@@ -5778,7 +5779,7 @@ return vm?.isCluster ?? false
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
 
             return (
-              <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
+              <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                 {/* VM Summary Bar + Migrate button */}
                 <Card variant="outlined" sx={{ borderRadius: 2 }}>
                   <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
@@ -5810,7 +5811,7 @@ return vm?.isCluster ?? false
                         onClick={() => setEsxiMigrateVm({
                           vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                           connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
-                          committed: vm.committed, guestOS: vm.guestOS,
+                          committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
                         })}
                       >
                         {t('inventoryPage.esxiMigration.startMigration')}
@@ -5856,8 +5857,8 @@ return vm?.isCluster ?? false
                 </Card>
 
                 {/* Transfer Metrics — real data from migration job */}
-                <Card variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <Card variant="outlined" sx={{ borderRadius: 2, flexShrink: 0 }}>
+                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
                         <i className="ri-line-chart-line" style={{ fontSize: 16, opacity: 0.7 }} />
@@ -5914,37 +5915,53 @@ return vm?.isCluster ?? false
                             </Box>
                           </Box>
 
-                          {/* Progress graph — SVG line chart from logs timestamps */}
+                          {/* Progress graph — Recharts area chart with tooltip */}
                           {vmMigJob.logs?.length > 1 && (() => {
                             const logs = vmMigJob.logs as { ts: string; msg: string; level: string }[]
                             const startTime = new Date(logs[0].ts).getTime()
-                            const points = logs.map((l: any, idx: number) => {
-                              const t = (new Date(l.ts).getTime() - startTime) / 1000
-                              const pct = Math.round((idx / (logs.length - 1)) * 100)
-                              return { t, pct }
+                            const chartData = logs.map((l: any, idx: number) => {
+                              const elapsed = (new Date(l.ts).getTime() - startTime) / 1000
+                              return {
+                                elapsed,
+                                pct: Math.round((idx / (logs.length - 1)) * 100),
+                                time: new Date(l.ts).toLocaleTimeString(),
+                                msg: l.msg,
+                              }
                             })
-                            const maxT = Math.max(points[points.length - 1]?.t || 1, 1)
-                            const w = 280
-                            const h = 50
-                            const pathD = points.map((p, i) => {
-                              const x = (p.t / maxT) * w
-                              const y = h - (p.pct / 100) * h
-                              return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
-                            }).join(' ')
-                            const fillD = `${pathD} L${w},${h} L0,${h} Z`
                             return (
                               <Box sx={{ mt: 2 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mb: 0.5, display: 'block' }}>{t('inventoryPage.esxiMigration.progressOverTime')}</Typography>
-                                <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={50} preserveAspectRatio="none">
-                                  <defs>
-                                    <linearGradient id="migGrad" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={0.3} />
-                                      <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={0.02} />
-                                    </linearGradient>
-                                  </defs>
-                                  <path d={fillD} fill="url(#migGrad)" />
-                                  <path d={pathD} fill="none" stroke={theme.palette.primary.main} strokeWidth="2" />
-                                </svg>
+                                <ResponsiveContainer width="100%" height={70}>
+                                  <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                                    <defs>
+                                      <linearGradient id="migGradChart" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={0.3} />
+                                        <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={0.02} />
+                                      </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="elapsed" tick={false} axisLine={false} tickLine={false} />
+                                    <YAxis domain={[0, 100]} tick={false} axisLine={false} tickLine={false} />
+                                    <Tooltip
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.[0]) return null
+                                        const d = payload[0].payload
+                                        return (
+                                          <Box sx={{
+                                            px: 1, py: 0.5, borderRadius: 1, fontSize: 11,
+                                            bgcolor: theme.palette.mode === 'dark' ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)',
+                                            border: '1px solid', borderColor: 'divider',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                          }}>
+                                            <Box sx={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', color: 'primary.main', fontSize: 11 }}>
+                                              {vmMigJob.transferSpeed || `${d.pct}%`}
+                                            </Box>
+                                          </Box>
+                                        )
+                                      }}
+                                    />
+                                    <Area type="monotone" dataKey="pct" stroke={theme.palette.primary.main} strokeWidth={2} fill="url(#migGradChart)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+                                  </AreaChart>
+                                </ResponsiveContainer>
                               </Box>
                             )
                           })()}
@@ -5960,9 +5977,9 @@ return vm?.isCluster ?? false
                 </Card>
 
                 {/* Migration Logs — real data from migration job */}
-                <Card variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                    <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
                         <i className="ri-terminal-box-line" style={{ fontSize: 16, opacity: 0.7 }} />
                         {t('inventoryPage.esxiMigration.migrationLogs')}
@@ -5970,8 +5987,18 @@ return vm?.isCluster ?? false
                           <Typography component="span" variant="caption" sx={{ opacity: 0.4 }}>({vmMigJob.logs.length})</Typography>
                         )}
                       </Typography>
+                      {vmMigJob?.logs?.length > 0 && (
+                        <MuiTooltip title={t('common.copy')}>
+                          <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
+                            const text = vmMigJob.logs.map((l: any) => `[${new Date(l.ts).toLocaleTimeString()}] ${l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '⚠' : '·'} ${l.msg}`).join('\n')
+                            navigator.clipboard.writeText(text)
+                          }}>
+                            <i className="ri-file-copy-line" style={{ fontSize: 14 }} />
+                          </IconButton>
+                        </MuiTooltip>
+                      )}
                     </Box>
-                    <Box sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, flex: 1, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, minHeight: 80 }}>
+                    <Box sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, maxHeight: 'calc(100vh - 650px)', minHeight: 80 }}>
                       {vmMigJob?.logs?.length > 0 ? (
                         vmMigJob.logs.map((log: any, i: number) => (
                           <Box key={i}>
@@ -6858,6 +6885,74 @@ return
                       </MenuItem>
                     ))}
                   </TextField>
+                  {/* Migration type selector */}
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {t('inventoryPage.esxiMigration.migrationType')}
+                    </Typography>
+                    <Stack spacing={1}>
+                      {([
+                        { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc', requiresLicense: false },
+                        { value: 'near-live' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeNearLive', descKey: 'migrationTypeNearLiveDesc', requiresLicense: true },
+                        { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc', requiresLicense: true },
+                      ]).map(opt => {
+                        const disabled = opt.requiresLicense && !esxiMigrateVm?.licenseFull
+                        return (
+                        <Box
+                          key={opt.value}
+                          onClick={() => !disabled && setMigType(opt.value)}
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 1.5,
+                            border: '2px solid',
+                            borderColor: disabled ? 'divider' : migType === opt.value ? `${opt.color}` : 'divider',
+                            bgcolor: disabled
+                              ? theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.03)'
+                              : migType === opt.value
+                                ? theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'
+                                : 'transparent',
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            opacity: disabled ? 0.5 : 1,
+                            transition: 'all 0.15s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1.5,
+                            ...(!disabled && { '&:hover': { borderColor: `${opt.color}`, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.01)' } }),
+                          }}
+                        >
+                          <Box sx={{
+                            width: 36, height: 36, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            bgcolor: !disabled && migType === opt.value ? `${opt.color}` : 'action.hover',
+                            color: !disabled && migType === opt.value ? '#fff' : 'text.secondary',
+                            transition: 'all 0.15s',
+                          }}>
+                            <i className={disabled ? 'ri-lock-line' : opt.icon} style={{ fontSize: 18 }} />
+                          </Box>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="body2" fontWeight={600} sx={{ color: disabled ? 'text.disabled' : 'text.primary' }}>
+                              {t(`inventoryPage.esxiMigration.${opt.labelKey}`)}
+                            </Typography>
+                            <Typography variant="caption" color={disabled ? 'text.disabled' : 'text.secondary'} sx={{ lineHeight: 1.3 }}>
+                              {disabled
+                                ? t('inventoryPage.esxiMigration.requiresLicensedEsxi')
+                                : t(`inventoryPage.esxiMigration.${opt.descKey}`)}
+                            </Typography>
+                          </Box>
+                          <Box sx={{
+                            width: 18, height: 18, borderRadius: '50%', border: '2px solid',
+                            borderColor: disabled ? 'action.disabled' : migType === opt.value ? `${opt.color}` : 'divider',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {!disabled && migType === opt.value && (
+                              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: `${opt.color}` }} />
+                            )}
+                          </Box>
+                        </Box>
+                        )
+                      })}
+                    </Stack>
+                  </Box>
+
                   <FormControlLabel
                     control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                     label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -6865,11 +6960,23 @@ return
                 </Stack>
               </Box>
 
+              {/* SSH warning */}
+              {migTargetConn && (() => {
+                const selectedConn = migPveConnections.find((c: any) => c.id === migTargetConn)
+                return selectedConn && !selectedConn.sshEnabled ? (
+                  <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>
+                    {t('inventoryPage.esxiMigration.sshRequired')}
+                  </Alert>
+                ) : null
+              })()}
+
               {/* Info banner */}
               <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', border: '1px solid', borderColor: 'primary.main', borderOpacity: 0.2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-information-line" style={{ fontSize: 18, color: theme.palette.primary.main }} />
                 <Typography variant="caption" color="primary">
-                  {t('inventoryPage.esxiMigration.coldMigrationInfo')}
+                  {migType === 'cold' && t('inventoryPage.esxiMigration.coldMigrationInfo')}
+                  {migType === 'near-live' && t('inventoryPage.esxiMigration.nearLiveMigrationInfo')}
+                  {migType === 'live' && t('inventoryPage.esxiMigration.liveMigrationInfo')}
                 </Typography>
               </Box>
             </Stack>
@@ -6878,6 +6985,81 @@ return
           {/* Migration in progress / completed / failed */}
           {esxiMigrateVm && migJobId && migJob && (
             <Stack spacing={2} sx={{ mt: 1 }}>
+              {/* Migration visual: VMware → Proxmox */}
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, py: 2 }}>
+                {/* VMware logo */}
+                <Box sx={{
+                  width: 56, height: 56, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  border: '2px solid', borderColor: migJob.status === 'completed' ? 'success.main' : migJob.status === 'failed' ? 'error.main' : 'divider',
+                  transition: 'border-color 0.3s',
+                }}>
+                  <img src="/images/esxi-logo.svg" alt="VMware" width={28} height={28} style={{ opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
+                </Box>
+
+                {/* Animated flow with tooltip */}
+                <MuiTooltip
+                  arrow
+                  placement="top"
+                  title={
+                    !['completed', 'failed', 'cancelled'].includes(migJob.status) && migJob.transferSpeed
+                      ? `${migJob.transferSpeed}${migJob.bytesTransferred ? ` — ${(Number(migJob.bytesTransferred) / 1073741824).toFixed(1)} GB / ${migJob.totalBytes ? (Number(migJob.totalBytes) / 1073741824).toFixed(1) : '?'} GB` : ''}`
+                      : migJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed')
+                      : migJob.status === 'failed' ? (migJob.error || t('inventoryPage.esxiMigration.failed'))
+                      : migJob.currentStep?.replace(/_/g, ' ') || ''
+                  }
+                >
+                <Box sx={{ flex: 1, maxWidth: 180, position: 'relative', height: 20, display: 'flex', alignItems: 'center', cursor: 'default' }}>
+                  {/* Track line */}
+                  <Box sx={{ position: 'absolute', inset: 0, top: '50%', height: 2, transform: 'translateY(-50%)', bgcolor: 'divider', borderRadius: 1 }} />
+                  {/* Animated dots (only when transferring) */}
+                  {!['completed', 'failed', 'cancelled'].includes(migJob.status) ? (
+                    <>
+                      {[0, 1, 2, 3, 4].map(idx => (
+                        <Box key={idx} sx={{
+                          position: 'absolute', width: 6, height: 6, borderRadius: '50%',
+                          bgcolor: 'primary.main',
+                          animation: 'migFlow 2s ease-in-out infinite',
+                          animationDelay: `${idx * 0.35}s`,
+                          opacity: 0,
+                          '@keyframes migFlow': {
+                            '0%': { left: '0%', opacity: 0, transform: 'scale(0.5)' },
+                            '15%': { opacity: 1, transform: 'scale(1)' },
+                            '85%': { opacity: 1, transform: 'scale(1)' },
+                            '100%': { left: '100%', opacity: 0, transform: 'scale(0.5)' },
+                          },
+                        }} />
+                      ))}
+                    </>
+                  ) : migJob.status === 'completed' ? (
+                    <Box sx={{ position: 'absolute', inset: 0, top: '50%', height: 2, transform: 'translateY(-50%)', bgcolor: 'success.main', borderRadius: 1 }} />
+                  ) : migJob.status === 'failed' ? (
+                    <Box sx={{
+                      position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+                      color: 'error.main', fontSize: 18, lineHeight: 1,
+                    }}>
+                      <i className="ri-close-circle-fill" />
+                    </Box>
+                  ) : null}
+                </Box>
+                </MuiTooltip>
+
+                {/* Proxmox logo */}
+                <Box sx={{
+                  width: 56, height: 56, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  border: '2px solid',
+                  borderColor: migJob.status === 'completed' ? 'success.main' : migJob.status === 'failed' ? 'error.main' : 'divider',
+                  transition: 'border-color 0.3s',
+                }}>
+                  <img
+                    src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                    alt="Proxmox" width={28} height={28}
+                    style={{ opacity: migJob.status === 'completed' ? 1 : 0.6, transition: 'opacity 0.3s' }}
+                  />
+                </Box>
+              </Box>
+
               {/* Status chip */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 {migJob.status === 'completed' && <Chip size="small" label={t('inventoryPage.esxiMigration.completed')} color="success" sx={{ fontWeight: 600 }} />}
@@ -6897,6 +7079,15 @@ return
                     <Typography variant="caption" fontWeight={700}>{migJob.progress || 0}%</Typography>
                   </Box>
                   <LinearProgress variant="determinate" value={migJob.progress || 0} sx={{ height: 6, borderRadius: 3 }} />
+                  {migJob.transferSpeed && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {migJob.bytesTransferred ? `${(Number(migJob.bytesTransferred) / 1073741824).toFixed(1)} GB` : '0 GB'}
+                        {migJob.totalBytes ? ` / ${(Number(migJob.totalBytes) / 1073741824).toFixed(1)} GB` : ''}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">{migJob.transferSpeed}</Typography>
+                    </Box>
+                  )}
                 </Box>
               )}
 
@@ -6936,7 +7127,7 @@ return
               <Button onClick={() => setEsxiMigrateVm(null)} disabled={migStarting}>{t('common.cancel')}</Button>
               <Button
                 variant="contained"
-                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || migStarting}
+                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || migStarting || (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled)}
                 sx={{ textTransform: 'none' }}
                 startIcon={migStarting ? <CircularProgress size={16} color="inherit" /> : <i className="ri-play-circle-line" />}
                 onClick={async () => {
@@ -6953,6 +7144,7 @@ return
                         targetNode: migTargetNode,
                         targetStorage: migTargetStorage,
                         networkBridge: migNetworkBridge,
+                        migrationType: migType,
                         startAfterMigration: migStartAfter,
                       }),
                     })
@@ -6995,7 +7187,7 @@ return
                   {t('inventoryPage.esxiMigration.retry')}
                 </Button>
               )}
-              <Button onClick={() => { setEsxiMigrateVm(null); setMigJobId(null); setMigJob(null) }}>
+              <Button onClick={() => { setEsxiMigrateVm(null); setMigJobId(null); setMigJob(null); setMigType('cold') }}>
                 {t('common.close')}
               </Button>
             </>

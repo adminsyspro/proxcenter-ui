@@ -20,7 +20,7 @@ type CachedInventory = {
   clusters: any[]
   pbsServers: any[]
   externalHypervisors: any[]
-  storages?: any[]
+  storages: any[]
   stats: {
     totalClusters: number
     totalNodes: number
@@ -72,6 +72,9 @@ type CacheResult =
 export function getInventoryFromCache(): CacheResult {
   const entry = getCache()
   if (!entry) return { status: 'miss' }
+
+  // Invalidate cache entries missing required fields (e.g. storages added later)
+  if (!entry.data.storages) return { status: 'miss' }
 
   const age = Date.now() - entry.timestamp
 

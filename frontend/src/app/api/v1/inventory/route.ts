@@ -124,6 +124,7 @@ async function fetchRawInventory(): Promise<{
   clusters: ClusterData[]
   pbsServers: PbsServerData[]
   externalHypervisors: ExternalHypervisor[]
+  storages: any[]
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }> {
   // 1) Charger toutes les connexions PVE, PBS et hyperviseurs externes en parallèle
@@ -149,6 +150,7 @@ async function fetchRawInventory(): Promise<{
     clusters: [] as ClusterData[],
     pbsServers: [] as PbsServerData[],
     externalHypervisors: [] as ExternalHypervisor[],
+    storages: [] as any[],
     stats: {
       totalClusters: 0, totalNodes: 0, totalGuests: 0,
       onlineNodes: 0, runningGuests: 0,
@@ -485,6 +487,7 @@ return aId - bId
     clusters,
     pbsServers,
     externalHypervisors: externalConnections,
+    storages: [],
     stats: {
       totalClusters: clusters.length,
       totalNodes,

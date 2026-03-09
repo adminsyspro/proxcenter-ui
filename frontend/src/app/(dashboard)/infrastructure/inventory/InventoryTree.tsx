@@ -842,7 +842,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   }, [controlledViewMode])
 
   // Controlled tree expansion state
-  const [manualExpandedItems, setManualExpandedItems] = useState<string[]>(['root:root'])
+  const [manualExpandedItems, setManualExpandedItems] = useState<string[]>([])
   const programmaticExpand = useRef(false)
   const virtualScrollRef = useRef<HTMLDivElement>(null)
   const [isHydrated, setIsHydrated] = useState(false)
@@ -1928,7 +1928,7 @@ return items
   // Expand/Collapse all for tree mode
   const expandAll = useCallback(() => {
     programmaticExpand.current = true
-    const items: string[] = ['root:root']
+    const items: string[] = []
     clusters.forEach(clu => {
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => items.push(`node:${clu.connId}:${n.node}`))
@@ -2910,50 +2910,7 @@ return (
       ) : (
 
       /* Mode Arbre : vue hiérarchique */
-      <SimpleTreeView
-          selectedItems={selectedItemId || 'root:root'}
-          expandedItems={search.trim() ? ['root:root', ...expandedItems] : manualExpandedItems}
-          onExpandedItemsChange={(_event, itemIds) => {
-            if (!search.trim() && !programmaticExpand.current) setManualExpandedItems(itemIds)
-          }}
-          onSelectedItemsChange={(_event, ids) => {
-            const picked = Array.isArray(ids) ? ids[0] : ids
-
-            if (!picked) return
-            
-            // Vérifier si c'est une VM en migration
-            const itemStr = String(picked)
-
-            if (itemStr.startsWith('vm:')) {
-              // Format: vm:connId:node:type:vmid
-              const parts = itemStr.split(':')
-
-              if (parts.length >= 5) {
-                const connId = parts[1]
-                const vmid = parts[4]
-
-                if (isVmMigrating(connId, vmid)) {
-                  // VM en migration, ignorer la sélection
-                  return
-                }
-              }
-            }
-            
-            const sel = selectionFromItemId(itemStr)
-
-            if (sel) onSelect(sel)
-          }}
-        >
-        {/* Nœud racine - Inventaire */}
-        <TreeItem
-          itemId="root:root"
-          label={
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <img src={theme.palette.mode === 'dark' ? '/images/proxcenter-logo-dark.svg' : '/images/proxcenter-logo-light.svg'} alt='' width={18} height={18} style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: 14, fontWeight: 700 }}>Infrastructure</span>
-            </Box>
-          }
-        >
+      <>
         {filteredClusters.length === 0 && search.trim() ? (
           <Box sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant='body2' sx={{ opacity: 0.6 }}>
@@ -2967,7 +2924,7 @@ return (
           <Box
             onClick={() => toggleSection('pve')}
             sx={{
-              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, mt: 1,
+              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
               bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
               borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
               cursor: 'pointer', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)' },
@@ -2987,6 +2944,40 @@ return (
         )}
 
         <Collapse in={!collapsedSections.has('pve')}>
+        <SimpleTreeView
+          selectedItems={selectedItemId || ''}
+          expandedItems={search.trim() ? expandedItems : manualExpandedItems}
+          onExpandedItemsChange={(_event, itemIds) => {
+            if (!search.trim() && !programmaticExpand.current) setManualExpandedItems(itemIds)
+          }}
+          onSelectedItemsChange={(_event, ids) => {
+            const picked = Array.isArray(ids) ? ids[0] : ids
+
+            if (!picked) return
+
+            // Vérifier si c'est une VM en migration
+            const itemStr = String(picked)
+
+            if (itemStr.startsWith('vm:')) {
+              // Format: vm:connId:node:type:vmid
+              const parts = itemStr.split(':')
+
+              if (parts.length >= 5) {
+                const connId = parts[1]
+                const vmid = parts[4]
+
+                if (isVmMigrating(connId, vmid)) {
+                  // VM en migration, ignorer la sélection
+                  return
+                }
+              }
+            }
+
+            const sel = selectionFromItemId(itemStr)
+
+            if (sel) onSelect(sel)
+          }}
+        >
         {filteredClusters.map(clu => {
           // Pour un standalone (1 seul node), on affiche directement le node sans niveau cluster
           if (!clu.isCluster && clu.nodes.length === 1) {
@@ -3161,10 +3152,9 @@ return (
             </TreeItem>
           )
         })}
+        </SimpleTreeView>
         </Collapse>
-
-        </TreeItem>
-      </SimpleTreeView>
+      </>
       )}
 
       {/* ── Proxmox Storage Section ── */}
@@ -3351,85 +3341,63 @@ return (
                 <Typography variant="caption" sx={{ opacity: 0.4 }}>No network data</Typography>
               </Box>
             ) : (
-              networkTree.map(({ connId: cId, connName, nodes }) => (
-                <React.Fragment key={`net-conn:${cId}`}>
-                  {/* Connection header */}
-                  <Box
-                    onClick={() => toggleNetSection(`net-conn:${cId}`)}
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 0.75,
-                      px: 1.5, pl: 3, py: 0.5,
-                      borderBottom: '1px solid', borderColor: 'divider',
-                      cursor: 'pointer',
-                      '&:hover': { bgcolor: 'action.hover' }
-                    }}
-                  >
-                    <i className={expandedNetSections.has(`net-conn:${cId}`) ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 14, opacity: 0.5 }} />
-                    <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.6 }} />
-                    <span style={{ fontSize: 14 }}>{connName}</span>
-                    <span style={{ opacity: 0.4, fontSize: 11 }}>({nodes.length} nodes)</span>
-                  </Box>
-                  {expandedNetSections.has(`net-conn:${cId}`) && nodes.map(({ node, vlans, totalVlans }) => {
-                    const nodeKey = `net-node:${cId}:${node}`
-                    return (
-                      <React.Fragment key={nodeKey}>
-                        {/* Node header */}
-                        <Box
-                          onClick={() => toggleNetSection(nodeKey)}
-                          sx={{
-                            display: 'flex', alignItems: 'center', gap: 0.75,
-                            px: 1.5, pl: 6, py: 0.5,
-                            borderBottom: '1px solid', borderColor: 'divider',
-                            cursor: 'pointer',
-                            '&:hover': { bgcolor: 'action.hover' }
-                          }}
-                        >
-                          <i className={expandedNetSections.has(nodeKey) ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 14, opacity: 0.5 }} />
+              <SimpleTreeView
+                selectedItems={selectedItemId || ''}
+                onSelectedItemsChange={(_event, ids) => {
+                  const picked = Array.isArray(ids) ? ids[0] : ids
+                  if (!picked) return
+                  const sel = selectionFromItemId(String(picked))
+                  if (sel) onSelect(sel)
+                }}
+              >
+              {networkTree.map(({ connId: cId, connName, nodes }) => (
+                <TreeItem
+                  key={`net-conn:${cId}`}
+                  itemId={`net-conn:${cId}`}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.6 }} />
+                      <span style={{ fontSize: 14 }}>{connName}</span>
+                      <span style={{ opacity: 0.4, fontSize: 11 }}>({nodes.length} nodes)</span>
+                    </Box>
+                  }
+                >
+                  {nodes.map(({ node, vlans, totalVlans }) => (
+                    <TreeItem
+                      key={`net-node:${cId}:${node}`}
+                      itemId={`net-node:${cId}:${node}`}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                           <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
                           <span style={{ fontSize: 13 }}>{node}</span>
                           <span style={{ opacity: 0.4, fontSize: 11 }}>
                             ({totalVlans} VLAN{totalVlans > 1 ? 's' : ''})
                           </span>
                         </Box>
-                        {/* VLANs */}
-                        {expandedNetSections.has(nodeKey) && vlans.map(({ tag, entries }) => {
-                          const vlanKey = `net-vlan:${cId}:${node}:${tag}`
-                          return (
-                            <React.Fragment key={vlanKey}>
-                              {/* VLAN header */}
-                              <Box
-                                onClick={() => toggleNetSection(vlanKey)}
-                                sx={{
-                                  display: 'flex', alignItems: 'center', gap: 0.75,
-                                  px: 1.5, pl: 9, py: 0.35,
-                                  borderBottom: '1px solid', borderColor: 'divider',
-                                  cursor: 'pointer',
-                                  '&:hover': { bgcolor: 'action.hover' }
-                                }}
-                              >
-                                <i className={expandedNetSections.has(vlanKey) ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 14, opacity: 0.4 }} />
-                                <i className={tag === 'untagged' ? 'ri-link-unlink' : 'ri-wifi-line'} style={{ fontSize: 14, opacity: 0.5 }} />
-                                <span style={{ fontSize: 13 }}>
-                                  {tag === 'untagged' ? 'Untagged' : `VLAN ${tag}`}
-                                </span>
-                                <span style={{ opacity: 0.4, fontSize: 11 }}>({entries.length})</span>
-                              </Box>
-                              {/* VMs */}
-                              {expandedNetSections.has(vlanKey) && entries.map(({ vm, netId, bridge }) => {
-                                const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                                return (
-                                  <Box
-                                    key={`${vmKey}-${netId}-${tag}`}
-                                    onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                                    sx={{
-                                      display: 'flex', alignItems: 'center', gap: 0.75,
-                                      px: 1.5, pl: 12, py: 0.3,
-                                      borderBottom: '1px solid', borderColor: 'divider',
-                                      cursor: 'pointer',
-                                      bgcolor: selected?.id === vmKey ? 'action.selected' : 'transparent',
-                                      '&:hover': { bgcolor: selected?.id === vmKey ? 'action.selected' : 'action.hover' }
-                                    }}
-                                  >
+                      }
+                    >
+                      {vlans.map(({ tag, entries }) => (
+                        <TreeItem
+                          key={`net-vlan:${cId}:${node}:${tag}`}
+                          itemId={`net-vlan:${cId}:${node}:${tag}`}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <i className={tag === 'untagged' ? 'ri-link-unlink' : 'ri-wifi-line'} style={{ fontSize: 14, opacity: 0.5 }} />
+                              <span style={{ fontSize: 13 }}>
+                                {tag === 'untagged' ? 'Untagged' : `VLAN ${tag}`}
+                              </span>
+                              <span style={{ opacity: 0.4, fontSize: 11 }}>({entries.length})</span>
+                            </Box>
+                          }
+                        >
+                          {entries.map(({ vm, netId, bridge }) => {
+                            const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
+                            return (
+                              <TreeItem
+                                key={`${vmKey}-${netId}-${tag}`}
+                                itemId={`vm:${vmKey}`}
+                                label={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                     <StatusIcon status={vm.status} type="vm" />
                                     <i className={getVmIcon(vm.type)} style={{ opacity: 0.8, fontSize: 14 }} />
                                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -3442,16 +3410,17 @@ return (
                                       {bridge}
                                     </span>
                                   </Box>
-                                )
-                              })}
-                            </React.Fragment>
-                          )
-                        })}
-                      </React.Fragment>
-                    )
-                  })}
-                </React.Fragment>
-              ))
+                                }
+                              />
+                            )
+                          })}
+                        </TreeItem>
+                      ))}
+                    </TreeItem>
+                  ))}
+                </TreeItem>
+              ))}
+              </SimpleTreeView>
             )}
           </Collapse>
         </>

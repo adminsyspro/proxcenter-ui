@@ -45,40 +45,7 @@ curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YO
 
 ## Features
 
-| Feature | Community | Enterprise |
-|---|:---:|:---:|
-| **Community — included for free** | | |
-| Dashboard & Health Scores | ✅ | ✅ |
-| Inventory (Nodes, VMs, CTs, Storage, Network, Backups) | ✅ | ✅ |
-| VM Operations (clone, snapshot, resize, move disk) | ✅ | ✅ |
-| Topology Map (Infrastructure / Network / Geo) | ✅ | ✅ |
-| Ceph Monitoring | ✅ | ✅ |
-| Backup Monitoring (PBS) | ✅ | ✅ |
-| Web Terminal (xterm.js) & VNC Console (noVNC) | ✅ | ✅ |
-| SSH Remote Management | ✅ | ✅ |
-| Templates, Custom Images & Blueprints | ✅ | ✅ |
-| VMware ESXi → Proxmox Migration | ✅ | ✅ |
-| XCP-ng (XO) → Proxmox Migration | ✅ | ✅ |
-| Events Log | ✅ | ✅ |
-| User Management & OIDC / SSO | ✅ | ✅ |
-| Audit Logs | ✅ | ✅ |
-| Themes (Light / Dark / System) | ✅ | ✅ |
-| Multi-language (EN / FR) | ✅ | ✅ |
-| **Enterprise — unlock the full platform** | | |
-| DRS (Distributed Resource Scheduler) | | ✅ |
-| Rolling Updates (zero-downtime) | | ✅ |
-| Cross-Cluster Migration (PVE ↔ PVE) | | ✅ |
-| Site Recovery (Ceph Replication) | | ✅ |
-| Task Center (Scheduled Jobs) | | ✅ |
-| Resource Trends & AI Insights | | ✅ |
-| Alerts & Notifications (SMTP) | | ✅ |
-| Change Tracking | | ✅ |
-| Reports (PDF, AI-powered) | | ✅ |
-| Green IT / Environmental Metrics | | ✅ |
-| RBAC (Role-Based Access Control) | | ✅ |
-| LDAP / Active Directory | | ✅ |
-| Network Microsegmentation | | ✅ |
-| Compliance Dashboard | | ✅ |
+[See the full feature comparison (Community vs Enterprise)](https://proxcenter.io/#comparison)
 
 ---
 

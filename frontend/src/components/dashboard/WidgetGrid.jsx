@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { ResponsiveGridLayout } from 'react-grid-layout'
@@ -8,7 +8,7 @@ import { ResponsiveGridLayout } from 'react-grid-layout'
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
   Skeleton, Tooltip, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Chip, Tabs, Tab, Snackbar, Alert
+  Button, Chip, Tabs, Tab, Snackbar, Alert, useTheme
 } from '@mui/material'
 
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory } from './widgetRegistry'
@@ -50,14 +50,18 @@ function WidgetContainer({
 
   return (
     <Card
-      variant='outlined'
+      elevation={0}
       sx={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
         overflow: 'hidden',
-        transition: 'box-shadow 0.2s',
+        transition: 'all 0.25s ease',
+        background: 'transparent',
+        border: '1px solid',
+        borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+        borderRadius: 3,
         '&:hover': editMode ? { boxShadow: 4 } : {},
       }}
     >
@@ -72,7 +76,6 @@ function WidgetContainer({
           py: 0.75,
           borderBottom: '1px solid',
           borderColor: 'divider',
-          bgcolor: 'action.hover',
           cursor: editMode ? 'move' : 'default',
         }}
       >
@@ -195,6 +198,7 @@ function AddWidgetDialog({ open, onClose, onAdd, t }) {
 // Composant principal
 export default function WidgetGrid({ data, loading, onRefresh, refreshLoading }) {
   const t = useTranslations()
+  const theme = useTheme()
   const [layout, setLayout] = useState(DEFAULT_LAYOUT)
   const [editMode, setEditMode] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -476,11 +480,19 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
         .react-grid-item.react-grid-placeholder {
           background-color: var(--mui-palette-primary-main);
           opacity: 0.2;
-          border-radius: 4px;
+          border-radius: 12px;
         }
         .react-grid-item > .react-resizable-handle {
           display: ${editMode ? 'block' : 'none'};
         }
+        @keyframes widgetFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .react-grid-item > div {
+          animation: widgetFadeIn 0.4s ease-out both;
+        }
+        ${layout.map((_, i) => `.react-grid-item:nth-child(${i + 1}) > div { animation-delay: ${i * 0.06}s; }`).join('\n')}
       `}</style>
         <ResponsiveGridLayout
             className="layout"
@@ -512,6 +524,41 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
           ))}
         </ResponsiveGridLayout>
       </div>
+
+      {/* Empty state */}
+      {layout.length === 0 && (
+        <Box sx={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2.5,
+        }}>
+          <Box>
+            <img
+              src={theme.palette.mode === 'dark' ? '/images/proxcenter-logo-dark.svg' : '/images/proxcenter-logo-light.svg'}
+              alt=""
+              style={{ width: 180, height: 180 }}
+            />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, opacity: 0.7 }}>
+            {t('dashboard.emptyTitle')}
+          </Typography>
+          <Typography variant="body2" sx={{ opacity: 0.45, maxWidth: 400, textAlign: 'center', lineHeight: 1.6 }}>
+            {t('dashboard.emptyDesc')}
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<i className="ri-add-line" />}
+            onClick={() => { setEditMode(true); setAddDialogOpen(true) }}
+            sx={{ mt: 1 }}
+          >
+            {t('dashboard.addWidget')}
+          </Button>
+        </Box>
+      )}
 
       {/* Add Widget Dialog */}
       <AddWidgetDialog

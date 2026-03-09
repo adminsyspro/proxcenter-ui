@@ -22,7 +22,7 @@ function ClustersListWidget({ data, loading }) {
         <Box 
           key={idx}
           sx={{ 
-            p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover',
+            p: 1.5, borderRadius: 1.5,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
           }}
         >

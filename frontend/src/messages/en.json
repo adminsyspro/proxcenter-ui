@@ -248,6 +248,8 @@
     "widgetRemoved": "Widget removed",
     "layoutApplied": "Layout \"{name}\" applied",
     "layoutReset": "Layout reset",
+    "emptyTitle": "Your command center awaits",
+    "emptyDesc": "Build your perfect dashboard. Add widgets to monitor, manage and optimize your Proxmox infrastructure at a glance.",
     "categories": {
       "infrastructure": "Infrastructure",
       "resources": "Resources",

@@ -248,6 +248,8 @@
     "widgetRemoved": "Widget supprimé",
     "layoutApplied": "Layout \"{name}\" appliqué",
     "layoutReset": "Layout réinitialisé",
+    "emptyTitle": "Votre centre de commande vous attend",
+    "emptyDesc": "Construisez votre dashboard idéal. Ajoutez des widgets pour surveiller, gérer et optimiser votre infrastructure Proxmox en un coup d'œil.",
     "categories": {
       "infrastructure": "Infrastructure",
       "resources": "Ressources",

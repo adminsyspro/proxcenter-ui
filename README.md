@@ -84,31 +84,14 @@ curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YO
 
 ## Architecture
 
-```
-               +---------------------+
-               |  Nginx (optional)   |
-               |  SSL termination    |
-               +----------+----------+
-                          |
-                    port 3000 (HTTP + WS)
-                          |
-               +----------+----------+
-               |   ProxCenter        |
-               |   Next.js 16        |
-               |   React 19 + MUI 7  |
-               |   Prisma + SQLite   |
-               |   WS Proxy (xterm,  |
-               |   noVNC)            |
-               +----------+----------+
-                          |
-                  Proxmox API (8006)
-                          |
-               +----------+----------+
-               |  PVE / PBS Cluster  |
-               +---------------------+
-```
+<p align="center">
+  <img src="docs/screenshots/architecture.png" alt="Architecture" width="100%">
+</p>
+
+> [Interactive version (HTML)](docs/architecture.html)
 
 - **Single port** (3000) — HTTP + WebSocket from one process
+- **Nginx optional** — SSL termination + reverse proxy
 - **Enterprise** adds a Go orchestrator for DRS, alerts, reports, etc.
 
 ---

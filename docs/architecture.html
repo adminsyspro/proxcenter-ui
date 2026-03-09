@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProxCenter — Stack Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1e1e2e;
+    --surface: #252535;
+    --border: #3a3a5c;
+    --border-light: #4a4a6a;
+    --text: #cdd6f4;
+    --text-muted: #6c7086;
+    --text-dim: #9399b2;
+
+    --nginx: #22c55e;
+    --nginx-bg: #052e16;
+    --nginx-border: #166534;
+
+    --proxcenter: #3b82f6;
+    --proxcenter-bg: #0c1a3a;
+    --proxcenter-border: #1d4ed8;
+
+    --nextjs: #e2e8f0;
+    --nextjs-bg: #0f172a;
+
+    --prisma: #a78bfa;
+    --prisma-bg: #1e0a3c;
+
+    --ws: #f59e0b;
+    --ws-bg: #1c0a00;
+
+    --pve: #f97316;
+    --pve-bg: #1c0700;
+    --pve-border: #c2410c;
+
+    --pbs: #a855f7;
+    --pbs-bg: #1a0030;
+    --pbs-border: #7c3aed;
+
+    --arrow: #475569;
+    --arrow-rest: #3b82f6;
+    --arrow-ws: #f59e0b;
+    --arrow-ssh: #22c55e;
+
+    --label-bg: #1e1e2e;
+  }
+
+  body {
+    background: var(--bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 24px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  header h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  header h1 span {
+    color: var(--proxcenter);
+  }
+
+  header p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 32px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .legend-line {
+    width: 28px;
+    height: 2px;
+    border-radius: 2px;
+  }
+
+  .legend-line.rest { background: var(--arrow-rest); }
+  .legend-line.ws { background: var(--arrow-ws); border-top: 2px dashed var(--arrow-ws); background: none; }
+  .legend-line.ssh { background: var(--arrow-ssh); border-top: 2px dotted var(--arrow-ssh); background: none; }
+
+  .diagram {
+    width: 100%;
+    max-width: 900px;
+    position: relative;
+  }
+
+  .svg-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .layer {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .box {
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    position: relative;
+    transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
+    cursor: pointer;
+  }
+
+  .box:hover {
+    transform: translateY(-2px);
+    z-index: 10;
+  }
+
+  .box-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .box-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .box-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .box-subtitle {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .box-body {
+    padding: 10px 14px 12px;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    margin: 2px 2px;
+    border: 1px solid transparent;
+  }
+
+  .tag-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .port {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.62rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    border: 1px solid;
+    margin: 2px 2px;
+  }
+
+  .box-nginx {
+    border-color: var(--nginx-border);
+    background: #0a1f12;
+    box-shadow: 0 0 0 1px #0d3320, 0 4px 16px rgba(34,197,94,0.08);
+    width: 380px;
+  }
+  .box-nginx:hover { box-shadow: 0 0 0 1px #166534, 0 8px 24px rgba(34,197,94,0.18); border-color: var(--nginx); }
+  .box-nginx .box-icon { background: #052e16; color: var(--nginx); border: 1px solid var(--nginx-border); }
+  .box-nginx .box-title { color: var(--nginx); }
+
+  .tag-nginx { background: #052e16; color: var(--nginx); border-color: #166534; }
+  .port-nginx { background: #052e16; color: var(--nginx); border-color: var(--nginx-border); }
+
+  .box-proxcenter {
+    border-color: var(--proxcenter-border);
+    background: var(--proxcenter-bg);
+    box-shadow: 0 0 0 1px #1a306a, 0 4px 24px rgba(59,130,246,0.12);
+    width: 680px;
+    margin-top: 0;
+  }
+  .box-proxcenter:hover { box-shadow: 0 0 0 1px #2563eb, 0 8px 32px rgba(59,130,246,0.22); border-color: var(--proxcenter); }
+  .box-proxcenter .box-icon { background: #0c1a3a; color: var(--proxcenter); border: 1px solid var(--proxcenter-border); }
+  .box-proxcenter .box-title { color: #93c5fd; }
+  .box-proxcenter .box-subtitle { color: #3b82f6; }
+
+  .proxcenter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .inner-box {
+    border-radius: 6px;
+    border: 1px solid;
+    padding: 10px 12px;
+  }
+
+  .inner-box-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .inner-nextjs {
+    border-color: #334155;
+    background: #0f172a;
+  }
+  .inner-nextjs .inner-box-title { color: var(--nextjs); }
+  .tag-nextjs { background: #1e293b; color: #94a3b8; border-color: #334155; }
+
+  .inner-prisma {
+    border-color: #4c1d95;
+    background: #1a0a2e;
+  }
+  .inner-prisma .inner-box-title { color: var(--prisma); }
+  .tag-prisma { background: #2e1065; color: #c4b5fd; border-color: #6d28d9; }
+
+  .inner-ws {
+    border-color: #78350f;
+    background: #1c0f00;
+    grid-column: 1 / -1;
+  }
+  .inner-ws .inner-box-title { color: var(--ws); }
+  .tag-ws { background: #292524; color: #fbbf24; border-color: #92400e; }
+
+  .cluster-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+  }
+
+  .box-pve {
+    border-color: var(--pve-border);
+    background: var(--pve-bg);
+    box-shadow: 0 0 0 1px #431407, 0 4px 16px rgba(249,115,22,0.08);
+    width: 322px;
+  }
+  .box-pve:hover { box-shadow: 0 0 0 1px #c2410c, 0 8px 24px rgba(249,115,22,0.2); border-color: var(--pve); }
+  .box-pve .box-icon { background: #1c0700; color: var(--pve); border: 1px solid var(--pve-border); }
+  .box-pve .box-title { color: var(--pve); }
+
+  .tag-pve { background: #1c0700; color: var(--pve); border-color: var(--pve-border); }
+
+  .box-pbs {
+    border-color: var(--pbs-border);
+    background: var(--pbs-bg);
+    box-shadow: 0 0 0 1px #3b0764, 0 4px 16px rgba(168,85,247,0.08);
+    width: 322px;
+  }
+  .box-pbs:hover { box-shadow: 0 0 0 1px #7c3aed, 0 8px 24px rgba(168,85,247,0.2); border-color: var(--pbs); }
+  .box-pbs .box-icon { background: #1a0030; color: var(--pbs); border: 1px solid var(--pbs-border); }
+  .box-pbs .box-title { color: var(--pbs); }
+
+  .tag-pbs { background: #1a0030; color: #d8b4fe; border-color: var(--pbs-border); }
+
+  .arrow-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    fill: var(--text-dim);
+    text-anchor: middle;
+  }
+
+  .arrow-label-bg {
+    fill: var(--bg);
+  }
+
+  .spacer { height: 52px; }
+  .spacer-sm { height: 40px; }
+
+  .tooltip {
+    position: fixed;
+    background: #0f0f1a;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+    max-width: 280px;
+    line-height: 1.6;
+  }
+
+  .tooltip.visible { opacity: 1; }
+  .tooltip-title { font-weight: 600; margin-bottom: 4px; }
+  .tooltip-line { color: var(--text-muted); }
+  .tooltip-line span { color: var(--text); }
+
+  footer {
+    margin-top: 40px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>ProxCenter</span> — Stack Architecture</h1>
+  <p>Application Stack</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-line rest"></div>
+    REST / HTTP
+  </div>
+  <div class="legend-item">
+    <div class="legend-line ws"></div>
+    WebSocket
+  </div>
+  <div class="legend-item">
+    <div class="legend-line ssh"></div>
+    SSH
+  </div>
+</div>
+
+<div class="diagram" id="diagram">
+
+  <svg class="svg-layer" id="svg-layer" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <div class="layer" id="layer-nginx">
+    <div class="box box-nginx" id="box-nginx"
+      data-tooltip="nginx"
+      data-title="Nginx (optionnel)"
+      data-lines="SSL termination|Reverse proxy HTTP/HTTPS|Forwarde vers :3000 (HTTP + WS)|Port entrant : 80 / 443">
+      <div class="box-header">
+        <div class="box-icon">N</div>
+        <div>
+          <div class="box-title">Nginx</div>
+          <div class="box-subtitle">SSL Termination · Reverse Proxy</div>
+        </div>
+      </div>
+      <div class="box-body">
+        <span class="tag tag-nginx"><span class="tag-dot" style="background:#22c55e"></span>optional</span>
+        <span class="port port-nginx">:80</span>
+        <span class="port port-nginx">:443</span>
+        <span class="port port-nginx">&rarr; :3000</span>
+        &nbsp;
+        <span class="tag tag-nginx">HTTP</span>
+        <span class="tag tag-nginx">HTTPS</span>
+        <span class="tag tag-nginx">WS Passthrough</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="layer" id="layer-proxcenter">
+    <div class="box box-proxcenter" id="box-proxcenter"
+      data-tooltip="proxcenter"
+      data-title="ProxCenter"
+      data-lines="Next.js 16 + React 19 (full-stack)|MUI 7 pour l'interface|Prisma ORM + SQLite|WS Proxy : xterm.js + noVNC|Port expose : 3000 (HTTP + WS)">
+      <div class="box-header">
+        <div class="box-icon">P</div>
+        <div>
+          <div class="box-title">ProxCenter</div>
+          <div class="box-subtitle">Next.js 16 · React 19 · MUI 7 · Prisma · SQLite</div>
+        </div>
+        <span style="margin-left:auto" class="port" style="background:#0c1a3a; color:#3b82f6; border-color:#1d4ed8;">:3000</span>
+      </div>
+      <div class="box-body">
+        <div class="proxcenter-grid">
+          <div class="inner-box inner-nextjs">
+            <div class="inner-box-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#1e293b"/><path d="M12 2L2 19h20L12 2z" fill="#e2e8f0"/></svg>
+              Next.js 16 + React 19
+            </div>
+            <span class="tag tag-nextjs">App Router</span>
+            <span class="tag tag-nextjs">SSR / RSC</span>
+            <span class="tag tag-nextjs">MUI 7</span>
+            <span class="tag tag-nextjs">API Routes</span>
+          </div>
+          <div class="inner-box inner-prisma">
+            <div class="inner-box-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 20l8-4 8 4L12 2z" fill="#a78bfa"/></svg>
+              Prisma + SQLite
+            </div>
+            <span class="tag tag-prisma">ORM</span>
+            <span class="tag tag-prisma">Migrations</span>
+            <span class="tag tag-prisma">Local DB</span>
+          </div>
+          <div class="inner-box inner-ws">
+            <div class="inner-box-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="14" rx="2" stroke="#f59e0b" stroke-width="1.5" fill="none"/><path d="M8 10l-3 3 3 3" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/><path d="M16 10l3 3-3 3" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/><path d="M13 8l-2 8" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round"/></svg>
+              WebSocket Proxy — Console Access
+            </div>
+            <span class="tag tag-ws">xterm.js (SSH)</span>
+            <span class="tag tag-ws">noVNC (VNC/SPICE)</span>
+            <span class="tag tag-ws">WS &harr; TCP bridge</span>
+            <span class="tag tag-ws">Proxmox VNC relay</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer" id="spacer-bottom"></div>
+
+  <div class="layer" id="layer-cluster">
+    <div class="cluster-row">
+      <div class="box box-pve" id="box-pve"
+        data-tooltip="pve"
+        data-title="Proxmox VE Cluster"
+        data-lines="API REST sur :8006|Authentification Token / TFA|Gestion VMs, LXC, Storage|Ceph integre (RBD, CephFS)|SSH pour operations bas niveau">
+        <div class="box-header">
+          <div class="box-icon">V</div>
+          <div>
+            <div class="box-title">Proxmox VE</div>
+            <div class="box-subtitle">PVE Cluster · Ceph</div>
+          </div>
+          <span style="margin-left:auto; display:inline-flex; align-items:center; padding:2px 6px; border-radius:3px; font-size:0.62rem; font-family:'JetBrains Mono',monospace; font-weight:600; border:1px solid #c2410c; color:#fb923c; background:#1c0700;">:8006</span>
+        </div>
+        <div class="box-body">
+          <span class="tag tag-pve">REST API</span>
+          <span class="tag tag-pve">VM / LXC</span>
+          <span class="tag tag-pve">Ceph RBD</span>
+          <span class="tag tag-pve">CephFS</span>
+          <span class="tag tag-pve">SSH :22</span>
+          <span class="tag tag-pve">VNC/SPICE</span>
+        </div>
+      </div>
+      <div class="box box-pbs" id="box-pbs"
+        data-tooltip="pbs"
+        data-title="Proxmox Backup Server"
+        data-lines="API REST sur :8007|Gestion des datastores|Sauvegarde incrementale (chunks)|Verification d'integrite|Accessible depuis PVE et ProxCenter">
+        <div class="box-header">
+          <div class="box-icon">B</div>
+          <div>
+            <div class="box-title">Proxmox BS</div>
+            <div class="box-subtitle">PBS · Backup &amp; Restore</div>
+          </div>
+          <span style="margin-left:auto; display:inline-flex; align-items:center; padding:2px 6px; border-radius:3px; font-size:0.62rem; font-family:'JetBrains Mono',monospace; font-weight:600; border:1px solid #7c3aed; color:#c084fc; background:#1a0030;">:8007</span>
+        </div>
+        <div class="box-body">
+          <span class="tag tag-pbs">REST API</span>
+          <span class="tag tag-pbs">Datastores</span>
+          <span class="tag tag-pbs">Backups</span>
+          <span class="tag tag-pbs">Restore</span>
+          <span class="tag tag-pbs">Pruning</span>
+          <span class="tag tag-pbs">Verify</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="tt-title"></div>
+  <div id="tt-lines"></div>
+</div>
+
+<footer>ProxCenter · Application Stack Diagram</footer>
+
+<script>
+  const tooltip = document.getElementById('tooltip');
+  const ttTitle = document.getElementById('tt-title');
+  const ttLines = document.getElementById('tt-lines');
+
+  document.querySelectorAll('[data-tooltip]').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      ttTitle.textContent = el.dataset.title;
+      ttLines.innerHTML = (el.dataset.lines || '').split('|').map(l => {
+        const [k, v] = l.split(':');
+        return v
+          ? `<div class="tooltip-line">${k}: <span>${v.trim()}</span></div>`
+          : `<div class="tooltip-line">${l}</div>`;
+      }).join('');
+      tooltip.classList.add('visible');
+    });
+    el.addEventListener('mousemove', e => {
+      tooltip.style.left = (e.clientX + 16) + 'px';
+      tooltip.style.top  = (e.clientY - 8) + 'px';
+    });
+    el.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+  });
+
+  function getCenter(el) {
+    const r = el.getBoundingClientRect();
+    const dr = document.getElementById('diagram').getBoundingClientRect();
+    return {
+      top: r.top - dr.top, bottom: r.bottom - dr.top,
+      left: r.left - dr.left, right: r.right - dr.left,
+      cx: r.left - dr.left + r.width / 2,
+      cy: r.top - dr.top + r.height / 2,
+    };
+  }
+
+  function makeDefs(svg) {
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const mkMarker = (id, color) => {
+      const m = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      m.setAttribute('id', id); m.setAttribute('viewBox', '0 0 8 8');
+      m.setAttribute('refX', '7'); m.setAttribute('refY', '4');
+      m.setAttribute('markerWidth', '6'); m.setAttribute('markerHeight', '6');
+      m.setAttribute('orient', 'auto');
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', 'M0,0 L8,4 L0,8 Z'); p.setAttribute('fill', color);
+      m.appendChild(p); defs.appendChild(m);
+    };
+    mkMarker('arrow-rest', '#3b82f6');
+    mkMarker('arrow-ws', '#f59e0b');
+    mkMarker('arrow-ssh', '#22c55e');
+    svg.appendChild(defs);
+  }
+
+  function drawPath(svg, x1, y1, x2, y2, color, dash, markerId, label, labelX, labelY) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${x1},${y1} C${x1},${y1+30} ${x2},${y2-30} ${x2},${y2}`);
+    path.setAttribute('stroke', color); path.setAttribute('stroke-width', '1.8');
+    path.setAttribute('fill', 'none');
+    if (dash) path.setAttribute('stroke-dasharray', dash);
+    path.setAttribute('marker-end', `url(#${markerId})`);
+    svg.appendChild(path);
+    if (label) {
+      const lx = labelX || (x1+x2)/2, ly = labelY || (y1+y2)/2;
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      const tw = label.length * 6.5 + 10;
+      bg.setAttribute('x', lx-tw/2); bg.setAttribute('y', ly-9);
+      bg.setAttribute('width', tw); bg.setAttribute('height', 14);
+      bg.setAttribute('rx', '3'); bg.setAttribute('fill', '#1e1e2e');
+      svg.appendChild(bg);
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', lx); t.setAttribute('y', ly+2);
+      t.setAttribute('class', 'arrow-label'); t.setAttribute('fill', color);
+      t.textContent = label; svg.appendChild(t);
+    }
+  }
+
+  function drawArrows() {
+    const svg = document.getElementById('svg-layer');
+    svg.innerHTML = ''; makeDefs(svg);
+    const nginx = getCenter(document.getElementById('box-nginx'));
+    const pc = getCenter(document.getElementById('box-proxcenter'));
+    const pve = getCenter(document.getElementById('box-pve'));
+    const pbs = getCenter(document.getElementById('box-pbs'));
+
+    drawPath(svg, nginx.cx, nginx.bottom, pc.cx, pc.top, '#3b82f6', null, 'arrow-rest', 'HTTP + WS :3000', nginx.cx, (nginx.bottom+pc.top)/2);
+    drawPath(svg, pc.cx-90, pc.bottom, pve.cx, pve.top, '#3b82f6', null, 'arrow-rest', 'REST :8006', (pc.cx-90+pve.cx)/2-10, (pc.bottom+pve.top)/2);
+    drawPath(svg, pc.cx-140, pc.bottom+10, pve.cx-60, pve.top, '#22c55e', '4 3', 'arrow-ssh', 'SSH :22', (pc.cx-140+pve.cx-60)/2-30, (pc.bottom+pve.top)/2+10);
+    drawPath(svg, pc.cx-30, pc.bottom+6, pve.cx+50, pve.top, '#f59e0b', '6 3', 'arrow-ws', 'WS/VNC', (pc.cx-30+pve.cx+50)/2+30, (pc.bottom+pve.top)/2-6);
+    drawPath(svg, pc.cx+90, pc.bottom, pbs.cx, pbs.top, '#3b82f6', null, 'arrow-rest', 'REST :8007', (pc.cx+90+pbs.cx)/2+10, (pc.bottom+pbs.top)/2);
+  }
+
+  window.addEventListener('load', () => setTimeout(drawArrows, 80));
+  window.addEventListener('resize', drawArrows);
+</script>
+</body>
+</html>

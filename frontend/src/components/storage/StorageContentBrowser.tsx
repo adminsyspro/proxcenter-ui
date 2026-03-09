@@ -64,6 +64,7 @@ const CONTENT_MAP: Record<string, { label: string; icon: string; uploadable: boo
   backup:   { label: 'Backups',       icon: 'ri-shield-check-line', uploadable: false },
   snippets: { label: 'Snippets',      icon: 'ri-code-s-slash-line', uploadable: true },
   vztmpl:   { label: 'CT Templates',  icon: 'ri-file-copy-line',    uploadable: true },
+  import:   { label: 'Import',        icon: 'ri-import-line',       uploadable: true },
 }
 
 // ---------- Single content group ----------

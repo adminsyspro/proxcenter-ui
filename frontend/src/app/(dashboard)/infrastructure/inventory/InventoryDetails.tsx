@@ -1945,6 +1945,10 @@ return next
   const [storageCephPerf, setStorageCephPerf] = useState<any>(null)
   const [storageCephPerfHistory, setStorageCephPerfHistory] = useState<Array<{ time: number; read_bytes_sec: number; write_bytes_sec: number; read_op_per_sec: number; write_op_per_sec: number }>>([])
 
+  // Storage usage RRD history (all storage types)
+  const [storageRrdHistory, setStorageRrdHistory] = useState<Array<{ time: number; used: number; total: number; usedPct: number }>>([])
+  const [storageRrdTimeframe, setStorageRrdTimeframe] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('day')
+
   // États pour Storage du cluster
   const [clusterStorageData, setClusterStorageData] = useState<any[]>([])
   const [clusterStorageLoading, setClusterStorageLoading] = useState(false)
@@ -4014,6 +4018,36 @@ return
     const iv = setInterval(fetchPerf, 3000)
     return () => clearInterval(iv)
   }, [selection?.type, selection?.id, data?.storageInfo])
+
+  // Fetch storage RRD history when viewing any storage
+  useEffect(() => {
+    if (selection?.type !== 'storage' || !data?.storageInfo) {
+      setStorageRrdHistory([])
+      return
+    }
+    const si = data.storageInfo
+    const path = `/nodes/${encodeURIComponent(si.node)}/storage/${encodeURIComponent(si.storage)}`
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        const raw = await fetchRrd(si.connId, path, storageRrdTimeframe)
+        if (cancelled) return
+        const points = (Array.isArray(raw) ? raw : [])
+          .filter((p: any) => p.time || p.t || p.timestamp)
+          .map((p: any) => {
+            const t = Math.round(pickNumber(p, ['time', 't', 'timestamp']) || 0) * 1000
+            const total = pickNumber(p, ['total', 'maxdisk']) || 0
+            const used = pickNumber(p, ['used', 'disk']) || 0
+            return { time: t, used, total, usedPct: total > 0 ? Math.round((used / total) * 100) : 0 }
+          })
+          .filter((p: any) => p.time > 0 && p.total > 0)
+        setStorageRrdHistory(points)
+      } catch { setStorageRrdHistory([]) }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [selection?.type, selection?.id, data?.storageInfo, storageRrdTimeframe])
 
   // Détecter si les valeurs CPU ont été modifiées
   const cpuModified = useMemo(() => {
@@ -6262,6 +6296,13 @@ return vm?.isCluster ?? false
               backup: { label: t('inventory.storageBackups'), icon: 'ri-shield-check-line' },
               snippets: { label: t('inventory.storageSnippets'), icon: 'ri-code-s-slash-line' },
               vztmpl: { label: t('inventory.storageTemplates'), icon: 'ri-file-copy-line' },
+              import: { label: 'Import', icon: 'ri-import-line' },
+            }
+
+            // Pre-create empty groups for all content types the storage supports
+            for (const ct of si.content || []) {
+              const cfg = contentLabelMap[ct] || { label: ct, icon: 'ri-file-line' }
+              groups[ct] = { label: cfg.label, icon: cfg.icon, items: [], contentType: ct }
             }
 
             for (const item of si.contentItems || []) {
@@ -6292,8 +6333,8 @@ return vm?.isCluster ?? false
                         {t('inventory.storageUsage')}
                       </Typography>
 
-                      {/* Usage gauge + Ceph graphs on same row */}
-                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch' }}>
+                      {/* Usage gauge + graphs */}
+                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: 'wrap' }}>
                         {/* Donut gauge + legend */}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
                           <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
@@ -6336,11 +6377,82 @@ return vm?.isCluster ?? false
                           </Box>
                         </Box>
 
+                        {/* Storage usage evolution graph (all storage types) */}
+                        {storageRrdHistory.length > 1 && (
+                          <Box sx={{ flex: 1, minWidth: 180, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                              <Typography variant="caption" fontWeight={600}>
+                                {t('inventory.storageUsage')}
+                              </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                                {([
+                                  { value: 'hour', label: '1h' },
+                                  { value: 'day', label: '24h' },
+                                  { value: 'week', label: '7d' },
+                                  { value: 'month', label: '30d' },
+                                  { value: 'year', label: '1y' },
+                                ] as const).map(opt => (
+                                  <Box
+                                    key={opt.value}
+                                    onClick={() => setStorageRrdTimeframe(opt.value)}
+                                    sx={{
+                                      px: 0.6, py: 0.1, borderRadius: 0.5, cursor: 'pointer',
+                                      fontSize: '0.6rem', fontWeight: 700, lineHeight: 1.4,
+                                      bgcolor: storageRrdTimeframe === opt.value ? 'primary.main' : 'transparent',
+                                      color: storageRrdTimeframe === opt.value ? 'primary.contrastText' : 'text.secondary',
+                                      opacity: storageRrdTimeframe === opt.value ? 1 : 0.5,
+                                      '&:hover': { opacity: 1 },
+                                    }}
+                                  >
+                                    {opt.label}
+                                  </Box>
+                                ))}
+                              </Box>
+                            </Box>
+                            <Box sx={{ height: 90 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={storageRrdHistory}>
+                                  <XAxis
+                                    dataKey="time"
+                                    hide
+                                    type="number"
+                                    domain={['dataMin', 'dataMax']}
+                                  />
+                                  <YAxis hide domain={[0, 100]} />
+                                  <Tooltip
+                                    contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                                    labelFormatter={(value) => {
+                                      const d = new Date(value)
+                                      return storageRrdTimeframe === 'hour' || storageRrdTimeframe === 'day'
+                                        ? d.toLocaleTimeString()
+                                        : d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+                                    }}
+                                    formatter={(value: number, name: string) => {
+                                      if (name === 'usedPct') return [`${value}%`, 'Usage']
+                                      return [formatBytes(value), name === 'used' ? 'Used' : 'Total']
+                                    }}
+                                  />
+                                  <Area
+                                    type="monotone"
+                                    dataKey="usedPct"
+                                    stroke={si.usedPct > 90 ? theme.palette.error.main : si.usedPct > 70 ? theme.palette.warning.main : theme.palette.success.main}
+                                    fill={si.usedPct > 90 ? theme.palette.error.main : si.usedPct > 70 ? theme.palette.warning.main : theme.palette.success.main}
+                                    fillOpacity={0.3}
+                                    strokeWidth={1.5}
+                                    isAnimationActive={false}
+                                    name="usedPct"
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </Box>
+                          </Box>
+                        )}
+
                         {/* Ceph Read/Write + IOPS graphs */}
                         {isCeph && storageCephPerfHistory.length > 1 && (
                           <>
                             {/* Read/Write throughput */}
-                            <Box sx={{ flex: 1, minWidth: 0, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                            <Box sx={{ flex: 1, minWidth: 180, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                                 <Typography variant="caption" fontWeight={600}>
                                   {t('inventory.pbsTransferRate')}
@@ -6369,7 +6481,7 @@ return vm?.isCluster ?? false
                             </Box>
 
                             {/* IOPS */}
-                            <Box sx={{ flex: 1, minWidth: 0, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                            <Box sx={{ flex: 1, minWidth: 180, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                                 <Typography variant="caption" fontWeight={600}>
                                   IOPS
@@ -6679,7 +6791,7 @@ return vm?.isCluster ?? false
                         key={contentType}
                         group={group}
                         formatBytes={formatBytes}
-                        onUpload={['iso', 'snippets', 'vztmpl'].includes(contentType) ? () => setStorageUploadOpen(true) : undefined}
+                        onUpload={['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => setStorageUploadOpen(true) : undefined}
                         onDelete={async (volid: string) => {
                           const res = await fetch(
                             `/api/v1/connections/${encodeURIComponent(si.connId)}/nodes/${encodeURIComponent(si.node)}/storage/${encodeURIComponent(si.storage)}/content/${encodeURIComponent(volid)}`,

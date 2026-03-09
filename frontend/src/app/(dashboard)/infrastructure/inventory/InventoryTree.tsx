@@ -853,6 +853,12 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // Storage tree expanded items (persisted)
   const [storageExpandedItems, setStorageExpandedItems] = useState<string[]>([])
 
+  // Backup (PBS) tree expanded items (persisted)
+  const [backupExpandedItems, setBackupExpandedItems] = useState<string[]>([])
+
+  // Migration tree expanded items (persisted)
+  const [migrationExpandedItems, setMigrationExpandedItems] = useState<string[]>([])
+
   const toggleSection = (key: string) => {
     setCollapsedSections(prev => {
       const next = new Set(prev)
@@ -879,6 +885,12 @@ return next
 
       const savedStorageExpanded = localStorage.getItem('inventoryStorageExpandedItems')
       if (savedStorageExpanded) setStorageExpandedItems(JSON.parse(savedStorageExpanded))
+
+      const savedBackupExpanded = localStorage.getItem('inventoryBackupExpandedItems')
+      if (savedBackupExpanded) setBackupExpandedItems(JSON.parse(savedBackupExpanded))
+
+      const savedMigrationExpanded = localStorage.getItem('inventoryMigrationExpandedItems')
+      if (savedMigrationExpanded) setMigrationExpandedItems(JSON.parse(savedMigrationExpanded))
     } catch {}
     setIsHydrated(true)
   }, [])
@@ -902,6 +914,16 @@ return next
   useEffect(() => {
     if (isHydrated) localStorage.setItem('inventoryStorageExpandedItems', JSON.stringify(storageExpandedItems))
   }, [storageExpandedItems, isHydrated])
+
+  // Persist backupExpandedItems
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem('inventoryBackupExpandedItems', JSON.stringify(backupExpandedItems))
+  }, [backupExpandedItems, isHydrated])
+
+  // Persist migrationExpandedItems
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem('inventoryMigrationExpandedItems', JSON.stringify(migrationExpandedItems))
+  }, [migrationExpandedItems, isHydrated])
 
   // Exposer la fonction refresh au parent
   useEffect(() => {
@@ -1947,13 +1969,10 @@ return items
     setManualExpandedItems(items)
     requestAnimationFrame(() => { programmaticExpand.current = false })
 
-    // Also expand Storage section header + all storage tree items
-    setCollapsedSections(prev => {
-      if (!prev.has('storage')) return prev
-      const next = new Set(prev)
-      next.delete('storage')
-      return next
-    })
+    // Open all section headers
+    setCollapsedSections(new Set())
+
+    // Expand all Storage tree items
     const storageItems: string[] = []
     clusterStorages.forEach(cs => {
       storageItems.push(`storage-cluster:${cs.connId}`)
@@ -1964,15 +1983,40 @@ return items
       }
     })
     setStorageExpandedItems(storageItems)
-  }, [clusters, clusterStorages])
+
+    // Expand all Backup (PBS) tree items
+    const backupItems: string[] = []
+    pbsServers.forEach(pbs => {
+      backupItems.push(`pbs:${pbs.connId}`)
+    })
+    setBackupExpandedItems(backupItems)
+
+    // Expand all Migration tree items
+    const migrationItems: string[] = []
+    externalHypervisors.forEach(h => {
+      migrationItems.push(`ext-type:${h.type}`)
+      migrationItems.push(`ext:${h.id}`)
+    })
+    setMigrationExpandedItems(migrationItems)
+
+    // Expand Network section + trigger fetch if needed
+    setExpandedNetSections(new Set(['network']))
+    if (!networkFetchedRef.current) {
+      networkFetchedRef.current = true
+      fetchNetworksRef.current?.()
+    }
+  }, [clusters, clusterStorages, pbsServers, externalHypervisors])
 
   const collapseAll = useCallback(() => {
     programmaticExpand.current = true
     setManualExpandedItems([])
     requestAnimationFrame(() => { programmaticExpand.current = false })
 
-    // Also collapse Storage tree items (but keep section header as-is)
+    // Collapse all sub-section tree items
     setStorageExpandedItems([])
+    setBackupExpandedItems([])
+    setMigrationExpandedItems([])
+    setExpandedNetSections(new Set())
   }, [])
 
   // Expand/Collapse all for grouped modes (hosts, pools, tags)
@@ -2240,6 +2284,8 @@ return favorites.has(vmKey)
       setNetworkLoading(false)
     })
   }, [clusters])
+  const fetchNetworksRef = useRef(fetchNetworks)
+  fetchNetworksRef.current = fetchNetworks
 
   // Build network tree: Connection → Node → VLAN → VMs
   const networkTree = useMemo(() => {
@@ -2341,7 +2387,7 @@ return favorites.has(vmKey)
     overscan: 10,
   })
 
-  const isTreeExpanded = manualExpandedItems.length > 1 || storageExpandedItems.length > 0
+  const isTreeExpanded = manualExpandedItems.length > 1 || storageExpandedItems.length > 0 || backupExpandedItems.length > 0 || migrationExpandedItems.length > 0 || expandedNetSections.size > 0
   const isSectionsAllExpanded = collapsedSections.size === 0
 
   const header = useMemo(
@@ -3487,6 +3533,8 @@ return (
           <Collapse in={!collapsedSections.has('pbs')}>
           <SimpleTreeView
             selectedItems={selectedItemId || ''}
+            expandedItems={backupExpandedItems}
+            onExpandedItemsChange={(_event, itemIds) => setBackupExpandedItems(itemIds)}
             onSelectedItemsChange={(_event, ids) => {
               const picked = Array.isArray(ids) ? ids[0] : ids
               if (!picked) return
@@ -3597,6 +3645,8 @@ return (
             <Collapse in={!collapsedSections.has('migrate-ext')}>
               <SimpleTreeView
                 selectedItems={selectedItemId || ''}
+                expandedItems={migrationExpandedItems}
+                onExpandedItemsChange={(_event, itemIds) => setMigrationExpandedItems(itemIds)}
                 onSelectedItemsChange={(_event, ids) => {
                   const picked = Array.isArray(ids) ? ids[0] : ids
                   if (!picked) return

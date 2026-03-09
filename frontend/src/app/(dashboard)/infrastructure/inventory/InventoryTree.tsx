@@ -3399,7 +3399,7 @@ return (
                             return (
                               <TreeItem
                                 key={`${vmKey}-${netId}-${tag}`}
-                                itemId={`vm:${vmKey}`}
+                                itemId={`vm:${vmKey}:${netId}:${tag}`}
                                 label={
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                     <StatusIcon status={vm.status} type="vm" />

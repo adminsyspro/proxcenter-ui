@@ -2001,9 +2001,13 @@ return items
 
     // Expand Network section + trigger fetch if needed
     setExpandedNetSections(new Set(['network']))
+    expandNetworkOnLoadRef.current = true
     if (!networkFetchedRef.current) {
       networkFetchedRef.current = true
       fetchNetworksRef.current?.()
+    } else {
+      // Data already loaded — expand now
+      expandNetworkTreeItemsRef.current()
     }
   }, [clusters, clusterStorages, pbsServers, externalHypervisors])
 
@@ -2017,6 +2021,8 @@ return items
     setBackupExpandedItems([])
     setMigrationExpandedItems([])
     setExpandedNetSections(new Set())
+    setNetworkTreeExpandedItems([])
+    expandNetworkOnLoadRef.current = false
   }, [])
 
   // Expand/Collapse all for grouped modes (hosts, pools, tags)
@@ -2248,6 +2254,8 @@ return favorites.has(vmKey)
   const networkFetchedRef = useRef(false)
   // Network sub-items: inverted logic — collapsed by default, expanded when added to this set
   const [expandedNetSections, setExpandedNetSections] = useState<Set<string>>(new Set())
+  // Network tree expanded items (not persisted — data is lazy-loaded)
+  const [networkTreeExpandedItems, setNetworkTreeExpandedItems] = useState<string[]>([])
   const toggleNetSection = useCallback((key: string) => {
     setExpandedNetSections(prev => {
       const next = new Set(prev)
@@ -2328,6 +2336,28 @@ return favorites.has(vmKey)
       return { connId, connName, nodes }
     })
   }, [networkData, clusters])
+
+  // Expand all network tree items helper
+  const expandNetworkOnLoadRef = useRef(false)
+  const expandNetworkTreeItems = useCallback(() => {
+    const items: string[] = []
+    networkTree.forEach(({ connId, nodes }) => {
+      items.push(`net-conn:${connId}`)
+      nodes.forEach(({ node }) => items.push(`net-node:${connId}:${node}`))
+    })
+    setNetworkTreeExpandedItems(items)
+  }, [networkTree])
+
+  const expandNetworkTreeItemsRef = useRef(expandNetworkTreeItems)
+  expandNetworkTreeItemsRef.current = expandNetworkTreeItems
+
+  // Auto-expand network tree when data arrives after Expand All
+  useEffect(() => {
+    if (expandNetworkOnLoadRef.current && networkTree.length > 0) {
+      expandNetworkOnLoadRef.current = false
+      expandNetworkTreeItemsRef.current()
+    }
+  }, [networkTree])
 
   // Notifier le parent quand les hosts changent
   useEffect(() => {
@@ -3426,6 +3456,8 @@ return (
             ) : (
               <SimpleTreeView
                 selectedItems={selectedItemId || ''}
+                expandedItems={networkTreeExpandedItems}
+                onExpandedItemsChange={(_event, itemIds) => setNetworkTreeExpandedItems(itemIds)}
                 onSelectedItemsChange={(_event, ids) => {
                   const picked = Array.isArray(ids) ? ids[0] : ids
                   if (!picked) return

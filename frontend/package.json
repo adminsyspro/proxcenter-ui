@@ -83,7 +83,7 @@
     "eslint": "8.57.1",
     "eslint-config-next": "15.1.2",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-import": "2.32.0",
     "postcss": "8.5.6",
     "postcss-styled-syntax": "0.7.1",
     "prettier": "3.8.1",

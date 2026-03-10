@@ -122,7 +122,7 @@
     "synced": "Synced {time}"
   },
   "auth": {
-    "welcomeTitle": "Welcome to ProxCenter",
+    "welcomeTitle": "Welcome to {appName}",
     "loginSubtitle": "Sign in to access your infrastructure",
     "loginMethod": "Login method",
     "localAccount": "Local account",

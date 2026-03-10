@@ -8,10 +8,12 @@ import { Box, Card, CardContent, Typography, Chip, Divider } from '@mui/material
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { GIT_SHA, GITHUB_URL } from '@/config/version'
+import { useBranding } from '@/contexts/BrandingContext'
 
 export default function AboutPage() {
   const { setPageInfo } = usePageTitle()
   const t = useTranslations()
+  const { branding } = useBranding()
 
   useEffect(() => {
     setPageInfo(t('aboutPage.title'), t('aboutPage.subtitle'), 'ri-information-line')
@@ -24,7 +26,7 @@ return () => setPageInfo('', '', '')
       <Card variant='outlined'>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-            <Typography variant='h4' sx={{ fontWeight: 800 }}>ProxCenter</Typography>
+            <Typography variant='h4' sx={{ fontWeight: 800 }}>{branding.appName || 'ProxCenter'}</Typography>
             <Chip
               label={GIT_SHA ? GIT_SHA.substring(0, 7) : 'dev'}
               color='primary'

@@ -13,6 +13,7 @@ import themeConfig from '@configs/themeConfig'
 // Hook Imports
 import useVerticalNav from '@menu/hooks/useVerticalNav'
 import { useSettings } from '@core/hooks/useSettings'
+import { useBranding } from '@/contexts/BrandingContext'
 
 const LogoText = styled.span`
   color: ${({ color }) => color ?? 'var(--mui-palette-text-primary)'};
@@ -67,10 +68,11 @@ const Logo = ({ color }) => {
   const theme = useTheme()
   const { isHovered, transitionDuration, isBreakpointReached } = useVerticalNav()
   const { settings } = useSettings()
+  const { branding, loading: brandingLoading } = useBranding()
 
   // Vars
   const { layout } = settings
-  
+
   // Utiliser la couleur primaire du thème pour l'accent du logo
   const accentColor = theme.palette.primary.main
 
@@ -90,8 +92,12 @@ const Logo = ({ color }) => {
   }, [isHovered, layout, isBreakpointReached])
 
   return (
-    <div className='flex items-center min-bs-[24px]'>
-      <LogoIcon size={28} accentColor={accentColor} />
+    <div className='flex items-center min-bs-[24px]' style={{ opacity: brandingLoading ? 0 : 1, transition: 'opacity 0.2s ease-in' }}>
+      {branding.logoUrl ? (
+        <img src={branding.logoUrl} alt={branding.appName || themeConfig.templateName} style={{ height: 28, width: 'auto', objectFit: 'contain' }} />
+      ) : (
+        <LogoIcon size={28} accentColor={accentColor} />
+      )}
       <LogoText
         color={color}
         ref={logoTextRef}
@@ -100,7 +106,7 @@ const Logo = ({ color }) => {
         transitionDuration={transitionDuration}
         isBreakpointReached={isBreakpointReached}
       >
-        {themeConfig.templateName}
+        {branding.appName || themeConfig.templateName}
       </LogoText>
     </div>
   )

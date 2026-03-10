@@ -7,6 +7,9 @@ import 'react-resizable/css/styles.css'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 
+// Context Imports
+import { BrandingProvider } from '@/contexts/BrandingContext'
+
 // Util Imports
 import { getSystemMode } from '@core/utils/serverHelpers'
 
@@ -38,7 +41,9 @@ const RootLayout = async props => {
       <body className='flex is-full min-bs-full flex-auto flex-col'>
         <InitColorSchemeScript attribute='data' defaultMode={systemMode} />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {children}
+          <BrandingProvider>
+            {children}
+          </BrandingProvider>
         </NextIntlClientProvider>
       </body>
     </html>

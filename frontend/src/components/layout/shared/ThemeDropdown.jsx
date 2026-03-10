@@ -20,6 +20,7 @@ import primaryColorConfig from '@configs/primaryColorConfig'
 
 // Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
+import { useBranding } from '@/contexts/BrandingContext'
 
 // Noms des thèmes pour l'affichage
 const themeNames = {
@@ -84,7 +85,9 @@ const ThemeDropdown = () => {
 
   // Hooks
   const { settings, updateSettings } = useSettings()
+  const { branding } = useBranding()
   const t = useTranslations('navbar')
+  const brandingHasPrimaryColor = !!branding.primaryColor
 
   const handleClose = () => {
     setOpen(false)
@@ -197,89 +200,93 @@ const ThemeDropdown = () => {
                     </IconButton>
                   </Box>
 
-                  <Divider sx={{ my: 1.5 }} />
+                  {!brandingHasPrimaryColor && (
+                    <>
+                      <Divider sx={{ my: 1.5 }} />
 
-                  {/* Section Couleurs */}
-                  <Typography variant="caption" sx={{ fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1 }}>
-                    Couleur
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1 }}>
-                    {primaryColorConfig.map((color) => {
-                      const isSelected = settings.primaryColor === color.main
-                      const themeInfo = themeNames[color.name] || { name: color.name, icon: 'ri-palette-fill' }
-                      const isProxmox = themeInfo.icon === 'proxmox-logo'
-                      
-                      return (
-                        <Box
-                          key={color.name}
-                          onClick={() => handleColorSwitch(color.main)}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1.5,
-                            p: 1,
-                            borderRadius: 1,
-                            cursor: 'pointer',
-                            border: '2px solid',
-                            borderColor: isSelected ? color.main : 'transparent',
-                            bgcolor: isSelected ? `${color.main}18` : 'transparent',
-                            '&:hover': {
-                              bgcolor: `${color.main}12`,
-                            },
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          {isProxmox ? (
+                      {/* Section Couleurs */}
+                      <Typography variant="caption" sx={{ fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Couleur
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1 }}>
+                        {primaryColorConfig.map((color) => {
+                          const isSelected = settings.primaryColor === color.main
+                          const themeInfo = themeNames[color.name] || { name: color.name, icon: 'ri-palette-fill' }
+                          const isProxmox = themeInfo.icon === 'proxmox-logo'
 
-                            // Logo Proxmox sans fond rond
+                          return (
                             <Box
+                              key={color.name}
+                              onClick={() => handleColorSwitch(color.main)}
                               sx={{
-                                width: 28,
-                                height: 28,
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <ThemeIcon icon={themeInfo.icon} size={24} color={color.main} />
-                            </Box>
-                          ) : (
-
-                            // Autres thèmes avec fond rond
-                            <Box
-                              sx={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: '50%',
-                                bgcolor: color.main,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontSize: 14,
-                                boxShadow: isSelected ? `0 0 0 3px ${color.main}40` : 'none',
+                                gap: 1.5,
+                                p: 1,
+                                borderRadius: 1,
+                                cursor: 'pointer',
+                                border: '2px solid',
+                                borderColor: isSelected ? color.main : 'transparent',
+                                bgcolor: isSelected ? `${color.main}18` : 'transparent',
+                                '&:hover': {
+                                  bgcolor: `${color.main}12`,
+                                },
                                 transition: 'all 0.2s ease'
                               }}
                             >
-                              <ThemeIcon icon={themeInfo.icon} size={14} color="#fff" />
+                              {isProxmox ? (
+
+                                // Logo Proxmox sans fond rond
+                                <Box
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  <ThemeIcon icon={themeInfo.icon} size={24} color={color.main} />
+                                </Box>
+                              ) : (
+
+                                // Autres thèmes avec fond rond
+                                <Box
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: '50%',
+                                    bgcolor: color.main,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#fff',
+                                    fontSize: 14,
+                                    boxShadow: isSelected ? `0 0 0 3px ${color.main}40` : 'none',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  <ThemeIcon icon={themeInfo.icon} size={14} color="#fff" />
+                                </Box>
+                              )}
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontWeight: isSelected ? 700 : 500,
+                                  color: isSelected ? color.main : 'text.primary'
+                                }}
+                              >
+                                {themeInfo.name}
+                              </Typography>
+                              {isSelected && (
+                                <i className='ri-check-line' style={{ marginLeft: 'auto', color: color.main }} />
+                              )}
                             </Box>
-                          )}
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              fontWeight: isSelected ? 700 : 500,
-                              color: isSelected ? color.main : 'text.primary'
-                            }}
-                          >
-                            {themeInfo.name}
-                          </Typography>
-                          {isSelected && (
-                            <i className='ri-check-line' style={{ marginLeft: 'auto', color: color.main }} />
-                          )}
-                        </Box>
-                      )
-                    })}
-                  </Box>
+                          )
+                        })}
+                      </Box>
+                    </>
+                  )}
                 </Box>
               </ClickAwayListener>
             </Paper>

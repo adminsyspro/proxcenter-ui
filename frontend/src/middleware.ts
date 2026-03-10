@@ -27,6 +27,7 @@ const publicApiRoutes = [
   "/api/v1/auth/setup",
   "/api/v1/auth/providers",
   "/api/v1/app/status",
+  "/api/v1/settings/branding/public", // Branding pour login page
   "/api/internal", // API internes (proxy WS, etc.)
 ]
 

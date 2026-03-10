@@ -38,6 +38,7 @@ import primaryColorConfig from '@configs/primaryColorConfig'
 
 // Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
+import { useBranding } from '@/contexts/BrandingContext'
 
 // Style Imports
 import styles from './styles.module.css'
@@ -91,7 +92,9 @@ const Customizer = ({ breakpoint = 'lg', dir = 'ltr', disableDirection = false }
   const theme = useTheme()
   const pathName = usePathname()
   const { settings, updateSettings, resetSettings, isSettingsChanged } = useSettings()
+  const { branding } = useBranding()
   const isSystemDark = useMedia('(prefers-color-scheme: dark)', false)
+  const brandingHasPrimaryColor = !!branding.primaryColor
 
   // Vars
   let breakpointValue
@@ -180,8 +183,8 @@ const Customizer = ({ breakpoint = 'lg', dir = 'ltr', disableDirection = false }
           <div className={styles.customizerBody}>
             <div className='flex flex-col gap-6'>
               <Chip label='Theming' size='small' color='primary' variant='tonal' className='self-start rounded-sm' />
-              <div className='flex flex-col gap-2.5'>
-                <p className='font-medium'>Primary Color</p>
+              <div className='flex flex-col gap-2.5' style={brandingHasPrimaryColor ? { opacity: 0.4, pointerEvents: 'none' } : undefined}>
+                <p className='font-medium'>Primary Color{brandingHasPrimaryColor && <span style={{ fontWeight: 400, fontSize: 12, marginLeft: 8 }}>(set by admin branding)</span>}</p>
                 <div className='flex items-center justify-between'>
                   {primaryColorConfig.map(item => (
                     <div

@@ -8,9 +8,10 @@ import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Divider, Fade, FormControl, FormControlLabel,
   IconButton, InputAdornment, InputLabel, MenuItem, Select, TextField, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
-import Logo from '@components/layout/shared/Logo'
+import { LogoIcon } from '@components/layout/shared/Logo'
 import LoginBackground from '@components/LoginBackground'
 import { useSettings } from '@core/hooks/useSettings'
+import { useBranding } from '@/contexts/BrandingContext'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -20,6 +21,7 @@ export default function LoginPage() {
   const t = useTranslations()
   const theme = useTheme()
   const { settings, updateSettings } = useSettings()
+  const { branding, loading: brandingLoading } = useBranding()
 
   const [authMethod, setAuthMethod] = useState('local')
   const [isPasswordShown, setIsPasswordShown] = useState(false)
@@ -122,8 +124,19 @@ export default function LoginPage() {
             </IconButton>
           </Tooltip>
 
-          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}><Logo /></Box>
-          <Typography variant='h5' sx={{ fontWeight: 700, textAlign: 'center', mb: 1 }}>{t('auth.welcomeTitle')}</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5, mb: 4, opacity: brandingLoading ? 0 : 1, transition: 'opacity 0.2s ease-in' }}>
+            {(branding.loginLogoUrl || branding.logoUrl) ? (
+              <img src={branding.loginLogoUrl || branding.logoUrl} alt={branding.appName || 'ProxCenter'} style={{ height: 40, objectFit: 'contain' }} />
+            ) : (
+              <>
+                <LogoIcon size={36} accentColor={theme.palette.primary.main} />
+                <Typography variant="h6" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {branding.appName || 'ProxCenter'}
+                </Typography>
+              </>
+            )}
+          </Box>
+          <Typography variant='h5' sx={{ fontWeight: 700, textAlign: 'center', mb: 1 }}>{t('auth.welcomeTitle', { appName: branding.appName || 'ProxCenter' })}</Typography>
           <Typography variant='body2' sx={{ opacity: 0.6, textAlign: 'center', mb: 3 }}>{t('auth.loginSubtitle')}</Typography>
           {error && <Alert severity='error' sx={{ mb: 3 }}>{error}</Alert>}
           <form onSubmit={handleLogin}>
@@ -192,7 +205,7 @@ export default function LoginPage() {
             </>
           )}
           <Divider sx={{ my: 3 }} />
-          <Typography variant='caption' sx={{ display: 'block', textAlign: 'center', opacity: 0.5 }}>ProxCenter - {t('auth.appSubtitle')}</Typography>
+          <Typography variant='caption' sx={{ display: 'block', textAlign: 'center', opacity: 0.5 }}>{branding.appName || 'ProxCenter'} - {t('auth.appSubtitle')}</Typography>
         </Box>
       </Fade>
     </LoginBackground>

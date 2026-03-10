@@ -24,6 +24,7 @@ import lightBackgroundConfig, { getLightBackground } from '@configs/lightBackgro
 
 // Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
+import { useBranding } from '@/contexts/BrandingContext'
 
 // Core Theme Imports
 import defaultCoreTheme from '@core/theme'
@@ -1585,6 +1586,7 @@ const CustomThemeProvider = props => {
 
   // Hooks
   const { settings } = useSettings()
+  const { branding } = useBranding()
   const isDark = useMedia('(prefers-color-scheme: dark)', systemMode === 'dark')
 
   if (isServer) {
@@ -1812,12 +1814,15 @@ const CustomThemeProvider = props => {
 
   // Merge the primary color scheme override with the core theme
   const theme = useMemo(() => {
+    // Branding primary color takes precedence over user setting
+    const effectivePrimaryColor = branding.primaryColor || settings.primaryColor
+
     // Build light palette with custom background
     const lightPalette = {
       primary: {
-        main: settings.primaryColor,
-        light: lighten(settings.primaryColor, 0.2),
-        dark: darken(settings.primaryColor, 0.1)
+        main: effectivePrimaryColor,
+        light: lighten(effectivePrimaryColor, 0.2),
+        dark: darken(effectivePrimaryColor, 0.1)
       },
       background: {
         default: lightBg.colors.body,
@@ -1834,9 +1839,9 @@ const CustomThemeProvider = props => {
         dark: {
           palette: {
             primary: {
-              main: settings.primaryColor,
-              light: lighten(settings.primaryColor, 0.2),
-              dark: darken(settings.primaryColor, 0.1)
+              main: effectivePrimaryColor,
+              light: lighten(effectivePrimaryColor, 0.2),
+              dark: darken(effectivePrimaryColor, 0.1)
             }
           }
         }
@@ -1850,7 +1855,7 @@ const CustomThemeProvider = props => {
 
     return createTheme(coreTheme)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.primaryColor, settings.skin, settings.globalTheme, settings.lightBackground, settings.customBorderRadius, settings.blurIntensity, settings.density, currentMode, lightBg])
+  }, [settings.primaryColor, branding.primaryColor, settings.skin, settings.globalTheme, settings.lightBackground, settings.customBorderRadius, settings.blurIntensity, settings.density, currentMode, lightBg])
 
   return (
     <AppRouterCacheProvider

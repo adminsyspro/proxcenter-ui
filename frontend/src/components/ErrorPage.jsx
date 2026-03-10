@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Box, Button, Typography, useTheme, alpha } from '@mui/material'
 import { useTranslations } from 'next-intl'
+import { useBranding } from '@/contexts/BrandingContext'
 
 // Logo SVG ProxCenter
 const LogoIcon = ({ size = 60, accentColor = '#F29221' }) => {
@@ -46,6 +47,7 @@ export default function ErrorPage({
 }) {
   const theme = useTheme()
   const t = useTranslations('errorPages')
+  const { branding } = useBranding()
   const icon = errorIcons[code] || errorIcons[404]
   const codeStr = String(code)
 
@@ -182,7 +184,7 @@ export default function ErrorPage({
           color: 'text.disabled',
         }}
       >
-        ProxCenter — Proxmox Management Platform
+        {branding.appName || 'ProxCenter'} — Proxmox Management Platform
       </Typography>
     </Box>
   )

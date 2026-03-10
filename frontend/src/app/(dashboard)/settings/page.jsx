@@ -72,6 +72,11 @@ const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionD
   ssr: false
 })
 
+const WhiteLabelTab = dynamic(() => import('@/components/settings/WhiteLabelTab'), {
+  ssr: false,
+  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+})
+
 /* ==================== Utility ==================== */
 
 function MainTabPanel({ value, index, children }) {
@@ -2167,7 +2172,7 @@ export default function SettingsPage() {
     return hasFeature(tab.requiredFeature)
   }
 
-  const tabNames = ['connections', 'appearance', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green']
+  const tabNames = ['connections', 'appearance', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label']
 
   const tabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab },
@@ -2178,6 +2183,7 @@ export default function SettingsPage() {
     { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab },
     { label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS },
     { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS },
+    { label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL },
   ]
 
   // Resolve tab index from URL param

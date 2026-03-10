@@ -24,6 +24,7 @@ export const Features = {
   COMPLIANCE: 'compliance',
   OIDC: 'oidc',
   CHANGE_TRACKING: 'change_tracking',
+  WHITE_LABEL: 'white_label',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]
@@ -51,6 +52,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.COMPLIANCE,
     Features.OIDC,
     Features.CHANGE_TRACKING,
+    Features.WHITE_LABEL,
   ],
   enterprise_plus: [
     Features.DRS,

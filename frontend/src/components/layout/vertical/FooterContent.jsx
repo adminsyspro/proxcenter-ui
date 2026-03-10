@@ -1,13 +1,14 @@
 'use client'
 
-// Next Imports
-import Link from 'next/link'
-
 // Third-party Imports
 import classnames from 'classnames'
 
 // Hook Imports
 import useVerticalNav from '@menu/hooks/useVerticalNav'
+import { useBranding } from '@/contexts/BrandingContext'
+
+// Config Imports
+import { APP_VERSION } from '@/config/version'
 
 // Util Imports
 import { verticalLayoutClasses } from '@layouts/utils/layoutClasses'
@@ -15,28 +16,22 @@ import { verticalLayoutClasses } from '@layouts/utils/layoutClasses'
 const FooterContent = () => {
   // Hooks
   const { isBreakpointReached } = useVerticalNav()
+  const { branding } = useBranding()
+
+  const year = new Date().getFullYear()
+  const appName = branding.appName || 'ProxCenter'
+  const footerText = branding.footerText || `© ${year} ${appName} - v${APP_VERSION}`
 
   return (
     <div
       className={classnames(verticalLayoutClasses.footerContent, 'flex items-center justify-between flex-wrap gap-4')}
     >
       <p>
-        <span>{`© ${new Date().getFullYear()} ProxCenter - v0.3`}</span>
+        <span>{footerText}</span>
+        {branding.poweredByVisible && branding.appName && branding.appName !== 'ProxCenter' && (
+          <span style={{ opacity: 0.5, marginLeft: 8, fontSize: '0.75rem' }}>Powered by ProxCenter</span>
+        )}
       </p>
-      {!isBreakpointReached && (
-        <div className='flex items-center gap-4'>
-          <Link
-            href='https://demos.themeselection.com/materio-mui-nextjs-admin-template/documentation'
-            target='_blank'
-            className='text-primary'
-          >
-            Documentation
-          </Link>
-          <Link href='https://themeselection.com/support' target='_blank' className='text-primary'>
-            Support
-          </Link>
-        </div>
-      )}
     </div>
   )
 }

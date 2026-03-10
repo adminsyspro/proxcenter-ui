@@ -2354,7 +2354,9 @@ return favorites.has(vmKey)
               tag,
               entries: entries.sort((a, b) => a.vm.name.localeCompare(b.vm.name)),
             }))
-          return { node, vlans, totalVlans: vlans.filter(v => v.tag !== 'untagged').length }
+          const taggedVlans = vlans.filter(v => v.tag !== 'untagged').length
+          const totalVms = vlans.reduce((sum, v) => sum + v.entries.length, 0)
+          return { node, vlans, totalVlans: taggedVlans, totalVms }
         })
       return { connId, connName, nodes }
     })
@@ -3513,7 +3515,7 @@ return (
                     </Box>
                   }
                 >
-                  {nodes.map(({ node, vlans, totalVlans }) => (
+                  {nodes.map(({ node, vlans, totalVlans, totalVms }) => (
                     <TreeItem
                       key={`net-node:${cId}:${node}`}
                       itemId={`net-node:${cId}:${node}`}
@@ -3523,7 +3525,7 @@ return (
                           <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
                           <span style={{ fontSize: 13 }}>{node}</span>
                           <span style={{ opacity: 0.4, fontSize: 11 }}>
-                            ({totalVlans} VLAN{totalVlans > 1 ? 's' : ''})
+                            ({totalVlans > 0 ? `${totalVlans} VLAN${totalVlans > 1 ? 's' : ''}, ` : ''}{totalVms} VM{totalVms > 1 ? 's' : ''})
                           </span>
                         </Box>
                       }

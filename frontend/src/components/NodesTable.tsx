@@ -49,15 +49,8 @@ return `${m}m`
   Sub-components
 ------------------------------ */
 
-const ServerIcon = ({ size = 16, color = 'currentColor' }: { size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="3" y="3" width="18" height="6" rx="1" stroke={color} strokeWidth="1.5" fill="none"/>
-    <rect x="3" y="11" width="18" height="6" rx="1" stroke={color} strokeWidth="1.5" fill="none"/>
-    <circle cx="6" cy="6" r="1" fill={color}/>
-    <circle cx="6" cy="14" r="1" fill={color}/>
-    <line x1="9" y1="6" x2="18" y2="6" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
-    <line x1="9" y1="14" x2="18" y2="14" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
-  </svg>
+const ProxmoxIcon = ({ size = 16, isDark = false }: { size?: number; isDark?: boolean }) => (
+  <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={size} height={size} style={{ opacity: 0.8 }} />
 )
 
 const StatusChip = ({ status }: { status: string }) => {
@@ -168,7 +161,7 @@ function NodesTable({
         renderCell: (params) => (
           <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
             <Avatar sx={{ width: 24, height: 24, bgcolor: 'action.hover' }}>
-              <ServerIcon size={12} />
+              <ProxmoxIcon size={14} isDark={theme.palette.mode === 'dark'} />
             </Avatar>
             <Typography variant='body2' sx={{ fontWeight: 600, fontSize: compact ? '0.8rem' : '0.875rem' }}>
               {params.row.name}
@@ -239,7 +232,7 @@ function NodesTable({
     ]
 
     return cols
-  }, [compact])
+  }, [compact, theme.palette.mode])
 
   const isAutoHeight = maxHeight === 'auto'
 

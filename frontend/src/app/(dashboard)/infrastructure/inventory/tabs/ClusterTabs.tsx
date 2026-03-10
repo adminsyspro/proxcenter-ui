@@ -477,7 +477,7 @@ export default function ClusterTabs(props: any) {
                 />
               </Tabs>
               
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
                 {/* Onglet Summary - Index 0 */}
                 {clusterTab === 0 && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>

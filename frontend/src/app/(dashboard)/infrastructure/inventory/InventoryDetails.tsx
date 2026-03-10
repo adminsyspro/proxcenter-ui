@@ -5315,7 +5315,7 @@ return vm?.isCluster ?? false
       ) : null}
 
       {selection && data ? (
-        <Stack spacing={2} sx={{ width: '100%', flex: 1, overflow: 'auto', minHeight: 0 }}>
+        <Stack spacing={2} sx={{ width: '100%', flex: 1, overflow: 'hidden', minHeight: 0 }}>
           {/* Header title + tags (VM only) + ACTIONS TOP RIGHT */}
           {selection?.type === 'vm' ? (
 
@@ -6062,7 +6062,7 @@ return vm?.isCluster ?? false
                 />
               </Tabs>
               
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
                 {/* Onglet Summary avec graphiques */}
                 {pbsTab === 0 && (
                   <Box sx={{ p: 2, flex: 1, overflow: 'auto' }}>

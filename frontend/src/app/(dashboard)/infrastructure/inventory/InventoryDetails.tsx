@@ -235,7 +235,7 @@ function StorageContentGroup({ group, formatBytes: fmt, onUpload, onDelete, onDo
             </IconButton>
           )}
         </Box>
-        <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+        <Box sx={{ maxHeight: 600, overflow: 'auto' }}>
           {filtered.length === 0 ? (
             <Box sx={{ px: 2, py: 2, textAlign: 'center' }}>
               <Typography variant="caption" sx={{ opacity: 0.4 }}>No results</Typography>
@@ -5015,7 +5015,7 @@ return vm?.isCluster ?? false
   }, [selection, allVms])
 
   return (
-    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%' }}>
       {progress}
 
       {error ? (
@@ -6675,7 +6675,7 @@ return vm?.isCluster ?? false
             }
 
             return (
-              <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {/* Usage chart card - fixed, never cropped */}
                 {si.total > 0 && (
                   <Card variant="outlined" sx={{ borderRadius: 2, flexShrink: 0 }}>

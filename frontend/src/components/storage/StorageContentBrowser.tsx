@@ -187,7 +187,7 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
               </IconButton>
             )}
           </Box>
-          <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+          <Box sx={{ maxHeight: 600, overflow: 'auto' }}>
             {filtered.length === 0 ? (
               <Box sx={{ px: 2, py: 2, textAlign: 'center' }}>
                 <Typography variant="caption" sx={{ opacity: 0.4 }}>No results</Typography>

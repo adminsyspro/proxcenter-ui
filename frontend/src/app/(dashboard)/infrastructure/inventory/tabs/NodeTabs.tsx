@@ -686,11 +686,11 @@ export default function NodeTabs(props: any) {
                   <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {!nodeShellData ? (
                       // Pas encore de session - afficher le bouton de connexion
-                      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#1e1e1e' }}>
+                      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
                         <Box sx={{ textAlign: 'center' }}>
-                          <i className="ri-terminal-box-line" style={{ fontSize: 64, color: '#444' }} />
-                          <Typography sx={{ mt: 2, color: '#888' }}>{t('inventory.nodeShell')}</Typography>
-                          <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 1, mb: 3 }}>
+                          <i className="ri-terminal-box-line" style={{ fontSize: 64, color: 'var(--mui-palette-text-disabled)' }} />
+                          <Typography sx={{ mt: 2, color: 'text.secondary' }}>{t('inventory.nodeShell')}</Typography>
+                          <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 1, mb: 3 }}>
                             {t('inventory.connectToNodeCli')}
                           </Typography>
                           <Button 

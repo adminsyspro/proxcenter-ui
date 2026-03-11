@@ -4594,27 +4594,27 @@ return (
         onClose={() => setShellDialog({ open: false, connId: '', node: '', loading: false, data: null, error: null })}
         maxWidth="lg"
         fullWidth
-        PaperProps={{ sx: { height: '80vh', bgcolor: '#0c0c0c' } }}
+        PaperProps={{ sx: { height: '80vh', bgcolor: 'background.default' } }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: '#1a1a1a', color: '#fff', py: 1.5 }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'background.paper', color: 'text.primary', py: 1.5 }}>
           <i className="ri-terminal-box-line" style={{ fontSize: 20 }} />
           <Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1 }}>
             {t('inventory.tabShell')} — {shellDialog.node}
           </Typography>
-          <IconButton size="small" onClick={() => setShellDialog({ open: false, connId: '', node: '', loading: false, data: null, error: null })} sx={{ color: '#888' }}>
+          <IconButton size="small" onClick={() => setShellDialog({ open: false, connId: '', node: '', loading: false, data: null, error: null })} sx={{ color: 'text.secondary' }}>
             <i className="ri-close-line" style={{ fontSize: 18 }} />
           </IconButton>
         </DialogTitle>
         <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {shellDialog.loading ? (
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CircularProgress size={32} sx={{ color: '#888' }} />
-              <Typography sx={{ ml: 2, color: '#888' }}>{t('inventory.connecting')}...</Typography>
+              <CircularProgress size={32} sx={{ color: 'text.secondary' }} />
+              <Typography sx={{ ml: 2, color: 'text.secondary' }}>{t('inventory.connecting')}...</Typography>
             </Box>
           ) : shellDialog.error ? (
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2 }}>
-              <i className="ri-error-warning-line" style={{ fontSize: 48, color: '#ef4444' }} />
-              <Typography sx={{ color: '#ef4444' }}>{shellDialog.error}</Typography>
+              <i className="ri-error-warning-line" style={{ fontSize: 48, color: 'var(--mui-palette-error-main)' }} />
+              <Typography color="error">{shellDialog.error}</Typography>
               <Button variant="outlined" color="error" onClick={() => setShellDialog({ open: false, connId: '', node: '', loading: false, data: null, error: null })}>
                 {t('common.close')}
               </Button>

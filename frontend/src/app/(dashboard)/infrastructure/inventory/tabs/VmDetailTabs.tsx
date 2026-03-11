@@ -1199,22 +1199,22 @@ export default function VmDetailTabs(props: any) {
                         <Box sx={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '30%' }}>{t('inventory.option')}</th>
-                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)' }}>{t('inventory.value')}</th>
-                                <th style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '60px' }}>{t('inventory.actions')}</th>
+                              <tr style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
+                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', width: '30%' }}>{t('inventory.option')}</th>
+                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)' }}>{t('inventory.value')}</th>
+                                <th style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', width: '60px' }}>{t('inventory.actions')}</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-file-text-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('common.name')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>{data.name || data.title || 'N/A'}</td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>{data.name || data.title || 'N/A'}</td>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'name', label: t('common.name'), value: data.name || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1223,16 +1223,16 @@ export default function VmDetailTabs(props: any) {
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-sticky-note-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('common.description')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.description ? 1 : 0.5, fontStyle: data.description ? 'normal' : 'italic' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: data.description ? 1 : 0.5, fontStyle: data.description ? 'normal' : 'italic' }}>
                                   {data.description || t('common.noData')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'description', label: t('common.description'), value: data.description || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1241,13 +1241,13 @@ export default function VmDetailTabs(props: any) {
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-price-tag-3-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     Tags
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                                     {localTags && localTags.length > 0 ? (
                                       localTags.map(tag => {
@@ -1274,7 +1274,7 @@ return (
                                     )}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tags', label: t('inventory.tags'), value: (localTags || []).join(','), type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1283,13 +1283,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-play-circle-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('common.enabled')} boot
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.onboot ? t('common.yes') : t('common.no')}
@@ -1297,7 +1297,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'onboot', label: t('common.enabled'), value: data.optionsInfo?.onboot ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1306,16 +1306,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-sort-asc" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.startupOrder')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontFamily: 'monospace', fontSize: '0.9rem' }}>
                                   {data.optionsInfo?.startupOrder || 'order=any'}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'startup', label: t('inventory.startupOrder'), value: data.optionsInfo?.startupOrder || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1324,16 +1324,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-window-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.osType')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   {data.optionsInfo?.ostype || t('common.notAvailable')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ostype', label: t('inventory.osType'), value: data.optionsInfo?.ostype || 'other', type: 'select', options: [
                                       { value: 'other', label: t('inventory.other') },
@@ -1356,13 +1356,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-restart-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.bootOrder')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontFamily: 'monospace', fontSize: '0.9rem' }}>
                                   {(() => {
                                     const boot = data.optionsInfo?.bootOrder || ''
                                     const match = boot.match(/order=(.+)/)
@@ -1374,7 +1374,7 @@ return (
                                     ))
                                   })()}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => {
                                       // Build device list from all disks + networks
@@ -1402,13 +1402,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-cursor-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.usbTablet')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.useTablet !== false ? t('common.enabled') : t('common.disabled')}
@@ -1416,7 +1416,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tablet', label: t('inventory.usbTablet'), value: data.optionsInfo?.useTablet !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1425,16 +1425,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-plug-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     Hotplug
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   {data.optionsInfo?.hotplug || 'disk,network,usb'}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'hotplug', label: 'Hotplug (disk,network,usb,memory,cpu)', value: data.optionsInfo?.hotplug || 'disk,network,usb', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1443,13 +1443,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-flashlight-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     ACPI
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.acpi !== false ? t('common.enabled') : t('common.disabled')}
@@ -1457,7 +1457,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'acpi', label: 'ACPI', value: data.optionsInfo?.acpi !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1466,13 +1466,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-speed-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     KVM Hardware
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.kvmEnabled !== false ? t('common.enabled') : t('common.disabled')}
@@ -1480,7 +1480,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'kvm', label: 'KVM Hardware Virtualization', value: data.optionsInfo?.kvmEnabled !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1489,13 +1489,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-snowflake-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.freezeCpuOnStartup')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip 
                                     size="small" 
                                     label={data.optionsInfo?.freezeCpu ? t('common.yes') : t('common.no')} 
@@ -1503,7 +1503,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'freeze', label: t('inventory.freezeCpuOnStartup'), value: data.optionsInfo?.freezeCpu ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1512,16 +1512,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-time-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.rtcLocalTime')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   {data.optionsInfo?.useLocalTime === 'yes' ? t('common.yes') : t('common.no')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'localtime', label: t('inventory.rtcLocalTime'), value: data.optionsInfo?.useLocalTime || '', type: 'select', options: [{ value: '', label: t('common.default') }, { value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1530,16 +1530,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-calendar-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.rtcDate')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   {data.optionsInfo?.rtcStartDate || 'now'}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'startdate', label: t('inventory.rtcDate'), value: data.optionsInfo?.rtcStartDate || 'now', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1548,16 +1548,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-fingerprint-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     SMBIOS (type1)
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
                                   {data.optionsInfo?.smbiosUuid ? `uuid=${data.optionsInfo.smbiosUuid}` : t('inventory.autoGenerated')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('inventory.notEditable')}>
                                     <span>
                                       <IconButton size="small" disabled>
@@ -1568,13 +1568,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-robot-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     QEMU Guest Agent
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip 
                                     size="small" 
                                     label={data.optionsInfo?.agentEnabled ? t('common.enabled') : t('common.disabled')}
@@ -1582,7 +1582,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'agent', label: 'QEMU Guest Agent', value: data.optionsInfo?.agentEnabled ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.enabled') }, { value: '0', label: t('common.disabled') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1591,13 +1591,13 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-shield-check-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     Protection
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Chip 
                                     size="small" 
                                     label={data.optionsInfo?.protection ? t('common.enabled') : t('common.disabled')}
@@ -1605,7 +1605,7 @@ return (
                                     variant="outlined"
                                   />
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'protection', label: t('inventory.protection'), value: data.optionsInfo?.protection ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1614,16 +1614,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-tv-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     Spice Enhancements
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   {data.optionsInfo?.spiceEnhancements || 'none'}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'spice_enhancements', label: t('inventory.spiceEnhancements'), value: data.optionsInfo?.spiceEnhancements || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1632,16 +1632,16 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-save-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     VM State Storage
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   {data.optionsInfo?.vmStateStorage || t('inventoryPage.automatic')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'vmstatestorage', label: t('inventory.vmStateStorage'), value: data.optionsInfo?.vmStateStorage || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -1686,7 +1686,7 @@ return (
                 <Box sx={{ py: 2 }}>
                   <Card variant="outlined" sx={{ borderRadius: 2 }}>
                     <CardContent sx={{ p: 0 }}>
-                      <Box sx={{ p: 2, borderBottom: '1px solid rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box sx={{ p: 2, borderBottom: '1px solid var(--mui-palette-divider)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <i className="ri-history-line" style={{ fontSize: 20 }} />
                           {t('inventory.tabs.history')}
@@ -1722,12 +1722,12 @@ return (
                         <Box sx={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('inventory.startTime')}</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('inventory.endTime')}</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('inventory.userName')}</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>{t('common.description')}</th>
-                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', fontSize: '0.8rem', width: '180px' }}>{t('updates.status')}</th>
+                              <tr style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', fontSize: '0.8rem' }}>{t('inventory.startTime')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', fontSize: '0.8rem' }}>{t('inventory.endTime')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', fontSize: '0.8rem' }}>{t('inventory.userName')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', fontSize: '0.8rem' }}>{t('common.description')}</th>
+                                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', fontSize: '0.8rem', width: '180px' }}>{t('updates.status')}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1752,27 +1752,27 @@ return (
                                   
                                   return (
                                     <tr key={task.upid || idx} style={{ backgroundColor: rowBgColor }}>
-                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
                                           {task.starttime ? formatDateTime(task.starttime * 1000, locale) : '-'}
                                         </Typography>
                                       </td>
-                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
                                           {task.endtime ? formatDateTime(task.endtime * 1000, locale) : '-'}
                                         </Typography>
                                       </td>
-                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
                                           {task.user}
                                         </Typography>
                                       </td>
-                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                         <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
                                           {data?.kindLabel}/{data?.vmType?.toUpperCase()} {selection?.id?.split(':').pop()} - {t(`tasks.types.${task.type}`, { defaultValue: task.type })}
                                         </Typography>
                                       </td>
-                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+                                      <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                         <Typography
                                           variant="body2"
                                           sx={{
@@ -3125,25 +3125,25 @@ return (
                         <Box sx={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '30%' }}>{t('inventory.option')}</th>
-                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)' }}>{t('inventory.value')}</th>
-                                <th style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.2)', width: '60px' }}>{t('inventory.actions')}</th>
+                              <tr style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
+                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', width: '30%' }}>{t('inventory.option')}</th>
+                                <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)' }}>{t('inventory.value')}</th>
+                                <th style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 600, borderBottom: '1px solid var(--mui-palette-divider)', width: '60px' }}>{t('inventory.actions')}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {/* User */}
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-user-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.cloudInit.user')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.cloudInitConfig.ciuser ? 1 : 0.5, fontStyle: data.cloudInitConfig.ciuser ? 'normal' : 'italic' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: data.cloudInitConfig.ciuser ? 1 : 0.5, fontStyle: data.cloudInitConfig.ciuser ? 'normal' : 'italic' }}>
                                   {data.cloudInitConfig.ciuser || t('common.noData')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ciuser', label: t('inventory.cloudInit.user'), value: data.cloudInitConfig.ciuser || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -3153,16 +3153,16 @@ return (
                               </tr>
                               {/* Password */}
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-lock-password-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.cloudInit.password')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.cloudInitConfig.cipassword ? 1 : 0.5, fontStyle: data.cloudInitConfig.cipassword ? 'normal' : 'italic' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: data.cloudInitConfig.cipassword ? 1 : 0.5, fontStyle: data.cloudInitConfig.cipassword ? 'normal' : 'italic' }}>
                                   {data.cloudInitConfig.cipassword ? t('inventory.cloudInit.passwordMasked') : t('common.noData')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'cipassword', label: t('inventory.cloudInit.password'), value: '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -3172,20 +3172,20 @@ return (
                               </tr>
                               {/* SSH Public Keys */}
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-key-2-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.cloudInit.sshKeys')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.cloudInitConfig.sshkeys ? 1 : 0.5, fontStyle: data.cloudInitConfig.sshkeys ? 'normal' : 'italic' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: data.cloudInitConfig.sshkeys ? 1 : 0.5, fontStyle: data.cloudInitConfig.sshkeys ? 'normal' : 'italic' }}>
                                   {data.cloudInitConfig.sshkeys ? (
                                     <Box component="pre" sx={{ m: 0, fontSize: 12, fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflow: 'auto' }}>
                                       {data.cloudInitConfig.sshkeys}
                                     </Box>
                                   ) : t('common.noData')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'sshkeys', label: t('inventory.cloudInit.sshKeys'), value: data.cloudInitConfig.sshkeys || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -3202,17 +3202,17 @@ return (
                                 })
                                 .map(([key, val]: [string, any]) => (
                                 <tr key={key}>
-                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                       <i className="ri-global-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                       {t('inventory.cloudInit.ipConfig')} ({key.replace('ipconfig', '')})
                                     </Box>
                                   </td>
-                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)' }}>
+                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                     <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{String(val)}</Typography>
                                     <Typography variant="caption" color="text.secondary">{t('inventory.cloudInit.ipConfigHelp')}</Typography>
                                   </td>
-                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                     <MuiTooltip title={t('common.edit')}>
                                       <IconButton size="small" onClick={() => setEditOptionDialog({ key, label: `${t('inventory.cloudInit.ipConfig')} (${key.replace('ipconfig', '')})`, value: String(val), type: 'text' })}>
                                         <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -3224,16 +3224,16 @@ return (
                               {/* If no ipconfigs yet, show ipconfig0 placeholder */}
                               {(!data.cloudInitConfig.ipconfigs || Object.keys(data.cloudInitConfig.ipconfigs).length === 0) && (
                                 <tr>
-                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                       <i className="ri-global-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                       {t('inventory.cloudInit.ipConfig')} (0)
                                     </Box>
                                   </td>
-                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: 0.5, fontStyle: 'italic' }}>
+                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: 0.5, fontStyle: 'italic' }}>
                                     {t('common.noData')}
                                   </td>
-                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                  <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                     <MuiTooltip title={t('common.edit')}>
                                       <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ipconfig0', label: `${t('inventory.cloudInit.ipConfig')} (0)`, value: '', type: 'text' })}>
                                         <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -3244,16 +3244,16 @@ return (
                               )}
                               {/* DNS Server */}
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-dns-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.cloudInit.nameserver')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.cloudInitConfig.nameserver ? 1 : 0.5, fontStyle: data.cloudInitConfig.nameserver ? 'normal' : 'italic' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: data.cloudInitConfig.nameserver ? 1 : 0.5, fontStyle: data.cloudInitConfig.nameserver ? 'normal' : 'italic' }}>
                                   {data.cloudInitConfig.nameserver || t('common.noData')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'nameserver', label: t('inventory.cloudInit.nameserver'), value: data.cloudInitConfig.nameserver || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
@@ -3263,16 +3263,16 @@ return (
                               </tr>
                               {/* Search Domain */}
                               <tr>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', fontWeight: 500 }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-search-line" style={{ fontSize: 16, opacity: 0.6 }} />
                                     {t('inventory.cloudInit.searchdomain')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', opacity: data.cloudInitConfig.searchdomain ? 1 : 0.5, fontStyle: data.cloudInitConfig.searchdomain ? 'normal' : 'italic' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', opacity: data.cloudInitConfig.searchdomain ? 1 : 0.5, fontStyle: data.cloudInitConfig.searchdomain ? 'normal' : 'italic' }}>
                                   {data.cloudInitConfig.searchdomain || t('common.noData')}
                                 </td>
-                                <td style={{ padding: '6px 16px', borderBottom: '1px solid rgba(0,0,0,0.15)', textAlign: 'center' }}>
+                                <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'searchdomain', label: t('inventory.cloudInit.searchdomain'), value: data.cloudInitConfig.searchdomain || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />

@@ -14,6 +14,8 @@ import Navbar from '@components/layout/vertical/Navbar'
 import ScrollToTop from '@core/components/scroll-to-top'
 import TasksFooter from '@components/TasksFooter'
 import OnboardingGuard from '@components/OnboardingGuard'
+import DemoBanner from '@components/DemoBanner'
+import DemoInterceptor from '@components/DemoInterceptor'
 import { ProxCenterTasksProvider } from '@/contexts/ProxCenterTasksContext'
 
 // Util Imports
@@ -30,6 +32,8 @@ const Layout = async props => {
 
   return (
     <Providers direction={direction}>
+      <DemoBanner />
+      <DemoInterceptor />
       <ProxCenterTasksProvider>
       <LayoutWrapper
         systemMode={systemMode}

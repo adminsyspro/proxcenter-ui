@@ -62,6 +62,60 @@ function getLocale(request: NextRequest): string {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const isDemoMode = process.env.DEMO_MODE === 'true'
+
+  // === DEMO MODE: bypass auth, mock API routes ===
+  if (isDemoMode) {
+    const { demoResponse } = await import("@/lib/demo/demo-api")
+    // /login and /setup always redirect to /home in demo mode
+    if (pathname === '/login' || pathname.startsWith('/login') || pathname === '/setup' || pathname.startsWith('/setup')) {
+      return NextResponse.redirect(new URL('/home', request.url))
+    }
+
+    // API routes: intercept with mock responses (bypass all route handlers)
+    if (pathname.startsWith('/api/')) {
+      // Mock NextAuth session endpoint (used by useSession() client-side)
+      if (pathname === '/api/auth/session') {
+        return NextResponse.json({
+          user: { id: 'demo-user', name: 'Admin Demo', email: 'admin@demo.proxcenter.io', role: 'super_admin', image: null },
+          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+      }
+
+      // For /api/v1/* routes, return mock data directly from the interceptor
+      const mockResponse = demoResponse(request)
+      if (mockResponse) return mockResponse
+
+      // For non-v1 API routes, pass through with demo header
+      const requestHeaders = new Headers(request.headers)
+      requestHeaders.set('x-demo-mode', 'true')
+
+      return NextResponse.next({
+        request: { headers: requestHeaders },
+      })
+    }
+
+    // Page routes: skip all auth checks, just handle locale
+    if (!pathname.startsWith('/api/') && !pathname.startsWith('/_next') && !pathname.startsWith('/images') && !pathname.startsWith('/favicon') && !pathname.includes('.')) {
+      const locale = getLocale(request)
+      const response = NextResponse.next()
+
+      if (!request.cookies.get('NEXT_LOCALE')) {
+        response.cookies.set('NEXT_LOCALE', locale, {
+          path: '/',
+          maxAge: 60 * 60 * 24 * 365,
+          sameSite: 'lax'
+        })
+      }
+
+      return response
+    }
+
+    // Static assets etc. — pass through
+    return NextResponse.next()
+  }
+
+  // === NORMAL MODE (existing behavior) ===
 
   // Skip middleware for large upload routes (auth handled in route handler via checkPermission)
   if (pathname.includes('/storage/') && pathname.endsWith('/upload')) {

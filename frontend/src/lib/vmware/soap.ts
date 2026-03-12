@@ -153,6 +153,102 @@ export async function soapPowerOffVm(session: SoapSession, vmid: string): Promis
   throw new Error("VM did not power off within 60s")
 }
 
+/** Create a snapshot on a VM (makes base disks read-only and downloadable while VM runs) */
+export async function soapCreateSnapshot(session: SoapSession, vmid: string, name: string, description = ""): Promise<string> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:CreateSnapshot_Task>
+      <urn:_this type="VirtualMachine">${vmid}</urn:_this>
+      <urn:name>${name}</urn:name>
+      <urn:description>${description}</urn:description>
+      <urn:memory>false</urn:memory>
+      <urn:quiesce>false</urn:quiesce>
+    </urn:CreateSnapshot_Task>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  if (result.text.includes("faultstring")) {
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+    throw new Error(`Failed to create snapshot: ${fault}`)
+  }
+
+  // Extract task MOR and wait for completion
+  const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+  if (!taskMor) throw new Error("No task returned from CreateSnapshot_Task")
+
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000))
+    const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet><urn:pathSet>info.error</urn:pathSet><urn:pathSet>info.result</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+    if (status.text.includes("success")) {
+      // Extract snapshot MOR from result
+      const snapMor = status.text.match(/<val[^>]*type="VirtualMachineSnapshot"[^>]*>([^<]+)<\/val>/)?.[1] || ""
+      return snapMor
+    }
+    if (status.text.includes("error")) {
+      const fault = status.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Unknown error"
+      throw new Error(`Snapshot creation failed: ${fault}`)
+    }
+  }
+  throw new Error("Snapshot creation timed out after 120s")
+}
+
+/** Remove all snapshots from a VM */
+export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string): Promise<void> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RemoveAllSnapshots_Task>
+      <urn:_this type="VirtualMachine">${vmid}</urn:_this>
+      <urn:consolidate>true</urn:consolidate>
+    </urn:RemoveAllSnapshots_Task>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  if (result.text.includes("faultstring")) {
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
+    throw new Error(`Failed to remove snapshots: ${fault}`)
+  }
+
+  // Wait for task completion
+  const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+  if (!taskMor) return
+
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000))
+    const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+    if (status.text.includes("success") || status.text.includes("error")) return
+  }
+}
+
 export interface EsxiDiskInfo {
   label: string
   fileName: string // e.g. "[datastore1] vmname/vmname.vmdk"
@@ -256,14 +352,20 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
 }
 
 /**
- * Build the HTTPS URL to download a VMDK flat file from ESXi datastore browser.
+ * Build HTTPS URLs to download a VMDK from ESXi datastore browser.
  * ESXi exposes files at: https://host/folder/<path>?dcPath=ha-datacenter&dsName=<datastore>
  *
- * For the flat disk data, we need the -flat.vmdk file (the actual raw data).
+ * Returns [flatUrl, descriptorUrl]:
+ * - flatUrl: the -flat.vmdk file (raw disk data, standard for split VMDK)
+ * - descriptorUrl: the .vmdk descriptor itself (works for monolithic thick disks)
  */
 export function buildVmdkDownloadUrl(esxiBaseUrl: string, disk: EsxiDiskInfo): string {
   const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-  // Convert vmname.vmdk -> vmname-flat.vmdk for the raw data file
   const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
   return `https://${host}/folder/${encodeURIComponent(flatPath).replace(/%2F/g, "/")}?dcPath=ha-datacenter&dsName=${encodeURIComponent(disk.datastoreName)}`
+}
+
+export function buildVmdkDescriptorUrl(esxiBaseUrl: string, disk: EsxiDiskInfo): string {
+  const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+  return `https://${host}/folder/${encodeURIComponent(disk.relativePath).replace(/%2F/g, "/")}?dcPath=ha-datacenter&dsName=${encodeURIComponent(disk.datastoreName)}`
 }

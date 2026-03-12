@@ -21,7 +21,7 @@ import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH } from "@/lib/ssh/exec"
 import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl } from "@/lib/xcpng/client"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
-import type { XoVmConfig } from "@/lib/xcpng/client"
+import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -33,6 +33,7 @@ interface MigrationConfig {
   targetStorage: string
   networkBridge: string
   startAfterMigration: boolean
+  migrationType?: "cold" | "near-live" | "live"
 }
 
 interface LogEntry {
@@ -233,12 +234,19 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       totalBytes: BigInt(totalDiskBytes),
     })
 
-    // Check VM is powered off
+    // Handle VM power state based on migration type
+    const isWarm = config.migrationType === "near-live" || config.migrationType === "live"
+
     if (vmConfig.powerState === "Running" || vmConfig.powerState === "running") {
-      throw new Error(
-        "VM is powered on. Please power off the VM in Xen Orchestra before migration. " +
-        "Cold migration requires the VM to be shut down."
-      )
+      if (isWarm) {
+        await appendLog(jobId, "VM is running — disks will be downloaded while VM is online (near-live migration)", "info")
+        await appendLog(jobId, "The VM will be shut down after disk transfer for final cutover", "info")
+      } else {
+        throw new Error(
+          "VM is powered on. Please power off the VM in Xen Orchestra before migration. " +
+          "Cold migration requires the VM to be shut down."
+        )
+      }
     }
 
     // Check snapshots
@@ -332,23 +340,16 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         select: { apiTokenEnc: true },
       }))!.apiTokenEnc
     )
+    const curlAuth = Buffer.from(xoCreds).toString("base64")
 
-    for (let i = 0; i < vmConfig.disks.length; i++) {
-      const disk = vmConfig.disks[i]
-      await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
-
+    // Helper: download a single VDI from XO via curl on PVE node
+    async function downloadDisk(i: number, disk: XoDiskInfo) {
       const diskSizeGB = (disk.sizeBytes / 1073741824).toFixed(1)
-      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Transferring "${disk.label}" (${diskSizeGB} GB)...`)
+      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)...`)
 
-      // Build download URL — use VHD format (raw hangs on XO)
       const downloadUrl = buildVdiDownloadUrl(xo.baseUrl, disk.vdiUuid, "vhd")
       const tmpFile = `/tmp/proxcenter-mig-${jobId}-disk${i}`
-      const scsiSlot = `scsi${i}`
 
-      if (isCancelled(jobId)) throw new Error("Migration cancelled")
-
-      // Phase 1: Download VDI from XO via curl on PVE node
-      await appendLog(jobId, `Downloading VDI from XO (${diskSizeGB} GB, VHD format)...`)
       await updateJob(jobId, "transferring", {
         currentStep: `downloading_disk_${i + 1}`,
         currentDisk: i,
@@ -356,11 +357,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         totalBytes: BigInt(disk.sizeBytes),
       })
 
-      // Start curl in background on PVE node
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
-      // Use Basic auth header with curl
-      const curlAuth = Buffer.from(xoCreds).toString("base64")
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
         `nohup bash -c 'curl -s -H "Authorization: Basic ${curlAuth}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
@@ -371,7 +369,6 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const curlPid = startDl.output.trim()
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
 
-      // Poll file size every 3s for real-time progress
       let downloadedBytes = 0
       let downloadSpeed = ""
       let downloadTime = 0
@@ -402,7 +399,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         await updateJob(jobId, "transferring", {
           bytesTransferred: BigInt(currentSize),
           transferSpeed: downloadSpeed,
-          progress: overallProgress,
+          progress: isWarm ? Math.round(overallProgress * 0.7) : overallProgress,
         })
 
         if (!isRunning) {
@@ -435,11 +432,14 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         transferSpeed: downloadSpeed,
       })
       await appendLog(jobId, `Download complete: ${(downloadedBytes / 1073741824).toFixed(1)} GB in ${downloadTime.toFixed(0)}s (${downloadSpeed})`, "success")
+    }
 
-      if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    // Helper: convert + import + attach a single disk
+    async function convertAndImportDisk(i: number) {
+      const tmpFile = `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const scsiSlot = `scsi${i}`
 
-      // Phase 2: Convert VHD to target format (qcow2 for file-based, raw for block storage)
-      await appendLog(jobId, `Converting VHD to ${importFormat} format...`)
+      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting VHD to ${importFormat} format...`)
       await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })
 
       const convertResult = await executeSSHWithTimeout(
@@ -452,13 +452,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         throw new Error(`Conversion failed: ${convertResult.error || convertResult.output}`)
       }
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
-
-      // Remove VHD, keep converted
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd"`)
 
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
-      // Phase 3: Import disk into Proxmox storage
+      // Import disk into Proxmox storage
       const importFile = `${tmpFile}.${importFormat}`
       await appendLog(jobId, `Importing disk into storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
@@ -468,8 +466,6 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         `qm disk import ${targetVmid} "${importFile}" ${config.targetStorage} --format ${importFormat} 2>&1`,
         3600000
       )
-
-      // Cleanup temp file
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${importFile}"`)
 
       if (!importResult.success) {
@@ -477,15 +473,16 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
 
       // Parse the actual disk volume name from qm disk import output
-      // Output format: "Successfully imported disk as 'unused0:storage:vm-XXX-disk-N'"
-      // or for NFS: "Successfully imported disk as 'unused0:storage:VMID/vm-XXX-disk-N.qcow2'"
       let diskVolume = ""
-      const importMatch = importResult.output?.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
+      const importOutput = importResult.output || ""
+      const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
+      const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
       if (importMatch?.[1]) {
         diskVolume = importMatch[1]
+      } else if (altMatch?.[1]) {
+        diskVolume = altMatch[1]
       } else {
-        // Fallback: read VM config to find the unused disk volume
-        await appendLog(jobId, `Parsing import output failed, reading VM config to find unused disk...`, "info")
+        await appendLog(jobId, `Parsing import output failed (output: ${importOutput.substring(0, 200)}), reading VM config to find unused disk...`, "info")
         try {
           const vmConf = await pveFetch<Record<string, any>>(
             pveConn,
@@ -496,14 +493,18 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
             .sort()
           if (unusedKeys.length > 0) {
             diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
+            await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
           }
-        } catch {}
+        } catch (e: any) {
+          await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
+        }
         if (!diskVolume) {
           diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
+          await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
         }
       }
 
-      // Attach unused disk to SCSI slot via PVE API (more reliable than qm set via SSH)
+      // Attach disk to SCSI slot via PVE API
       const attachBody = new URLSearchParams({
         [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
       })
@@ -517,11 +518,85 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
       }
+    }
 
-      await updateJob(jobId, "transferring", {
-        currentDisk: i + 1,
-        progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
-      })
+    if (isWarm) {
+      // ── Near-live mode: download all disks while VM runs, then shut down, then convert/import ──
+
+      // Phase 1: Download all disks (VM still running — no downtime yet)
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        await updateJob(jobId, "transferring", { currentDisk: i })
+        await downloadDisk(i, vmConfig.disks[i])
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+      }
+
+      // Phase 2: Shut down source VM via XO (downtime starts here)
+      await appendLog(jobId, "All disks downloaded — shutting down source VM for cutover...", "warn")
+      try {
+        const xoFetchInternal = async (path: string, opts: RequestInit = {}) => {
+          const fetchOpts: any = {
+            ...opts,
+            headers: { Authorization: xo.authHeader, "Content-Type": "application/json", ...opts.headers },
+            signal: AbortSignal.timeout(30000),
+          }
+          if (xo.insecureTLS) {
+            fetchOpts.dispatcher = new (await import("undici")).Agent({ connect: { rejectUnauthorized: false } })
+          }
+          return fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
+        }
+
+        // XO REST API: POST /vms/{uuid}/actions/clean_shutdown or hard_shutdown
+        const shutRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/clean_shutdown`, { method: "POST" })
+        if (!shutRes.ok) {
+          // Try hard shutdown as fallback
+          const hardRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/hard_shutdown`, { method: "POST" })
+          if (!hardRes.ok) {
+            await appendLog(jobId, "Cannot shut down VM via XO API. Please shut down the VM manually now.", "warn")
+          }
+        }
+
+        // Wait for VM to be halted (poll every 5s, max 120s)
+        let halted = false
+        for (let attempt = 0; attempt < 24; attempt++) {
+          await new Promise(r => setTimeout(r, 5000))
+          try {
+            const refreshed = await xoGetVmConfig(xo, config.sourceVmId)
+            if (refreshed.powerState === "Halted" || refreshed.powerState === "halted") {
+              halted = true
+              break
+            }
+          } catch {}
+        }
+
+        if (halted) {
+          await appendLog(jobId, "Source VM shut down — downtime started", "success")
+        } else {
+          await appendLog(jobId, "VM did not shut down within 120s — proceeding anyway (disk image may be crash-consistent)", "warn")
+        }
+      } catch (e: any) {
+        await appendLog(jobId, `Shutdown attempt failed: ${e?.message || e}. Proceeding with conversion...`, "warn")
+      }
+
+      // Phase 3: Convert and import all disks (downtime continues)
+      await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+        await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
+        await convertAndImportDisk(i)
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+      }
+    } else {
+      // ── Cold mode: sequential download → convert → import per disk ──
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
+        await downloadDisk(i, vmConfig.disks[i])
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+        await convertAndImportDisk(i)
+        await updateJob(jobId, "transferring", {
+          currentDisk: i + 1,
+          progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
+        })
+      }
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")

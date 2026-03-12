@@ -476,6 +476,7 @@ export default function InventoryDetails({
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
   const [vmMigJob, setVmMigJob] = useState<any>(null) // active migration job for current VM panel
+  const migLogsRef = useRef<HTMLDivElement>(null)
   const [exitMaintenanceBusy, setExitMaintenanceBusy] = useState(false)
   const [exitMaintenanceError, setExitMaintenanceError] = useState<string | null>(null)
 
@@ -780,6 +781,13 @@ export default function InventoryDetails({
     }, 3000)
     return () => clearInterval(interval)
   }, [vmMigJob?.id, vmMigJob?.status])
+
+  // Auto-scroll migration logs to bottom
+  useEffect(() => {
+    if (migLogsRef.current) {
+      migLogsRef.current.scrollTop = migLogsRef.current.scrollHeight
+    }
+  }, [vmMigJob?.logs?.length])
 
   // VMs sans templates (pour affichage dans les modes vms, tree, hosts, pools, tags)
   const displayVms = useMemo(() => allVms.filter(vm => !vm.template), [allVms])
@@ -3853,7 +3861,7 @@ return vm?.isCluster ?? false
                         </MuiTooltip>
                       )}
                     </Box>
-                    <Box sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, maxHeight: 'calc(100vh - 650px)', minHeight: 80 }}>
+                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, maxHeight: 'calc(100vh - 650px)', minHeight: 80 }}>
                       {vmMigJob?.logs?.length > 0 ? (
                         vmMigJob.logs.map((log: any, i: number) => (
                           <Box key={i}>
@@ -4752,8 +4760,8 @@ return
                     <Stack spacing={1}>
                       {([
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc', requiresLicense: false },
-                        { value: 'near-live' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeNearLive', descKey: 'migrationTypeNearLiveDesc', requiresLicense: true },
-                        { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc', requiresLicense: true },
+                        { value: 'near-live' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeNearLive', descKey: 'migrationTypeNearLiveDesc', requiresLicense: false },
+                        { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc', requiresLicense: false },
                       ]).map(opt => {
                         const disabled = opt.requiresLicense && !esxiMigrateVm?.licenseFull
                         return (

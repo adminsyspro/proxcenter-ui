@@ -19,9 +19,9 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH } from "@/lib/ssh/exec"
-import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
-import type { SoapSession, EsxiVmConfig } from "@/lib/vmware/soap"
+import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -33,6 +33,7 @@ interface MigrationConfig {
   targetStorage: string
   networkBridge: string
   startAfterMigration: boolean
+  migrationType?: "cold" | "near-live" | "live"
 }
 
 interface LogEntry {
@@ -112,6 +113,34 @@ async function getNodeIp(connectionId: string, nodeName: string, baseUrl: string
   }
 }
 
+/** Power off VM with fallback to manual power off for free ESXi license */
+async function powerOffSourceVm(jobId: string, session: SoapSession, vmid: string): Promise<void> {
+  try {
+    await soapPowerOffVm(session, vmid)
+    await appendLog(jobId, "Source VM powered off", "success")
+  } catch (e: any) {
+    const msg = e?.message || String(e)
+    if (msg.includes("InvalidPowerState") || msg.includes("poweredOff")) {
+      await appendLog(jobId, "VM was already powered off", "info")
+    } else if (msg.includes("license") || msg.includes("prohibits")) {
+      await appendLog(jobId, "Cannot power off via API (ESXi license restriction). Please power off the VM manually now.", "warn")
+      let powered = true
+      for (let attempt = 0; attempt < 24; attempt++) {
+        await new Promise(r => setTimeout(r, 5000))
+        const xml = await soapGetVmConfig(session, vmid)
+        if (extractProp(xml, "runtime.powerState") === "poweredOff") { powered = false; break }
+      }
+      if (powered) {
+        await appendLog(jobId, "VM still running after 120s — proceeding anyway (disk image may be crash-consistent)", "warn")
+      } else {
+        await appendLog(jobId, "VM powered off manually", "success")
+      }
+    } else {
+      throw e
+    }
+  }
+}
+
 /**
  * Main migration pipeline — runs async after HTTP response
  */
@@ -166,18 +195,25 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       totalBytes: BigInt(vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)),
     })
 
-    // Check VM is powered off
+    // Handle VM power state based on migration type
+    const isWarm = config.migrationType === "near-live" || config.migrationType === "live"
+
     if (vmConfig.powerState === "poweredOn") {
-      await appendLog(jobId, "VM is powered on — attempting to power off for cold migration...", "warn")
-      try {
-        await soapSession && await import("@/lib/vmware/soap").then(m => m.soapPowerOffVm(soapSession!, config.sourceVmId))
-        await appendLog(jobId, "VM powered off", "success")
-      } catch (e: any) {
-        const msg = e?.message || String(e)
-        if (msg.includes("license") || msg.includes("prohibits")) {
-          throw new Error("VM is powered on and ESXi license does not allow API power operations. Please power off the VM manually in the ESXi interface before retrying.")
+      if (isWarm) {
+        await appendLog(jobId, "VM is running — disks will be downloaded while VM is online (near-live migration)", "info")
+        await appendLog(jobId, "The VM will be powered off after disk transfer for final cutover", "info")
+      } else {
+        await appendLog(jobId, "VM is powered on — attempting to power off for cold migration...", "warn")
+        try {
+          await soapSession && await import("@/lib/vmware/soap").then(m => m.soapPowerOffVm(soapSession!, config.sourceVmId))
+          await appendLog(jobId, "VM powered off", "success")
+        } catch (e: any) {
+          const msg = e?.message || String(e)
+          if (msg.includes("license") || msg.includes("prohibits")) {
+            throw new Error("VM is powered on and ESXi license does not allow API power operations. Please power off the VM manually in the ESXi interface before retrying.")
+          }
+          throw e
         }
-        throw e
       }
     }
 
@@ -270,24 +306,23 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     const isFileBased = isFileBasedStorage(storageType)
     const importFormat = isFileBased ? "qcow2" : "raw"
 
-    for (let i = 0; i < vmConfig.disks.length; i++) {
-      const disk = vmConfig.disks[i]
-      await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
-
+    // Helper: download a single disk from ESXi via curl on PVE node
+    async function downloadDisk(i: number, disk: EsxiDiskInfo) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
-      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Transferring "${disk.label}" (${diskSizeGB} GB, ${disk.thinProvisioned ? "thin" : "thick"})...`)
+      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, ${disk.thinProvisioned ? "thin" : "thick"})...`)
 
-      // Build download URL for the flat VMDK
-      const vmdkUrl = buildVmdkDownloadUrl(esxiUrl, disk)
+      // Try flat VMDK first (standard split format), then descriptor (monolithic thick)
+      const flatUrl = buildVmdkDownloadUrl(esxiUrl, disk)
+      const descriptorUrl = buildVmdkDescriptorUrl(esxiUrl, disk)
       const tmpFile = `/tmp/proxcenter-mig-${jobId}-disk${i}`
-      const soapCookie = soapSession.cookie
+      const soapCookie = soapSession!.cookie
 
-      if (isCancelled(jobId)) throw new Error("Migration cancelled")
+      // Strip double quotes from cookie value to avoid shell quoting issues
+      // ESXi returns: vmware_soap_session="abc123" — quotes are decorative, not required
+      const safeCookie = soapCookie.replace(/"/g, '')
+      const vmdkUrl = flatUrl
+      await appendLog(jobId, `Download URL: ${vmdkUrl.replace(/\?.*/, '?...')}`, "info")
 
-      const scsiSlot = `scsi${i}`
-
-      // Phase 1: Download VMDK from ESXi with real-time progress
-      await appendLog(jobId, `Downloading VMDK from ESXi (${diskSizeGB} GB)...`)
       await updateJob(jobId, "transferring", {
         currentStep: `downloading_disk_${i + 1}`,
         currentDisk: i,
@@ -295,12 +330,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         totalBytes: BigInt(disk.capacityBytes),
       })
 
-      // Start curl in background on PVE node, write PID to file for tracking
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
+      const dlScript = `${tmpFile}.dl.sh`
+      // Write download script to avoid shell quoting issues with cookie/URL values
+      // Note: no -f flag — we check HTTP code and file size after download
+      await executeSSH(config.targetConnectionId, nodeIp,
+        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk -b '${safeCookie}' -o "${tmpFile}.vmdk" -w '{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}' '${vmdkUrl}' > "${statsFile}" 2>&1\necho $? > "${pidFile}.exit"\nDLEOF`
+      )
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
-        `nohup bash -c 'curl -sk -b "${soapCookie}" -o "${tmpFile}.vmdk" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total}}'"'"' "${vmdkUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+        `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`
       )
       if (!startDl.success || !startDl.output?.trim()) {
         throw new Error(`Failed to start download: ${startDl.error}`)
@@ -308,7 +348,6 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const curlPid = startDl.output.trim()
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
 
-      // Poll file size every 3s for real-time progress
       const totalBytes = disk.capacityBytes
       let downloadedBytes = 0
       let downloadSpeed = ""
@@ -317,59 +356,73 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       while (true) {
         if (isCancelled(jobId)) {
-          await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+          await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
           throw new Error("Migration cancelled")
         }
 
         await new Promise(r => setTimeout(r, 3000))
 
-        // Check if download is complete (exit code file exists)
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
         const isRunning = exitCheck.output?.trim() === "RUNNING"
 
-        // Get current file size
         const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
         const currentSize = parseInt(sizeResult.output?.trim() || "0", 10) || 0
         downloadedBytes = currentSize
 
-        // Calculate speed
         const elapsed = (Date.now() - startTime) / 1000
         const speedBps = elapsed > 0 ? currentSize / elapsed : 0
         downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
-        // Calculate progress for this disk
         const diskProgress = totalBytes > 0 ? Math.min(Math.round((currentSize / totalBytes) * 100), 99) : 0
         const overallProgress = Math.round((i / vmConfig.disks.length) * 100 + (diskProgress / vmConfig.disks.length))
 
         await updateJob(jobId, "transferring", {
           bytesTransferred: BigInt(currentSize),
           transferSpeed: downloadSpeed,
-          progress: overallProgress,
+          progress: isWarm ? Math.round(overallProgress * 0.7) : overallProgress,
         })
 
         if (!isRunning) {
           const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
           if (exitCode !== 0) {
-            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-            throw new Error(`Download failed with exit code ${exitCode}`)
+            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
+            throw new Error(`Download failed: curl exit code ${exitCode}`)
           }
 
-          // Parse curl stats from stats file
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
           const curlStats = statsContent.output?.match(/\{[^}]+\}/)
+          let httpCode = 0
           if (curlStats) {
             try {
               const stats = JSON.parse(curlStats[0])
               downloadedBytes = stats.size || currentSize
               downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
               downloadTime = stats.time || elapsed
+              httpCode = stats.http_code || 0
             } catch {}
           } else {
             downloadTime = elapsed
           }
 
-          // Cleanup pid/stats files
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+          // Validate HTTP status code
+          if (httpCode >= 400 || httpCode === 0) {
+            // Read first bytes of the downloaded file to see error content
+            const errorPreview = await executeSSH(config.targetConnectionId, nodeIp, `head -c 500 "${tmpFile}.vmdk" 2>/dev/null | tr '\\n' ' '`)
+            const preview = errorPreview.output?.trim().substring(0, 200) || "(empty)"
+            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
+            throw new Error(`Download failed: HTTP ${httpCode} from ESXi. Response: ${preview}`)
+          }
+
+          // Validate downloaded file size (must be at least 1 MB for any real disk)
+          const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
+          const actualSize = parseInt(fileSizeCheck.output?.trim() || "0", 10)
+          if (actualSize < 1048576) {
+            const errorPreview = await executeSSH(config.targetConnectionId, nodeIp, `head -c 500 "${tmpFile}.vmdk" 2>/dev/null | tr '\\n' ' '`)
+            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
+            throw new Error(`Download produced a ${actualSize}-byte file (expected ~${diskSizeGB} GB, HTTP ${httpCode}). Content: ${errorPreview.output?.trim().substring(0, 200)}`)
+          }
+
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
           break
         }
       }
@@ -379,11 +432,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         transferSpeed: downloadSpeed,
       })
       await appendLog(jobId, `Download complete: ${(downloadedBytes / 1073741824).toFixed(1)} GB in ${downloadTime.toFixed(0)}s (${downloadSpeed})`, "success")
+    }
 
-      if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    // Helper: convert + import + attach a single disk
+    async function convertAndImportDisk(i: number) {
+      const tmpFile = `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const scsiSlot = `scsi${i}`
 
-      // Phase 2: Convert VMDK to target format
-      await appendLog(jobId, `Converting to ${importFormat} format...`)
+      // Convert VMDK to target format
+      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting to ${importFormat} format...`)
       await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })
 
       const convertResult = await executeSSHWithTimeout(
@@ -396,13 +453,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         throw new Error(`Conversion failed: ${convertResult.error || convertResult.output}`)
       }
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
-
-      // Remove downloaded VMDK (keep converted file)
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk"`)
 
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
-      // Phase 3: Import disk into Proxmox storage
+      // Import disk into Proxmox storage
       await appendLog(jobId, `Importing disk into storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
@@ -411,8 +466,6 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         `qm disk import ${targetVmid} "${tmpFile}.${importFormat}" ${config.targetStorage} --format ${importFormat} 2>&1`,
         3600000
       )
-
-      // Cleanup converted file
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.${importFormat}"`)
 
       if (!importResult.success) {
@@ -420,34 +473,40 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
 
       // Parse the actual disk volume name from qm disk import output
-      // Output format: "Successfully imported disk as 'unused0:storage:vm-XXX-disk-N'"
-      // or for NFS: "Successfully imported disk as 'unused0:storage:VMID/vm-XXX-disk-N.qcow2'"
       let diskVolume = ""
-      const importMatch = importResult.output?.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
+      const importOutput = importResult.output || ""
+      // Try standard format: "Successfully imported disk as 'unused0:storage:vm-XXX-disk-N'"
+      const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
+      // Also try alternate format: "unused0: successfully imported disk 'storage:vm-XXX-disk-N'"
+      const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
       if (importMatch?.[1]) {
         diskVolume = importMatch[1]
+      } else if (altMatch?.[1]) {
+        diskVolume = altMatch[1]
       } else {
-        // Fallback: read VM config to find the unused disk volume
-        await appendLog(jobId, `Parsing import output failed, reading VM config to find unused disk...`, "info")
+        await appendLog(jobId, `Parsing import output failed (output: ${importOutput.substring(0, 200)}), reading VM config to find unused disk...`, "info")
         try {
           const vmConf = await pveFetch<Record<string, any>>(
             pveConn,
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
           )
-          // Find the highest unused disk (unused0, unused1, etc.)
           const unusedKeys = Object.keys(vmConf)
             .filter(k => k.startsWith("unused"))
             .sort()
           if (unusedKeys.length > 0) {
             diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
+            await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
           }
-        } catch {}
+        } catch (e: any) {
+          await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
+        }
         if (!diskVolume) {
           diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
+          await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
         }
       }
 
-      // Attach unused disk to SCSI slot via PVE API (more reliable than qm set via SSH)
+      // Attach disk to SCSI slot via PVE API
       const attachBody = new URLSearchParams({
         [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
       })
@@ -461,11 +520,71 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
       }
+    }
 
-      await updateJob(jobId, "transferring", {
-        currentDisk: i + 1,
-        progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
-      })
+    if (isWarm) {
+      // ── Near-live mode: snapshot → download (VM still runs) → power off → convert/import ──
+
+      // Phase 1: Create snapshot so base disks become read-only and downloadable
+      await appendLog(jobId, "Creating temporary snapshot to enable disk download while VM runs...", "info")
+      let snapshotCreated = false
+      try {
+        await soapCreateSnapshot(soapSession!, config.sourceVmId, "proxcenter-migration", "Temporary snapshot for ProxCenter migration")
+        snapshotCreated = true
+        await appendLog(jobId, "Snapshot created — base disks now accessible", "success")
+      } catch (snapErr: any) {
+        const msg = snapErr?.message || String(snapErr)
+        if (msg.includes("license") || msg.includes("prohibits") || msg.includes("restricted")) {
+          await appendLog(jobId, "ESXi free license does not support snapshots — near-live migration unavailable. Falling back to cold migration (VM must be powered off first).", "warn")
+          await powerOffSourceVm(jobId, soapSession!, config.sourceVmId)
+        } else {
+          throw snapErr
+        }
+      }
+
+      // Phase 2: Download all disks (VM still running — no downtime yet, unless we powered off above)
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        await updateJob(jobId, "transferring", { currentDisk: i })
+        await downloadDisk(i, vmConfig.disks[i])
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+      }
+
+      // Phase 3: Remove snapshot (if created) + power off source VM (downtime starts here)
+      if (snapshotCreated) {
+        await appendLog(jobId, "All disks downloaded — cleaning up snapshot and powering off source VM...", "warn")
+        try {
+          await soapRemoveAllSnapshots(soapSession!, config.sourceVmId)
+          await appendLog(jobId, "Migration snapshot removed", "info")
+        } catch {
+          await appendLog(jobId, "Warning: could not remove migration snapshot — please remove it manually", "warn")
+        }
+
+        // Power off for final cutover
+        await powerOffSourceVm(jobId, soapSession!, config.sourceVmId)
+      } else {
+        await appendLog(jobId, "All disks downloaded.", "info")
+      }
+
+      // Phase 4: Convert and import all disks (downtime continues)
+      await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+        await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
+        await convertAndImportDisk(i)
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+      }
+    } else {
+      // ── Cold mode: sequential download → convert → import per disk ──
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
+        await downloadDisk(i, vmConfig.disks[i])
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+        await convertAndImportDisk(i)
+        await updateJob(jobId, "transferring", {
+          currentDisk: i + 1,
+          progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
+        })
+      }
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")

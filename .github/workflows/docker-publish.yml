@@ -85,7 +85,7 @@ jobs:
 
       - name: Extract metadata for Frontend
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.FRONTEND_IMAGE }}
           tags: |
@@ -234,7 +234,7 @@ jobs:
 
       - name: Extract metadata for Orchestrator
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.ORCHESTRATOR_IMAGE }}
           tags: |

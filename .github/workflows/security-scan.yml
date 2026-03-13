@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Frontend image (local)
         uses: docker/build-push-action@v6
@@ -72,7 +72,7 @@ jobs:
           token: ${{ secrets.ORCHESTRATOR_PAT }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Orchestrator image (local)
         uses: docker/build-push-action@v6

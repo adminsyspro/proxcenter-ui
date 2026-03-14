@@ -1098,7 +1098,7 @@ export default function VmDetailTabs(props: any) {
                                   }}
                                 >
                                   <ListItemIcon sx={{ minWidth: 40 }}>
-                                    <i className={disk.isUnused ? "ri-delete-bin-line" : disk.isCdrom ? "ri-disc-fill" : "ri-hard-drive-2-fill"} style={{ fontSize: 24, opacity: disk.isUnused ? 0.5 : disk.isCdrom ? 1 : 0.7, color: disk.isUnused ? 'var(--mui-palette-warning-main)' : disk.isCdrom ? 'var(--mui-palette-secondary-main)' : undefined }} />
+                                    <i className={disk.isUnused ? "ri-delete-bin-line" : disk.isCdrom ? "ri-disc-fill" : disk.isEfi ? "ri-shield-keyhole-line" : disk.isTpm ? "ri-key-2-line" : "ri-hard-drive-2-fill"} style={{ fontSize: 24, opacity: disk.isUnused ? 0.5 : disk.isCdrom || disk.isEfi || disk.isTpm ? 1 : 0.7, color: disk.isUnused ? 'var(--mui-palette-warning-main)' : disk.isCdrom ? 'var(--mui-palette-secondary-main)' : disk.isEfi || disk.isTpm ? 'var(--mui-palette-info-main)' : undefined }} />
                                   </ListItemIcon>
                                   <ListItemText
                                     primary={
@@ -1110,6 +1110,10 @@ export default function VmDetailTabs(props: any) {
                                           <Chip label={t('inventory.unused')} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
                                         ) : disk.isCdrom ? (
                                           <Chip label="CD-ROM" size="small" color="secondary" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                                        ) : disk.isEfi ? (
+                                          <Chip label="EFI" size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                                        ) : disk.isTpm ? (
+                                          <Chip label={disk.format || 'TPM'} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
                                         ) : (
                                           <Chip label={disk.size} size="small" sx={{ height: 20, fontSize: 11 }} />
                                         )}

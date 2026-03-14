@@ -781,31 +781,38 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           }
         })
 
-        // Parse other hardware: EFI disk, TPM, USB, PCI passthrough, serial ports
+        // Parse EFI disk and TPM state as disks (they are stored on storage)
         Object.keys(config).forEach(key => {
           const val = String(config[key])
           if (/^efidisk\d+$/.test(key)) {
             const storagePart = val.split(',')[0].split(':')
             const sizeMatch = val.match(/size=(\d+[KMG]?)/)
-            otherHardwareInfo.push({
+            disksInfo.push({
               id: key,
-              type: 'efidisk',
-              label: 'EFI Disk',
-              rawValue: val,
               storage: storagePart[0] || 'unknown',
-              size: sizeMatch ? sizeMatch[1] : '128K',
+              size: sizeMatch ? sizeMatch[1] : '4M',
+              format: 'EFI',
+              isEfi: true,
+              rawValue: val,
             })
           } else if (/^tpmstate\d+$/.test(key)) {
             const storagePart = val.split(',')[0].split(':')
             const versionMatch = val.match(/version=v(\d+\.\d+)/)
-            otherHardwareInfo.push({
+            disksInfo.push({
               id: key,
-              type: 'tpmstate',
-              label: `TPM${versionMatch ? ` v${versionMatch[1]}` : ''}`,
-              rawValue: val,
               storage: storagePart[0] || 'unknown',
+              size: '4M',
+              format: versionMatch ? `TPM v${versionMatch[1]}` : 'TPM',
+              isTpm: true,
+              rawValue: val,
             })
-          } else if (/^usb\d+$/.test(key)) {
+          }
+        })
+
+        // Parse other hardware: USB, PCI passthrough, serial ports, audio, RNG
+        Object.keys(config).forEach(key => {
+          const val = String(config[key])
+          if (/^usb\d+$/.test(key)) {
             const hostMatch = val.match(/host=([^,]+)/)
             const isSpice = val.includes('spice')
             otherHardwareInfo.push({

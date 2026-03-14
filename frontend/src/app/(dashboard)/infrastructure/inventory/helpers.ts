@@ -807,10 +807,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             })
           } else if (/^usb\d+$/.test(key)) {
             const hostMatch = val.match(/host=([^,]+)/)
+            const isSpice = val.includes('spice')
             otherHardwareInfo.push({
               id: key,
               type: 'usb',
-              label: `USB Device`,
+              label: isSpice ? 'USB (SPICE)' : `USB${hostMatch ? ` (${hostMatch[1]})` : ''}`,
               rawValue: val,
             })
           } else if (/^hostpci\d+$/.test(key)) {
@@ -818,7 +819,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             otherHardwareInfo.push({
               id: key,
               type: 'pci',
-              label: `PCI Device`,
+              label: `PCI${deviceMatch ? ` (${deviceMatch[1]})` : ''}`,
               rawValue: val,
             })
           } else if (/^serial\d+$/.test(key)) {

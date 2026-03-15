@@ -1396,7 +1396,12 @@
     "tapeType": "Tape",
     "warningLabel": "Warning",
     "storagePrefix": "Storage",
-    "datastorePrefix": "Datastore"
+    "datastorePrefix": "Datastore",
+    "trendsTitle": "Backup Trends",
+    "trendsCount": "Count",
+    "trendsSize": "Size",
+    "trendsVerification": "Verification",
+    "trendsDistribution": "Type distribution"
   },
   "drs": {
     "title": "DRS",

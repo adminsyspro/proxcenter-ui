@@ -41,6 +41,7 @@ import { DataGrid } from '@mui/x-data-grid'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import BackupJobsTabs from './BackupJobsTabs'
+import BackupTrendsChart from './BackupTrendsChart'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/skeletons'
 
@@ -621,6 +622,9 @@ return () => clearTimeout(timer)
           </Card>
         </Box>
       )}
+
+      {/* Graphiques de tendances */}
+      {selectedPbs && <BackupTrendsChart pbsId={selectedPbs} />}
 
       {/* Jobs de sauvegarde PVE et PBS avec onglets */}
       {(pveConnections.length > 0 || pbsConnections.length > 0) && (

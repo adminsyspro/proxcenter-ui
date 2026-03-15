@@ -1596,11 +1596,15 @@ return (
                                   </Box>
                                 </td>
                                 <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
-                                  {data.optionsInfo?.hotplug || 'disk,network,usb'}
+                                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                    {(data.optionsInfo?.hotplug || 'disk,network,usb').split(',').map((h: string) => h.trim()).filter(Boolean).map((h: string) => (
+                                      <Chip key={h} label={h} size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 22 }} />
+                                    ))}
+                                  </Box>
                                 </td>
                                 <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'hotplug', label: 'Hotplug (disk,network,usb,memory,cpu)', value: data.optionsInfo?.hotplug || 'disk,network,usb', type: 'text' })}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'hotplug', label: 'Hotplug', value: data.optionsInfo?.hotplug || 'disk,network,usb', type: 'hotplug' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>

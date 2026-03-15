@@ -648,7 +648,7 @@ export default function InventoryDetails({
     key: string; 
     label: string; 
     value: any; 
-    type: 'text' | 'boolean' | 'select';
+    type: 'text' | 'boolean' | 'select' | 'hotplug';
     options?: { value: string; label: string }[];
   } | null>(null)
 
@@ -4750,6 +4750,25 @@ return vm?.isCluster ?? false
                 </Select>
               </FormControl>
             )}
+            {editOptionDialog?.type === 'hotplug' && (() => {
+              const fields = ['disk', 'network', 'usb', 'memory', 'cpu']
+              const current = typeof editOptionValue === 'string' ? editOptionValue.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+              const toggle = (field: string) => {
+                const next = current.includes(field) ? current.filter((f: string) => f !== field) : [...current, field]
+                setEditOptionValue(next.join(','))
+              }
+              return (
+                <Stack spacing={1}>
+                  {fields.map(field => (
+                    <FormControlLabel
+                      key={field}
+                      control={<Checkbox checked={current.includes(field)} onChange={() => toggle(field)} />}
+                      label={field.charAt(0).toUpperCase() + field.slice(1)}
+                    />
+                  ))}
+                </Stack>
+              )
+            })()}
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>

@@ -108,14 +108,12 @@ export default function BackupTrendsChart({ pbsId }) {
     return [
       { name: 'VM', value: d.vm },
       { name: 'CT', value: d.ct },
-      { name: 'Host', value: d.host },
     ].filter(x => x.value > 0)
   }, [data])
 
   const PIE_COLORS = [
     theme.palette.primary.main,
     theme.palette.secondary.main,
-    theme.palette.warning.main,
   ]
 
   if (!pbsId) return null
@@ -172,8 +170,7 @@ export default function BackupTrendsChart({ pbsId }) {
                     <Tooltip content={<CustomTooltip t={t} mode='count' />} />
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey='vm' name='VM' stackId='a' fill={theme.palette.primary.main} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey='ct' name='CT' stackId='a' fill={theme.palette.secondary.main} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey='host' name='Host' stackId='a' fill={theme.palette.warning.main} radius={[2, 2, 0, 0]} />
+                    <Bar dataKey='ct' name='CT' stackId='a' fill={theme.palette.secondary.main} radius={[2, 2, 0, 0]} />
                   </BarChart>
                 ) : mode === 'size' ? (
                   <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>

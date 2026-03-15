@@ -2174,28 +2174,40 @@ return vms
   }, [filteredVms, onAllVmsChange])
 
   // Liste des hôtes uniques avec leurs VMs (filtrées, sans templates)
+  // Inclut aussi les nœuds sans VM depuis filteredClusters
   const hostsList = useMemo(() => {
-    const hostsMap = new Map<string, typeof displayVms>()
+    const hostsMap = new Map<string, { node: string; connName: string; vms: typeof displayVms }>()
 
+    // D'abord, ajouter tous les nœuds depuis les clusters (y compris ceux sans VM)
+    filteredClusters.forEach(clu => {
+      clu.nodes.forEach(n => {
+        const key = `${clu.connId}:${n.node}`
+        if (!hostsMap.has(key)) {
+          hostsMap.set(key, { node: n.node, connName: clu.name, vms: [] })
+        }
+      })
+    })
+
+    // Puis, associer les VMs filtrées aux nœuds
     displayVms.forEach(vm => {
       const key = `${vm.connId}:${vm.node}`
 
       if (!hostsMap.has(key)) {
-        hostsMap.set(key, [])
+        hostsMap.set(key, { node: vm.node, connName: vm.connName, vms: [] })
       }
 
-      hostsMap.get(key)!.push(vm)
+      hostsMap.get(key)!.vms.push(vm)
     })
 
     return Array.from(hostsMap.entries())
-      .map(([key, vms]) => ({
+      .map(([key, h]) => ({
         key,
-        node: vms[0].node,
-        connName: vms[0].connName,
-        vms
+        node: h.node,
+        connName: h.connName,
+        vms: h.vms
       }))
       .sort((a, b) => a.node.localeCompare(b.node))
-  }, [displayVms])
+  }, [displayVms, filteredClusters])
 
   // Liste des pools uniques avec leurs VMs (filtrées, sans templates)
   const poolsList = useMemo(() => {
@@ -2399,7 +2411,7 @@ return favorites.has(vmKey)
     onHostsChange?.(hostsList.map(h => ({
       key: h.key,
       node: h.node,
-      connId: h.vms[0]?.connId || '',
+      connId: h.vms[0]?.connId || h.key.split(':')[0],
       connName: h.connName,
       vms: h.vms.map(vm => ({
         ...vm,

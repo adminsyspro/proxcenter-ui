@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useTranslations } from 'next-intl'
+import { getOsSvgIcon } from '@/lib/utils/osIcons'
 
 import {
   Box,
@@ -47,41 +48,26 @@ function ConsolePreview({
     }
   }
 
-  // Déterminer l'icône Remix Icon à afficher selon l'OS
-  const getOsIcon = () => {
+  // Déterminer l'icône SVG à afficher selon l'OS
+  const getOsIconData = () => {
     if (!osInfo?.name && !osInfo?.type) return null
-    
-    const osName = (osInfo?.name || '').toLowerCase()
+
+    const osName = osInfo?.name || ''
     const osType = osInfo?.type
-    
-    // Windows
-    if (osType === 'windows' || osName.includes('windows')) {
-      return 'ri-windows-fill'
-    }
-    // Ubuntu
-    if (osName.includes('ubuntu')) {
-      return 'ri-ubuntu-fill'
-    }
-    // Debian, Linux générique et autres distributions
-    if (osType === 'linux' || osName.includes('linux') || osName.includes('debian') || 
-        osName.includes('centos') || osName.includes('fedora') || osName.includes('arch') ||
-        osName.includes('alpine') || osName.includes('suse') || osName.includes('red hat') ||
-        osName.includes('rhel')) {
-      return 'ri-ubuntu-fill' // Utiliser ubuntu comme icône Linux générique
-    }
+
+    // Try SVG icon first
+    const svgIcon = getOsSvgIcon(osName, osType)
+    if (svgIcon) return { type: 'svg' as const, src: svgIcon }
+
     // macOS
-    if (osName.includes('mac') || osName.includes('darwin')) {
-      return 'ri-apple-fill'
+    if (osName.toLowerCase().includes('mac') || osName.toLowerCase().includes('darwin')) {
+      return { type: 'ri' as const, className: 'ri-apple-fill' }
     }
-    // FreeBSD et autres
-    if (osName.includes('bsd')) {
-      return 'ri-terminal-box-fill'
-    }
-    
-    return 'ri-computer-fill'
+
+    return { type: 'ri' as const, className: 'ri-computer-fill' }
   }
 
-  const osIcon = getOsIcon()
+  const osIconData = getOsIconData()
 
   return (
     <Box sx={{ width: '100%', height: '100%' }}>
@@ -118,7 +104,7 @@ function ConsolePreview({
         }}
       >
         {/* Icône OS en fond */}
-        {osIcon && (
+        {osIconData && (
           <Box
             sx={{
               position: 'absolute',
@@ -129,14 +115,18 @@ function ConsolePreview({
               pointerEvents: 'none',
             }}
           >
-            <Box
-              component="i"
-              className={osIcon}
-              sx={{
-                fontSize: 100,
-                color: 'rgba(255, 255, 255, 0.12)',
-              }}
-            />
+            {osIconData.type === 'svg' ? (
+              <img src={osIconData.src} alt="" width={100} height={100} style={{ opacity: 0.12, filter: 'brightness(0) invert(1)' }} />
+            ) : (
+              <Box
+                component="i"
+                className={osIconData.className}
+                sx={{
+                  fontSize: 100,
+                  color: 'rgba(255, 255, 255, 0.12)',
+                }}
+              />
+            )}
           </Box>
         )}
 

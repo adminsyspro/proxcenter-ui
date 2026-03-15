@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { getOsSvgIcon } from '@/lib/utils/osIcons'
 
 import {
   Alert,
@@ -945,10 +946,12 @@ return
 
       case 1: // OS
         {
-          const osPresets: { id: string; label: string; icon: string; type: string; version: string }[] = [
-            { id: 'ubuntu', label: 'Ubuntu / Debian', icon: 'ri-ubuntu-fill', type: 'Linux', version: 'l26' },
-            { id: 'centos', label: 'CentOS / RHEL', icon: 'ri-centos-fill', type: 'Linux', version: 'l26' },
-            { id: 'fedora', label: 'Fedora', icon: 'ri-firefox-fill', type: 'Linux', version: 'l26' },
+          const osPresets: { id: string; label: string; icon?: string; svgIcon?: string; type: string; version: string }[] = [
+            { id: 'ubuntu', label: 'Ubuntu', svgIcon: '/images/os/ubuntu.svg', type: 'Linux', version: 'l26' },
+            { id: 'debian', label: 'Debian', svgIcon: '/images/os/debian.svg', type: 'Linux', version: 'l26' },
+            { id: 'centos', label: 'CentOS / Rocky', svgIcon: '/images/os/centos.svg', type: 'Linux', version: 'l26' },
+            { id: 'rhel', label: 'RHEL', svgIcon: '/images/os/redhat.svg', type: 'Linux', version: 'l26' },
+            { id: 'fedora', label: 'Fedora', svgIcon: '/images/os/fedora.svg', type: 'Linux', version: 'l26' },
             { id: 'win11', label: 'Windows 11', icon: 'ri-windows-fill', type: 'Windows', version: 'win11' },
             { id: 'win10', label: 'Windows 10', icon: 'ri-windows-fill', type: 'Windows', version: 'win10' },
             { id: 'winserver', label: 'Windows Server', icon: 'ri-windows-fill', type: 'Windows', version: 'win11' },
@@ -976,7 +979,10 @@ return
                           '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.03) },
                         }}
                       >
-                        <i className={p.icon} style={{ fontSize: 20, opacity: isActive ? 1 : 0.5 }} />
+                        {p.svgIcon
+                          ? <img src={p.svgIcon} alt="" width={20} height={20} style={{ opacity: isActive ? 1 : 0.5 }} />
+                          : <i className={p.icon} style={{ fontSize: 20, opacity: isActive ? 1 : 0.5 }} />
+                        }
                         <Typography variant="body2" fontSize={12} fontWeight={isActive ? 700 : 400}>{p.label}</Typography>
                       </Box>
                     )
@@ -1037,7 +1043,10 @@ return
               {/* Guest OS type + version */}
               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <i className={guestOsType === 'Linux' ? 'ri-ubuntu-fill' : guestOsType === 'Windows' ? 'ri-windows-fill' : guestOsType === 'Solaris' ? 'ri-sun-line' : 'ri-question-line'} style={{ fontSize: 16, opacity: 0.6 }} />
+                  {guestOsType === 'Linux' ? <img src="/images/os/linux.svg" alt="" width={16} height={16} style={{ opacity: 0.6 }} />
+                    : guestOsType === 'Windows' ? <i className="ri-windows-fill" style={{ fontSize: 16, opacity: 0.6 }} />
+                    : guestOsType === 'Solaris' ? <i className="ri-sun-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                    : <i className="ri-question-line" style={{ fontSize: 16, opacity: 0.6 }} />}
                   <Typography variant="body2" fontWeight={600} fontSize={13}>{t('inventory.createVm.guestOs')}</Typography>
                 </Box>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
@@ -1049,12 +1058,15 @@ return
                       label={t('inventory.createVm.osType')}
                       renderValue={(val) => (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <i className={val === 'Linux' ? 'ri-ubuntu-fill' : val === 'Windows' ? 'ri-windows-fill' : val === 'Solaris' ? 'ri-sun-line' : 'ri-question-line'} style={{ fontSize: 18, opacity: 0.8 }} />
+                          {val === 'Linux' ? <img src="/images/os/linux.svg" alt="" width={18} height={18} style={{ opacity: 0.8 }} />
+                            : val === 'Windows' ? <i className="ri-windows-fill" style={{ fontSize: 18, opacity: 0.8 }} />
+                            : val === 'Solaris' ? <i className="ri-sun-line" style={{ fontSize: 18, opacity: 0.8 }} />
+                            : <i className="ri-question-line" style={{ fontSize: 18, opacity: 0.8 }} />}
                           {t(`inventory.createVm.os${val}`)}
                         </Box>
                       )}
                     >
-                      <MenuItem value="Linux"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-ubuntu-fill" style={{ fontSize: 18, opacity: 0.8 }} />{t('inventory.createVm.osLinux')}</Box></MenuItem>
+                      <MenuItem value="Linux"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><img src="/images/os/linux.svg" alt="" width={18} height={18} style={{ opacity: 0.8 }} />{t('inventory.createVm.osLinux')}</Box></MenuItem>
                       <MenuItem value="Windows"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-windows-fill" style={{ fontSize: 18, opacity: 0.8 }} />{t('inventory.createVm.osWindows')}</Box></MenuItem>
                       <MenuItem value="Solaris"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-sun-line" style={{ fontSize: 18, opacity: 0.8 }} />{t('inventory.createVm.osSolaris')}</Box></MenuItem>
                       <MenuItem value="Other"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-question-line" style={{ fontSize: 18, opacity: 0.8 }} />{t('inventory.createVm.osOther')}</Box></MenuItem>
@@ -1659,7 +1671,7 @@ return
                 {/* OS */}
                 {confirmCard('ri-disc-line', 'OS', (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    <Chip icon={<i className={guestOsType === 'Linux' ? 'ri-ubuntu-fill' : guestOsType === 'Windows' ? 'ri-windows-fill' : 'ri-question-line'} />} label={`${guestOsType} ${guestOsVersion}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
+                    <Chip icon={guestOsType === 'Linux' ? <img src="/images/os/linux.svg" alt="" width={16} height={16} /> : <i className={guestOsType === 'Windows' ? 'ri-windows-fill' : 'ri-question-line'} />} label={`${guestOsType} ${guestOsVersion}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
                     {osMediaType === 'iso' && isoImage && <Chip label={isoImage} size="small" variant="outlined" sx={{ fontSize: 11 }} />}
                   </Box>
                 ))}

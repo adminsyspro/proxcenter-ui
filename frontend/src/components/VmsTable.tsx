@@ -2,6 +2,7 @@
 
 import React, { useMemo, useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import { getOsSvgIcon } from '@/lib/utils/osIcons'
 
 import { createPortal } from 'react-dom'
 import {
@@ -1014,30 +1015,22 @@ return (
               return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
             }
             
-            // Icône selon le type d'OS
-            const osIcon = osInfo.type === 'windows' 
-              ? 'ri-windows-fill' 
-              : osInfo.type === 'linux' 
-                ? 'ri-ubuntu-fill' 
-                : 'ri-terminal-box-line'
-            
-            const osColor = osInfo.type === 'windows'
-              ? '#0078D4'
-              : osInfo.type === 'linux'
-                ? '#E95420'
-                : undefined
-            
+            // Icône selon le type d'OS (SVG si disponible)
+            const osSvgIcon = getOsSvgIcon(osInfo.name || '', osInfo.type)
+            const osRiIcon = osInfo.type === 'windows'
+              ? 'ri-windows-fill'
+              : 'ri-terminal-box-line'
+
             // Nom court de l'OS
             let shortName = osInfo.name || 'Unknown'
-
 
             // Raccourcir les noms longs
             if (shortName.length > 15) {
               shortName = shortName.split(' ').slice(0, 2).join(' ')
             }
-            
+
             return (
-              <Tooltip 
+              <Tooltip
                 title={
                   <Box>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>{osInfo.name || 'Unknown OS'}</Typography>
@@ -1048,7 +1041,10 @@ return (
                 arrow
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <i className={osIcon} style={{ fontSize: 14, color: osColor }} />
+                  {osSvgIcon
+                    ? <img src={osSvgIcon} alt="" width={14} height={14} />
+                    : <i className={osRiIcon} style={{ fontSize: 14 }} />
+                  }
                   <Typography variant='body2' sx={{ fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {shortName}
                   </Typography>

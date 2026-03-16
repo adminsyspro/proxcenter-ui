@@ -481,10 +481,10 @@ return () => setPageInfo('', '', '')
         flex: 1,
         minWidth: 200,
         renderCell: params => (
-          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.3 }}>{params.row.email}</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
+            <Typography variant='body2' noWrap sx={{ fontWeight: 600, lineHeight: 1.3 }}>{params.row.email}</Typography>
             {params.row.name && (
-              <Typography variant='caption' sx={{ opacity: 0.6, lineHeight: 1.2 }}>{params.row.name}</Typography>
+              <Typography variant='caption' noWrap sx={{ opacity: 0.6, lineHeight: 1.2 }}>{params.row.name}</Typography>
             )}
           </Box>
         ),
@@ -615,6 +615,7 @@ return () => setPageInfo('', '', '')
                       '& .MuiDataGrid-cell': {
                         display: 'flex',
                         alignItems: 'center',
+                        overflow: 'hidden',
                         py: 0.5,
                       },
                       '& .MuiDataGrid-columnHeaders': {

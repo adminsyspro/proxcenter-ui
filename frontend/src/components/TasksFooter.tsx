@@ -683,7 +683,11 @@ export default function TasksFooter({
               </Box>
             ) : (
               <DataGrid
-                rows={tasks}
+                rows={[...tasks].sort((a, b) => {
+                  const aRunning = a.status === 'running' ? 0 : 1
+                  const bRunning = b.status === 'running' ? 0 : 1
+                  return aRunning - bRunning
+                })}
                 columns={columns}
                 density="compact"
                 disableRowSelectionOnClick

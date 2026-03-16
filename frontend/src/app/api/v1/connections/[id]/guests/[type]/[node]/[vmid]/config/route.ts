@@ -29,7 +29,7 @@ const ALLOWED_QEMU_FIELDS = new Set([
   'scsihw',
 
   // Options
-  'ostype', 'tablet', 'localtime', 'freeze', 'kvm', 'acpi',
+  'ostype', 'hotplug', 'tablet', 'localtime', 'freeze', 'kvm', 'acpi',
 
   // Args
   'args',

@@ -349,6 +349,7 @@ export default function TasksFooter({
             sx={{
               height: 20,
               fontSize: '0.7rem',
+              '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
               '& .MuiChip-label': { px: 1 }
             }}
             icon={isRunning ? (
@@ -356,8 +357,6 @@ export default function TasksFooter({
                 className="ri-loader-4-line"
                 style={{
                   fontSize: 12,
-                  marginLeft: 4,
-                  marginRight: 2,
                   animation: 'spin 1s linear infinite'
                 }}
               />
@@ -531,6 +530,8 @@ export default function TasksFooter({
                     sx={{
                       height: 18,
                       fontSize: '0.7rem',
+                      gap: 0.5,
+                      '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
                       '& .MuiChip-label': { px: 0.75 }
                     }}
                   />
@@ -651,9 +652,9 @@ export default function TasksFooter({
                         color={task.status === 'running' ? 'primary' : task.status === 'done' ? 'success' : 'error'}
                         variant={task.status === 'running' ? 'outlined' : 'filled'}
                         icon={task.status === 'running' ? (
-                          <i className="ri-loader-4-line" style={{ fontSize: 12, marginLeft: 4, marginRight: 2, animation: 'spin 1s linear infinite' }} />
+                          <i className="ri-loader-4-line" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />
                         ) : undefined}
-                        sx={{ height: 20, fontSize: '0.7rem', '& .MuiChip-label': { px: 1 } }}
+                        sx={{ height: 20, fontSize: '0.7rem', '& .MuiChip-icon': { ml: 0.5, mr: -0.25 }, '& .MuiChip-label': { px: 1 } }}
                       />
                     </Box>
                   ))}

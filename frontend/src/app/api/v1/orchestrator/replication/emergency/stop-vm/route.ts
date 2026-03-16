@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -12,6 +13,14 @@ export async function POST(request: NextRequest) {
     if (denied) return denied
 
     const body = await request.json()
+
+    // Verify the target cluster belongs to the tenant
+    const tenantConnectionIds = await getTenantConnectionIds()
+
+    if (body.target_cluster && !tenantConnectionIds.has(body.target_cluster)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
     const client = getOrchestratorClient()
     const response = await client.stopDRVM(body)
 

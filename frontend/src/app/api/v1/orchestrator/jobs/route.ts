@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -19,6 +19,7 @@ function extractHostname(baseUrl: string): string {
 // GET /api/v1/orchestrator/jobs - List all jobs (rolling updates, future: DRS, migrations, etc.)
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const { searchParams } = new URL(req.url)
     const type = searchParams.get("type") // filter by type: rolling_update, drs, migration, etc.
     const status = searchParams.get("status") // filter by status: running, completed, failed, etc.
@@ -272,8 +273,16 @@ export async function GET(req: Request) {
       }
     }
 
+    // Filter all jobs by tenant connections
+    const tenantConnIds = new Set(connections.map((c: any) => c.id))
+    const tenantJobs = jobs.filter((j: any) =>
+      !j.metadata?.connectionId || tenantConnIds.has(j.metadata.connectionId)
+    ).filter((j: any) =>
+      !j.metadata?.sourceCluster || tenantConnIds.has(j.metadata.sourceCluster) || connByName.has(j.metadata.sourceCluster)
+    )
+
     // Apply filters
-    let filtered = jobs
+    let filtered = tenantJobs
 
     if (type && type !== "all") {
       filtered = filtered.filter(j => j.type === type)
@@ -296,14 +305,14 @@ export async function GET(req: Request) {
       filtered = filtered.slice(0, limitNum)
     }
 
-    // Calculate stats
+    // Calculate stats from tenant-filtered jobs
     const stats = {
-      total: jobs.length,
-      running: jobs.filter(j => j.status === "running").length,
-      pending: jobs.filter(j => j.status === "pending" || j.status === "queued").length,
-      success: jobs.filter(j => j.status === "success" || j.status === "completed").length,
-      failed: jobs.filter(j => j.status === "failed" || j.status === "cancelled").length,
-      paused: jobs.filter(j => j.status === "paused").length,
+      total: tenantJobs.length,
+      running: tenantJobs.filter(j => j.status === "running").length,
+      pending: tenantJobs.filter(j => j.status === "pending" || j.status === "queued").length,
+      success: tenantJobs.filter(j => j.status === "success" || j.status === "completed").length,
+      failed: tenantJobs.filter(j => j.status === "failed" || j.status === "cancelled").length,
+      paused: tenantJobs.filter(j => j.status === "paused").length,
     }
 
     return NextResponse.json({ 

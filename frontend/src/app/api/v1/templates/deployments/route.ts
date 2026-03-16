@@ -1,13 +1,14 @@
 // src/app/api/v1/templates/deployments/route.ts
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 

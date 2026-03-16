@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
@@ -127,6 +127,7 @@ async function fetchRawInventory(): Promise<{
   storages: any[]
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }> {
+  const prisma = await getSessionPrisma()
   // 1) Charger toutes les connexions PVE, PBS et hyperviseurs externes en parallèle
   const [pveConnections, pbsConnections, externalConnections] = await Promise.all([
     prisma.connection.findMany({
@@ -509,23 +510,23 @@ return aId - bId
  * Blocking fetch with thundering-herd protection.
  * Used on cache miss or force refresh — the caller awaits the result.
  */
-async function blockingFetch() {
-  let inflight = getInflightFetch()
+async function blockingFetch(tenantId: string) {
+  let inflight = getInflightFetch(tenantId)
 
   if (!inflight) {
     const startTime = Date.now()
     inflight = fetchRawInventory()
       .then(result => {
         console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
-        setCachedInventory(result)
-        setInflightFetch(null)
+        setCachedInventory(result, tenantId)
+        setInflightFetch(null, tenantId)
         return result
       })
       .catch(err => {
-        setInflightFetch(null)
+        setInflightFetch(null, tenantId)
         throw err
       })
-    setInflightFetch(inflight)
+    setInflightFetch(inflight, tenantId)
   }
 
   return inflight
@@ -535,21 +536,21 @@ async function blockingFetch() {
  * Trigger a background revalidation if one isn't already in progress.
  * Fire-and-forget — errors are logged but don't affect the current request.
  */
-function triggerBackgroundRevalidation() {
-  if (getInflightFetch()) return
+function triggerBackgroundRevalidation(tenantId: string) {
+  if (getInflightFetch(tenantId)) return
 
   const startTime = Date.now()
   const revalidation = fetchRawInventory()
     .then(result => {
       console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
-      setCachedInventory(result)
-      setInflightFetch(null)
+      setCachedInventory(result, tenantId)
+      setInflightFetch(null, tenantId)
     })
     .catch(err => {
       console.error('[inventory] Background revalidation failed:', err?.message)
-      setInflightFetch(null)
+      setInflightFetch(null, tenantId)
     })
-  setInflightFetch(revalidation as any)
+  setInflightFetch(revalidation as any, tenantId)
 }
 
 /* ------------------------------------------------------------------ */
@@ -559,9 +560,10 @@ function triggerBackgroundRevalidation() {
 export async function GET(request: NextRequest) {
   try {
     const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
+    const tenantId = await getCurrentTenantId()
 
     // 1) Tenter le cache (sauf si refresh forcé)
-    const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache()
+    const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId)
 
     let raw: Awaited<ReturnType<typeof fetchRawInventory>>
 
@@ -572,10 +574,10 @@ export async function GET(request: NextRequest) {
       // Cache is stale — serve immediately, trigger background revalidation
       console.log('[inventory] Serving stale data, revalidating in background')
       raw = cacheResult.data
-      triggerBackgroundRevalidation()
+      triggerBackgroundRevalidation(tenantId)
     } else {
       // Cache miss or force refresh — blocking fetch required
-      raw = await blockingFetch()
+      raw = await blockingFetch(tenantId)
     }
 
     // 2) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache)
@@ -603,7 +605,8 @@ export async function GET(request: NextRequest) {
               node: node.node,
               vmid: String(g.vmid),
             })),
-            PERMISSIONS.VM_VIEW
+            PERMISSIONS.VM_VIEW,
+            rbacCtx.tenantId
           )
         }))
       }))

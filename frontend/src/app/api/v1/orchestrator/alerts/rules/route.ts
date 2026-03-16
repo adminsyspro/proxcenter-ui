@@ -1,20 +1,27 @@
 import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { getTenantConnectionIds } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/v1/orchestrator/alerts/rules
- * Liste toutes les règles d'événements
+ * Liste les règles d'événements (filtrées par tenant)
  */
 export async function GET() {
   try {
+    const tenantConnectionIds = await getTenantConnectionIds()
     const rules = await orchestratorFetch('/alerts/rules')
 
-    
-return NextResponse.json(rules)
+    // Filter rules: keep global rules (no connection_id) + rules for tenant connections
+    const allRules = Array.isArray(rules) ? rules : ((rules as any)?.data || [])
+    const filtered = Array.isArray(allRules)
+      ? allRules.filter((r: any) => !r.connection_id || tenantConnectionIds.has(r.connection_id))
+      : allRules
+
+    return NextResponse.json(filtered)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/rules] GET error:', error)
@@ -38,6 +45,18 @@ return NextResponse.json(rules)
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+
+    // Validate connection_id belongs to current tenant
+    if (body.connection_id) {
+      const tenantConnectionIds = await getTenantConnectionIds()
+
+      if (!tenantConnectionIds.has(body.connection_id)) {
+        return NextResponse.json(
+          { error: 'Connection not found or not owned by current tenant' },
+          { status: 403 }
+        )
+      }
+    }
 
     const rule = await orchestratorFetch('/alerts/rules', {
       method: 'POST',

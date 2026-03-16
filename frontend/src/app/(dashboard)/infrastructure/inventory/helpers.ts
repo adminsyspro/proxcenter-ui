@@ -864,7 +864,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           ostype: config.ostype || 'other',
           bootOrder: config.boot || '',
           useTablet: config.tablet !== 0 && config.tablet !== false,
-          hotplug: config.hotplug || 'Disk, Network, USB',
+          hotplug: config.hotplug === 1 || config.hotplug === '1' ? 'disk,network,usb,memory,cpu' : (typeof config.hotplug === 'string' ? config.hotplug.toLowerCase() : 'disk,network,usb'),
           acpi: config.acpi !== 0 && config.acpi !== false,
           kvmEnabled: config.kvm !== 0 && config.kvm !== false,
           freezeCpu: config.freeze === 1 || config.freeze === true,

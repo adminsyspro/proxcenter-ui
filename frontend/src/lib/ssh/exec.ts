@@ -1,5 +1,5 @@
 import { Client } from "ssh2"
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
@@ -21,6 +21,7 @@ export async function executeSSH(
   nodeIp: string,
   command: string
 ): Promise<SSHResult> {
+  const prisma = await getSessionPrisma()
   const connection = await prisma.connection.findUnique({
     where: { id: connectionId },
     select: {

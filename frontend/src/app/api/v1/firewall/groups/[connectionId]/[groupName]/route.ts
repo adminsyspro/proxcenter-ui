@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 // DELETE /api/v1/firewall/groups/[connectionId]/[groupName] - Delete security group
 export async function DELETE(
@@ -10,6 +11,8 @@ export async function DELETE(
 ) {
   try {
     const { connectionId, groupName } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
 
     const orchestrator = getOrchestratorClient()
 

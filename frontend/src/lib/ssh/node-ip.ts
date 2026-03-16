@@ -1,6 +1,6 @@
 import { pveFetch } from "@/lib/proxmox/client"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 
 /**
  * Resolve the management IP of a Proxmox node.
@@ -17,6 +17,7 @@ export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
   try {
     const connId = conn.id || conn.connectionId
     if (connId) {
+      const prisma = await getSessionPrisma()
       const host = await prisma.managedHost.findUnique({
         where: { connectionId_node: { connectionId: connId, node: nodeName } },
         select: { sshAddress: true },

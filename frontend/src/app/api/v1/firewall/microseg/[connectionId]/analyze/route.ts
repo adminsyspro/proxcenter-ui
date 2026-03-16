@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 export async function GET(
   request: NextRequest,
@@ -9,6 +10,8 @@ export async function GET(
 ) {
   try {
     const { connectionId } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const searchParams = request.nextUrl.searchParams
     const gatewayOffset = searchParams.get('gateway_offset') || '254'
     

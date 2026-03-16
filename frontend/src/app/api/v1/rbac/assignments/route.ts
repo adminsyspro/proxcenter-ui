@@ -9,6 +9,7 @@ import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 // GET /api/v1/rbac/assignments - Liste toutes les assignations
 export async function GET(req: NextRequest) {
@@ -20,12 +21,13 @@ export async function GET(req: NextRequest) {
     }
 
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
     const url = new URL(req.url)
     const userId = url.searchParams.get("user_id")
     const roleId = url.searchParams.get("role_id")
 
     let query = `
-      SELECT 
+      SELECT
         ur.id,
         ur.user_id,
         ur.role_id,
@@ -43,9 +45,9 @@ export async function GET(req: NextRequest) {
       JOIN users u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
       LEFT JOIN users g ON g.id = ur.granted_by
-      WHERE 1=1
+      WHERE ur.tenant_id = ?
     `
-    const params: any[] = []
+    const params: any[] = [tenantId]
 
     if (userId) {
       query += " AND ur.user_id = ?"
@@ -106,7 +108,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    const tenantId = await getCurrentTenantId()
+
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 
@@ -144,14 +148,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
     }
 
-    // Vérifier si l'utilisateur a déjà un rôle différent assigné
+    // Vérifier si l'utilisateur a déjà un rôle différent assigné (within tenant)
     const existingRole = db.prepare(`
-      SELECT ur.id, r.name as role_name 
+      SELECT ur.id, r.name as role_name
       FROM rbac_user_roles ur
       JOIN rbac_roles r ON r.id = ur.role_id
-      WHERE ur.user_id = ? AND ur.role_id != ?
+      WHERE ur.user_id = ? AND ur.role_id != ? AND ur.tenant_id = ?
       LIMIT 1
-    `).get(user_id, role_id) as any
+    `).get(user_id, role_id, tenantId) as any
 
     if (existingRole) {
       return NextResponse.json({ 
@@ -159,11 +163,11 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Vérifier que cette assignation n'existe pas déjà
+    // Vérifier que cette assignation n'existe pas déjà (within tenant)
     const existing = db.prepare(`
-      SELECT id FROM rbac_user_roles 
-      WHERE user_id = ? AND role_id = ? AND scope_type = ? AND COALESCE(scope_target, '') = COALESCE(?, '')
-    `).get(user_id, role_id, scopeType, scope_target || null)
+      SELECT id FROM rbac_user_roles
+      WHERE user_id = ? AND role_id = ? AND scope_type = ? AND COALESCE(scope_target, '') = COALESCE(?, '') AND tenant_id = ?
+    `).get(user_id, role_id, scopeType, scope_target || null, tenantId)
 
     if (existing) {
       return NextResponse.json({ error: "Cette assignation existe déjà" }, { status: 400 })
@@ -173,9 +177,9 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString()
 
     db.prepare(`
-      INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, granted_by, granted_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, user_id, role_id, scopeType, scope_target || null, session.user.id, now, expires_at || null)
+      INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, granted_by, granted_at, expires_at, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, user_id, role_id, scopeType, scope_target || null, session.user.id, now, expires_at || null, tenantId)
 
     // Audit
     await audit({

@@ -16,6 +16,7 @@ import {
   ListItemIcon,
   Menu,
   MenuItem,
+  Select,
   Tooltip,
   Typography
 } from '@mui/material'
@@ -40,6 +41,9 @@ import TasksDropdown from '@components/layout/shared/TasksDropdown'
 // About Dialog
 import AboutDialog from '@components/dialogs/AboutDialog'
 
+// What's New Dialog
+import WhatsNewDialog, { useWhatsNew } from '@components/dialogs/WhatsNewDialog'
+
 // Command Palette
 import CommandPalette from '@components/layout/shared/CommandPalette'
 
@@ -51,6 +55,9 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 
 // RBAC Context
 import { useRBAC } from '@/contexts/RBACContext'
+
+// Tenant Context
+import { useTenant } from '@/contexts/TenantContext'
 
 import { useActiveAlerts, useDRSRecommendations, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
 
@@ -157,6 +164,8 @@ const NavbarContent = () => {
   const { title, subtitle, icon } = usePageTitle()
   const { hasFeature, loading: licenseLoading, status: licenseStatus, isEnterprise } = useLicense()
   const { roles: rbacRoles, hasPermission } = useRBAC()
+  const { currentTenant, availableTenants, switchTenant, isMultiTenant } = useTenant()
+
   // Check if AI feature is available AND enabled in settings
   const [aiEnabled, setAiEnabled] = useState(false)
   const aiAvailable = !licenseLoading && hasFeature(Features.AI_INSIGHTS) && aiEnabled
@@ -182,6 +191,9 @@ const NavbarContent = () => {
 
   // About Dialog
   const [aboutOpen, setAboutOpen] = useState(false)
+
+  // What's New
+  const { open: whatsNewOpen, hasUnseen: hasNewFeatures, handleOpen: openWhatsNew, handleClose: closeWhatsNew } = useWhatsNew()
 
   // Menus anchors
   const [langAnchor, setLangAnchor] = useState(null)
@@ -1221,6 +1233,43 @@ return () => window.removeEventListener('keydown', onKeyDown)
           </>
         )}
 
+        {isMultiTenant && availableTenants.length > 1 && (
+          <>
+            <Divider />
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', fontSize: '0.65rem' }}>
+                {t('settings.tenant', { defaultMessage: 'Tenant' })}
+              </Typography>
+              <Select
+                size='small'
+                fullWidth
+                value={currentTenant?.id || ''}
+                onChange={(e) => {
+                  if (e.target.value !== currentTenant?.id) {
+                    switchTenant(e.target.value)
+                  }
+                }}
+                sx={{ mt: 0.5, height: 32, fontSize: '0.8rem' }}
+                renderValue={(val) => (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className='ri-building-line' style={{ fontSize: 14, opacity: 0.7 }} />
+                    {availableTenants.find(tn => tn.id === val)?.name || val}
+                  </Box>
+                )}
+              >
+                {availableTenants.map((tenant) => (
+                  <MenuItem key={tenant.id} value={tenant.id}>
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      <i className={tenant.id === currentTenant?.id ? 'ri-checkbox-circle-fill' : 'ri-building-line'} style={{ fontSize: 16 }} />
+                    </ListItemIcon>
+                    {tenant.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Box>
+          </>
+        )}
+
         <Divider />
 
         <MenuItem
@@ -1266,6 +1315,23 @@ return () => window.removeEventListener('keydown', onKeyDown)
         <MenuItem
           onClick={() => {
             setUserAnchor(null)
+            openWhatsNew()
+          }}
+        >
+          <ListItemIcon>
+            <i className='ri-megaphone-line' />
+          </ListItemIcon>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {t('whatsNew.title', { defaultMessage: "What's New" })}
+            {hasNewFeatures && (
+              <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0 }} />
+            )}
+          </Box>
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            setUserAnchor(null)
             setAboutOpen(true)
           }}
         >
@@ -1299,6 +1365,8 @@ return () => window.removeEventListener('keydown', onKeyDown)
       {/* About Dialog */}
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
 
+      {/* What's New Dialog */}
+      <WhatsNewDialog open={whatsNewOpen} onClose={closeWhatsNew} />
     </>
   )
 }

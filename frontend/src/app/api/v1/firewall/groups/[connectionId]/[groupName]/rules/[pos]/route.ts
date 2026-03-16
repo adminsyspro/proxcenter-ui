@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 // PUT /api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos] - Update rule
 export async function PUT(
@@ -10,6 +11,8 @@ export async function PUT(
 ) {
   try {
     const { connectionId, groupName, pos } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
@@ -34,6 +37,8 @@ export async function DELETE(
 ) {
   try {
     const { connectionId, groupName, pos } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
 
     const orchestrator = getOrchestratorClient()
 

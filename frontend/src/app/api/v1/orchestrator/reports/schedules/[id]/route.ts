@@ -2,8 +2,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator'
+import { getTenantConnectionIds } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
+
+async function verifyScheduleBelongsToTenant(id: string): Promise<{ data: any; allowed: boolean }> {
+  const data = await orchestratorFetch(`/reports/schedules/${id}`) as any
+  if (data?.connection_id) {
+    const tenantConnectionIds = await getTenantConnectionIds()
+    if (!tenantConnectionIds.has(data.connection_id)) {
+      return { data, allowed: false }
+    }
+  }
+  return { data, allowed: true }
+}
 
 // GET /api/v1/orchestrator/reports/schedules/[id] - Get a single schedule
 export async function GET(
@@ -12,7 +24,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const data = await orchestratorFetch(`/reports/schedules/${id}`)
+    const { data, allowed } = await verifyScheduleBelongsToTenant(id)
+    if (!allowed) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 })
 
     return NextResponse.json(data)
   } catch (error: any) {
@@ -33,8 +46,10 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const body = await request.json()
+    const { allowed } = await verifyScheduleBelongsToTenant(id)
+    if (!allowed) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 })
 
+    const body = await request.json()
     const data = await orchestratorFetch(`/reports/schedules/${id}`, {
       method: 'PUT',
       body
@@ -59,6 +74,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const { allowed } = await verifyScheduleBelongsToTenant(id)
+    if (!allowed) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 })
+
     const data = await orchestratorFetch(`/reports/schedules/${id}`, {
       method: 'DELETE'
     })

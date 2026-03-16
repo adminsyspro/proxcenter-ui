@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -23,9 +24,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
 
     const assignment = db.prepare(`
-      SELECT 
+      SELECT
         ur.*,
         u.email as user_email,
         u.name as user_name,
@@ -36,8 +38,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
       JOIN users u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
       LEFT JOIN users g ON g.id = ur.granted_by
-      WHERE ur.id = ?
-    `).get(id) as any
+      WHERE ur.id = ? AND ur.tenant_id = ?
+    `).get(id, tenantId) as any
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
@@ -66,28 +68,30 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    const tenantId = await getCurrentTenantId()
+
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 
     const { id } = await context.params
     const db = getDb()
 
-    // Récupérer l'assignation pour l'audit
+    // Récupérer l'assignation pour l'audit (scoped by tenant)
     const assignment = db.prepare(`
       SELECT ur.*, u.email as user_email, r.name as role_name
       FROM rbac_user_roles ur
       JOIN users u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
-      WHERE ur.id = ?
-    `).get(id) as any
+      WHERE ur.id = ? AND ur.tenant_id = ?
+    `).get(id, tenantId) as any
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
     }
 
     // Supprimer l'assignation
-    db.prepare("DELETE FROM rbac_user_roles WHERE id = ?").run(id)
+    db.prepare("DELETE FROM rbac_user_roles WHERE id = ? AND tenant_id = ?").run(id, tenantId)
 
     // Audit
     await audit({
@@ -128,7 +132,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    const tenantId = await getCurrentTenantId()
+
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 
@@ -138,14 +144,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     const db = getDb()
 
-    // Récupérer l'assignation existante
+    // Récupérer l'assignation existante (scoped by tenant)
     const assignment = db.prepare(`
       SELECT ur.*, u.email as user_email, r.name as role_name
       FROM rbac_user_roles ur
       JOIN users u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
-      WHERE ur.id = ?
-    `).get(id) as any
+      WHERE ur.id = ? AND ur.tenant_id = ?
+    `).get(id, tenantId) as any
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
@@ -195,7 +201,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     // Ajouter l'ID à la fin pour le WHERE
     params.push(id)
 
-    db.prepare(`UPDATE rbac_user_roles SET ${updates.join(", ")} WHERE id = ?`).run(...params)
+    db.prepare(`UPDATE rbac_user_roles SET ${updates.join(", ")} WHERE id = ? AND tenant_id = ?`).run(...params, tenantId)
 
     // Récupérer l'assignation mise à jour
     const updated = db.prepare(`
@@ -203,8 +209,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       FROM rbac_user_roles ur
       JOIN users u ON u.id = ur.user_id
       JOIN rbac_roles r ON r.id = ur.role_id
-      WHERE ur.id = ?
-    `).get(id) as any
+      WHERE ur.id = ? AND ur.tenant_id = ?
+    `).get(id, tenantId) as any
 
     // Audit
     await audit({

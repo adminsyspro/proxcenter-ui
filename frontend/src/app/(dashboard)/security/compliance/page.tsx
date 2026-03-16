@@ -415,18 +415,16 @@ function HardeningTab() {
               { label: t('compliance.criticalIssues'), value: summary.critical, icon: 'ri-error-warning-line', color: '#dc2626' },
             ].map((stat) => (
               <Grid size={{ xs: 2.5, md: 1 }} key={stat.label}>
-                <Card sx={{ height: '100%', display: 'flex' }}>
-                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, py: 0, '&:last-child': { pb: 0 } }}>
+                <Card sx={{ height: '100%' }}>
+                  <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, '&:last-child': { pb: 2 } }}>
                     <Box sx={{
                       width: 48, height: 48, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      bgcolor: `${stat.color}15`, flexShrink: 0,
+                      bgcolor: `${stat.color}15`,
                     }}>
                       <i className={stat.icon} style={{ fontSize: 24, color: stat.color }} />
                     </Box>
-                    <Box>
-                      <Typography variant="h4" fontWeight={700}>{stat.value}</Typography>
-                      <Typography variant="body2" color="text.secondary">{stat.label}</Typography>
-                    </Box>
+                    <Typography variant="h4" fontWeight={700}>{stat.value}</Typography>
+                    <Typography variant="body2" color="text.secondary" textAlign="center">{stat.label}</Typography>
                   </CardContent>
                 </Card>
               </Grid>

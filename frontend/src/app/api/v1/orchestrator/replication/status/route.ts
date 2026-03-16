@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -34,13 +35,19 @@ const MOCK_HEALTH = {
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
-
     if (denied) return denied
 
+    const tenantConnectionIds = await getTenantConnectionIds()
     const client = getOrchestratorClient()
     const response = await client.getReplicationHealth()
 
-    return NextResponse.json(response.data)
+    // Filter sites by tenant connections
+    const data = response.data as any
+    if (data?.sites && Array.isArray(data.sites)) {
+      data.sites = data.sites.filter((s: any) => !s.cluster_id || tenantConnectionIds.has(s.cluster_id))
+    }
+
+    return NextResponse.json(data)
   } catch (e: any) {
     // Return mock data when orchestrator is not available
     return NextResponse.json(MOCK_HEALTH)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -10,6 +11,8 @@ type RouteContext = {
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await req.json()
 
     const orchestrator = getOrchestratorClient()

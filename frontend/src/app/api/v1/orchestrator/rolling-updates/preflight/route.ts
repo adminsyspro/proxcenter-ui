@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 
 export const runtime = "nodejs"
@@ -9,6 +9,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const body = await req.json()
 
     const connectionId = body.connection_id

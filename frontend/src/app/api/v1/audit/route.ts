@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 import { getAuditLogs, type AuditCategory, type AuditAction, type AuditStatus } from "@/lib/audit"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -14,8 +15,10 @@ export async function GET(req: Request) {
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
+    const tenantId = await getCurrentTenantId()
 
     const options = {
+      tenantId,
       limit: parseInt(searchParams.get("limit") || "100"),
       offset: parseInt(searchParams.get("offset") || "0"),
       category: searchParams.get("category") as AuditCategory | undefined,

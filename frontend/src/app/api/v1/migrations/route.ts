@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
@@ -15,6 +15,7 @@ export const runtime = "nodejs"
  */
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
     if (denied) return denied
 
@@ -80,12 +81,13 @@ export async function POST(req: Request) {
       migrationType: migrationType as "cold" | "live",
     }
 
-    // Run appropriate pipeline in background after response
+    // Run appropriate pipeline in background after response (pass tenantId for scoped DB access)
+    const tenantId = await getCurrentTenantId()
     after(async () => {
       if (sourceType === "xcpng") {
-        await runXcpngMigrationPipeline(job.id, migrationConfig)
+        await runXcpngMigrationPipeline(job.id, migrationConfig, tenantId)
       } else {
-        await runMigrationPipeline(job.id, migrationConfig)
+        await runMigrationPipeline(job.id, migrationConfig, tenantId)
       }
     })
 
@@ -101,6 +103,7 @@ export async function POST(req: Request) {
  */
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
     if (denied) return denied
 

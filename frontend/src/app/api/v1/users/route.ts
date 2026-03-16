@@ -6,6 +6,7 @@ import { nanoid } from "nanoid"
 import { getDb } from "@/lib/db/sqlite"
 import { hashPassword } from "@/lib/auth/password"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -18,18 +19,24 @@ export async function GET() {
     if (denied) return denied
 
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
 
     const users = db
       .prepare(
-        `SELECT id, email, name, role, auth_provider, enabled, last_login_at, created_at, updated_at 
-         FROM users ORDER BY created_at DESC`
+        `SELECT u.id, u.email, u.name, u.role, u.auth_provider, u.enabled, u.last_login_at, u.created_at, u.updated_at
+         FROM users u JOIN user_tenants ut ON ut.user_id = u.id
+         WHERE ut.tenant_id = ?
+         ORDER BY u.created_at DESC`
       )
-      .all()
+      .all(tenantId)
 
-    // Compter les admins
+    // Compter les admins in this tenant
     const adminCount = db
-      .prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")
-      .get() as { count: number }
+      .prepare(
+        `SELECT COUNT(*) as count FROM users u JOIN user_tenants ut ON ut.user_id = u.id
+         WHERE u.role = 'admin' AND ut.tenant_id = ?`
+      )
+      .get(tenantId) as { count: number }
 
     return NextResponse.json({
       data: users,
@@ -91,10 +98,17 @@ export async function POST(req: Request) {
     const id = nanoid()
     const now = new Date().toISOString()
 
+    const tenantId = await getCurrentTenantId()
+
     db.prepare(
       `INSERT INTO users (id, email, password, name, role, auth_provider, enabled, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'user', 'credentials', 1, ?, ?)`
     ).run(id, email.toLowerCase().trim(), hashedPassword, name || null, now, now)
+
+    // Add user to the current tenant
+    db.prepare(
+      `INSERT INTO user_tenants (user_id, tenant_id, is_default, joined_at) VALUES (?, ?, 1, ?)`
+    ).run(id, tenantId, now)
 
     // Audit
     const { audit } = await import("@/lib/audit")

@@ -14,6 +14,7 @@ datasource db {
 
 model Connection {
   id          String  @id @default(cuid())
+  tenantId    String  @default("default") @map("tenant_id")
   name        String
   type        String  @default("pve")
   baseUrl      String
@@ -42,6 +43,7 @@ model Connection {
 
 model ManagedHost {
   id           String      @id @default(cuid())
+  tenantId     String      @default("default") @map("tenant_id")
   connectionId String?
   connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   node         String
@@ -60,6 +62,7 @@ model ManagedHost {
 
 model DashboardLayout {
   id        String   @id @default(cuid())
+  tenantId  String   @default("default") @map("tenant_id")
   userId    String   @default("default")
   name      String   @default("custom")
   widgets   String   // JSON array of widgets
@@ -72,7 +75,8 @@ model DashboardLayout {
 
 model Alert {
   id             String    @id @default(cuid())
-  fingerprint    String    @unique
+  tenantId       String    @default("default") @map("tenant_id")
+  fingerprint    String
 
   // Alert info
   severity       String
@@ -106,13 +110,15 @@ model Alert {
   @@index([severity])
   @@index([source])
   @@index([lastSeenAt])
+  @@unique([tenantId, fingerprint])
   @@index([status, severity, lastSeenAt])
   @@map("alerts")
 }
 
 model CustomImage {
   id                String   @id @default(cuid())
-  slug              String   @unique
+  tenantId          String   @default("default") @map("tenant_id")
+  slug              String
   name              String
   vendor            String   @default("custom")
   version           String   @default("")
@@ -133,11 +139,13 @@ model CustomImage {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  @@unique([tenantId, slug])
   @@map("custom_images")
 }
 
 model Blueprint {
   id          String   @id @default(cuid())
+  tenantId    String   @default("default") @map("tenant_id")
   name        String
   description String?
   imageSlug   String   @map("image_slug")
@@ -153,6 +161,7 @@ model Blueprint {
 
 model Deployment {
   id            String    @id @default(cuid())
+  tenantId      String    @default("default") @map("tenant_id")
   blueprintId   String?   @map("blueprint_id")
   blueprintName String?   @map("blueprint_name")
   connectionId  String    @map("connection_id")
@@ -176,6 +185,7 @@ model Deployment {
 
 model MigrationJob {
   id                  String    @id @default(cuid())
+  tenantId            String    @default("default") @map("tenant_id")
 
   // Source (ESXi)
   sourceConnectionId  String    @map("source_connection_id")

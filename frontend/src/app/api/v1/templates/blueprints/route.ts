@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { createBlueprintSchema } from "@/lib/schemas"
@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 
@@ -26,6 +27,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 

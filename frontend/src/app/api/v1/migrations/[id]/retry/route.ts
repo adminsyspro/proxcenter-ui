@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
@@ -17,6 +17,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
     if (denied) return denied
 
@@ -56,8 +57,9 @@ export async function POST(
       },
     })
 
+    const tenantId = await getCurrentTenantId()
     after(async () => {
-      await runMigrationPipeline(newJob.id, config)
+      await runMigrationPipeline(newJob.id, config, tenantId)
     })
 
     return NextResponse.json({ data: { jobId: newJob.id, status: "pending" } })

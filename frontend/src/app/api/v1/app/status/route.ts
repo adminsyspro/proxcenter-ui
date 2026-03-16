@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getDb } from "@/lib/db/sqlite"
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = 'nodejs'
 
@@ -11,6 +11,7 @@ export const runtime = 'nodejs'
  */
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     const db = getDb()
 
     // Vérifier le nombre d'utilisateurs

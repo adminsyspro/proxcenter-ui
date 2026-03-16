@@ -313,6 +313,98 @@ export function getDb() {
   }
 
   // ========================================
+  // Multi-tenancy tables
+  // ========================================
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      settings TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
+
+    CREATE TABLE IF NOT EXISTS user_tenants (
+      user_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      joined_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, tenant_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_tenants_user ON user_tenants(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_tenants_tenant ON user_tenants(tenant_id);
+  `)
+
+  // Auto-create DEFAULT tenant
+  {
+    const now = new Date().toISOString()
+    db.prepare(
+      "INSERT OR IGNORE INTO tenants (id, slug, name, description, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run('default', 'default', 'Default', 'Default tenant for all existing data', 1, now, now)
+  }
+
+  // Migrate existing users to DEFAULT tenant
+  try {
+    const now = new Date().toISOString()
+    db.exec(`
+      INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+      SELECT id, 'default', 1, '${now}' FROM users
+    `)
+  } catch {}
+
+  // Add tenant_id column to tenant-scoped tables
+  const tenantScopedTables = [
+    'users', 'audit_logs', 'favorites', 'alert_rules', 'alert_instances',
+    'health_score_history', 'security_policies', 'compliance_profiles',
+    'compliance_profile_checks',
+    'ldap_config', 'oidc_config', 'rbac_user_roles', 'rbac_user_permissions',
+    'settings'
+  ]
+
+  for (const table of tenantScopedTables) {
+    try {
+      const cols = db.pragma(`table_info(${table})`) as any[]
+      if (!cols.some((c: any) => c.name === 'tenant_id')) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'`)
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_tenant ON ${table}(tenant_id)`)
+      }
+    } catch {}
+  }
+
+  // ========================================
+  // Table Settings (per-tenant)
+  // ========================================
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT NOT NULL,
+      tenant_id TEXT NOT NULL DEFAULT 'default',
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (key, tenant_id)
+    )
+  `)
+
+  // Migrate old settings table: if it exists with single-column PK, migrate data
+  try {
+    const cols = db.pragma('table_info(settings)') as any[]
+    const hasTenantCol = cols.some((c: any) => c.name === 'tenant_id')
+    if (cols.length > 0 && !hasTenantCol) {
+      // Old schema without tenant_id — add column
+      db.exec(`ALTER TABLE settings ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'`)
+    }
+    // Ensure UNIQUE index on (key, tenant_id) exists for ON CONFLICT to work
+    // (new DBs get this from PRIMARY KEY, old DBs need the explicit index)
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_settings_key_tenant ON settings(key, tenant_id)`)
+  } catch {}
+
+  // ========================================
   // Tables RBAC
   // ========================================
   
@@ -359,6 +451,7 @@ export function getDb() {
       role_id TEXT NOT NULL,
       scope_type TEXT NOT NULL DEFAULT 'global',
       scope_target TEXT,
+      tenant_id TEXT NOT NULL DEFAULT 'default',
       granted_by TEXT,
       granted_at TEXT NOT NULL,
       expires_at TEXT,
@@ -377,6 +470,7 @@ export function getDb() {
       permission_id TEXT NOT NULL,
       scope_type TEXT NOT NULL DEFAULT 'global',
       scope_target TEXT,
+      tenant_id TEXT NOT NULL DEFAULT 'default',
       granted_by TEXT,
       granted_at TEXT NOT NULL,
       expires_at TEXT,
@@ -457,6 +551,7 @@ export function getDb() {
     { id: 'admin.settings', name: 'admin.settings', category: 'admin', description: 'Modify settings', is_dangerous: 1 },
     { id: 'admin.audit', name: 'admin.audit', category: 'admin', description: 'View audit logs' },
     { id: 'admin.compliance', name: 'admin.compliance', category: 'admin', description: 'Manage compliance and security policies', is_dangerous: 1 },
+    { id: 'admin.tenants', name: 'admin.tenants', category: 'admin', description: 'Manage tenants (multi-tenancy)', is_dangerous: 1 },
   ]
 
   // Utiliser INSERT OR IGNORE pour ajouter les permissions manquantes sans erreur
@@ -585,10 +680,10 @@ export function getDb() {
     ).all() as any[]
 
     const checkExisting = db.prepare(
-      "SELECT 1 FROM rbac_user_roles WHERE user_id = ? AND role_id = 'role_super_admin'"
+      "SELECT 1 FROM rbac_user_roles WHERE user_id = ? AND role_id = 'role_super_admin' AND tenant_id = 'default'"
     )
     const insertUserRole = db.prepare(
-      "INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, granted_at) VALUES (?, ?, 'role_super_admin', 'global', NULL, ?)"
+      "INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, tenant_id, granted_at) VALUES (?, ?, 'role_super_admin', 'global', NULL, 'default', ?)"
     )
 
     const migrationNow = new Date().toISOString()

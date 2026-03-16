@@ -8,6 +8,7 @@ import { getServerSession } from "next-auth"
 import { getDb } from "@/lib/db/sqlite"
 import { authOptions } from "@/lib/auth/config"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 
 
 export interface PermissionCheck {
@@ -16,6 +17,7 @@ export interface PermissionCheck {
   resourceType?: "connection" | "node" | "vm" | "global" | "pbs"
   resourceId?: string
   resourceMeta?: { tags?: string[]; pool?: string }
+  tenantId?: string
 }
 
 /**
@@ -24,17 +26,18 @@ export interface PermissionCheck {
  * @returns true if the user has the permission, false otherwise
  */
 export function hasPermission(check: PermissionCheck): boolean {
-  const { userId, permission, resourceType, resourceId, resourceMeta } = check
+  const { userId, permission, resourceType, resourceId, resourceMeta, tenantId } = check
+  const tid = tenantId || DEFAULT_TENANT_ID
   const db = getDb()
 
-  // Check via RBAC roles
-  // Get all user's active roles
+  // Check via RBAC roles (scoped by tenant)
+  // Get all user's active roles for this tenant
   const userRoles = db.prepare(`
     SELECT ur.role_id, ur.scope_type, ur.scope_target
     FROM rbac_user_roles ur
-    WHERE ur.user_id = ?
+    WHERE ur.user_id = ? AND ur.tenant_id = ?
       AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
-  `).all(userId) as any[]
+  `).all(userId, tid) as any[]
 
   // Check if any role grants this permission with matching scope
   for (const role of userRoles) {
@@ -53,14 +56,14 @@ export function hasPermission(check: PermissionCheck): boolean {
     }
   }
 
-  // Check direct permissions
+  // Check direct permissions (scoped by tenant)
   const directPerm = db.prepare(`
     SELECT up.scope_type, up.scope_target
     FROM rbac_user_permissions up
     JOIN rbac_permissions p ON p.id = up.permission_id
-    WHERE up.user_id = ? AND p.name = ?
+    WHERE up.user_id = ? AND p.name = ? AND up.tenant_id = ?
       AND (up.expires_at IS NULL OR up.expires_at > datetime('now'))
-  `).all(userId, permission) as any[]
+  `).all(userId, permission, tid) as any[]
 
   for (const perm of directPerm) {
     if (scopeMatches(perm.scope_type, perm.scope_target, resourceType, resourceId, resourceMeta)) {
@@ -74,19 +77,20 @@ export function hasPermission(check: PermissionCheck): boolean {
 /**
  * Get all effective permissions for a user
  */
-export function getEffectivePermissions(userId: string, resourceType?: string, resourceId?: string): string[] {
+export function getEffectivePermissions(userId: string, resourceType?: string, resourceId?: string, tenantId?: string): string[] {
   const db = getDb()
+  const tid = tenantId || DEFAULT_TENANT_ID
   const permissions = new Set<string>()
 
-  // Get permissions from roles
+  // Get permissions from roles (scoped by tenant)
   const rolePerms = db.prepare(`
     SELECT DISTINCT p.name, ur.scope_type, ur.scope_target
     FROM rbac_user_roles ur
     JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
     JOIN rbac_permissions p ON p.id = rp.permission_id
-    WHERE ur.user_id = ?
+    WHERE ur.user_id = ? AND ur.tenant_id = ?
       AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
-  `).all(userId) as any[]
+  `).all(userId, tid) as any[]
 
   for (const perm of rolePerms) {
     if (scopeMatches(perm.scope_type, perm.scope_target, resourceType, resourceId)) {
@@ -94,14 +98,14 @@ export function getEffectivePermissions(userId: string, resourceType?: string, r
     }
   }
 
-  // Get direct permissions
+  // Get direct permissions (scoped by tenant)
   const directPerms = db.prepare(`
     SELECT p.name, up.scope_type, up.scope_target
     FROM rbac_user_permissions up
     JOIN rbac_permissions p ON p.id = up.permission_id
-    WHERE up.user_id = ?
+    WHERE up.user_id = ? AND up.tenant_id = ?
       AND (up.expires_at IS NULL OR up.expires_at > datetime('now'))
-  `).all(userId) as any[]
+  `).all(userId, tid) as any[]
 
   for (const perm of directPerms) {
     if (scopeMatches(perm.scope_type, perm.scope_target, resourceType, resourceId)) {
@@ -115,44 +119,45 @@ export function getEffectivePermissions(userId: string, resourceType?: string, r
 /**
  * Check if multiple permissions are granted
  */
-export function hasAllPermissions(userId: string, permissions: string[], resourceType?: string, resourceId?: string): boolean {
-  return permissions.every(perm => hasPermission({ userId, permission: perm, resourceType: resourceType as any, resourceId }))
+export function hasAllPermissions(userId: string, permissions: string[], resourceType?: string, resourceId?: string, tenantId?: string): boolean {
+  return permissions.every(perm => hasPermission({ userId, permission: perm, resourceType: resourceType as any, resourceId, tenantId }))
 }
 
 /**
  * Check if at least one permission is granted
  */
-export function hasAnyPermission(userId: string, permissions: string[], resourceType?: string, resourceId?: string): boolean {
-  return permissions.some(perm => hasPermission({ userId, permission: perm, resourceType: resourceType as any, resourceId }))
+export function hasAnyPermission(userId: string, permissions: string[], resourceType?: string, resourceId?: string, tenantId?: string): boolean {
+  return permissions.some(perm => hasPermission({ userId, permission: perm, resourceType: resourceType as any, resourceId, tenantId }))
 }
 
 /**
  * Get all resources a user can access with a specific permission
  */
-export function getAccessibleResources(userId: string, permission: string): { scope_type: string; scope_target: string | null }[] {
+export function getAccessibleResources(userId: string, permission: string, tenantId?: string): { scope_type: string; scope_target: string | null }[] {
   const db = getDb()
+  const tid = tenantId || DEFAULT_TENANT_ID
   const resources: { scope_type: string; scope_target: string | null }[] = []
 
-  // Get from roles
+  // Get from roles (scoped by tenant)
   const fromRoles = db.prepare(`
     SELECT DISTINCT ur.scope_type, ur.scope_target
     FROM rbac_user_roles ur
     JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
     JOIN rbac_permissions p ON p.id = rp.permission_id
-    WHERE ur.user_id = ? AND p.name = ?
+    WHERE ur.user_id = ? AND p.name = ? AND ur.tenant_id = ?
       AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
-  `).all(userId, permission) as any[]
+  `).all(userId, permission, tid) as any[]
 
   resources.push(...fromRoles)
 
-  // Get direct permissions
+  // Get direct permissions (scoped by tenant)
   const direct = db.prepare(`
     SELECT up.scope_type, up.scope_target
     FROM rbac_user_permissions up
     JOIN rbac_permissions p ON p.id = up.permission_id
-    WHERE up.user_id = ? AND p.name = ?
+    WHERE up.user_id = ? AND p.name = ? AND up.tenant_id = ?
       AND (up.expires_at IS NULL OR up.expires_at > datetime('now'))
-  `).all(userId, permission) as any[]
+  `).all(userId, permission, tid) as any[]
 
   resources.push(...direct)
 
@@ -280,6 +285,7 @@ export const PERMISSIONS = {
   ADMIN_SETTINGS: "admin.settings",
   ADMIN_AUDIT: "admin.audit",
   ADMIN_COMPLIANCE: "admin.compliance",
+  ADMIN_TENANTS: "admin.tenants",
 } as const
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS]
@@ -308,23 +314,26 @@ export function buildNodeResourceId(connId: string, nodeName: string): string {
  * Get the current user's RBAC context from the session
  * Returns null if not authenticated
  */
-export async function getRBACContext(): Promise<{ userId: string; isAdmin: boolean } | null> {
+export async function getRBACContext(): Promise<{ userId: string; isAdmin: boolean; tenantId: string } | null> {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
     return null
   }
 
+  const tenantId = (session as any)?.user?.tenantId || DEFAULT_TENANT_ID
+
   const db = getDb()
   const superAdmin = db.prepare(`
     SELECT 1 FROM rbac_user_roles
-    WHERE user_id = ? AND role_id = 'role_super_admin' AND scope_type = 'global'
+    WHERE user_id = ? AND role_id = 'role_super_admin' AND scope_type = 'global' AND tenant_id = ?
       AND (expires_at IS NULL OR expires_at > datetime('now'))
-  `).get(session.user.id)
+  `).get(session.user.id, tenantId)
 
   return {
     userId: session.user.id,
-    isAdmin: !!superAdmin
+    isAdmin: !!superAdmin,
+    tenantId
   }
 }
 
@@ -332,26 +341,27 @@ export async function getRBACContext(): Promise<{ userId: string; isAdmin: boole
  * Check if a user has any tag or pool scoped assignments (roles or direct permissions).
  * Used to decide whether to attempt the second pass in checkPermission().
  */
-export function hasTagOrPoolScopes(userId: string): boolean {
+export function hasTagOrPoolScopes(userId: string, tenantId?: string): boolean {
   const db = getDb()
+  const tid = tenantId || DEFAULT_TENANT_ID
   const row = db
     .prepare(
       `SELECT 1 FROM rbac_user_roles
-       WHERE user_id = ? AND scope_type IN ('tag', 'pool')
+       WHERE user_id = ? AND scope_type IN ('tag', 'pool') AND tenant_id = ?
          AND (expires_at IS NULL OR expires_at > datetime('now'))
        LIMIT 1`
     )
-    .get(userId)
+    .get(userId, tid)
   if (row) return true
 
   const row2 = db
     .prepare(
       `SELECT 1 FROM rbac_user_permissions
-       WHERE user_id = ? AND scope_type IN ('tag', 'pool')
+       WHERE user_id = ? AND scope_type IN ('tag', 'pool') AND tenant_id = ?
          AND (expires_at IS NULL OR expires_at > datetime('now'))
        LIMIT 1`
     )
-    .get(userId)
+    .get(userId, tid)
   return !!row2
 }
 
@@ -375,18 +385,19 @@ export async function checkPermission(
   }
 
   const userId = session.user.id
+  const tenantId = (session as any)?.user?.tenantId || DEFAULT_TENANT_ID
 
   // Pass 1: standard scopes (global, connection, node, vm)
-  if (hasPermission({ userId, permission, resourceType, resourceId })) {
+  if (hasPermission({ userId, permission, resourceType, resourceId, tenantId })) {
     return null
   }
 
   // Pass 2: if VM resource + user has tag/pool scopes → resolve meta and retry
-  if (resourceType === "vm" && resourceId && hasTagOrPoolScopes(userId)) {
-    const meta = resolveVmMeta(resourceId)
+  if (resourceType === "vm" && resourceId && hasTagOrPoolScopes(userId, tenantId)) {
+    const meta = resolveVmMeta(resourceId, tenantId)
     if (
       meta &&
-      hasPermission({ userId, permission, resourceType, resourceId, resourceMeta: meta })
+      hasPermission({ userId, permission, resourceType, resourceId, resourceMeta: meta, tenantId })
     ) {
       return null
     }
@@ -413,10 +424,11 @@ export async function requireAdmin(): Promise<NextResponse | null> {
 export function filterVmsByPermission<T extends { id?: string; connId?: string; node?: string; type?: string; vmid?: string }>(
   userId: string,
   vms: T[],
-  permission: string = PERMISSIONS.VM_VIEW
+  permission: string = PERMISSIONS.VM_VIEW,
+  tenantId?: string
 ): T[] {
   // Get accessible resources for this permission
-  const resources = getAccessibleResources(userId, permission)
+  const resources = getAccessibleResources(userId, permission, tenantId)
 
   // Check for global access
   if (resources.some(r => r.scope_type === "global")) {
@@ -454,7 +466,8 @@ export function filterVmsByPermission<T extends { id?: string; connId?: string; 
       permission,
       resourceType: "vm",
       resourceId,
-      resourceMeta: { tags, pool: vmAny.pool || undefined }
+      resourceMeta: { tags, pool: vmAny.pool || undefined },
+      tenantId
     })
   })
 }
@@ -465,10 +478,11 @@ export function filterVmsByPermission<T extends { id?: string; connId?: string; 
 export function filterNodesByPermission<T extends { connId: string; node: string }>(
   userId: string,
   nodes: T[],
-  permission: string = PERMISSIONS.NODE_VIEW
+  permission: string = PERMISSIONS.NODE_VIEW,
+  tenantId?: string
 ): T[] {
   // Get accessible resources
-  const resources = getAccessibleResources(userId, permission)
+  const resources = getAccessibleResources(userId, permission, tenantId)
 
   if (resources.some(r => r.scope_type === "global")) {
     return nodes
@@ -482,7 +496,8 @@ return hasPermission({
       userId,
       permission,
       resourceType: "node",
-      resourceId
+      resourceId,
+      tenantId
     })
   })
 }

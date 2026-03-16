@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
 
@@ -21,6 +22,7 @@ return NextResponse.json({ ok: true })
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
 

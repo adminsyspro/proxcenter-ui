@@ -1,7 +1,7 @@
 // src/app/api/v1/templates/catalog/route.ts
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { CLOUD_IMAGES, VENDORS, getImagesByVendor, customImageToCloudImage } from "@/lib/templates/cloudImages"
 
@@ -9,6 +9,7 @@ export const runtime = "nodejs"
 
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 

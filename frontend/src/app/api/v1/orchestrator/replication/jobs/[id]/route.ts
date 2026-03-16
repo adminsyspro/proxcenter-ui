@@ -2,8 +2,27 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
+
+/** Verify that a replication job belongs to the current tenant */
+async function verifyJobOwnership(id: string) {
+  const client = getOrchestratorClient()
+  const tenantConnectionIds = await getTenantConnectionIds()
+  const response = await client.getReplicationJob(id)
+  const job = response.data
+
+  if (
+    job &&
+    ((job.source_cluster && !tenantConnectionIds.has(job.source_cluster)) ||
+    (job.target_cluster && !tenantConnectionIds.has(job.target_cluster)))
+  ) {
+    return null // not owned by tenant
+  }
+
+  return job
+}
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,10 +31,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const client = getOrchestratorClient()
-    const response = await client.getReplicationJob(id)
+    const job = await verifyJobOwnership(id)
 
-    return NextResponse.json(response.data)
+    if (!job) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(job)
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error fetching replication job:", e)
@@ -35,6 +57,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (denied) return denied
 
     const { id } = await params
+    const job = await verifyJobOwnership(id)
+
+    if (!job) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
     const body = await request.json()
     const client = getOrchestratorClient()
     const response = await client.updateReplicationJob(id, body)
@@ -59,6 +87,12 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (denied) return denied
 
     const { id } = await params
+    const job = await verifyJobOwnership(id)
+
+    if (!job) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
     const client = getOrchestratorClient()
     const response = await client.deleteReplicationJob(id)
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getServerSession } from "next-auth"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
@@ -19,6 +19,8 @@ function round1(n: number) {
 
 // Synchroniser les alertes en base de données
 async function syncAlertsToDatabase(alerts: any[]) {
+  const prisma = await getSessionPrisma()
+  const tenantId = await getCurrentTenantId()
   const now = new Date()
   const currentFingerprints: string[] = []
 
@@ -36,14 +38,14 @@ async function syncAlertsToDatabase(alerts: any[]) {
 
     try {
       // Upsert l'alerte
-      const existing = await prisma.alert.findUnique({ where: { fingerprint } })
+      const existing = await prisma.alert.findUnique({ where: { tenantId_fingerprint: { tenantId, fingerprint } } })
 
       if (existing) {
         // Mettre à jour si l'alerte existe et n'est pas résolue manuellement récemment
-        if (existing.status !== 'resolved' || 
+        if (existing.status !== 'resolved' ||
             (existing.resolvedAt && (now.getTime() - existing.resolvedAt.getTime()) > 300000)) {
           await prisma.alert.update({
-            where: { fingerprint },
+            where: { tenantId_fingerprint: { tenantId, fingerprint } },
             data: {
               status: existing.status === 'resolved' ? 'active' : existing.status,
               resolvedAt: existing.status === 'resolved' ? null : existing.resolvedAt,
@@ -105,6 +107,7 @@ async function syncAlertsToDatabase(alerts: any[]) {
 
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
@@ -112,6 +115,7 @@ export async function GET() {
     }
 
     const userId = session.user.id
+    const tenantId = (session as any).user?.tenantId || 'default'
 
     // Récupérer toutes les connexions (PVE et PBS) en une seule requête
     const allConnections = await prisma.connection.findMany({
@@ -538,9 +542,9 @@ return null
     // ============================================
     // RBAC FILTERING — scope data to user's permissions
     // ============================================
-    const filteredVms = filterVmsByPermission(userId, allVms)
-    const filteredLxcs = filterVmsByPermission(userId, allLxcs)
-    const filteredNodes = filterNodesByPermission(userId, allNodes)
+    const filteredVms = filterVmsByPermission(userId, allVms, undefined, tenantId)
+    const filteredLxcs = filterVmsByPermission(userId, allLxcs, undefined, tenantId)
+    const filteredNodes = filterNodesByPermission(userId, allNodes, undefined, tenantId)
 
     // Recompute node-level aggregates from filtered nodes
     const fOnlineNodes = filteredNodes.filter((n: any) => n.status === 'online').length

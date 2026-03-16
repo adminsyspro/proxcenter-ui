@@ -1,7 +1,7 @@
 // src/app/api/v1/connections/route.ts
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
@@ -30,6 +30,7 @@ export async function GET(req: Request) {
     if (typeFilter) where.type = typeFilter
     if (hasCephFilter === 'true') where.hasCeph = true
 
+    const prisma = await getSessionPrisma()
     const connections = await prisma.connection.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
       orderBy: { createdAt: "desc" },
@@ -259,6 +260,7 @@ export async function POST(req: Request) {
       }
     }
 
+    const prisma = await getSessionPrisma()
     const created = await prisma.connection.create({
       data,
       select: {

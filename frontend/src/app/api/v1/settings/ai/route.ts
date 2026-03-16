@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getDb } from '@/lib/db/sqlite'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 // GET /api/v1/settings/ai - Récupérer les paramètres IA
 export async function GET() {
@@ -12,25 +13,16 @@ export async function GET() {
     if (denied) return denied
 
     const db = getDb()
-    
-    // Créer la table settings si elle n'existe pas
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    
-    const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
-    const row = stmt.get('ai') as { value: string } | undefined
-    
+    const tenantId = await getCurrentTenantId()
+
+    const row = db.prepare('SELECT value FROM settings WHERE key = ? AND tenant_id = ?').get('ai', tenantId) as { value: string } | undefined
+
     if (row?.value) {
       return NextResponse.json({ data: JSON.parse(row.value) })
     }
-    
+
     // Valeurs par défaut
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: {
         enabled: false,
         provider: 'ollama',
@@ -44,7 +36,7 @@ export async function GET() {
     })
   } catch (e: any) {
     console.error('Failed to get AI settings:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -59,31 +51,21 @@ export async function PUT(request: Request) {
 
     const body = await request.json()
     const db = getDb()
-    
-    // Créer la table settings si elle n'existe pas
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    
+    const tenantId = await getCurrentTenantId()
+
     const value = JSON.stringify(body)
     const now = new Date().toISOString()
-    
-    const stmt = db.prepare(`
-      INSERT INTO settings (key, value, updated_at) 
-      VALUES (?, ?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?
-    `)
 
-    stmt.run('ai', value, now, value, now)
-    
+    db.prepare(`
+      INSERT INTO settings (key, tenant_id, value, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(key, tenant_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run('ai', tenantId, value, now)
+
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Failed to save AI settings:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

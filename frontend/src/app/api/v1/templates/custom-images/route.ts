@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { createCustomImageSchema } from "@/lib/schemas"
@@ -19,6 +19,7 @@ function slugify(name: string): string {
 
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 
@@ -51,6 +53,8 @@ export async function POST(req: Request) {
 
     const body = parseResult.data
 
+    const tenantId = await getCurrentTenantId()
+
     // Generate unique slug
     let baseSlug = slugify(body.name)
     if (!baseSlug) baseSlug = 'custom-image'
@@ -58,7 +62,7 @@ export async function POST(req: Request) {
     baseSlug = `custom-${baseSlug}`
     let slug = baseSlug
     let suffix = 0
-    while (await prisma.customImage.findUnique({ where: { slug } })) {
+    while (await prisma.customImage.findUnique({ where: { tenantId_slug: { tenantId, slug } } })) {
       suffix++
       slug = `${baseSlug}-${suffix}`
     }

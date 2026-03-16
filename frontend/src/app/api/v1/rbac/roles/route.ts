@@ -9,6 +9,7 @@ import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 // GET /api/v1/rbac/roles - Liste tous les rôles
 export async function GET(req: NextRequest) {
@@ -37,18 +38,19 @@ export async function GET(req: NextRequest) {
       ORDER BY p.category, p.name
     `)
 
-    // Compter les utilisateurs par rôle
+    // Compter les utilisateurs par rôle (scoped by tenant)
+    const tenantId = await getCurrentTenantId()
     const countUsers = db.prepare(`
       SELECT COUNT(DISTINCT user_id) as count
       FROM rbac_user_roles
-      WHERE role_id = ?
+      WHERE role_id = ? AND tenant_id = ?
     `)
 
     const rolesWithDetails = roles.map(role => ({
       ...role,
       is_system: role.is_system === 1,
       permissions: getPermissions.all(role.id),
-      user_count: (countUsers.get(role.id) as any)?.count || 0
+      user_count: (countUsers.get(role.id, tenantId) as any)?.count || 0
     }))
 
     return NextResponse.json({
@@ -76,7 +78,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Vérifier les droits admin
-    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    const tenantId = await getCurrentTenantId()
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 

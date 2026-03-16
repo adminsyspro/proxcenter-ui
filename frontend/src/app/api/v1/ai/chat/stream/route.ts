@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 
 import { getDb } from '@/lib/db/sqlite'
-import { prisma } from '@/lib/db/prisma'
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
 
-// Récupérer les paramètres IA
-function getAISettings() {
+// Récupérer les paramètres IA (tenant-scoped)
+async function getAISettings() {
   try {
     const db = getDb()
-    const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
-    const row = stmt.get('ai') as { value: string } | undefined
+    const tenantId = await getCurrentTenantId()
+    const stmt = db.prepare('SELECT value FROM settings WHERE key = ? AND tenant_id = ?')
+    const row = stmt.get('ai', tenantId) as { value: string } | undefined
     
     if (row?.value) {
       return JSON.parse(row.value)
@@ -30,6 +31,7 @@ function getAISettings() {
 // Récupérer les connexions PVE via Prisma
 async function getConnections() {
   try {
+    const prisma = await getSessionPrisma()
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' },
       select: {
@@ -54,6 +56,7 @@ return []
 // Récupérer les alertes actives via Prisma
 async function getActiveAlerts() {
   try {
+    const prisma = await getSessionPrisma()
     const alerts = await prisma.alert.findMany({
       where: { status: 'active' },
       orderBy: { lastSeenAt: 'desc' },
@@ -236,7 +239,7 @@ export async function POST(request: Request) {
   try {
     const { messages, locale } = await request.json()
     const lang = locale === 'fr' ? 'fr' : 'en'
-    const settings = getAISettings()
+    const settings = await getAISettings()
 
     if (!settings.enabled) {
       return NextResponse.json({

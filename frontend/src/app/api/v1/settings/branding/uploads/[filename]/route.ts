@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import path from 'path'
 import fs from 'fs'
+import { getCurrentTenantId } from '@/lib/tenant'
 
-const UPLOAD_DIR = path.join(process.cwd(), 'data', 'uploads', 'branding')
+const BASE_UPLOAD_DIR = path.join(process.cwd(), 'data', 'uploads', 'branding')
 const LEGACY_DIR = path.join(process.cwd(), 'public', 'uploads', 'branding')
 
 const MIME_TYPES: Record<string, string> = {
@@ -23,8 +24,17 @@ export async function GET(
 
     // Sanitize filename to prevent path traversal
     const sanitized = path.basename(filename)
-    // Check new location first, then legacy public/ location
-    let filePath = path.join(UPLOAD_DIR, sanitized)
+
+    // Try tenant-specific directory first
+    let tenantId = 'default'
+    try { tenantId = await getCurrentTenantId() } catch {}
+
+    let filePath = path.join(BASE_UPLOAD_DIR, tenantId, sanitized)
+    // Fallback to non-tenant directory (pre-migration files)
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(BASE_UPLOAD_DIR, sanitized)
+    }
+    // Then legacy public/ location
     if (!fs.existsSync(filePath)) {
       filePath = path.join(LEGACY_DIR, sanitized)
     }

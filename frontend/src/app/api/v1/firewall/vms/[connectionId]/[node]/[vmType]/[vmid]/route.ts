@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -12,6 +13,8 @@ type RouteContext = {
 export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const url = new URL(req.url)
     const type = url.searchParams.get('type') || 'options'
     
@@ -36,8 +39,10 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await req.json()
-    
+
     const orchestrator = getOrchestratorClient()
 
     const response = await orchestrator.post(
@@ -58,8 +63,10 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await req.json()
-    
+
     const orchestrator = getOrchestratorClient()
 
     const response = await orchestrator.put(

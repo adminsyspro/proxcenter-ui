@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from "@/components/dashboard/types"
 
 export const runtime = "nodejs"
@@ -11,6 +11,7 @@ export const runtime = "nodejs"
  */
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const url = new URL(req.url)
     const userId = url.searchParams.get('userId') || 'default'
 
@@ -58,6 +59,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  */
 export async function PUT(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const body = await req.json()
     const { userId = 'default', name = 'custom', widgets } = body
 
@@ -111,6 +113,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  */
 export async function DELETE(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const url = new URL(req.url)
     const userId = url.searchParams.get('userId') || 'default'
 

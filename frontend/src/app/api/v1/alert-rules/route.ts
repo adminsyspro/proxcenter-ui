@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 
 import { getDb } from '@/lib/db/sqlite'
+import { getCurrentTenantId } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 
@@ -57,10 +58,11 @@ type AlertRule = {
 export async function GET() {
   try {
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
 
     const rules = db.prepare(`
-      SELECT * FROM alert_rules ORDER BY created_at DESC
-    `).all() as AlertRule[]
+      SELECT * FROM alert_rules WHERE tenant_id = ? ORDER BY created_at DESC
+    `).all(tenantId) as AlertRule[]
 
     // Transformer pour le frontend
     const formattedRules = rules.map(rule => ({
@@ -128,14 +130,16 @@ export async function POST(req: Request) {
     }
 
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
     const id = randomUUID()
     const now = new Date().toISOString()
 
     db.prepare(`
-      INSERT INTO alert_rules (id, name, description, enabled, metric, operator, threshold, duration, severity, scope_type, scope_target, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO alert_rules (id, tenant_id, name, description, enabled, metric, operator, threshold, duration, severity, scope_type, scope_target, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
+      tenantId,
       name.trim(),
       description?.trim() || null,
       enabled !== false ? 1 : 0,

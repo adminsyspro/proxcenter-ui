@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 // GET /api/v1/firewall/ipsets/[connectionId] - Get all IP sets
 export async function GET(
@@ -10,6 +11,8 @@ export async function GET(
 ) {
   try {
     const { connectionId } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
 
     const orchestrator = getOrchestratorClient()
     const response = await orchestrator.get(`/firewall/ipsets/${connectionId}`)
@@ -32,6 +35,8 @@ export async function POST(
 ) {
   try {
     const { connectionId } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()

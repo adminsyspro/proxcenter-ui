@@ -19,6 +19,7 @@ export interface AuthUser {
   avatar: string | null
   role: UserRole
   authProvider: "credentials" | "ldap" | "oidc"
+  tenantId: string
 }
 
 declare module "next-auth" {
@@ -36,6 +37,7 @@ declare module "next-auth/jwt" {
     // avatar is NOT stored in JWT to keep cookie size small
     role: UserRole
     authProvider: "credentials" | "ldap" | "oidc"
+    tenantId: string
   }
 }
 
@@ -134,11 +136,21 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Mettre à jour last_login_at
-        db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(
-          new Date().toISOString(),
-          user.id
-        )
-        
+        const loginNow = new Date().toISOString()
+        db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(loginNow, user.id)
+
+        // Ensure user has a user_tenants entry
+        const hasUserTenant = db.prepare(
+          "SELECT 1 FROM user_tenants WHERE user_id = ? AND tenant_id = 'default'"
+        ).get(user.id)
+
+        if (!hasUserTenant) {
+          db.prepare(
+            `INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+             VALUES (?, 'default', 1, ?)`
+          ).run(user.id, loginNow)
+        }
+
         return {
           id: user.id,
           email: user.email,
@@ -146,6 +158,7 @@ export const authOptions: NextAuthOptions = {
           avatar: user.avatar || null,
           role: user.role as UserRole,
           authProvider: "credentials",
+          tenantId: "default",
         }
       },
     }),
@@ -195,6 +208,12 @@ export const authOptions: NextAuthOptions = {
              VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
           ).run(id, email, ldapUser.name, ldapUser.avatar, "viewer", "ldap", ldapUser.dn, now, now, now)
 
+          // Add new LDAP user to default tenant
+          db.prepare(
+            `INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+             VALUES (?, 'default', 1, ?)`
+          ).run(id, now)
+
           user = { id, email, name: ldapUser.name, role: "viewer", enabled: 1 }
         } else {
           if (!user.enabled) {
@@ -205,6 +224,18 @@ export const authOptions: NextAuthOptions = {
           db.prepare(
             "UPDATE users SET name = ?, avatar = ?, ldap_dn = ?, last_login_at = ?, updated_at = ? WHERE id = ?"
           ).run(ldapUser.name, ldapUser.avatar, ldapUser.dn, now, now, user.id)
+
+          // Ensure existing LDAP user has a user_tenants entry
+          const hasLdapTenant = db.prepare(
+            "SELECT 1 FROM user_tenants WHERE user_id = ? AND tenant_id = 'default'"
+          ).get(user.id)
+
+          if (!hasLdapTenant) {
+            db.prepare(
+              `INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+               VALUES (?, 'default', 1, ?)`
+            ).run(user.id, now)
+          }
         }
 
         // Sync RBAC role from LDAP groups
@@ -214,11 +245,11 @@ export const authOptions: NextAuthOptions = {
           const roleExists = db.prepare("SELECT id FROM rbac_roles WHERE id = ?").get(resolvedRoleId)
           const finalRoleId = roleExists ? resolvedRoleId : 'role_viewer'
 
-          // Replace only the global scope assignment
-          db.prepare("DELETE FROM rbac_user_roles WHERE user_id = ? AND scope_type = 'global'").run(user.id)
+          // Replace only the global scope assignment for the default tenant
+          db.prepare("DELETE FROM rbac_user_roles WHERE user_id = ? AND scope_type = 'global' AND tenant_id = 'default'").run(user.id)
           db.prepare(
-            `INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, granted_by, granted_at)
-             VALUES (?, ?, ?, 'global', NULL, ?)`
+            `INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, tenant_id, granted_by, granted_at)
+             VALUES (?, ?, ?, 'global', 'default', NULL, ?)`
           ).run(`ldap_${nanoid(12)}`, user.id, finalRoleId, now)
         }
 
@@ -229,6 +260,7 @@ export const authOptions: NextAuthOptions = {
           avatar: ldapUser.avatar || null,
           role: user.role as UserRole,
           authProvider: "ldap",
+          tenantId: "default",
         }
       },
     }),
@@ -269,6 +301,18 @@ export const authOptions: NextAuthOptions = {
             "UPDATE users SET name = ?, oidc_sub = ?, last_login_at = ?, updated_at = ?, auth_provider = 'oidc' WHERE id = ?"
           ).run(name, sub, now, now, existing.id)
 
+          // Ensure existing user has a user_tenants entry
+          const hasTenant = db.prepare(
+            "SELECT 1 FROM user_tenants WHERE user_id = ? AND tenant_id = 'default'"
+          ).get(existing.id)
+
+          if (!hasTenant) {
+            db.prepare(
+              `INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+               VALUES (?, 'default', 1, ?)`
+            ).run(existing.id, now)
+          }
+
           user.id = existing.id
           user.email = existing.email
           user.name = name
@@ -285,6 +329,22 @@ export const authOptions: NextAuthOptions = {
             `INSERT INTO users (id, email, name, role, auth_provider, oidc_sub, enabled, created_at, updated_at, last_login_at)
              VALUES (?, ?, ?, ?, 'oidc', ?, 1, ?, ?, ?)`
           ).run(id, email, name, role, sub, now, now, now)
+
+          // Add user to default tenant
+          db.prepare(
+            `INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+             VALUES (?, 'default', 1, ?)`
+          ).run(id, now)
+
+          // Create RBAC role assignment from OIDC groups
+          const oidcRoleId = `role_${role}`
+          const oidcRoleExists = db.prepare("SELECT id FROM rbac_roles WHERE id = ?").get(oidcRoleId)
+          const finalOidcRoleId = oidcRoleExists ? (oidcRoleExists as any).id : 'role_viewer'
+
+          db.prepare(
+            `INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, tenant_id, granted_at)
+             VALUES (?, ?, ?, 'global', 'default', ?)`
+          ).run(`oidc_${nanoid(12)}`, id, finalOidcRoleId, now)
 
           user.id = id
           user.email = email
@@ -307,6 +367,16 @@ export const authOptions: NextAuthOptions = {
         token.authProvider = account?.provider === 'oidc' ? 'oidc' : user.authProvider
       }
 
+      // Always refresh tenantId from DB (supports tenant switching without re-login)
+      if (token.id) {
+        try {
+          const { getUserDefaultTenantId } = await import("@/lib/tenant")
+          token.tenantId = getUserDefaultTenantId(token.id as string)
+        } catch {
+          token.tenantId = token.tenantId || 'default'
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
@@ -327,6 +397,7 @@ export const authOptions: NextAuthOptions = {
         avatar,
         role: token.role as UserRole,
         authProvider: token.authProvider as "credentials" | "ldap" | "oidc",
+        tenantId: (token.tenantId as string) || 'default',
       }
 
       return session
@@ -416,6 +487,7 @@ export function getAuthOptions(): NextAuthOptions {
         avatar: profile.picture || null,
         role: 'viewer' as UserRole,
         authProvider: 'oidc' as const,
+        tenantId: 'default',
       }
     },
   }

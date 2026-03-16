@@ -19,6 +19,7 @@ import {
 } from '@mui/material'
 
 import { VERSION_NAME, GIT_SHA, GITHUB_URL } from '@/config/version'
+import { LogoIcon } from '@/components/layout/shared/Logo'
 
 interface VersionInfo {
   currentSha: string | null
@@ -85,19 +86,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
       <DialogTitle sx={{ pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: 2,
-                bgcolor: 'primary.main',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <i className="ri-server-line" style={{ fontSize: 24, color: 'white' }} />
-            </Box>
+            <LogoIcon size={40} />
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                 {VERSION_NAME}

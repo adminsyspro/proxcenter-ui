@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 
@@ -23,6 +23,7 @@ function round1(n: number) {
 
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     // 1) Connexions SQLite - uniquement PVE (pas PBS)
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' },

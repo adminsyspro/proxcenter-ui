@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -42,9 +43,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
       ORDER BY p.category, p.name
     `).all(id)
 
-    // Récupérer les utilisateurs assignés à ce rôle
+    // Récupérer les utilisateurs assignés à ce rôle (scoped by tenant)
+    const tenantId = await getCurrentTenantId()
     const users = db.prepare(`
-      SELECT 
+      SELECT
         ur.id as assignment_id,
         ur.scope_type,
         ur.scope_target,
@@ -57,9 +59,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
       FROM rbac_user_roles ur
       JOIN users u ON u.id = ur.user_id
       LEFT JOIN users g ON g.id = ur.granted_by
-      WHERE ur.role_id = ?
+      WHERE ur.role_id = ? AND ur.tenant_id = ?
       ORDER BY ur.granted_at DESC
-    `).all(id)
+    `).all(id, tenantId)
 
     return NextResponse.json({
       data: {
@@ -89,7 +91,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    const tenantId = await getCurrentTenantId()
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 
@@ -189,7 +192,8 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
-    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    const tenantId = await getCurrentTenantId()
+    if (!hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
     }
 
@@ -206,10 +210,10 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Impossible de supprimer un rôle système" }, { status: 400 })
     }
 
-    // Vérifier si des utilisateurs utilisent ce rôle
+    // Vérifier si des utilisateurs utilisent ce rôle (dans le tenant courant)
     const userCount = db.prepare(
-      "SELECT COUNT(*) as count FROM rbac_user_roles WHERE role_id = ?"
-    ).get(id) as any
+      "SELECT COUNT(*) as count FROM rbac_user_roles WHERE role_id = ? AND tenant_id = ?"
+    ).get(id, tenantId) as any
 
     if (userCount.count > 0) {
       return NextResponse.json({ 

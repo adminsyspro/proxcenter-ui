@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 
 import { subscribe, type InventoryEvent } from "@/lib/cache/inventoryPoller"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -11,6 +12,9 @@ export const runtime = "nodejs"
  * The backend polls PVE /cluster/resources every ~10s and pushes only
  * the deltas (VM status changes, node changes, VM additions/removals).
  *
+ * Events are filtered to only include connections belonging to the
+ * current user's tenant.
+ *
  * Events:
  *   - event: vm:update    → { connId, vmid, node, type, status, cpu?, mem?, ... }
  *   - event: node:update  → { connId, node, status, cpu?, mem?, maxmem? }
@@ -20,6 +24,14 @@ export const runtime = "nodejs"
  */
 
 export async function GET(_request: NextRequest) {
+  // Resolve tenant connections upfront to filter events
+  let tenantConnIds: Set<string>
+  try {
+    tenantConnIds = await getTenantConnectionIds()
+  } catch {
+    tenantConnIds = new Set()
+  }
+
   const encoder = new TextEncoder()
 
   let unsubscribe: (() => void) | null = null
@@ -46,11 +58,13 @@ export async function GET(_request: NextRequest) {
         send('heartbeat', { ts: Date.now() })
       }, 30_000)
 
-      // Subscribe to inventory changes
+      // Subscribe to inventory changes — filter by tenant connections
       unsubscribe = subscribe((events: InventoryEvent[]) => {
         if (closed) return
         for (const ev of events) {
-          send(ev.event, ev)
+          if (tenantConnIds.has(ev.connId)) {
+            send(ev.event, ev)
+          }
         }
       })
     },

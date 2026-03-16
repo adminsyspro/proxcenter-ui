@@ -965,7 +965,7 @@ export default function VmDetailTabs(props: any) {
                                 InputProps={{
                                   endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                 }}
-                                sx={{ width: 120 }}
+                                sx={{ width: 170 }}
                                 inputProps={{ min: 0.5 }}
                               />
                             </Box>
@@ -974,10 +974,10 @@ export default function VmDetailTabs(props: any) {
                               const sliderMax = Math.min(hostMemGb, 128)
                               const step = sliderMax > 32 ? 2 : 1
                               const marks = [
-                                { value: 1, label: '1 GB' },
-                                ...(sliderMax >= 16 ? [{ value: Math.floor(sliderMax / 4), label: `${Math.floor(sliderMax / 4)} GB` }] : []),
-                                ...(sliderMax >= 32 ? [{ value: Math.floor(sliderMax / 2), label: `${Math.floor(sliderMax / 2)} GB` }] : []),
-                                { value: sliderMax, label: `${sliderMax} GB` },
+                                { value: 1, label: '1' },
+                                ...(sliderMax >= 16 ? [{ value: Math.floor(sliderMax / 4), label: `${Math.floor(sliderMax / 4)}` }] : []),
+                                ...(sliderMax >= 32 ? [{ value: Math.floor(sliderMax / 2), label: `${Math.floor(sliderMax / 2)}` }] : []),
+                                { value: sliderMax, label: `${sliderMax}` },
                               ]
                               return (
                                 <Slider
@@ -1017,7 +1017,7 @@ export default function VmDetailTabs(props: any) {
                                     InputProps={{
                                       endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                     }}
-                                    sx={{ width: 120 }}
+                                    sx={{ width: 170 }}
                                     inputProps={{ min: 0, max: memory / 1024 }}
                                   />
                                 </Box>
@@ -1597,8 +1597,8 @@ return (
                                 </td>
                                 <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
                                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                                    {(data.optionsInfo?.hotplug || 'disk,network,usb').split(',').map((h: string) => h.trim()).filter(Boolean).map((h: string) => (
-                                      <Chip key={h} label={h} size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 22 }} />
+                                    {(data.optionsInfo?.hotplug || 'disk,network,usb').split(',').map((h: string) => h.trim().toLowerCase()).filter(Boolean).map((h: string) => (
+                                      <Chip key={h} label={{ disk: 'Disk', network: 'Network', usb: 'USB', memory: 'Memory', cpu: 'CPU' }[h] || h} size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 22 }} />
                                     ))}
                                   </Box>
                                 </td>

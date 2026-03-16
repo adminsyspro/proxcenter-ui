@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { formatBytes } from "@/utils/format"
 
@@ -14,6 +14,7 @@ export const runtime = "nodejs"
  */
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     // RBAC: Check storage.view permission
     const denied = await checkPermission(PERMISSIONS.STORAGE_VIEW)
 

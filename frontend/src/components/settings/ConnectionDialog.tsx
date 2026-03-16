@@ -6,6 +6,9 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -321,14 +324,14 @@ export default function ConnectionDialog({
           {t('settings.generalInfo')}
         </Typography>
 
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {isXcpng
-            ? t.rich('settings.xcpngPortInfo', { b: (chunks: any) => <b>{chunks}</b> })
-            : isVmware
-              ? t.rich('settings.vmwarePortInfo', { b: (chunks: any) => <b>{chunks}</b> })
-              : t.rich(isPbs ? 'settings.pbsPortInfo' : 'settings.pvePortInfo', { b: (chunks: any) => <b>{chunks}</b> })
-          }
-        </Alert>
+        {(isXcpng || isVmware) && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {isXcpng
+              ? t.rich('settings.xcpngPortInfo', { b: (chunks: any) => <b>{chunks}</b> })
+              : t.rich('settings.vmwarePortInfo', { b: (chunks: any) => <b>{chunks}</b> })
+            }
+          </Alert>
+        )}
 
         <TextField
           fullWidth
@@ -455,28 +458,96 @@ export default function ConnectionDialog({
               }}
             />
 
-            {!isPbs && (
-              <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
-                <Typography variant="body2">
-                  {t('settings.pvePrivsepHint')}
+            <Accordion
+              disableGutters
+              elevation={0}
+              sx={{
+                mt: 2,
+                border: '1px solid',
+                borderColor: 'info.main',
+                borderRadius: '8px !important',
+                '&::before': { display: 'none' },
+                bgcolor: 'transparent',
+              }}
+            >
+              <AccordionSummary
+                expandIcon={<i className="ri-arrow-down-s-line" style={{ fontSize: 18 }} />}
+                sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className="ri-terminal-line" style={{ fontSize: 16, opacity: 0.7 }} />
+                  <Typography variant="body2" fontWeight={600}>
+                    {t('settings.tokenSetupGuide')}
+                  </Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0, pb: 1.5 }}>
+                <Typography variant="caption" sx={{ display: 'block', mb: 1, opacity: 0.7 }}>
+                  {isPbs ? t('settings.pbsTokenSetupDesc') : t('settings.pveTokenSetupDesc')}
                 </Typography>
-              </Alert>
-            )}
-
-            {isPbs && (
-              <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                  {t('settings.pbsAuthHintTitle')}
-                </Typography>
-                <Typography variant="body2" component="div">
-                  <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
-                    <li>{t('settings.pbsAuthHintRealm')}</li>
-                    <li>{t('settings.pbsAuthHintFormat')}</li>
-                    <li>{t('settings.pbsAuthHintPerms')}</li>
-                  </ul>
-                </Typography>
-              </Alert>
-            )}
+                <Box
+                  component="pre"
+                  sx={{
+                    bgcolor: 'grey.900',
+                    color: 'grey.100',
+                    p: 1.5,
+                    borderRadius: 1,
+                    fontSize: '0.75rem',
+                    fontFamily: '"JetBrains Mono", monospace',
+                    overflow: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                    position: 'relative',
+                    m: 0,
+                  }}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      const text = isPbs
+                        ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / DatastoreReader --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / DatastoreReader --auth-id 'proxcenter@pbs!proxcenter'`
+                        : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin`
+                      navigator.clipboard.writeText(text)
+                    }}
+                    sx={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      color: 'grey.400',
+                      '&:hover': { color: 'grey.100' },
+                    }}
+                  >
+                    <i className="ri-file-copy-line" style={{ fontSize: 14 }} />
+                  </IconButton>
+                  {isPbs ? (
+                    <>
+                      <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pbsStep1')}</Box>{'\n'}
+                      proxmox-backup-manager user create proxcenter@pbs \{'\n'}
+                      {'  '}--comment &quot;ProxCenter service account&quot;{'\n\n'}
+                      <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pbsStep2')}</Box>{'\n'}
+                      proxmox-backup-manager user generate-token \{'\n'}
+                      {'  '}proxcenter@pbs proxcenter{'\n\n'}
+                      <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pbsStep3')}</Box>{'\n'}
+                      proxmox-backup-manager acl update / DatastoreReader \{'\n'}
+                      {'  '}--auth-id proxcenter@pbs{'\n'}
+                      proxmox-backup-manager acl update / DatastoreReader \{'\n'}
+                      {'  '}--auth-id &apos;proxcenter@pbs!proxcenter&apos;
+                    </>
+                  ) : (
+                    <>
+                      <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pveStep1')}</Box>{'\n'}
+                      pveum user add proxcenter@pve \{'\n'}
+                      {'  '}--comment &quot;ProxCenter service account&quot;{'\n\n'}
+                      <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pveStep2')}</Box>{'\n'}
+                      pveum user token add proxcenter@pve proxcenter-token \{'\n'}
+                      {'  '}--privsep=0{'\n\n'}
+                      <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pveStep3')}</Box>{'\n'}
+                      pveum aclmod / -user proxcenter@pve -role PVEAdmin
+                    </>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
           </>
         )}
 

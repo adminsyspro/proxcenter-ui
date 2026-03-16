@@ -24,6 +24,15 @@ const input = {
         '&.Mui-disabled .MuiInputAdornment-root, &.Mui-disabled .MuiInputAdornment-root > *': {
           color: 'var(--mui-palette-action-disabled)'
         }
+      },
+      input: {
+        '&[type="number"]': {
+          MozAppearance: 'textfield',
+          '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+            WebkitAppearance: 'none',
+            margin: 0
+          }
+        }
       }
     }
   },

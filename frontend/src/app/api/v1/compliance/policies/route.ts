@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { authOptions } from '@/lib/auth/config'
 import { getSecurityPolicies, updateSecurityPolicies } from '@/lib/compliance/policies'
 import { audit } from '@/lib/audit'
+import { getCurrentTenantId } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 
@@ -14,7 +15,8 @@ export async function GET() {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
 
-    const policies = getSecurityPolicies()
+    const tenantId = await getCurrentTenantId()
+    const policies = getSecurityPolicies(tenantId)
     return NextResponse.json({ data: policies })
   } catch (e: any) {
     console.error('Error fetching security policies:', e)
@@ -33,7 +35,8 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json()
-    const updated = updateSecurityPolicies(body, session.user.id)
+    const tenantId = await getCurrentTenantId()
+    const updated = updateSecurityPolicies(body, session.user.id, tenantId)
 
     await audit({
       action: 'update',

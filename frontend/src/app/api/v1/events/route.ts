@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
-import { prisma } from '@/lib/db/prisma'
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
@@ -57,6 +57,7 @@ return 'info'
 
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.EVENTS_VIEW)
     if (permError) return permError
 

@@ -1,7 +1,7 @@
 // src/app/api/v1/templates/blueprints/[id]/route.ts
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { createBlueprintSchema } from "@/lib/schemas"
 
@@ -9,6 +9,7 @@ export const runtime = "nodejs"
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
@@ -27,6 +28,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
@@ -78,6 +80,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })

@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { hashPassword } from "@/lib/auth/password"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -20,13 +21,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await params
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
 
     const user = db
       .prepare(
-        `SELECT id, email, name, role, auth_provider, enabled, last_login_at, created_at, updated_at 
-         FROM users WHERE id = ?`
+        `SELECT u.id, u.email, u.name, u.role, u.auth_provider, u.enabled, u.last_login_at, u.created_at, u.updated_at
+         FROM users u JOIN user_tenants ut ON ut.user_id = u.id
+         WHERE u.id = ? AND ut.tenant_id = ?`
       )
-      .get(id)
+      .get(id, tenantId)
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
@@ -54,9 +57,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { name, enabled, password } = body
 
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
 
-    // Vérifier que l'utilisateur existe
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any
+    // Vérifier que l'utilisateur existe et appartient au tenant
+    const user = db
+      .prepare(
+        `SELECT u.* FROM users u JOIN user_tenants ut ON ut.user_id = u.id
+         WHERE u.id = ? AND ut.tenant_id = ?`
+      )
+      .get(id, tenantId) as any
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
@@ -145,9 +154,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const session = await getServerSession(authOptions)
     const { id } = await params
     const db = getDb()
+    const tenantId = await getCurrentTenantId()
 
-    // Vérifier que l'utilisateur existe
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any
+    // Vérifier que l'utilisateur existe et appartient au tenant
+    const user = db
+      .prepare(
+        `SELECT u.* FROM users u JOIN user_tenants ut ON ut.user_id = u.id
+         WHERE u.id = ? AND ut.tenant_id = ?`
+      )
+      .get(id, tenantId) as any
 
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
@@ -161,12 +176,24 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       )
     }
 
-    // Supprimer les assignations RBAC de l'utilisateur
-    db.prepare("DELETE FROM rbac_user_roles WHERE user_id = ?").run(id)
-    db.prepare("DELETE FROM rbac_user_permissions WHERE user_id = ?").run(id)
+    // Supprimer le lien tenant (uniquement pour le tenant courant)
+    db.prepare("DELETE FROM user_tenants WHERE user_id = ? AND tenant_id = ?").run(id, tenantId)
 
-    // Supprimer l'utilisateur
-    db.prepare("DELETE FROM users WHERE id = ?").run(id)
+    // Vérifier si l'utilisateur appartient encore à d'autres tenants
+    const remainingTenants = db.prepare(
+      "SELECT COUNT(*) as count FROM user_tenants WHERE user_id = ?"
+    ).get(id) as any
+
+    if (remainingTenants.count === 0) {
+      // Plus aucun tenant — supprimer complètement l'utilisateur
+      db.prepare("DELETE FROM rbac_user_roles WHERE user_id = ?").run(id)
+      db.prepare("DELETE FROM rbac_user_permissions WHERE user_id = ?").run(id)
+      db.prepare("DELETE FROM users WHERE id = ?").run(id)
+    } else {
+      // L'utilisateur appartient encore à d'autres tenants — ne supprimer que les RBAC du tenant courant
+      db.prepare("DELETE FROM rbac_user_roles WHERE user_id = ? AND tenant_id = ?").run(id, tenantId)
+      db.prepare("DELETE FROM rbac_user_permissions WHERE user_id = ? AND tenant_id = ?").run(id, tenantId)
+    }
 
     // Audit
     const { audit } = await import("@/lib/audit")

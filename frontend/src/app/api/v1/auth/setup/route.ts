@@ -60,16 +60,22 @@ export async function POST(req: Request) {
 
     db.prepare(
       `INSERT INTO users (id, email, password, name, role, enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)`
+       VALUES (?, ?, ?, ?, 'super_admin', 1, ?, ?)`
     ).run(id, email.toLowerCase().trim(), hashedPassword, name || null, now, now)
 
-    // Assign RBAC role_super_admin to the first user
+    // Assign RBAC role_super_admin to the first user (default tenant)
     const roleAssignId = nanoid()
 
     db.prepare(
-      `INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, granted_at)
-       VALUES (?, ?, 'role_super_admin', 'global', NULL, ?)`
+      `INSERT INTO rbac_user_roles (id, user_id, role_id, scope_type, scope_target, tenant_id, granted_at)
+       VALUES (?, ?, 'role_super_admin', 'global', NULL, 'default', ?)`
     ).run(roleAssignId, id, now)
+
+    // Add user to default tenant
+    db.prepare(
+      `INSERT OR IGNORE INTO user_tenants (user_id, tenant_id, is_default, joined_at)
+       VALUES (?, 'default', 1, ?)`
+    ).run(id, now)
 
     return NextResponse.json({
       success: true,
@@ -78,7 +84,7 @@ export async function POST(req: Request) {
         id,
         email: email.toLowerCase().trim(),
         name: name || null,
-        role: "admin",
+        role: "super_admin",
       },
     })
   } catch (error: any) {

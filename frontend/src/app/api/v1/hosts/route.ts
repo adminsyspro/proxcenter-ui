@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes, formatUptime } from "@/utils/format"
@@ -13,6 +13,7 @@ function round1(n: number) {
 
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const url = new URL(req.url)
     const connIdFilter = url.searchParams.get('connId')
 

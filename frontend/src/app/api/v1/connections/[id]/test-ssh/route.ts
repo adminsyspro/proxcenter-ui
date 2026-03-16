@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -23,6 +23,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
 

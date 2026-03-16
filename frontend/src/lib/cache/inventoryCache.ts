@@ -14,6 +14,8 @@
  * The cache lives in the Node.js process memory and is shared across all
  * requests.  A module-level singleton is used so that Next.js hot-reload
  * does not reset it in production.
+ *
+ * Cache is keyed by tenantId to ensure tenant isolation.
  */
 
 type CachedInventory = {
@@ -47,16 +49,22 @@ const STALE_TTL_MS = 15 * 60 * 1_000 // 15 minutes
 // Use globalThis to survive Next.js hot-reload in development
 const CACHE_KEY = '__proxcenter_inventory_cache__' as const
 
-function getCache(): CacheEntry | null {
-  return (globalThis as any)[CACHE_KEY] ?? null
+function getCacheStore(): Map<string, CacheEntry> {
+  if (!(globalThis as any)[CACHE_KEY]) {
+    ;(globalThis as any)[CACHE_KEY] = new Map<string, CacheEntry>()
+  }
+  return (globalThis as any)[CACHE_KEY]
 }
 
-function setCache(entry: CacheEntry) {
-  ;(globalThis as any)[CACHE_KEY] = entry
-}
+// Lock to prevent concurrent fetches per tenant (thundering herd)
+const INFLIGHT_KEY = '__proxcenter_inventory_inflight__' as const
 
-// Lock to prevent concurrent fetches (thundering herd)
-let fetchInProgress: Promise<CachedInventory> | null = null
+function getInflightStore(): Map<string, Promise<CachedInventory>> {
+  if (!(globalThis as any)[INFLIGHT_KEY]) {
+    ;(globalThis as any)[INFLIGHT_KEY] = new Map<string, Promise<CachedInventory>>()
+  }
+  return (globalThis as any)[INFLIGHT_KEY]
+}
 
 type CacheResult =
   | { status: 'fresh'; data: CachedInventory }
@@ -69,8 +77,9 @@ type CacheResult =
  *   - `stale`  → data is usable but should be revalidated in background
  *   - `miss`   → no usable data, blocking fetch required
  */
-export function getInventoryFromCache(): CacheResult {
-  const entry = getCache()
+export function getInventoryFromCache(tenantId = 'default'): CacheResult {
+  const store = getCacheStore()
+  const entry = store.get(tenantId)
   if (!entry) return { status: 'miss' }
 
   // Invalidate cache entries missing required fields (e.g. storages added later)
@@ -89,23 +98,34 @@ export function getInventoryFromCache(): CacheResult {
   return { status: 'miss' }
 }
 
-export function setCachedInventory(data: CachedInventory): void {
-  setCache({ data, timestamp: Date.now() })
+export function setCachedInventory(data: CachedInventory, tenantId = 'default'): void {
+  const store = getCacheStore()
+  store.set(tenantId, { data, timestamp: Date.now() })
 }
 
-export function invalidateInventoryCache(): void {
-  ;(globalThis as any)[CACHE_KEY] = null
+export function invalidateInventoryCache(tenantId?: string): void {
+  const store = getCacheStore()
+  if (tenantId) {
+    store.delete(tenantId)
+  } else {
+    store.clear()
+  }
 }
 
 /**
- * Returns the in-flight fetch promise if one is already running,
+ * Returns the in-flight fetch promise if one is already running for the given tenant,
  * or null if the caller should start a new fetch.
  * This prevents multiple simultaneous requests from all hitting Proxmox.
  */
-export function getInflightFetch(): Promise<CachedInventory> | null {
-  return fetchInProgress
+export function getInflightFetch(tenantId = 'default'): Promise<CachedInventory> | null {
+  return getInflightStore().get(tenantId) ?? null
 }
 
-export function setInflightFetch(p: Promise<CachedInventory> | null): void {
-  fetchInProgress = p
+export function setInflightFetch(p: Promise<CachedInventory> | null, tenantId = 'default'): void {
+  const store = getInflightStore()
+  if (p) {
+    store.set(tenantId, p)
+  } else {
+    store.delete(tenantId)
+  }
 }

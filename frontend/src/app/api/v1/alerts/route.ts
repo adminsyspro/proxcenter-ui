@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { prisma } from '@/lib/db/prisma'
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { createAlertSchema, patchAlertsSchema } from '@/lib/schemas'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -13,6 +13,7 @@ export const runtime = 'nodejs'
  */
 export async function GET(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_VIEW)
     if (permError) return permError
 
@@ -109,6 +110,7 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const rawBody = await req.json()
     const parseResult = createAlertSchema.safeParse(rawBody)
 
@@ -122,10 +124,11 @@ export async function POST(req: Request) {
     const { severity, message, source, sourceType, entityType, entityId, entityName, metric, currentValue, threshold } = parseResult.data
 
     const fingerprint = generateFingerprint({ severity, source, entityType, entityId, metric })
+    const tenantId = await getCurrentTenantId()
 
     // Upsert: créer ou mettre à jour si existe déjà
     const alert = await prisma.alert.upsert({
-      where: { fingerprint },
+      where: { tenantId_fingerprint: { tenantId, fingerprint } },
       create: {
         fingerprint,
         severity,
@@ -167,6 +170,7 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function PATCH(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (permError) return permError
 
@@ -228,6 +232,7 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  */
 export async function DELETE(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (permError) return permError
 

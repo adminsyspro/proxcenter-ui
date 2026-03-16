@@ -1,18 +1,31 @@
 // src/app/api/v1/orchestrator/reports/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
+import { orchestratorFetch } from '@/lib/orchestrator'
+import { getTenantConnectionIds } from '@/lib/tenant'
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
 const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 export const runtime = 'nodejs'
 
-// GET /api/v1/orchestrator/reports/[id]/download - Download report PDF
+// GET /api/v1/orchestrator/reports/[id]/download — tenant-scoped
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+
+    // Verify report belongs to tenant
+    const report = await orchestratorFetch(`/reports/${id}`) as any
+    if (report?.connection_id) {
+      const tenantConnectionIds = await getTenantConnectionIds()
+      if (!tenantConnectionIds.has(report.connection_id)) {
+        return NextResponse.json({ error: 'Report not found' }, { status: 404 })
+      }
+    }
+
     const url = `${ORCHESTRATOR_URL}/api/v1/reports/${id}/download`
 
     const headers: Record<string, string> = {}

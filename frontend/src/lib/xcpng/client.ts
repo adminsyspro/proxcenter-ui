@@ -12,7 +12,7 @@
  * - GET /rest/v0/vdis/{uuid}.raw      → Download VDI as raw image
  */
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 
 export interface XoConnectionInfo {
@@ -54,6 +54,7 @@ export interface XoNetworkInfo {
  * Get XO connection info from a stored connection
  */
 export async function getXoConnectionInfo(connectionId: string): Promise<XoConnectionInfo> {
+  const prisma = await getSessionPrisma()
   const conn = await prisma.connection.findUnique({
     where: { id: connectionId },
     select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },

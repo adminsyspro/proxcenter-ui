@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -14,16 +15,25 @@ export async function POST(req: Request, ctx: Params) {
   try {
     const { id, action } = await ctx.params
 
-    // Vérifier la permission
-    const permission = action === 'execute' 
-      ? PERMISSIONS.VM_MIGRATE 
+    const permission = action === 'execute'
+      ? PERMISSIONS.VM_MIGRATE
       : PERMISSIONS.AUTOMATION_MANAGE
-    
-    const denied = await checkPermission(permission, "global", "*")
 
+    const denied = await checkPermission(permission, "global", "*")
     if (denied) return denied
 
+    // Verify recommendation belongs to tenant
     const client = getOrchestratorClient()
+    const recsRes = await client.getRecommendations(false)
+    const recs = Array.isArray(recsRes.data) ? recsRes.data : []
+    const rec = recs.find((r: any) => r.id === id)
+    if (rec?.connection_id) {
+      const tenantConnectionIds = await getTenantConnectionIds()
+      if (!tenantConnectionIds.has(rec.connection_id)) {
+        return NextResponse.json({ error: 'Recommendation not found' }, { status: 404 })
+      }
+    }
+
     let response
 
     switch (action) {

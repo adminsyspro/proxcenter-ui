@@ -2286,9 +2286,9 @@ export default function SettingsPage() {
     return hasFeature(tab.requiredFeature)
   }
 
-  const tabNames = ['connections', 'appearance', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'tenants']
+  const allTabNames = ['connections', 'appearance', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'tenants']
 
-  const tabs = [
+  const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab },
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS },
@@ -2300,6 +2300,15 @@ export default function SettingsPage() {
     { label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL },
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, superAdminOnly: true },
   ]
+
+  // Hide tabs that require superAdmin when user is not superAdmin (e.g. Tenants tab)
+  const visibleIndices = allTabs.reduce((acc, tab, idx) => {
+    if (!tab.superAdminOnly || isSuperAdmin) acc.push(idx)
+    return acc
+  }, [])
+
+  const tabs = visibleIndices.map(i => allTabs[i])
+  const tabNames = visibleIndices.map(i => allTabNames[i])
 
   // Resolve tab index from URL param
   const resolveTabIndex = () => {

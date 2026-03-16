@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { getDb } from '@/lib/db/sqlite'
+import { getCurrentTenantId } from '@/lib/tenant'
 import { METRIC_TYPES, OPERATORS, SEVERITIES } from '../route'
 
 export const runtime = 'nodejs'
@@ -12,14 +13,15 @@ export async function GET(req: Request, { params }: Params) {
   try {
     const { id } = await params
     const db = getDb()
-    
-    const rule = db.prepare(`SELECT * FROM alert_rules WHERE id = ?`).get(id) as any
-    
+    const tenantId = await getCurrentTenantId()
+
+    const rule = db.prepare(`SELECT * FROM alert_rules WHERE id = ? AND tenant_id = ?`).get(id, tenantId) as any
+
     if (!rule) {
       return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: {
         id: rule.id,
         name: rule.name,
@@ -54,9 +56,10 @@ export async function PUT(req: Request, { params }: Params) {
     const { name, description, enabled, metric, operator, threshold, duration, severity, scopeType, scopeTarget } = body
 
     const db = getDb()
-    
-    // Vérifier que la règle existe
-    const existing = db.prepare(`SELECT id FROM alert_rules WHERE id = ?`).get(id)
+    const tenantId = await getCurrentTenantId()
+
+    // Vérifier que la règle existe et appartient au tenant
+    const existing = db.prepare(`SELECT id FROM alert_rules WHERE id = ? AND tenant_id = ?`).get(id, tenantId)
 
     if (!existing) {
       return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
@@ -86,9 +89,9 @@ export async function PUT(req: Request, { params }: Params) {
     const now = new Date().toISOString()
 
     db.prepare(`
-      UPDATE alert_rules 
+      UPDATE alert_rules
       SET name = ?, description = ?, enabled = ?, metric = ?, operator = ?, threshold = ?, duration = ?, severity = ?, scope_type = ?, scope_target = ?, updated_at = ?
-      WHERE id = ?
+      WHERE id = ? AND tenant_id = ?
     `).run(
       name.trim(),
       description?.trim() || null,
@@ -101,7 +104,8 @@ export async function PUT(req: Request, { params }: Params) {
       scopeType || 'all',
       scopeTarget?.trim() || null,
       now,
-      id
+      id,
+      tenantId
     )
 
     return NextResponse.json({ message: 'Règle mise à jour' })
@@ -123,8 +127,9 @@ export async function PATCH(req: Request, { params }: Params) {
     const { enabled } = body
 
     const db = getDb()
-    
-    const existing = db.prepare(`SELECT id FROM alert_rules WHERE id = ?`).get(id)
+    const tenantId = await getCurrentTenantId()
+
+    const existing = db.prepare(`SELECT id FROM alert_rules WHERE id = ? AND tenant_id = ?`).get(id, tenantId)
 
     if (!existing) {
       return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
@@ -133,8 +138,8 @@ export async function PATCH(req: Request, { params }: Params) {
     const now = new Date().toISOString()
 
     db.prepare(`
-      UPDATE alert_rules SET enabled = ?, updated_at = ? WHERE id = ?
-    `).run(enabled ? 1 : 0, now, id)
+      UPDATE alert_rules SET enabled = ?, updated_at = ? WHERE id = ? AND tenant_id = ?
+    `).run(enabled ? 1 : 0, now, id, tenantId)
 
     return NextResponse.json({ message: enabled ? 'Règle activée' : 'Règle désactivée' })
   } catch (error: any) {
@@ -152,16 +157,17 @@ export async function DELETE(req: Request, { params }: Params) {
   try {
     const { id } = await params
     const db = getDb()
-    
-    const existing = db.prepare(`SELECT id FROM alert_rules WHERE id = ?`).get(id)
+    const tenantId = await getCurrentTenantId()
+
+    const existing = db.prepare(`SELECT id FROM alert_rules WHERE id = ? AND tenant_id = ?`).get(id, tenantId)
 
     if (!existing) {
       return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
     }
 
     // Supprimer aussi les alertes déclenchées par cette règle
-    db.prepare(`DELETE FROM alert_instances WHERE rule_id = ?`).run(id)
-    db.prepare(`DELETE FROM alert_rules WHERE id = ?`).run(id)
+    db.prepare(`DELETE FROM alert_instances WHERE rule_id = ? AND tenant_id = ?`).run(id, tenantId)
+    db.prepare(`DELETE FROM alert_rules WHERE id = ? AND tenant_id = ?`).run(id, tenantId)
 
     return NextResponse.json({ message: 'Règle supprimée' })
   } catch (error: any) {

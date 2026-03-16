@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -48,15 +49,21 @@ const MOCK_PLANS = [
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
-
     if (denied) return denied
 
+    const tenantConnectionIds = await getTenantConnectionIds()
     const client = getOrchestratorClient()
     const response = await client.getRecoveryPlans()
 
-    return NextResponse.json(response.data || [])
+    const all = Array.isArray(response.data) ? response.data : []
+    const filtered = all.filter((p: any) =>
+      (!p.source_cluster || tenantConnectionIds.has(p.source_cluster)) &&
+      (!p.target_cluster || tenantConnectionIds.has(p.target_cluster))
+    )
+
+    return NextResponse.json(filtered)
   } catch (e: any) {
-    // Return mock data when orchestrator is not available
+    // Return mock data when orchestrator is not available (filtered is not possible for mocks)
     return NextResponse.json(MOCK_PLANS)
   }
 }
@@ -68,6 +75,16 @@ export async function POST(request: NextRequest) {
     if (denied) return denied
 
     const body = await request.json()
+
+    // Validate cluster connections belong to current tenant
+    const tenantConnectionIds = await getTenantConnectionIds()
+    if (body.source_cluster && !tenantConnectionIds.has(body.source_cluster)) {
+      return NextResponse.json({ error: 'Source cluster not found' }, { status: 404 })
+    }
+    if (body.target_cluster && !tenantConnectionIds.has(body.target_cluster)) {
+      return NextResponse.json({ error: 'Target cluster not found' }, { status: 404 })
+    }
+
     const client = getOrchestratorClient()
     const response = await client.createRecoveryPlan(body)
 

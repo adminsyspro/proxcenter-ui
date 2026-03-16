@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
 
+import { getTenantConnectionIds } from "@/lib/tenant"
+
 export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
-// POST /api/v1/orchestrator/rolling-updates/[id]/[action]
+// POST /api/v1/orchestrator/rolling-updates/[id]/[action] — tenant-scoped
 // Actions: pause, resume, cancel, approve
 export async function POST(
   _req: Request,
@@ -13,7 +15,6 @@ export async function POST(
   try {
     const { id, action } = await ctx.params
 
-    // Validate action
     const validActions = ["pause", "resume", "cancel", "approve"]
     if (!validActions.includes(action)) {
       return NextResponse.json(
@@ -22,11 +23,24 @@ export async function POST(
       )
     }
 
+    // Verify rolling update belongs to tenant
+    const ruRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}`, {
+      headers: { "Content-Type": "application/json" },
+    })
+    if (ruRes.ok) {
+      const ruData = await ruRes.json()
+      const ru = ruData?.data || ruData
+      if (ru?.connection_id) {
+        const tenantConnectionIds = await getTenantConnectionIds()
+        if (!tenantConnectionIds.has(ru.connection_id)) {
+          return NextResponse.json({ error: 'Rolling update not found' }, { status: 404 })
+        }
+      }
+    }
+
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}/${action}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
     })
 
     const data = await response.json()

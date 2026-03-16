@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getTenantConnectionIds } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 
@@ -17,8 +18,14 @@ export async function GET(req: Request) {
       params.set(key, value)
     }
 
+    const tenantConnectionIds = await getTenantConnectionIds()
     const query = params.toString()
     const data = await orchestratorFetch<any>(`/changes${query ? `?${query}` : ''}`)
+
+    // Filter changes by tenant connections
+    if (data?.data && Array.isArray(data.data)) {
+      data.data = data.data.filter((c: any) => !c.connectionId || tenantConnectionIds.has(c.connectionId))
+    }
 
     return NextResponse.json(data)
   } catch (error: any) {

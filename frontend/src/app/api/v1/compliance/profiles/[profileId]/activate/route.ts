@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getProfile, setActiveProfile, deactivateProfiles } from '@/lib/compliance/profiles'
+import { getCurrentTenantId } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,21 +17,22 @@ export async function POST(
     if (denied) return denied
 
     const { profileId } = await ctx.params
+    const tenantId = await getCurrentTenantId()
 
     // Special case: deactivate all
     if (profileId === 'none') {
       const body = await req.json().catch(() => ({}))
-      deactivateProfiles(body.connection_id)
+      deactivateProfiles(body.connection_id, tenantId)
       return NextResponse.json({ success: true })
     }
 
-    const existing = getProfile(profileId)
+    const existing = getProfile(profileId, tenantId)
     if (!existing) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
     const body = await req.json().catch(() => ({}))
-    setActiveProfile(profileId, body.connection_id)
+    setActiveProfile(profileId, body.connection_id, tenantId)
 
     return NextResponse.json({ success: true })
   } catch (e: any) {

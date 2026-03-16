@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
 
@@ -11,6 +12,8 @@ export async function GET(
 ) {
   try {
     const { connectionId, node, vmType, vmid } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const orchestrator = getOrchestratorClient()
 
     const response = await orchestrator.get(

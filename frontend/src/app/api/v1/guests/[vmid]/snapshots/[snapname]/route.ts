@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -29,6 +29,7 @@ return {
 }
 
 async function getConnection(id: string) {
+  const prisma = await getSessionPrisma()
   const connection = await prisma.connection.findUnique({
     where: { id },
     select: {

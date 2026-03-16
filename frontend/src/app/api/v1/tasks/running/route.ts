@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
-import { prisma } from '@/lib/db/prisma'
+import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = 'nodejs'
 
@@ -86,6 +86,7 @@ return 'ri-loader-4-line'
 // GET /api/v1/tasks/running - Récupère toutes les tâches en cours
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     // Récupérer uniquement les connexions PVE
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' }

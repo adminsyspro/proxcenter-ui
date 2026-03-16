@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { prisma } from '@/lib/db/prisma'
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { syncAlertsSchema } from '@/lib/schemas'
 
@@ -15,6 +15,7 @@ export const runtime = 'nodejs'
  */
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const rawBody = await req.json()
     const parseResult = syncAlertsSchema.safeParse(rawBody)
 
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
     const { alerts } = parseResult.data
 
     const now = new Date()
+    const tenantId = await getCurrentTenantId()
     const currentFingerprints: string[] = []
     let created = 0
     let updated = 0
@@ -46,14 +48,14 @@ export async function POST(req: Request) {
       currentFingerprints.push(fingerprint)
 
       // Upsert l'alerte
-      const existing = await prisma.alert.findUnique({ where: { fingerprint } })
+      const existing = await prisma.alert.findUnique({ where: { tenantId_fingerprint: { tenantId, fingerprint } } })
 
       if (existing) {
         // Mettre à jour si active ou acknowledged (pas si resolved manuellement récemment)
-        if (existing.status !== 'resolved' || 
+        if (existing.status !== 'resolved' ||
             (existing.resolvedAt && (now.getTime() - existing.resolvedAt.getTime()) > 300000)) { // 5 min
           await prisma.alert.update({
-            where: { fingerprint },
+            where: { tenantId_fingerprint: { tenantId, fingerprint } },
             data: {
               status: existing.status === 'resolved' ? 'active' : existing.status,
               resolvedAt: existing.status === 'resolved' ? null : existing.resolvedAt,

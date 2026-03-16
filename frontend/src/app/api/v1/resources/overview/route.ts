@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getDb } from "@/lib/db/sqlite"
@@ -8,11 +8,11 @@ import { getDb } from "@/lib/db/sqlite"
 export const runtime = "nodejs"
 
 // Charger les paramètres Green depuis la base de données
-async function loadGreenSettings() {
+async function loadGreenSettings(tenantId: string) {
   try {
     const db = getDb()
-    const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
-    const row = stmt.get('green') as { value: string } | undefined
+    const stmt = db.prepare('SELECT value FROM settings WHERE key = ? AND tenant_id = ?')
+    const row = stmt.get('green', tenantId) as { value: string } | undefined
 
     if (row?.value) {
       return JSON.parse(row.value)
@@ -640,7 +640,7 @@ return data.nodeCount >= minNodes
 }
 
 // Load resource thresholds from DB (F9)
-async function loadResourceThresholds() {
+async function loadResourceThresholds(tenantId: string) {
   const DEFAULT_THRESHOLDS = {
     cpu: { warning: 80, critical: 90 },
     ram: { warning: 80, critical: 90 },
@@ -649,8 +649,8 @@ async function loadResourceThresholds() {
 
   try {
     const db = getDb()
-    const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
-    const row = stmt.get('resource_thresholds') as { value: string } | undefined
+    const stmt = db.prepare('SELECT value FROM settings WHERE key = ? AND tenant_id = ?')
+    const row = stmt.get('resource_thresholds', tenantId) as { value: string } | undefined
     if (row?.value) return { ...DEFAULT_THRESHOLDS, ...JSON.parse(row.value) }
   } catch (e: any) {
     if (!e?.message?.includes('no such table')) {
@@ -662,18 +662,18 @@ async function loadResourceThresholds() {
 }
 
 // Save health score snapshot (F8) - one per day
-function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: number, storagePct: number, connectionId?: string) {
+function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: number, storagePct: number, connectionId: string | undefined, tenantId: string) {
   try {
     const db = getDb()
     const today = new Date().toISOString().split('T')[0]
-    const id = `hs_${today}${connectionId ? `_${connectionId}` : ''}`
+    const id = `hs_${today}${connectionId ? `_${connectionId}` : ''}_${tenantId}`
     const dateKey = connectionId ? `${today}_${connectionId}` : today
 
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO health_score_history (id, date, score, cpu_pct, ram_pct, storage_pct, connection_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO health_score_history (id, date, score, cpu_pct, ram_pct, storage_pct, connection_id, created_at, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    stmt.run(id, dateKey, Math.round(score), cpuPct, ramPct, storagePct, connectionId || null, new Date().toISOString())
+    stmt.run(id, dateKey, Math.round(score), cpuPct, ramPct, storagePct, connectionId || null, new Date().toISOString(), tenantId)
   } catch (e: any) {
     if (!e?.message?.includes('no such table')) {
       console.warn('Failed to save health score:', e?.message)
@@ -682,7 +682,7 @@ function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: number, 
 }
 
 // Load health score history (F8)
-function loadHealthScoreHistory(connectionId?: string): Array<{ date: string; score: number; cpu: number; ram: number; storage: number }> {
+function loadHealthScoreHistory(connectionId: string | undefined, tenantId: string): Array<{ date: string; score: number; cpu: number; ram: number; storage: number }> {
   try {
     const db = getDb()
     const cutoff = new Date()
@@ -691,11 +691,11 @@ function loadHealthScoreHistory(connectionId?: string): Array<{ date: string; sc
 
     let rows: any[]
     if (connectionId) {
-      const stmt = db.prepare('SELECT date, score, cpu_pct, ram_pct, storage_pct FROM health_score_history WHERE date >= ? AND connection_id = ? ORDER BY date ASC')
-      rows = stmt.all(`${cutoffStr}_${connectionId}`, connectionId)
+      const stmt = db.prepare('SELECT date, score, cpu_pct, ram_pct, storage_pct FROM health_score_history WHERE date >= ? AND connection_id = ? AND tenant_id = ? ORDER BY date ASC')
+      rows = stmt.all(`${cutoffStr}_${connectionId}`, connectionId, tenantId)
     } else {
-      const stmt = db.prepare('SELECT date, score, cpu_pct, ram_pct, storage_pct FROM health_score_history WHERE date >= ? AND connection_id IS NULL ORDER BY date ASC')
-      rows = stmt.all(cutoffStr)
+      const stmt = db.prepare('SELECT date, score, cpu_pct, ram_pct, storage_pct FROM health_score_history WHERE date >= ? AND connection_id IS NULL AND tenant_id = ? ORDER BY date ASC')
+      rows = stmt.all(cutoffStr, tenantId)
     }
 
     return rows.map((r: any) => ({
@@ -712,14 +712,16 @@ function loadHealthScoreHistory(connectionId?: string): Array<{ date: string; sc
 
 export async function GET(request: Request) {
   try {
+    const prisma = await getSessionPrisma()
+    const tenantId = await getCurrentTenantId()
     // Parse query params (F4: connectionId filter)
     const { searchParams } = new URL(request.url)
     const filterConnectionId = searchParams.get('connectionId') || undefined
 
     // Load settings in parallel
     const [greenSettings, resourceThresholds] = await Promise.all([
-      loadGreenSettings(),
-      loadResourceThresholds(),
+      loadGreenSettings(tenantId),
+      loadResourceThresholds(tenantId),
     ])
     const greenConfig = buildGreenConfig(greenSettings)
 
@@ -1278,10 +1280,10 @@ export async function GET(request: Request) {
     else if (healthStoragePct > 80) snapshotScore -= 10
     snapshotScore = Math.max(0, Math.min(100, snapshotScore))
 
-    saveHealthScoreSnapshot(snapshotScore, healthCpuPct, healthRamPct, healthStoragePct, filterConnectionId)
+    saveHealthScoreSnapshot(snapshotScore, healthCpuPct, healthRamPct, healthStoragePct, filterConnectionId, tenantId)
 
     // F8: Load history
-    const healthScoreHistory = loadHealthScoreHistory(filterConnectionId)
+    const healthScoreHistory = loadHealthScoreHistory(filterConnectionId, tenantId)
 
     return NextResponse.json({
       data: {

@@ -4752,7 +4752,9 @@ return vm?.isCluster ?? false
             )}
             {editOptionDialog?.type === 'hotplug' && (() => {
               const fields = ['disk', 'network', 'usb', 'memory', 'cpu']
-              const current = typeof editOptionValue === 'string' ? editOptionValue.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+              const fieldLabels: Record<string, string> = { disk: 'Disk', network: 'Network', usb: 'USB', memory: 'Memory', cpu: 'CPU' }
+              const raw = typeof editOptionValue === 'string' ? editOptionValue.toLowerCase() : ''
+              const current = raw.split(',').map((s: string) => s.trim()).filter(Boolean)
               const toggle = (field: string) => {
                 const next = current.includes(field) ? current.filter((f: string) => f !== field) : [...current, field]
                 setEditOptionValue(next.join(','))
@@ -4763,7 +4765,7 @@ return vm?.isCluster ?? false
                     <FormControlLabel
                       key={field}
                       control={<Checkbox checked={current.includes(field)} onChange={() => toggle(field)} />}
-                      label={field.charAt(0).toUpperCase() + field.slice(1)}
+                      label={fieldLabels[field] || field}
                     />
                   ))}
                 </Stack>

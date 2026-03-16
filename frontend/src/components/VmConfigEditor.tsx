@@ -181,7 +181,7 @@ function SliderWithInput({
           InputProps={{
             endAdornment: unit ? <InputAdornment position="end">{unit}</InputAdornment> : undefined,
           }}
-          sx={{ width: unit ? 140 : 120 }}
+          sx={{ width: unit ? 170 : 120 }}
           inputProps={{ min, max, step }}
         />
       </Box>

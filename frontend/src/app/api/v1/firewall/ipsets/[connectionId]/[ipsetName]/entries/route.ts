@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 // POST /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries - Add entry
 export async function POST(
@@ -10,6 +11,8 @@ export async function POST(
 ) {
   try {
     const { connectionId, ipsetName } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()

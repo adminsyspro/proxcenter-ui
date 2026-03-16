@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
@@ -497,7 +497,8 @@ function applyRbacToCluster(cluster: ClusterData, rbacCtx: any): ClusterData {
           node: node.node,
           vmid: String(g.vmid),
         })),
-        PERMISSIONS.VM_VIEW
+        PERMISSIONS.VM_VIEW,
+        rbacCtx.tenantId
       )
     }))
   }
@@ -508,10 +509,12 @@ function applyRbacToCluster(cluster: ClusterData, rbacCtx: any): ClusterData {
 /* ------------------------------------------------------------------ */
 
 export async function GET(request: NextRequest) {
+  const prisma = await getSessionPrisma()
+  const tenantId = await getCurrentTenantId()
   const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
 
   // Check cache first — if fresh, send everything at once (fast path)
-  const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache()
+  const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId)
 
   const encoder = new TextEncoder()
 
@@ -668,7 +671,7 @@ export async function GET(request: NextRequest) {
           externalHypervisors: externalConnections,
           storages: allStorages,
           stats,
-        })
+        }, tenantId)
 
         console.log(`[inventory-stream] Streamed all data in ${Date.now() - startTime}ms`)
         send('done', { stats })

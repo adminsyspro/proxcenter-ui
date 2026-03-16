@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { decryptSecret } from "@/lib/crypto/secret"
 
@@ -33,6 +33,7 @@ export const runtime = "nodejs"
  */
 export async function GET() {
   try {
+    const prisma = await getSessionPrisma()
     // Récupérer toutes les connexions PVE et PBS
     const connections = await prisma.connection.findMany({
       select: {

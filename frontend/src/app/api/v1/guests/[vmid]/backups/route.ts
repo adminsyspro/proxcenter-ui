@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -21,6 +21,7 @@ export async function GET(
   ctx: { params: Promise<{ vmid: string }> | { vmid: string } }
 ) {
   try {
+    const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const vmid = (params as any)?.vmid
 

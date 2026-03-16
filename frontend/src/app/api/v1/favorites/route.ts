@@ -6,6 +6,7 @@ import { getServerSession } from 'next-auth'
 
 import { getDb } from '@/lib/db/sqlite'
 import { authOptions } from '@/lib/auth'
+import { getCurrentTenantId } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 
@@ -14,14 +15,15 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     const userId = session?.user?.email || 'anonymous'
-    
+    const tenantId = await getCurrentTenantId()
+
     const db = getDb()
 
     const favorites = db.prepare(`
-      SELECT * FROM favorites 
-      WHERE user_id = ? 
+      SELECT * FROM favorites
+      WHERE user_id = ? AND tenant_id = ?
       ORDER BY created_at DESC
-    `).all(userId)
+    `).all(userId, tenantId)
     
     return NextResponse.json({ 
       data: favorites,
@@ -42,26 +44,27 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     const userId = session?.user?.email || 'anonymous'
-    
+    const tenantId = await getCurrentTenantId()
+
     const body = await req.json()
     const { connectionId, node, vmType, vmid, vmName } = body
-    
+
     if (!connectionId || !node || !vmType || !vmid) {
       return NextResponse.json(
         { error: 'connectionId, node, vmType et vmid sont requis' },
         { status: 400 }
       )
     }
-    
+
     // Clé unique pour la VM
     const vmKey = `${connectionId}:${node}:${vmType}:${vmid}`
-    
+
     const db = getDb()
-    
+
     // Vérifier si déjà en favori
     const existing = db.prepare(`
-      SELECT id FROM favorites WHERE user_id = ? AND vm_key = ?
-    `).get(userId, vmKey)
+      SELECT id FROM favorites WHERE user_id = ? AND vm_key = ? AND tenant_id = ?
+    `).get(userId, vmKey, tenantId)
     
     if (existing) {
       return NextResponse.json(
@@ -74,9 +77,9 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
     
     db.prepare(`
-      INSERT INTO favorites (id, user_id, vm_key, connection_id, node, vm_type, vmid, vm_name, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, userId, vmKey, connectionId, node, vmType, vmid, vmName || null, now)
+      INSERT INTO favorites (id, tenant_id, user_id, vm_key, connection_id, node, vm_type, vmid, vm_name, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, tenantId, userId, vmKey, connectionId, node, vmType, vmid, vmName || null, now)
     
     return NextResponse.json({ 
       success: true, 
@@ -98,22 +101,23 @@ export async function DELETE(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     const userId = session?.user?.email || 'anonymous'
-    
+    const tenantId = await getCurrentTenantId()
+
     const { searchParams } = new URL(req.url)
     const vmKey = searchParams.get('vmKey')
-    
+
     if (!vmKey) {
       return NextResponse.json(
         { error: 'vmKey est requis' },
         { status: 400 }
       )
     }
-    
+
     const db = getDb()
-    
+
     const result = db.prepare(`
-      DELETE FROM favorites WHERE user_id = ? AND vm_key = ?
-    `).run(userId, vmKey)
+      DELETE FROM favorites WHERE user_id = ? AND vm_key = ? AND tenant_id = ?
+    `).run(userId, vmKey, tenantId)
     
     if (result.changes === 0) {
       return NextResponse.json(

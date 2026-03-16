@@ -395,7 +395,7 @@ return () => window.removeEventListener('focus', handleFocus)
                 <Chip label={taskCount} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
               )}
             </Box>
-            {loading && <CircularProgress size={16} />}
+            {loading && <CircularProgress size={16} sx={{ ml: 1 }} />}
           </Box>
 
           {/* Toggle notifications */}
@@ -438,7 +438,7 @@ return () => window.removeEventListener('focus', handleFocus)
                     py: 1.5,
                     display: 'flex',
                     alignItems: 'flex-start',
-                    gap: 1.5,
+                    gap: 2,
                     '&:hover': { bgcolor: 'action.hover' }
                   }}
                 >
@@ -446,6 +446,7 @@ return () => window.removeEventListener('focus', handleFocus)
                   <Box sx={{
                     width: 32,
                     height: 32,
+                    flexShrink: 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

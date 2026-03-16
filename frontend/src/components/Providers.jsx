@@ -10,6 +10,7 @@ import { PageTitleProvider } from '@/contexts/PageTitleContext'
 import { LocaleProvider } from '@/contexts/LocaleContext'
 import { LicenseProvider } from '@/contexts/LicenseContext'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { TenantProvider } from '@/contexts/TenantContext'
 
 // i18n
 
@@ -28,6 +29,7 @@ const Providers = async props => {
 
   return (
     <AuthProvider>
+      <TenantProvider>
       <RBACProvider>
         <LicenseProvider>
           <LocaleProvider initialLocale={locale}>
@@ -45,6 +47,7 @@ const Providers = async props => {
           </LocaleProvider>
         </LicenseProvider>
       </RBACProvider>
+      </TenantProvider>
     </AuthProvider>
   )
 }

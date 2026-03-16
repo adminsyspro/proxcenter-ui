@@ -13,7 +13,7 @@
  * ProxCenter orchestrates via SSH commands + PVE API.
  */
 
-import { prisma } from "@/lib/db/prisma"
+import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -48,7 +48,15 @@ export function cancelMigrationJob(jobId: string) {
   cancelledJobs.add(jobId)
 }
 
+// Per-job tenant-scoped prisma instances (set at pipeline start, used by helpers)
+const jobPrisma = new Map<string, any>()
+
+function getPrismaForJob(jobId: string) {
+  return jobPrisma.get(jobId)
+}
+
 async function updateJob(id: string, status: MigrationStatus, extra: Record<string, any> = {}) {
+  const prisma = getPrismaForJob(id)
   const data: any = {
     status,
     currentStep: status,
@@ -59,6 +67,7 @@ async function updateJob(id: string, status: MigrationStatus, extra: Record<stri
 }
 
 async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info") {
+  const prisma = getPrismaForJob(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
   const logs: LogEntry[] = job?.logs ? JSON.parse(job.logs) : []
   logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
@@ -95,9 +104,9 @@ async function waitForPveTask(
  * Find the IP address of a Proxmox node for SSH access.
  * Tries managed hosts first, then extracts from baseUrl.
  */
-async function getNodeIp(connectionId: string, nodeName: string, baseUrl: string): Promise<string> {
+async function getNodeIpForMigration(db: any, connectionId: string, nodeName: string, baseUrl: string): Promise<string> {
   // Check managed hosts
-  const host = await prisma.managedHost.findFirst({
+  const host = await db.managedHost.findFirst({
     where: { connectionId, node: nodeName, enabled: true },
     select: { ip: true, sshAddress: true },
   })
@@ -144,7 +153,11 @@ async function powerOffSourceVm(jobId: string, session: SoapSession, vmid: strin
 /**
  * Main migration pipeline — runs async after HTTP response
  */
-export async function runMigrationPipeline(jobId: string, config: MigrationConfig): Promise<void> {
+export async function runMigrationPipeline(jobId: string, config: MigrationConfig, tenantId = 'default'): Promise<void> {
+  // Register tenant-scoped prisma for this job
+  const prisma = getTenantPrisma(tenantId)
+  jobPrisma.set(jobId, prisma)
+
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = null
 
@@ -229,7 +242,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // Verify PVE SSH connectivity
-    const nodeIp = await getNodeIp(config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+    const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
     await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${nodeIp})...`)
     const sshTest = await executeSSH(config.targetConnectionId, nodeIp, "echo ok")
     if (!sshTest.success) {
@@ -748,7 +761,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })
 
       const convertResult = await executeSSHWithTimeout(
-        config.targetConnectionId, nodeIp,
+        prisma, config.targetConnectionId, nodeIp,
         `qemu-img convert -f raw -O ${importFormat} "${tmpFile}.vmdk" "${tmpFile}.${importFormat}" 2>&1 && echo CONVERT_OK`,
         14400000
       )
@@ -766,7 +779,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
       const importResult = await executeSSHWithTimeout(
-        config.targetConnectionId, nodeIp,
+        prisma, config.targetConnectionId, nodeIp,
         `qm disk import ${targetVmid} "${tmpFile}.${importFormat}" ${config.targetStorage} --format ${importFormat} 2>&1`,
         3600000
       )
@@ -957,7 +970,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Cleanup: remove temp files on Proxmox node
     try {
-      const nodeIp = await getNodeIp(config.targetConnectionId, config.targetNode,
+      const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode,
         (await getConnectionById(config.targetConnectionId)).baseUrl)
       await executeSSH(config.targetConnectionId, nodeIp,
         `rm -f /tmp/proxcenter-mig-${jobId}-disk*.vmdk /tmp/proxcenter-mig-${jobId}-disk*.qcow2 /tmp/proxcenter-mig-${jobId}-disk*.raw /tmp/proxcenter-mig-${jobId}-disk*.pid* /tmp/proxcenter-mig-${jobId}-disk*.stats /tmp/proxcenter-mig-${jobId}-disk*.dl.sh`)
@@ -984,6 +997,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await soapLogout(soapSession)
     }
     cancelledJobs.delete(jobId)
+    jobPrisma.delete(jobId)
   }
 }
 
@@ -992,12 +1006,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
  * The ssh2 library has a 30s default; we need much longer for large disks.
  */
 async function executeSSHWithTimeout(
+  db: any,
   connectionId: string,
   nodeIp: string,
   command: string,
   timeoutMs: number
 ): Promise<{ success: boolean; output?: string; error?: string }> {
-  const connection = await prisma.connection.findUnique({
+  const connection = await db.connection.findUnique({
     where: { id: connectionId },
     select: {
       sshEnabled: true, sshPort: true, sshUser: true,

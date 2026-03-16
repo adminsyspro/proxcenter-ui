@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -67,6 +68,12 @@ export async function GET(
         { error: 'connection_id and node are required' },
         { status: 400 }
       )
+    }
+
+    // Verify connection belongs to tenant
+    const tenantConnectionIds = await getTenantConnectionIds()
+    if (!tenantConnectionIds.has(connectionId)) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
     const client = getOrchestratorClient()

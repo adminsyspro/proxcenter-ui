@@ -213,6 +213,15 @@ try {
     { table: 'ManagedHost', column: 'sshAddress', type: 'TEXT' },
     // Behind proxy flag — replaces uiUrl (2026-03-09)
     { table: 'Connection', column: 'behindProxy', type: 'INTEGER DEFAULT 0' },
+    // Multi-tenancy (2026-03-15)
+    { table: 'Connection',      column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'ManagedHost',     column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'DashboardLayout', column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'alerts',          column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'blueprints',      column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'custom_images',   column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'deployments',     column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    { table: 'migration_jobs',  column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
   ]
 
   let applied = 0

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db/sqlite'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getCurrentTenantId } from '@/lib/tenant'
 
 
 const DEFAULT_BRANDING = {
@@ -21,12 +22,8 @@ export async function GET() {
     if (denied) return denied
 
     const db = await getDb()
-    db.exec(`CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )`)
-    const row = db.prepare("SELECT value FROM settings WHERE key = 'branding'").get() as any
+    const tenantId = await getCurrentTenantId()
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'branding' AND tenant_id = ?").get(tenantId) as any
     const settings = row ? { ...DEFAULT_BRANDING, ...JSON.parse(row.value) } : DEFAULT_BRANDING
 
     // Migrate old static paths to API serving paths
@@ -51,14 +48,11 @@ export async function PUT(req: Request) {
     const settings = { ...DEFAULT_BRANDING, ...body }
 
     const db = await getDb()
-    db.exec(`CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )`)
+    const tenantId = await getCurrentTenantId()
     db.prepare(
-      "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('branding', ?, datetime('now'))"
-    ).run(JSON.stringify(settings))
+      `INSERT INTO settings (key, tenant_id, value, updated_at) VALUES ('branding', ?, ?, datetime('now'))
+       ON CONFLICT(key, tenant_id) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+    ).run(tenantId, JSON.stringify(settings))
 
     return NextResponse.json({ success: true, ...settings })
   } catch (error: any) {

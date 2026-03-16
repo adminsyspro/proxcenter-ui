@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string; pos: string }>
@@ -11,6 +12,8 @@ type RouteContext = {
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid, pos } = await ctx.params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await req.json()
     
     const orchestrator = getOrchestratorClient()
@@ -32,7 +35,9 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 export async function DELETE(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid, pos } = await ctx.params
-    
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
+
     const orchestrator = getOrchestratorClient()
 
     const response = await orchestrator.delete(

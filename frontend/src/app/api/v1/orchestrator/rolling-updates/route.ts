@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getTenantConnectionIds } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 
 export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
-// GET /api/v1/orchestrator/rolling-updates - List all updates
-// GET /api/v1/orchestrator/rolling-updates?connection_id=xxx - List updates for a connection
+// GET /api/v1/orchestrator/rolling-updates — tenant-filtered
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const connectionId = searchParams.get("connection_id")
+
+    // Verify connection belongs to tenant if specified
+    const tenantConnectionIds = await getTenantConnectionIds()
+    if (connectionId && !tenantConnectionIds.has(connectionId)) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+    }
 
     let url = `${ORCHESTRATOR_URL}/api/v1/rolling-updates`
     if (connectionId) {
@@ -20,9 +25,7 @@ export async function GET(req: Request) {
     }
 
     const response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
     })
 
     const data = await response.json()
@@ -32,6 +35,13 @@ export async function GET(req: Request) {
         { error: data.error || "Failed to get rolling updates" },
         { status: response.status }
       )
+    }
+
+    // Filter results by tenant connections
+    const items = Array.isArray(data) ? data : (data?.data || data)
+    if (Array.isArray(items)) {
+      const filtered = items.filter((ru: any) => !ru.connection_id || tenantConnectionIds.has(ru.connection_id))
+      return NextResponse.json({ data: filtered })
     }
 
     return NextResponse.json({ data })
@@ -49,6 +59,7 @@ export async function GET(req: Request) {
 // POST /api/v1/orchestrator/rolling-updates - Start a new rolling update
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const body = await req.json()
 
     const connectionId = body.connection_id

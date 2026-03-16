@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { hasPermission } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 // GET /api/v1/rbac/effective - Récupérer les permissions effectives d'un utilisateur
 // Query params: user_id (optionnel, admin only), resource_type, resource_id
@@ -22,8 +23,10 @@ export async function GET(req: NextRequest) {
     const resourceType = url.searchParams.get("resource_type") // 'vm', 'node', 'connection'
     const resourceId = url.searchParams.get("resource_id")
 
+    const tenantId = await getCurrentTenantId()
+
     // Seuls les admins peuvent voir les permissions d'autres utilisateurs
-    if (targetUserId !== session.user.id && !hasPermission({ userId: session.user.id, permission: 'admin.rbac' })) {
+    if (targetUserId !== session.user.id && !hasPermission({ userId: session.user.id, permission: 'admin.rbac', tenantId })) {
       return NextResponse.json({ error: "Non autorisé à voir les permissions d'autres utilisateurs" }, { status: 403 })
     }
 
@@ -36,9 +39,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
     }
 
-    // Récupérer les rôles de l'utilisateur
+    // Récupérer les rôles de l'utilisateur (scoped by tenant)
     const userRoles = db.prepare(`
-      SELECT 
+      SELECT
         ur.id as assignment_id,
         ur.scope_type,
         ur.scope_target,
@@ -48,13 +51,13 @@ export async function GET(req: NextRequest) {
         r.color
       FROM rbac_user_roles ur
       JOIN rbac_roles r ON r.id = ur.role_id
-      WHERE ur.user_id = ?
+      WHERE ur.user_id = ? AND ur.tenant_id = ?
         AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
-    `).all(targetUserId) as any[]
+    `).all(targetUserId, tenantId) as any[]
 
-    // Récupérer les permissions directes de l'utilisateur
+    // Récupérer les permissions directes de l'utilisateur (scoped by tenant)
     const directPermissions = db.prepare(`
-      SELECT 
+      SELECT
         up.scope_type,
         up.scope_target,
         p.id as permission_id,
@@ -62,9 +65,9 @@ export async function GET(req: NextRequest) {
         p.category
       FROM rbac_user_permissions up
       JOIN rbac_permissions p ON p.id = up.permission_id
-      WHERE up.user_id = ?
+      WHERE up.user_id = ? AND up.tenant_id = ?
         AND (up.expires_at IS NULL OR up.expires_at > datetime('now'))
-    `).all(targetUserId) as any[]
+    `).all(targetUserId, tenantId) as any[]
 
     // Calculer les permissions effectives
     const effectivePermissions = new Set<string>()

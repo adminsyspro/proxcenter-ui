@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Box, CircularProgress } from '@mui/material'
+import { useTenant } from '@/contexts/TenantContext'
 
 // Routes autorisées sans connexion Proxmox configurée
 const allowedRoutes = ['/settings', '/logout', '/profile']
@@ -10,6 +11,8 @@ const allowedRoutes = ['/settings', '/logout', '/profile']
 export default function OnboardingGuard({ children }) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { currentTenant } = useTenant()
   const [checking, setChecking] = useState(true)
   const [ready, setReady] = useState(false)
 
@@ -18,6 +21,21 @@ export default function OnboardingGuard({ children }) {
     const isAllowed = allowedRoutes.some(route => pathname.startsWith(route))
 
     if (isAllowed) {
+      // If we're on /settings with onboarding=true, re-check in case tenant changed
+      const isOnboarding = pathname.startsWith('/settings') && searchParams.get('onboarding') === 'true'
+
+      if (isOnboarding) {
+        fetch('/api/v1/app/status')
+          .then(res => res.json())
+          .then(data => {
+            if (data.connectionsConfigured) {
+              // Connections exist now (tenant switch), remove onboarding param
+              router.replace('/settings')
+            }
+          })
+          .catch(() => {})
+      }
+
       setChecking(false)
       setReady(true)
       return
@@ -39,7 +57,7 @@ export default function OnboardingGuard({ children }) {
         setReady(true)
       })
       .finally(() => setChecking(false))
-  }, [pathname, router])
+  }, [pathname, router, currentTenant?.id, searchParams])
 
   if (checking) {
     return (

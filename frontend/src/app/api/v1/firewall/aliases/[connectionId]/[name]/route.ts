@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 
 // PUT /api/v1/firewall/aliases/[connectionId]/[name] - Update alias
 export async function PUT(
@@ -10,6 +11,8 @@ export async function PUT(
 ) {
   try {
     const { connectionId, name } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
@@ -33,6 +36,8 @@ export async function DELETE(
 ) {
   try {
     const { connectionId, name } = await params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
 
     const orchestrator = getOrchestratorClient()
 

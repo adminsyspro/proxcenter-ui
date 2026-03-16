@@ -1,7 +1,7 @@
 // src/app/api/v1/templates/custom-images/[id]/route.ts
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateCustomImageSchema } from "@/lib/schemas"
 
@@ -11,6 +11,7 @@ interface Ctx { params: Promise<{ id: string }> }
 
 export async function GET(req: Request, ctx: Ctx) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 
@@ -26,6 +27,7 @@ export async function GET(req: Request, ctx: Ctx) {
 
 export async function PUT(req: Request, ctx: Ctx) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 
@@ -69,6 +71,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
 export async function DELETE(req: Request, ctx: Ctx) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 

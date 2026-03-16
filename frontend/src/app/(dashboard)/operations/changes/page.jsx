@@ -35,6 +35,7 @@ import { useChanges } from '@/hooks/useChanges'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import EmptyState from '@/components/EmptyState'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { CardsSkeleton } from '@/components/skeletons'
 
 /* --------------------------------
@@ -366,16 +367,6 @@ export default function ChangesPage() {
 
   usePageTitle(t('changes.title'))
 
-  if (!licenseLoading && !hasFeature(Features.CHANGE_TRACKING)) {
-    return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Alert severity="warning" sx={{ maxWidth: 500, mx: 'auto' }}>
-          {t('license.enterpriseRequired')}
-        </Alert>
-      </Box>
-    )
-  }
-
   const [resourceType, setResourceType] = useState('')
   const [action, setAction] = useState('')
   const [search, setSearch] = useState('')
@@ -388,6 +379,10 @@ export default function ChangesPage() {
 
   const { data: response, isLoading, error, mutate } = useChanges({ limit: 300, resourceType: resourceType || undefined, action: action || undefined })
   const { data: settingsData, mutate: mutateSettings } = useSWRFetch('/api/v1/changes/settings')
+
+  if (!licenseLoading && !hasFeature(Features.CHANGE_TRACKING)) {
+    return <EnterpriseGuard requiredFeature={Features.CHANGE_TRACKING} featureName={t('changes.title')}><span /></EnterpriseGuard>
+  }
 
   const changes = response?.data || []
   const currentRetention = settingsData?.retentionDays || 30

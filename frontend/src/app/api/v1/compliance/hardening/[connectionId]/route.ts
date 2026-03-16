@@ -10,10 +10,11 @@ import {
   type HardeningData, type CheckConfig,
 } from '@/lib/compliance/hardening'
 import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance/profiles'
+import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
 import { buildSSHAuditCommand, parseSSHAuditOutput, type SSHNodeData, type SSHHardeningData } from '@/lib/compliance/ssh-checks'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
-import { prisma } from '@/lib/db/prisma'
+import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,10 +33,16 @@ export async function GET(
   ctx: { params: Promise<{ connectionId: string }> }
 ) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
 
     const { connectionId } = await ctx.params
+
+    // Verify connection belongs to current tenant
+    const ownershipError = await verifyConnectionOwnership(connectionId)
+    if (ownershipError) return ownershipError
+
     const conn = await getConnectionById(connectionId)
 
     const { searchParams } = new URL(req.url)
@@ -187,10 +194,12 @@ export async function GET(
     let checkConfig: CheckConfig[] | null = null
     let activeProfileId: string | null = null
 
+    const tenantId = await getCurrentTenantId()
+
     if (profileId) {
-      const profile = getProfile(profileId)
+      const profile = getProfile(profileId, tenantId)
       if (profile) {
-        const profileChecks = getProfileChecks(profileId)
+        const profileChecks = getProfileChecks(profileId, tenantId)
         checkConfig = profileChecks.map(pc => ({
           checkId: pc.check_id,
           enabled: pc.enabled === 1,
@@ -202,7 +211,7 @@ export async function GET(
       }
     } else {
       // Check for active profile
-      const active = getActiveProfile(connectionId)
+      const active = getActiveProfile(connectionId, tenantId)
       if (active) {
         checkConfig = active.checks.map(pc => ({
           checkId: pc.check_id,

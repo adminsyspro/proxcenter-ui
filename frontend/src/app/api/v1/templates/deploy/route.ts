@@ -2,7 +2,7 @@
 import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 
-import { prisma } from "@/lib/db/prisma"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
@@ -16,6 +16,7 @@ export const runtime = "nodejs"
 type DeploymentStatus = "pending" | "downloading" | "creating" | "configuring" | "starting" | "completed" | "failed"
 
 async function updateDeployment(id: string, status: DeploymentStatus, extra: Record<string, any> = {}) {
+  const prisma = await getSessionPrisma()
   await prisma.deployment.update({
     where: { id },
     data: {
@@ -29,6 +30,7 @@ async function updateDeployment(id: string, status: DeploymentStatus, extra: Rec
 
 export async function POST(req: Request) {
   try {
+    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 
@@ -53,7 +55,8 @@ export async function POST(req: Request) {
     let volumeId: string | null = null
 
     if (!image) {
-      const customRow = await prisma.customImage.findUnique({ where: { slug: body.imageSlug } })
+      const tenantId = await getCurrentTenantId()
+      const customRow = await prisma.customImage.findUnique({ where: { tenantId_slug: { tenantId, slug: body.imageSlug } } })
       if (!customRow) {
         return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
       }

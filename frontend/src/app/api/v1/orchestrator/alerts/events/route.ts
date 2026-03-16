@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { getTenantConnectionIds } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/v1/orchestrator/alerts/events
- * Envoie des événements Proxmox à l'orchestrator pour analyse
+ * Envoie des événements Proxmox à l'orchestrator pour analyse (filtrés par tenant)
  */
 export async function POST(req: Request) {
   try {
     const events = await req.json()
-    
+
     if (!Array.isArray(events)) {
       return NextResponse.json(
         { error: 'Events must be an array' },
@@ -20,11 +21,17 @@ export async function POST(req: Request) {
       )
     }
 
+    // Filter events to only include those from tenant's connections
+    const tenantConnectionIds = await getTenantConnectionIds()
+    const filteredEvents = events.filter(
+      (e: any) => !e.connectionId || tenantConnectionIds.has(e.connectionId)
+    )
+
     const result = await orchestratorFetch('/alerts/events', {
       method: 'POST',
-      body: events
+      body: filteredEvents
     })
-    
+
     return NextResponse.json(result)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {

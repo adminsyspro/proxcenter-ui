@@ -39,9 +39,13 @@ function rowToPolicies(row: any): SecurityPolicies {
   }
 }
 
-export function getSecurityPolicies(): SecurityPolicies {
+export function getSecurityPolicies(tenantId: string = 'default'): SecurityPolicies {
   const db = getDb()
-  const row = db.prepare("SELECT * FROM security_policies WHERE id = 'default'").get() as any
+  let row: any = db.prepare("SELECT * FROM security_policies WHERE id = 'default' AND tenant_id = ?").get(tenantId) as any
+  // Fallback to global default if no tenant-specific row exists
+  if (!row && tenantId !== 'default') {
+    row = db.prepare("SELECT * FROM security_policies WHERE id = 'default' AND tenant_id = 'default'").get() as any
+  }
   if (!row) throw new Error('Security policies not initialized')
   return rowToPolicies(row)
 }
@@ -60,7 +64,7 @@ const ALLOWED_FIELDS = [
   'audit_auto_cleanup',
 ] as const
 
-export function updateSecurityPolicies(partial: Partial<Record<string, any>>, userId: string): SecurityPolicies {
+export function updateSecurityPolicies(partial: Partial<Record<string, any>>, userId: string, tenantId: string = 'default'): SecurityPolicies {
   const db = getDb()
   const sets: string[] = []
   const values: any[] = []
@@ -78,15 +82,15 @@ export function updateSecurityPolicies(partial: Partial<Record<string, any>>, us
   }
 
   if (sets.length === 0) {
-    return getSecurityPolicies()
+    return getSecurityPolicies(tenantId)
   }
 
   sets.push('updated_at = ?', 'updated_by = ?')
   values.push(new Date().toISOString(), userId)
 
-  db.prepare(`UPDATE security_policies SET ${sets.join(', ')} WHERE id = 'default'`).run(...values)
+  db.prepare(`UPDATE security_policies SET ${sets.join(', ')} WHERE id = 'default' AND tenant_id = ?`).run(...values, tenantId)
 
-  return getSecurityPolicies()
+  return getSecurityPolicies(tenantId)
 }
 
 export interface PasswordValidationResult {

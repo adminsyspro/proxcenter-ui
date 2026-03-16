@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth"
 
 import { getDb } from "@/lib/db/sqlite"
 import { authOptions } from "@/lib/auth/config"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export type AuditCategory =
   | "auth"           // Connexion, déconnexion, changement de mot de passe
@@ -21,6 +22,7 @@ export type AuditCategory =
   | "security"       // Actions de sécurité (RBAC, permissions)
   | "templates"      // Actions cloud-init templates / blueprints
   | "migration"      // Migration ESXi → Proxmox
+  | "admin"          // Admin actions (tenants, etc.)
 
 export type AuditAction =
 
@@ -62,6 +64,14 @@ export type AuditAction =
   | "rbac_role_assigned"
   | "rbac_role_revoked"
   | "rbac_assignment_updated"
+
+  // Tenants
+  | "tenant.create"
+  | "tenant.update"
+  | "tenant.delete"
+  | "tenant.switch"
+  | "tenant.add_user"
+  | "tenant.remove_user"
 
 export type AuditStatus = "success" | "failure" | "warning"
 
@@ -122,12 +132,20 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
 
   const details = entry.details ? JSON.stringify(entry.details) : null
 
+  // Get tenant ID for scoping
+  let tenantId = 'default'
+  try {
+    tenantId = await getCurrentTenantId()
+  } catch {
+    // Fallback to default (e.g. during login before session exists)
+  }
+
   db.prepare(
     `INSERT INTO audit_logs (
-      id, timestamp, user_id, user_email, action, category, 
+      id, timestamp, user_id, user_email, action, category,
       resource_type, resource_id, resource_name, details,
-      ip_address, user_agent, status, error_message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ip_address, user_agent, status, error_message, tenant_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     timestamp,
@@ -142,7 +160,8 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
     ipAddress || null,
     userAgent || null,
     entry.status || "success",
-    entry.errorMessage || null
+    entry.errorMessage || null,
+    tenantId
   )
 
   return id
@@ -197,6 +216,7 @@ export async function auditResource(
  * Récupère les logs d'audit avec filtres et pagination
  */
 export function getAuditLogs(options: {
+  tenantId: string
   limit?: number
   offset?: number
   category?: AuditCategory
@@ -210,8 +230,8 @@ export function getAuditLogs(options: {
   search?: string
 }) {
   const db = getDb()
-  const conditions: string[] = []
-  const params: any[] = []
+  const conditions: string[] = ['tenant_id = ?']
+  const params: any[] = [options.tenantId]
 
   if (options.category) {
     conditions.push("category = ?")

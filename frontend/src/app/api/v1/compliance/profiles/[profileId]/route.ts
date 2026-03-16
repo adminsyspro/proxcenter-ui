@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getProfile, getProfileChecks, updateProfile, updateProfileChecks, deleteProfile } from '@/lib/compliance/profiles'
+import { getCurrentTenantId } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,12 +17,13 @@ export async function GET(
     if (denied) return denied
 
     const { profileId } = await ctx.params
-    const profile = getProfile(profileId)
+    const tenantId = await getCurrentTenantId()
+    const profile = getProfile(profileId, tenantId)
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
-    const checks = getProfileChecks(profileId)
+    const checks = getProfileChecks(profileId, tenantId)
     return NextResponse.json({ data: { ...profile, checks } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
@@ -37,7 +39,8 @@ export async function PUT(
     if (denied) return denied
 
     const { profileId } = await ctx.params
-    const existing = getProfile(profileId)
+    const tenantId = await getCurrentTenantId()
+    const existing = getProfile(profileId, tenantId)
     if (!existing) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
@@ -46,16 +49,16 @@ export async function PUT(
 
     // Update profile metadata
     if (body.name !== undefined || body.description !== undefined) {
-      updateProfile(profileId, { name: body.name, description: body.description })
+      updateProfile(profileId, { name: body.name, description: body.description }, tenantId)
     }
 
     // Update checks if provided
     if (Array.isArray(body.checks)) {
-      updateProfileChecks(profileId, body.checks)
+      updateProfileChecks(profileId, body.checks, tenantId)
     }
 
-    const updated = getProfile(profileId)
-    const checks = getProfileChecks(profileId)
+    const updated = getProfile(profileId, tenantId)
+    const checks = getProfileChecks(profileId, tenantId)
     return NextResponse.json({ data: { ...updated, checks } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
@@ -71,12 +74,13 @@ export async function DELETE(
     if (denied) return denied
 
     const { profileId } = await ctx.params
-    const existing = getProfile(profileId)
+    const tenantId = await getCurrentTenantId()
+    const existing = getProfile(profileId, tenantId)
     if (!existing) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
-    deleteProfile(profileId)
+    deleteProfile(profileId, tenantId)
     return NextResponse.json({ success: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })

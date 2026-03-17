@@ -560,7 +560,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       if (needsClone) {
         // Step 1: Clone VMDK on ESXi using vmkfstools (works on locked/running VMDKs after snapshot)
-        await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Cloning "${disk.label}" on ESXi via vmkfstools (${diskSizeGB} GB)...`)
+        const isVsanDatastore = disk.datastoreName.toLowerCase().includes('vsan')
+        await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Cloning "${disk.label}" on ESXi via vmkfstools${isVsanDatastore ? ' (vSAN mode)' : ''} (${diskSizeGB} GB)...`)
         await updateJob(jobId, "transferring", {
           currentStep: `cloning_disk_${i + 1}`,
           currentDisk: i,
@@ -579,7 +580,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           const cloneErrFile = `${cloneTmpPrefix}.stderr`
           const cloneOutFile = `${cloneTmpPrefix}.out`
 
-          const cloneSshCmd = `${clSshPrefix} -p ${clPort} ${clUser}@${clHost} "vmkfstools -i '${descriptorPath}' '${cloneVmdkPath}' -d thin" >"${cloneOutFile}" 2>"${cloneErrFile}"`
+          // Add -W vsan flag for vSAN datastores (vmkfstools clone requires it for vSAN object storage)
+          const isVsan = disk.datastoreName.toLowerCase().includes('vsan')
+          const vsanFlag = isVsan ? ' -W vsan' : ''
+          const cloneSshCmd = `${clSshPrefix} -p ${clPort} ${clUser}@${clHost} "vmkfstools -i '${descriptorPath}' '${cloneVmdkPath}' -d thin${vsanFlag}" >"${cloneOutFile}" 2>"${cloneErrFile}"`
 
           await executeSSH(config.targetConnectionId, nodeIp,
             `cat > "${cloneScript}" << 'CLEOF'\n${clSetup}\n${cloneSshCmd}\nEXIT_CODE=$?\n${clCleanup}\necho $EXIT_CODE > "${cloneExitFile}"\nCLEOF`
@@ -899,7 +903,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // ── Offline mode: VM already powered off → sequential download → convert → import ──
       for (let i = 0; i < vmConfig.disks.length; i++) {
         await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
-        await downloadDisk(i, vmConfig.disks[i])
+        // vSAN datastores: use vmkfstools clone + SSH dd (HTTPS datastore browser may fail on vSAN objects)
+        const isVsanDs = vmConfig.disks[i].datastoreName.toLowerCase().includes('vsan')
+        if (isVsanDs && esxiSshAvailable) {
+          await appendLog(jobId, `vSAN datastore detected — using vmkfstools clone instead of HTTPS download`, "info")
+          await downloadDiskViaSsh(i, vmConfig.disks[i], true)
+        } else {
+          await downloadDisk(i, vmConfig.disks[i])
+        }
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
         await convertAndImportDisk(i)
         await updateJob(jobId, "transferring", {

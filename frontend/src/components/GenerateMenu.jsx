@@ -33,11 +33,11 @@ export const GenerateVerticalMenu = ({ menuData }) => {
     return hasFeature(item.requiredFeature)
   }
 
-  // Fonction pour filtrer les enfants accessibles
+  // Fonction pour filtrer les enfants accessibles (RBAC + licence)
   const filterChildren = (children) => {
     if (!children) return []
 
-    return children.filter(child => canView(child))
+    return children.filter(child => canView(child) && hasRequiredFeature(child))
   }
 
   const renderMenuItems = data => {
@@ -73,8 +73,8 @@ export const GenerateVerticalMenu = ({ menuData }) => {
       // Vérifier les permissions de l'item
       if (!canView(item)) return null
 
-      // Vérifier si la feature de licence est disponible
-      const featureAvailable = hasRequiredFeature(item)
+      // Masquer les items dont la feature de licence n'est pas disponible
+      if (!hasRequiredFeature(item)) return null
 
       // Check if the current item is a sub menu
       if (subMenuItem.children) {
@@ -88,11 +88,7 @@ export const GenerateVerticalMenu = ({ menuData }) => {
 
         const Icon = icon ? <i className={icon} /> : null
         const subMenuPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
-
-        // Ajouter une icône couronne si feature non disponible (mais garder cliquable)
-        const subMenuSuffix = !featureAvailable ? (
-          <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
-        ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
+        const subMenuSuffix = suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix
 
         return (
           <VerticalSubMenu
@@ -112,11 +108,7 @@ export const GenerateVerticalMenu = ({ menuData }) => {
 
       const Icon = icon ? <i className={icon} /> : null
       const menuItemPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
-
-      // Ajouter une icône couronne si feature non disponible (mais garder cliquable)
-      const menuItemSuffix = !featureAvailable ? (
-        <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
-      ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
+      const menuItemSuffix = suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix
 
       return (
         <VerticalMenuItem
@@ -156,7 +148,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
   const filterChildren = (children) => {
     if (!children) return []
 
-    return children.filter(child => canView(child))
+    return children.filter(child => canView(child) && hasRequiredFeature(child))
   }
 
   const renderMenuItems = data => {
@@ -167,7 +159,8 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
       // Vérifier les permissions
       if (!canView(item)) return null
 
-      const featureAvailable = hasRequiredFeature(item)
+      // Masquer les items dont la feature de licence n'est pas disponible
+      if (!hasRequiredFeature(item)) return null
 
       // Check if the current item is a sub menu
       if (subMenuItem.children) {
@@ -199,9 +192,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
 
       const Icon = icon ? <i className={icon} /> : null
       const menuItemPrefix = prefix && prefix.label ? <Chip size='small' {...prefix} /> : prefix
-      const menuItemSuffix = !featureAvailable ? (
-        <i className='ri-vip-crown-fill' style={{ color: 'var(--mui-palette-warning-main)', fontSize: '1rem' }} />
-      ) : (suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix)
+      const menuItemSuffix = suffix && suffix.label ? <Chip size='small' {...suffix} /> : suffix
 
       return (
         <HorizontalMenuItem

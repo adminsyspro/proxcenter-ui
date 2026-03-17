@@ -379,6 +379,15 @@ export default function NodeTabs(props: any) {
                     </Box>
                   }
                 />
+                {/* Onglet Subscription pour tous les nodes */}
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-vip-crown-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabSubscription')}
+                    </Box>
+                  }
+                />
                 {/* Onglet CVE Scanner */}
                 <Tab
                   disabled={!cveAvailable}
@@ -401,15 +410,6 @@ export default function NodeTabs(props: any) {
                           }}
                         />
                       )}
-                    </Box>
-                  }
-                />
-                {/* Onglet Subscription pour tous les nodes */}
-                <Tab
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className="ri-vip-crown-line" style={{ fontSize: 16 }} />
-                      {t('inventory.tabSubscription')}
                     </Box>
                   }
                 />
@@ -2977,15 +2977,8 @@ export default function NodeTabs(props: any) {
                 )}
 
 
-                {/* Onglet CVE - Index 10 pour cluster, Index 11 pour standalone */}
+                {/* Onglet Subscription - Index 10 pour cluster, Index 11 pour standalone */}
                 {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
-                  <Box sx={{ p: 2, overflow: 'auto' }}>
-                    <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
-                  </Box>
-                )}
-
-                {/* Onglet Subscription - Index 11 pour cluster, Index 12 pour standalone */}
-                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -3309,6 +3302,13 @@ export default function NodeTabs(props: any) {
                         </Dialog>
                       </Stack>
                     )}
+                  </Box>
+                )}
+
+                {/* Onglet CVE - Index 11 pour cluster, Index 12 pour standalone */}
+                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
+                  <Box sx={{ p: 2, overflow: 'auto' }}>
+                    <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
                   </Box>
                 )}
 

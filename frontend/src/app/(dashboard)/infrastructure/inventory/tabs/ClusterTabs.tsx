@@ -397,6 +397,14 @@ export default function ClusterTabs(props: any) {
                   }
                 />
                 <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabCluster')}
+                    </Box>
+                  }
+                />
+                <Tab
                   disabled={!rollingUpdateAvailable}
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, opacity: rollingUpdateAvailable ? 1 : 0.4 }}>
@@ -441,14 +449,6 @@ export default function ClusterTabs(props: any) {
                           }}
                         />
                       )}
-                    </Box>
-                  }
-                />
-                <Tab
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
-                      {t('inventory.tabCluster')}
                     </Box>
                   }
                 />
@@ -2448,8 +2448,8 @@ export default function ClusterTabs(props: any) {
                   />
                 )}
 
-                {/* Onglet Rolling Update - Index 10 */}
-                {clusterTab === 10 && (
+                {/* Onglet Rolling Update - Index 11 */}
+                {clusterTab === 11 && (
                   <Box sx={{ p: 2 }}>
                     <Stack spacing={3}>
                       {/* Header */}
@@ -3104,15 +3104,15 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet CVE - Index 11 */}
-                {clusterTab === 11 && (
+                {/* Onglet CVE - Index 12 */}
+                {clusterTab === 12 && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Cluster - Index 12 */}
-                {clusterTab === 12 && (
+                {/* Onglet Cluster - Index 10 */}
+                {clusterTab === 10 && (
                   <Box sx={{ p: 2 }}>
                     {clusterConfigLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

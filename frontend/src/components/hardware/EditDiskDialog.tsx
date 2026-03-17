@@ -697,7 +697,7 @@ return
         {tab === 2 && onResize && (
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="info" icon={<i className="ri-information-line" />}>
-              Le redimensionnement ne peut qu'agrandir le disque. Taille actuelle: <strong>{disk.size}</strong>
+              <span dangerouslySetInnerHTML={{ __html: t('hardware.resizeInfo', { size: disk.size }) }} />
             </Alert>
 
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
@@ -779,13 +779,13 @@ return
                 </FormControl>
 
                 <FormControl fullWidth size="small">
-                  <InputLabel>Format (optionnel)</InputLabel>
+                  <InputLabel>{t('hardware.formatOptional')}</InputLabel>
                   <Select
                     value={targetFormat}
                     onChange={(e) => setTargetFormat(e.target.value)}
-                    label="Format (optionnel)"
+                    label={t('hardware.formatOptional')}
                   >
-                    <MenuItem value="">Conserver le format actuel</MenuItem>
+                    <MenuItem value="">{t('hardware.keepCurrentFormat')}</MenuItem>
                     <MenuItem value="raw">Raw</MenuItem>
                     <MenuItem value="qcow2">QCOW2</MenuItem>
                     <MenuItem value="vmdk">VMDK</MenuItem>
@@ -802,7 +802,7 @@ return
                   }
                   label={
                     <Typography variant="body2">
-                      {t('common.delete')}
+                      {t('hardware.deleteSourceDisk')}
                     </Typography>
                   }
                 />

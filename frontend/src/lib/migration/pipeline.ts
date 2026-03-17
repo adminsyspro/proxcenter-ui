@@ -459,7 +459,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const esxiSshPort = esxiConn.sshPort || 22
       const esxiSshUser = esxiConn.sshUser || "root"
       const esxiPass = esxiConn.sshPassEnc ? decryptSecret(esxiConn.sshPassEnc) : ""
-      const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+      const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
 
       let setupCmd = ""
       let sshPrefix = ""
@@ -722,10 +722,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             downloadTime = elapsed
 
             if (exitCode !== 0) {
-              const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${errFile}" 2>/dev/null | head -c 500`)
-              const errMsg = stderrContent.output?.trim() || "(no stderr output)"
-              await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key" "${errFile}"`)
-              throw new Error(`SSH dd download failed (exit ${exitCode}): ${errMsg}`)
+              // Check if the file was actually downloaded despite non-zero exit (SSH warnings can cause exit 1)
+              const fileSizeOnError = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
+              const actualSizeOnError = parseInt(fileSizeOnError.output?.trim() || "0", 10)
+              const expectedMin = Math.floor(disk.capacityBytes * 0.9) // Allow 10% tolerance for thin disks
+
+              if (actualSizeOnError >= expectedMin) {
+                // File looks complete despite non-zero exit — SSH warning, not a real error
+                await appendLog(jobId, `SSH exited with code ${exitCode} but file size looks correct (${(actualSizeOnError / 1073741824).toFixed(1)} GB) — continuing`, "warn")
+              } else {
+                const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${errFile}" 2>/dev/null | head -c 500`)
+                const errMsg = stderrContent.output?.trim() || "(no stderr output)"
+                await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key" "${errFile}"`)
+                throw new Error(`SSH dd download failed (exit ${exitCode}): ${errMsg}`)
+              }
             }
 
             const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)

@@ -46,10 +46,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/v1/orchestrator/reports - Generate a new report
+// POST /api/v1/orchestrator/reports - Generate a new report (scoped to tenant connections)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+
+    // Inject tenant connection_ids so the orchestrator only includes this tenant's data
+    const tenantConnectionIds = await getTenantConnectionIds()
+    body.connection_ids = Array.from(tenantConnectionIds)
 
     const data = await orchestratorFetch('/reports', {
       method: 'POST',

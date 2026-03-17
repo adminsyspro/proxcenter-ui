@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 // Import dynamique pour éviter les problèmes SSR
 const KpiClustersWidget = dynamic(() => import('./widgets/KpiClustersWidget'), { ssr: false })
 const KpiVmsWidget = dynamic(() => import('./widgets/KpiVmsWidget'), { ssr: false })
+const KpiLxcWidget = dynamic(() => import('./widgets/KpiLxcWidget'), { ssr: false })
 const KpiBackupsWidget = dynamic(() => import('./widgets/KpiBackupsWidget'), { ssr: false })
 const KpiAlertsWidget = dynamic(() => import('./widgets/KpiAlertsWidget'), { ssr: false })
 const ResourcesGaugesWidget = dynamic(() => import('./widgets/ResourcesGaugesWidget'), { ssr: false })
@@ -66,6 +67,17 @@ export const WIDGET_REGISTRY = {
     maxSize: { w: 6, h: 3 },
     component: KpiVmsWidget,
   },
+  'kpi-lxc': {
+    type: 'kpi-lxc',
+    name: 'LXC Running',
+    description: 'Running / total LXC containers',
+    icon: 'ri-instance-line',
+    category: 'infrastructure',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 3 },
+    component: KpiLxcWidget,
+  },
   'kpi-backups': {
     type: 'kpi-backups',
     name: 'Backups 24h',
@@ -113,7 +125,7 @@ export const WIDGET_REGISTRY = {
   'top-consumers': {
     type: 'top-consumers',
     name: 'Top Consumers',
-    description: 'VMs les plus gourmandes',
+    description: 'Most resource-intensive guests (VMs + LXC)',
     icon: 'ri-bar-chart-line',
     category: 'resources',
     defaultSize: { w: 6, h: 4 },
@@ -263,8 +275,8 @@ export const WIDGET_REGISTRY = {
   // ═══════════════════════════════════════════════════════════════════════════
   'vm-status-waffle': {
     type: 'vm-status-waffle',
-    name: 'VM Status (Waffle)',
-    description: 'Vue waffle des VMs par cluster et status',
+    name: 'Guest Status (Waffle)',
+    description: 'Waffle view of guests (VMs + LXC) by cluster and status',
     icon: 'ri-grid-fill',
     category: 'infrastructure',
     defaultSize: { w: 6, h: 5 },
@@ -296,8 +308,8 @@ export const WIDGET_REGISTRY = {
   },
   'vm-heatmap': {
     type: 'vm-heatmap',
-    name: 'VM Heatmap',
-    description: 'Heatmap CPU/RAM de toutes les VMs',
+    name: 'Guest Heatmap',
+    description: 'CPU/RAM heatmap of all guests (VMs + LXC)',
     icon: 'ri-fire-fill',
     category: 'resources',
     defaultSize: { w: 6, h: 5 },

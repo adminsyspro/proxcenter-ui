@@ -83,6 +83,27 @@ export function cpuPct(v: any) {
 return Math.round(n * 100)
 }
 
+const osTypeLabels: Record<string, string> = {
+  l26: 'Linux 6.x - 2.6 Kernel',
+  l24: 'Linux 2.4 Kernel',
+  win11: 'Windows 11/2022/2025',
+  win10: 'Windows 10/2016/2019',
+  win8: 'Windows 8.x/2012/2012r2',
+  win7: 'Windows 7/2008r2',
+  wvista: 'Windows Vista/2008',
+  w2k8: 'Windows Vista/2008',
+  w2k3: 'Windows XP/2003',
+  wxp: 'Windows XP/2003',
+  w2k: 'Windows 2000',
+  solaris: 'Solaris Kernel',
+  other: 'Other',
+}
+
+export function formatOsType(code: string | undefined): string {
+  if (!code) return 'Other'
+  return osTypeLabels[code] || code
+}
+
 export function formatBps(bps: number) {
   if (!Number.isFinite(bps) || bps <= 0) return '0 B/s'
   const u = ['B/s', 'KB/s', 'MB/s', 'GB/s']

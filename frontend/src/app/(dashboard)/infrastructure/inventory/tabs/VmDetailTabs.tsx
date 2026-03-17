@@ -66,7 +66,7 @@ const EditNetworkDialog = dynamic(() => import('@/components/HardwareModals').th
 const EditScsiControllerDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditScsiControllerDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
+import { formatBps, formatOsType, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
@@ -1535,24 +1535,23 @@ return (
                                   </Box>
                                 </td>
                                 <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
-                                  {data.optionsInfo?.ostype || t('common.notAvailable')}
+                                  {formatOsType(data.optionsInfo?.ostype)}
                                 </td>
                                 <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ostype', label: t('inventory.osType'), value: data.optionsInfo?.ostype || 'other', type: 'select', options: [
-                                      { value: 'other', label: t('inventory.other') },
-                                      { value: 'wxp', label: 'Windows XP' },
-                                      { value: 'w2k', label: 'Windows 2000' },
-                                      { value: 'w2k3', label: 'Windows 2003' },
-                                      { value: 'w2k8', label: 'Windows 2008' },
-                                      { value: 'wvista', label: 'Windows Vista' },
-                                      { value: 'win7', label: 'Windows 7' },
-                                      { value: 'win8', label: 'Windows 8/2012' },
-                                      { value: 'win10', label: 'Windows 10/2016/2019' },
-                                      { value: 'win11', label: 'Windows 11/2022' },
+                                      { value: 'l26', label: 'Linux 6.x - 2.6 Kernel' },
                                       { value: 'l24', label: 'Linux 2.4 Kernel' },
-                                      { value: 'l26', label: 'Linux 2.6+ Kernel' },
-                                      { value: 'solaris', label: 'Solaris' },
+                                      { value: 'win11', label: 'Windows 11/2022/2025' },
+                                      { value: 'win10', label: 'Windows 10/2016/2019' },
+                                      { value: 'win8', label: 'Windows 8.x/2012/2012r2' },
+                                      { value: 'win7', label: 'Windows 7/2008r2' },
+                                      { value: 'wvista', label: 'Windows Vista/2008' },
+                                      { value: 'w2k3', label: 'Windows XP/2003' },
+                                      { value: 'wxp', label: 'Windows XP/2003' },
+                                      { value: 'w2k', label: 'Windows 2000' },
+                                      { value: 'solaris', label: 'Solaris Kernel' },
+                                      { value: 'other', label: 'Other' },
                                     ] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>

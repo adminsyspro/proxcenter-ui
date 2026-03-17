@@ -48,7 +48,7 @@
     "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "nanoid": "^5.1.6",
-    "next": "16.1.6",
+    "next": "16.1.7",
     "next-auth": "^4.24.13",
     "next-intl": "^4.8.0",
     "react": "19.2.1",

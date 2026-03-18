@@ -26,6 +26,7 @@ import {
 } from '@mui/material'
 import { lighten } from '@mui/material/styles'
 
+import DOMPurify from 'dompurify'
 import { formatBytes } from '@/utils/format'
 
 import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
@@ -62,6 +63,7 @@ function InventorySummary({
   agentEnabled,
   ioSeries,
   isTemplate,
+  vmNotes,
 }: {
   kindLabel: string
   status: Status
@@ -89,6 +91,7 @@ function InventorySummary({
   agentEnabled?: boolean | null
   ioSeries?: SeriesPoint[]
   isTemplate?: boolean
+  vmNotes?: string | null
 }) {
   const t = useTranslations()
   const theme = useTheme()

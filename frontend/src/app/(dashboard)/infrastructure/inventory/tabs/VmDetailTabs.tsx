@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
+import DOMPurify from 'dompurify'
 
 import {
   Alert,
@@ -2960,14 +2961,20 @@ return (
                                 bgcolor: 'action.hover',
                                 borderRadius: 1,
                                 minHeight: 150,
-                                whiteSpace: 'pre-wrap',
                                 fontFamily: 'inherit',
                               }}
                             >
                               {vmNotes ? (
-                                <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
-                                  {vmNotes}
-                                </Typography>
+                                /<[a-z][\s\S]*>/i.test(vmNotes) ? (
+                                  <Box
+                                    sx={{ '& a': { color: 'primary.main' }, '& img': { maxWidth: '100%' }, lineHeight: 1.8, fontSize: '0.875rem' }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(vmNotes, { ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','br','b','i','u','strong','em','a','ul','ol','li','table','thead','tbody','tr','th','td','hr','pre','code','blockquote','span','div','img','sup','sub','dl','dt','dd'], ALLOWED_ATTR: ['href','src','alt','title','class','style','target','width','height','colspan','rowspan'], ADD_ATTR: ['target'] }) }}
+                                  />
+                                ) : (
+                                  <Typography variant="body2" sx={{ lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                                    {vmNotes}
+                                  </Typography>
+                                )
                               ) : (
                                 <Typography variant="body2" sx={{ opacity: 0.5, fontStyle: 'italic' }}>
                                   {t('inventory.noNotes')}

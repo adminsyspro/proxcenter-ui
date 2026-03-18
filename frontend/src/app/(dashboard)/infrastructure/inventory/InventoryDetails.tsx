@@ -3006,6 +3006,7 @@ return vm?.isCluster ?? false
             agentEnabled={selection?.type === 'vm' ? data.optionsInfo?.agentEnabled ?? null : null}
             ioSeries={selection?.type === 'vm' ? series : undefined}
             isTemplate={data.isTemplate}
+            vmNotes={selection?.type === 'vm' ? vmNotes : undefined}
           />
           </Box>
           </>)}

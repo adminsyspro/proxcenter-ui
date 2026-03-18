@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import DOMPurify from 'dompurify'
 
 import {
   Alert,
@@ -684,16 +685,30 @@ export default function NodeTabs(props: any) {
                       <Card variant="outlined" sx={{ flex: 1 }}>
                         <CardContent sx={{ height: '100%' }}>
                           {nodeNotesData ? (
-                            <Box 
-                              sx={{ 
-                                whiteSpace: 'pre-wrap', 
-                                wordBreak: 'break-word',
-                                fontFamily: 'inherit',
-                                fontSize: 14
-                              }}
-                            >
-                              {nodeNotesData}
-                            </Box>
+                            /<[a-z][\s\S]*>/i.test(nodeNotesData) ? (
+                              <Box
+                                sx={{
+                                  wordBreak: 'break-word',
+                                  fontFamily: 'inherit',
+                                  fontSize: 14,
+                                  lineHeight: 1.8,
+                                  '& a': { color: 'primary.main' },
+                                  '& img': { maxWidth: '100%', height: 'auto' },
+                                }}
+                                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(nodeNotesData, { ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','br','b','i','u','strong','em','a','ul','ol','li','table','thead','tbody','tr','th','td','hr','pre','code','blockquote','span','div','img','sup','sub','dl','dt','dd'], ALLOWED_ATTR: ['href','src','alt','title','class','style','target','width','height','colspan','rowspan'], ADD_ATTR: ['target'] }) }}
+                              />
+                            ) : (
+                              <Box
+                                sx={{
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  fontFamily: 'inherit',
+                                  fontSize: 14
+                                }}
+                              >
+                                {nodeNotesData}
+                              </Box>
+                            )
                           ) : (
                             <Box sx={{ textAlign: 'center', opacity: 0.5, py: 4 }}>
                               <i className="ri-file-text-line" style={{ fontSize: 48 }} />

@@ -2651,7 +2651,9 @@
       "actions": "操作",
       "testFailover": "测试故障转移",
       "failover": "故障转移",
-      "failback": "故障回切"
+      "failback": "故障回切",
+      "deletePlan": "删除恢复计划",
+      "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。"
     },
     "createJob": {
       "title": "创建复制任务",

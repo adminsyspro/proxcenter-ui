@@ -2655,7 +2655,9 @@
       "actions": "Actions",
       "testFailover": "Test Failover",
       "failover": "Failover",
-      "failback": "Failback"
+      "failback": "Failback",
+      "deletePlan": "Delete Recovery Plan",
+      "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone."
     },
     "createJob": {
       "title": "Create Replication Job",

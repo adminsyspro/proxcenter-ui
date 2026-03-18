@@ -12,6 +12,10 @@ import {
   CardHeader,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   Skeleton,
   Snackbar,
@@ -68,7 +72,9 @@ export default function EmergencyDRTab({
   jobs, plans, loading, connections, vmNameMap, onStartVM, onExecuteFailover, onExecuteFailback, onDeletePlan
 }: EmergencyDRTabProps) {
   const t = useTranslations('siteRecovery')
+  const tc = useTranslations('common')
   const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting'>>({})
+  const [deletePlanId, setDeletePlanId] = useState<string | null>(null)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   })
@@ -342,7 +348,7 @@ export default function EmergencyDRTab({
                 {onDeletePlan && (
                   <IconButton
                     size="small"
-                    onClick={() => { if (confirm(t('plans.confirmDelete'))) onDeletePlan(planId) }}
+                    onClick={() => setDeletePlanId(planId)}
                     sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
                   >
                     <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
@@ -392,6 +398,34 @@ export default function EmergencyDRTab({
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Delete Plan Confirmation Dialog */}
+      <Dialog open={!!deletePlanId} onClose={() => setDeletePlanId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+          <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
+          {t('plans.deletePlan')}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {t('plans.deletePlanConfirm')}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeletePlanId(null)}>{tc('cancel')}</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => {
+              if (deletePlanId && onDeletePlan) {
+                onDeletePlan(deletePlanId)
+              }
+              setDeletePlanId(null)
+            }}
+          >
+            {tc('delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

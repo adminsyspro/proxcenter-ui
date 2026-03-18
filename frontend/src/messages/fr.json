@@ -2660,7 +2660,9 @@
       "actions": "Actions",
       "testFailover": "Test de failover",
       "failover": "Failover",
-      "failback": "Failback"
+      "failback": "Failback",
+      "deletePlan": "Supprimer le plan de reprise",
+      "deletePlanConfirm": "Êtes-vous sûr de vouloir supprimer ce plan de reprise ? Cette action est irréversible."
     },
     "createJob": {
       "title": "Créer un job de réplication",

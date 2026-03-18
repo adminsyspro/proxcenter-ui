@@ -55,7 +55,7 @@ async function soapLogout(baseUrl: string, cookie: string, insecureTLS: boolean)
 }
 
 function extractProp(xml: string, propName: string): string {
-  const regex = new RegExp(`<propSet>\\s*<name>${propName.replace(/\./g, '\\.')}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>\\s*</propSet>`)
+  const regex = new RegExp(`<propSet>\\s*<name>${propName.replaceAll('.', '\\.')}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>\\s*</propSet>`)
   return regex.exec(xml)?.[1] || ''
 }
 

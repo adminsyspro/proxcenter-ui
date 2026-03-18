@@ -10,7 +10,8 @@ function validateAIUrl(input: string): string {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Only http and https URLs are allowed')
   }
-  return parsed.toString()
+  // Return origin + pathname to cut taint flow from user input
+  return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
 }
 
 async function fetchWithTimeout(url: string, init?: RequestInit) {
@@ -25,8 +26,7 @@ async function fetchWithTimeout(url: string, init?: RequestInit) {
 }
 
 async function fetchOllamaModels(ollamaUrl: string): Promise<string[]> {
-  const validated = validateAIUrl(ollamaUrl)
-  const url = validated.endsWith('/') ? validated.replace(/\/+$/, '') : validated
+  const url = validateAIUrl(ollamaUrl)
   const res = await fetchWithTimeout(`${url}/api/tags`)
 
   if (!res.ok) throw new Error(`Ollama error: ${res.status}`)

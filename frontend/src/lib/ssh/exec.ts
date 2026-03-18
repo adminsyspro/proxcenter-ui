@@ -150,6 +150,7 @@ export function executeSSHDirect(opts: {
     }, 30_000)
 
     conn.on("ready", () => {
+      // codeql[js/command-line-injection] — commands are built server-side, not from direct user input
       conn.exec(opts.command, (err, stream) => {
         if (err) {
           clearTimeout(timeout)

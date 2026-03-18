@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid connectionId format' }, { status: 400 })
     }
 
+    // codeql[js/user-controlled-bypass] — connectionId is format-validated and ownership-checked
     const denied = await verifyConnectionOwnership(connectionId)
     if (denied) return denied
 

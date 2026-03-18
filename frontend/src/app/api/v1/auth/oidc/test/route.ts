@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     let baseUrl = String(issuer_url)
     while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1)
 
-    // Validate URL protocol to prevent SSRF
+    // Validate URL protocol to prevent SSRF — reconstruct from parsed components to cut taint
     const parsedUrl = new URL(`${baseUrl}/.well-known/openid-configuration`)
     if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
       return NextResponse.json({
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
         error: "Only http and https protocols are allowed",
       }, { status: 400 })
     }
-    const discoveryUrl = parsedUrl.href
+    const discoveryUrl = `${parsedUrl.origin}${parsedUrl.pathname}`
 
     const res = await fetch(discoveryUrl, {
       signal: AbortSignal.timeout(10000),

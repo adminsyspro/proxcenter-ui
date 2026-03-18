@@ -31,7 +31,7 @@
     "@mui/x-data-grid": "^8.23.0",
     "@mui/x-tree-view": "^8.27.1",
     "@novnc/novnc": "^1.5.0",
-    "@prisma/adapter-better-sqlite3": "^7.2.0",
+    "@prisma/adapter-better-sqlite3": "^7.5.0",
     "@prisma/client": "^7.2.0",
     "@tanstack/react-virtual": "^3.13.23",
     "@types/leaflet": "^1.9.21",

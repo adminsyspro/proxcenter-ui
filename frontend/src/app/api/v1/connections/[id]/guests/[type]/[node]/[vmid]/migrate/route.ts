@@ -63,9 +63,14 @@ export async function POST(
       }
     }
     
-    // Pour LXC avec stockage cible
-    if (resourceType === 'lxc' && targetstorage) {
-      migrateParams['target-storage'] = targetstorage
+    // Pour les LXC
+    if (resourceType === 'lxc') {
+      if (online) {
+        migrateParams.restart = 1
+      }
+      if (targetstorage) {
+        migrateParams['target-storage'] = targetstorage
+      }
     }
     
     // Appeler l'API Proxmox pour la migration

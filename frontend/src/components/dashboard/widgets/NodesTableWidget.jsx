@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Chip, LinearProgress,
@@ -9,6 +10,7 @@ import {
 
 function NodesTableWidget({ data, loading }) {
   const t = useTranslations()
+  const router = useRouter()
   const nodes = data?.nodes || []
 
   if (nodes.length === 0) {
@@ -33,7 +35,7 @@ function NodesTableWidget({ data, loading }) {
         </TableHead>
         <TableBody>
           {[...nodes].sort((a, b) => (b.memPct || 0) - (a.memPct || 0)).map((node, idx) => (
-            <TableRow key={idx} hover>
+            <TableRow key={idx} hover onClick={() => node.connId && router.push(`/infrastructure/inventory?selectType=node&selectId=${node.connId}:${node.name}`)} sx={{ cursor: node.connId ? 'pointer' : 'default' }}>
               <TableCell sx={{ py: 0.75 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? '#4caf50' : '#f44336' }} />

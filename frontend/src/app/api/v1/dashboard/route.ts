@@ -378,76 +378,81 @@ return null
     // Alertes PVE - Nodes
     for (const node of allNodes) {
       if (node.status !== 'online') {
-        alerts.push({ 
-          severity: 'crit', 
-          message: `Node ${node.name} : OFFLINE`, 
+        alerts.push({
+          severity: 'crit',
+          message: `Node ${node.name} : OFFLINE`,
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
           entityId: node.name,
           entityName: node.name,
+          connId: node.connId,
           metric: 'status',
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       }
 
       if (node.memPct > 90) {
-        alerts.push({ 
-          severity: 'crit', 
-          message: `Node ${node.name} : RAM critique (${node.memPct}%)`, 
+        alerts.push({
+          severity: 'crit',
+          message: `Node ${node.name} : RAM critique (${node.memPct}%)`,
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
           entityId: node.name,
           entityName: node.name,
+          connId: node.connId,
           metric: 'ram',
           currentValue: node.memPct,
           threshold: 90,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       } else if (node.memPct > 80) {
-        alerts.push({ 
-          severity: 'warn', 
-          message: `Node ${node.name} : RAM élevée (${node.memPct}%)`, 
+        alerts.push({
+          severity: 'warn',
+          message: `Node ${node.name} : RAM élevée (${node.memPct}%)`,
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
           entityId: node.name,
           entityName: node.name,
+          connId: node.connId,
           metric: 'ram',
           currentValue: node.memPct,
           threshold: 80,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       }
 
       if (node.cpuPct > 90) {
-        alerts.push({ 
-          severity: 'crit', 
-          message: `Node ${node.name} : CPU critique (${node.cpuPct}%)`, 
+        alerts.push({
+          severity: 'crit',
+          message: `Node ${node.name} : CPU critique (${node.cpuPct}%)`,
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
           entityId: node.name,
           entityName: node.name,
+          connId: node.connId,
           metric: 'cpu',
           currentValue: node.cpuPct,
           threshold: 90,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       } else if (node.cpuPct > 80) {
-        alerts.push({ 
-          severity: 'warn', 
-          message: `Node ${node.name} : CPU élevé (${node.cpuPct}%)`, 
+        alerts.push({
+          severity: 'warn',
+          message: `Node ${node.name} : CPU élevé (${node.cpuPct}%)`,
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
           entityId: node.name,
           entityName: node.name,
+          connId: node.connId,
           metric: 'cpu',
           currentValue: node.cpuPct,
           threshold: 80,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       }
     }
@@ -586,8 +591,8 @@ return null
 
     // Recompute top consumers from filtered VMs
     const fRunningVms = filteredVms.filter((v: any) => v.status === 'running')
-    const fTopCpu = fRunningVms.map((v: any) => ({ name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: round1(Number(v.cpu || 0) * 100) })).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
-    const fTopRam = fRunningVms.map((v: any) => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0); return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
+    const fTopCpu = fRunningVms.map((v: any) => ({ name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: round1(Number(v.cpu || 0) * 100) })).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
+    const fTopRam = fRunningVms.map((v: any) => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0); return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
 
     // Filter alerts to only include visible resources
     const visibleNodeNames = new Set(filteredNodes.map((n: any) => n.name))

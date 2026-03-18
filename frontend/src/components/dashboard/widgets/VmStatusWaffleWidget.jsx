@@ -18,7 +18,7 @@ function VmStatusWaffleWidget({ data, loading }) {
   }, [data?.vmList, data?.lxcList])
 
   const handleVmClick = (vm) => {
-    router.push(`/infrastructure/inventory?selected=${vm.connId}&type=${vm.type}&vmid=${vm.vmid}&node=${vm.node}`)
+    router.push(`/infrastructure/inventory?vmid=${vm.vmid}&connId=${vm.connId}&node=${vm.node}&type=${vm.type}`)
   }
 
   if (!data) {

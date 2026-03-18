@@ -1,11 +1,13 @@
 'use client'
 
 import React from 'react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Box, Chip, Typography } from '@mui/material'
 
 function ClustersListWidget({ data, loading }) {
   const t = useTranslations()
+  const router = useRouter()
   const clusters = (data?.clusters || []).filter(c => c.isCluster)
 
   if (clusters.length === 0) {
@@ -19,11 +21,14 @@ function ClustersListWidget({ data, loading }) {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 1, overflow: 'auto' }}>
       {clusters.map((cluster, idx) => (
-        <Box 
+        <Box
           key={idx}
-          sx={{ 
+          onClick={() => cluster.id && router.push(`/infrastructure/inventory?selectType=cluster&selectId=${cluster.id}`)}
+          sx={{
             p: 1.5, borderRadius: 1.5,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
+            cursor: cluster.id ? 'pointer' : 'default',
+            '&:hover': cluster.id ? { bgcolor: 'action.hover' } : {},
           }}
         >
           <Box sx={{ minWidth: 0 }}>

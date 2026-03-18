@@ -1,11 +1,24 @@
 'use client'
 
 import React from 'react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, List, ListItem, ListItemText, Typography } from '@mui/material'
 
 function AlertsListWidget({ data, loading }) {
   const t = useTranslations()
+  const router = useRouter()
+
+  function getAlertLink(alert) {
+    if (alert.entityType === 'node' && alert.connId && alert.entityId) {
+      return `/infrastructure/inventory?selectType=node&selectId=${alert.connId}:${alert.entityId}`
+    }
+    if (alert.entityType === 'cluster' && alert.entityId) {
+      return `/infrastructure/inventory?selectType=cluster&selectId=${alert.entityId}`
+    }
+    // PBS alerts and others don't have a direct inventory link yet
+    return null
+  }
   const alerts = data?.alerts || []
 
   function timeAgo(date) {
@@ -39,9 +52,10 @@ function AlertsListWidget({ data, loading }) {
       {alerts.map((alert, idx) => {
         const cfg = severityConfig[alert.severity] || severityConfig.info
 
-        
+        const link = getAlertLink(alert)
+
 return (
-          <ListItem key={idx} sx={{ px: 0.5, py: 0.5 }}>
+          <ListItem key={idx} onClick={() => link && router.push(link)} sx={{ px: 0.5, py: 0.5, cursor: link ? 'pointer' : 'default', borderRadius: 0.5, '&:hover': link ? { bgcolor: 'action.hover' } : {} }}>
             <ListItemText
               primary={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

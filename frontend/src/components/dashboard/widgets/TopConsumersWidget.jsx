@@ -1,12 +1,14 @@
 'use client'
 
 import React from 'react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, LinearProgress, Typography, useTheme } from '@mui/material'
 
 function TopConsumersWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
+  const router = useRouter()
   const primaryColor = theme.palette.primary.main
   const topCpu = data?.topCpu || []
   const topRam = data?.topRam || []
@@ -26,7 +28,7 @@ function TopConsumersWidget({ data, loading }) {
           TOP {t('monitoring.cpu').toUpperCase()}
         </Typography>
         {topCpu.slice(0, 10).map((vm, idx) => (
-          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+          <Box key={idx} onClick={() => vm.connId && router.push(`/infrastructure/inventory?vmid=${vm.vmid}&connId=${vm.connId}&node=${vm.node}&type=${vm.type || 'qemu'}`)} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25, cursor: vm.connId ? 'pointer' : 'default', borderRadius: 0.5, '&:hover': vm.connId ? { bgcolor: 'action.hover' } : {} }}>
             <Typography variant='caption' sx={{
               width: 100, fontWeight: 500, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11
@@ -52,7 +54,7 @@ function TopConsumersWidget({ data, loading }) {
           TOP {t('monitoring.memory').toUpperCase()}
         </Typography>
         {topRam.slice(0, 10).map((vm, idx) => (
-          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+          <Box key={idx} onClick={() => vm.connId && router.push(`/infrastructure/inventory?vmid=${vm.vmid}&connId=${vm.connId}&node=${vm.node}&type=${vm.type || 'qemu'}`)} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25, cursor: vm.connId ? 'pointer' : 'default', borderRadius: 0.5, '&:hover': vm.connId ? { bgcolor: 'action.hover' } : {} }}>
             <Typography variant='caption' sx={{
               width: 100, fontWeight: 500, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11

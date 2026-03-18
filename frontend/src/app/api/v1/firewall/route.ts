@@ -14,6 +14,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
     }
 
+    // Validate connectionId format to prevent path traversal
+    if (!/^[a-zA-Z0-9_-]+$/.test(connectionId)) {
+      return NextResponse.json({ error: 'Invalid connectionId format' }, { status: 400 })
+    }
+
     const denied = await verifyConnectionOwnership(connectionId)
     if (denied) return denied
 
@@ -22,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response.data)
   } catch (error: any) {
-    console.error('Error fetching firewall status:', error)
+    console.error('Error fetching firewall status:', String(error?.message || error).replace(/[\r\n]/g, ''))
     
 return NextResponse.json(
       { error: error.message || 'Failed to fetch firewall status' },

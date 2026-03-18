@@ -1,5 +1,19 @@
 import { NextResponse } from 'next/server'
 
+/** Validate that a user-provided URL is a valid HTTP(S) URL */
+function validateAIUrl(input) {
+  const parsed = new URL(input)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http and https URLs are allowed')
+  }
+  return parsed.toString()
+}
+
+/** Sanitize a string for safe logging (strip newlines/control chars) */
+function sanitizeLog(str) {
+  return String(str || '').replace(/[\r\n]/g, '')
+}
+
 // POST /api/v1/ai/test - Tester la connexion au LLM
 export async function POST(request) {
   try {
@@ -7,7 +21,8 @@ export async function POST(request) {
     
     if (settings.provider === 'ollama') {
       // Test Ollama
-      const response = await fetch(`${settings.ollamaUrl}/api/generate`, {
+      const ollamaBase = validateAIUrl(settings.ollamaUrl.replace(/\/+$/, ''))
+      const response = await fetch(`${ollamaBase}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -35,7 +50,8 @@ return NextResponse.json({
       
     } else if (settings.provider === 'openai') {
       // Test OpenAI
-      const openaiBase = (settings.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+      const openaiRaw = settings.openaiBaseUrl || 'https://api.openai.com/v1'
+      const openaiBase = validateAIUrl(openaiRaw.replace(/\/+$/, ''))
       const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -102,7 +118,7 @@ return NextResponse.json({
     }
     
   } catch (e) {
-    console.error('AI test failed:', e)
+    console.error('AI test failed:', sanitizeLog(e?.message || e))
     
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

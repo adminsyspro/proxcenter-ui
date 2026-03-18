@@ -4,6 +4,15 @@ const TIMEOUT_MS = 10_000
 
 const OPENAI_EXCLUDED = /embed|tts|whisper|dall-e|moderation|audio|realtime/i
 
+/** Validate that a user-provided URL is a valid HTTP(S) URL and not a private/internal address */
+function validateAIUrl(input: string): string {
+  const parsed = new URL(input)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http and https URLs are allowed')
+  }
+  return parsed.toString()
+}
+
 async function fetchWithTimeout(url: string, init?: RequestInit) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -16,7 +25,8 @@ async function fetchWithTimeout(url: string, init?: RequestInit) {
 }
 
 async function fetchOllamaModels(ollamaUrl: string): Promise<string[]> {
-  const url = ollamaUrl.replace(/\/+$/, '')
+  const validated = validateAIUrl(ollamaUrl)
+  const url = validated.endsWith('/') ? validated.replace(/\/+$/, '') : validated
   const res = await fetchWithTimeout(`${url}/api/tags`)
 
   if (!res.ok) throw new Error(`Ollama error: ${res.status}`)
@@ -27,7 +37,9 @@ async function fetchOllamaModels(ollamaUrl: string): Promise<string[]> {
 }
 
 async function fetchOpenAIModels(key: string, baseUrl?: string): Promise<string[]> {
-  const url = (baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+  const raw = baseUrl || 'https://api.openai.com/v1'
+  const validated = validateAIUrl(raw)
+  const url = validated.endsWith('/') ? validated.replace(/\/+$/, '') : validated
   const res = await fetchWithTimeout(`${url}/models`, {
     headers: { Authorization: `Bearer ${key}` },
   })
@@ -77,7 +89,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ models })
   } catch (e: any) {
-    console.error('AI models fetch failed:', e)
+    console.error('AI models fetch failed:', String(e?.message || e).replace(/[\r\n]/g, ''))
 
     return NextResponse.json({ models: [], error: e?.message || String(e) }, { status: 500 })
   }

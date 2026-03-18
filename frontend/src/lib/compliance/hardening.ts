@@ -163,8 +163,11 @@ function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck {
       const fileList = Array.isArray((repos as any).files) ? (repos as any).files : []
       for (const file of fileList) {
         if (file.enabled) {
-          const uris = Array.isArray(file.uris) ? file.uris.join(' ') : ''
-          if (uris.includes('enterprise.proxmox.com')) { hasEnterpriseRepo = true; break }
+          const uriList = Array.isArray(file.uris) ? file.uris : []
+          const isEnterprise = uriList.some(u => {
+            try { return new URL(u).hostname === 'enterprise.proxmox.com' || new URL(u).hostname.endsWith('.enterprise.proxmox.com') } catch { return false }
+          })
+          if (isEnterprise) { hasEnterpriseRepo = true; break }
         }
       }
       const stdList = Array.isArray((repos as any).standard) ? (repos as any).standard : []

@@ -4,6 +4,14 @@ import { decryptSecret } from "@/lib/crypto/secret"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
+/**
+ * Escape a string for safe use as a shell argument.
+ * Wraps in single quotes and escapes embedded single quotes.
+ */
+export function shellEscape(arg: string): string {
+  return "'" + arg.replace(/'/g, "'\\''") + "'"
+}
+
 export interface SSHResult {
   success: boolean
   output?: string

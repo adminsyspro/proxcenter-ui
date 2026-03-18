@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
+import DOMPurify from 'dompurify'
 
 import {
   Alert,
@@ -238,11 +239,11 @@ function replaceMacros(template, data) {
     if (typeof values === 'object') {
       Object.entries(values).forEach(([key, value]) => {
         const macro = `{{${category}.${key}}}`
-        result = result.replace(new RegExp(macro.replace(/[{}]/g, '\\$&'), 'g'), value || '')
+        result = result.replaceAll(macro, value || '')
       })
     } else {
       const macro = `{{${category}}}`
-      result = result.replace(new RegExp(macro.replace(/[{}]/g, '\\$&'), 'g'), values || '')
+      result = result.replaceAll(macro, values || '')
     }
   })
   
@@ -633,7 +634,7 @@ export default function EmailTemplateEditor() {
 
                       {/* Content */}
                       <Box sx={{ p: 4 }}>
-                        <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }} />
                       </Box>
 
                       {/* Divider */}

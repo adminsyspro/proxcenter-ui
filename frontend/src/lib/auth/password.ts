@@ -44,10 +44,17 @@ return
 export function generateRandomPassword(length: number = 16): string {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
   let password = ""
-  const randomBytes = crypto.randomBytes(length)
+  // Use rejection sampling to avoid modulo bias
+  const maxValid = 256 - (256 % chars.length)
 
-  for (let i = 0; i < length; i++) {
-    password += chars[randomBytes[i] % chars.length]
+  while (password.length < length) {
+    const randomBytes = crypto.randomBytes(length - password.length + 16)
+
+    for (let i = 0; i < randomBytes.length && password.length < length; i++) {
+      if (randomBytes[i] < maxValid) {
+        password += chars[randomBytes[i] % chars.length]
+      }
+    }
   }
 
   return password

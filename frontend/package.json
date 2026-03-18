@@ -40,6 +40,7 @@
     "@xyflow/react": "^12.10.1",
     "better-sqlite3": "^12.6.0",
     "classnames": "2.5.1",
+    "dompurify": "^3.3.3",
     "exceljs": "^4.4.0",
     "flatted": "^3.4.0",
     "form-data": "^4.0.5",

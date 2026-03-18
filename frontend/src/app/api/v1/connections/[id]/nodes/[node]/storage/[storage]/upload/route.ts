@@ -56,9 +56,9 @@ export async function POST(
     const safeName = fileField.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     tmpFile = path.join(tmpDir, `proxcenter-upload-${randomUUID()}-${safeName}`)
     const arrayBuf = await fileField.arrayBuffer()
-    fs.writeFileSync(tmpFile, Buffer.from(arrayBuf))
+    fs.writeFileSync(tmpFile, Buffer.from(arrayBuf), { mode: 0o600 })
 
-    console.log(`[upload] Saved "${fileField.name}" (${fileField.size} bytes), uploadId=${uploadId}`)
+    console.log(`[upload] Saved "${String(fileField.name).replace(/[\r\n]/g, '')}" (${fileField.size} bytes), uploadId=${uploadId}`)
 
     // Build a clean multipart form streaming from disk
     const form = new FormData()
@@ -88,6 +88,8 @@ export async function POST(
 
     const isHttps = targetUrl.protocol === "https:"
     const transport = isHttps ? https : http
+    // Intentionally allow self-signed certs for Proxmox VE connections (common in private clusters)
+    // codeql[js/disabling-certificate-validation]
     const agent = isHttps && conn.insecureDev
       ? new https.Agent({ rejectUnauthorized: false })
       : undefined

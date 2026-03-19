@@ -5130,6 +5130,10 @@
     "infraComingSoon": "Infrastruktur-Verkehrsansicht — kommt in Phase 4",
     "subtitle": "sFlow-Überwachung und Verkehrsanalyse",
     "noSshConnections": "Keine SSH-aktivierten Verbindungen",
-    "noSshConnectionsDesc": "Netzwerk-Flows erfordern SSH auf Ihren PVE-Verbindungen für die Kommunikation mit Open vSwitch. Aktivieren Sie SSH unter Einstellungen > Verbindungen."
+    "noSshConnectionsDesc": "Netzwerk-Flows erfordern SSH auf Ihren PVE-Verbindungen für die Kommunikation mit Open vSwitch. Aktivieren Sie SSH unter Einstellungen > Verbindungen.",
+    "configureAll": "sFlow auf allen Nodes konfigurieren",
+    "active": "Aktiv",
+    "notConfigured": "Nicht konfiguriert",
+    "enterCollectorTarget": "Collector-Ziel eingeben (IP:Port des ProxCenter-Orchestrators)"
   }
 }

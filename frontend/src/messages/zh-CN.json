@@ -5134,6 +5134,10 @@
     "infraComingSoon": "基础设施流量视图 — 第 4 阶段",
     "subtitle": "sFlow 监控和流量分析",
     "noSshConnections": "没有启用 SSH 的连接",
-    "noSshConnectionsDesc": "网络流量需要在 PVE 连接上配置 SSH 以与 Open vSwitch 通信。请在设置 > 连接中启用 SSH。"
+    "noSshConnectionsDesc": "网络流量需要在 PVE 连接上配置 SSH 以与 Open vSwitch 通信。请在设置 > 连接中启用 SSH。",
+    "configureAll": "在所有节点上配置 sFlow",
+    "active": "活跃",
+    "notConfigured": "未配置",
+    "enterCollectorTarget": "输入收集器目标（ProxCenter 编排器的 IP:端口）"
   }
 }

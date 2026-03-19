@@ -5145,6 +5145,10 @@
     "collectorTargetHelp": "ProxCenter 服务器的 IP 地址和端口（编排器运行的位置）",
     "nodesToConfigure": "要配置的节点：",
     "reconfigure": "重新配置 sFlow",
-    "configure": "配置 sFlow"
+    "configure": "配置 sFlow",
+    "communications": "通信",
+    "peer": "对端",
+    "direction": "方向",
+    "vmDetailNote": "时间序列和详细流量分析将在第 2 阶段通过 InfluxDB 集成提供。"
   }
 }

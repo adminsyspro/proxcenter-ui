@@ -107,6 +107,9 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
   const [collectorTarget, setCollectorTarget] = useState('')
   const [configSingleNode, setConfigSingleNode] = useState<typeof nodeAgents[0] | null>(null)
 
+  // VM detail modal
+  const [selectedVM, setSelectedVM] = useState<TopTalker | null>(null)
+
   const primaryColor = theme.palette.primary.main
 
   // Load node agent status
@@ -450,7 +453,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       </TableHead>
                       <TableBody>
                         {topTalkers.map((talker) => (
-                          <TableRow key={talker.vmid} hover sx={{ cursor: 'pointer' }}>
+                          <TableRow key={talker.vmid} hover sx={{ cursor: 'pointer' }} onClick={() => setSelectedVM(talker)}>
                             <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                 <i className="ri-computer-line" style={{ fontSize: 14, opacity: 0.5 }} />
@@ -507,13 +510,17 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       <TableBody>
                         {topPairs.slice(0, 10).map((pair, idx) => (
                           <TableRow key={idx} hover>
-                            <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
+                            <TableCell sx={{ py: 0.75, fontSize: '0.8rem', cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
+                              onClick={() => setSelectedVM({ vmid: pair.src_vmid, vm_name: pair.src_name, node: '', bytes_in: pair.bytes, bytes_out: 0, packets: 0 })}
+                            >
                               {pair.src_name || `VM ${pair.src_vmid}`}
                             </TableCell>
                             <TableCell sx={{ py: 0.75, textAlign: 'center' }}>
                               <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
                             </TableCell>
-                            <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
+                            <TableCell sx={{ py: 0.75, fontSize: '0.8rem', cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
+                              onClick={() => setSelectedVM({ vmid: pair.dst_vmid, vm_name: pair.dst_name, node: '', bytes_in: 0, bytes_out: pair.bytes, packets: 0 })}
+                            >
                               {pair.dst_name || `VM ${pair.dst_vmid}`}
                             </TableCell>
                             <TableCell align="right" sx={{ py: 0.75, fontSize: '0.8rem', fontFamily: 'monospace' }}>
@@ -560,10 +567,10 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                         percent: p.percent,
                       }))}
                       layout="vertical"
-                      margin={{ top: 5, right: 80, left: 120, bottom: 5 }}
+                      margin={{ top: 5, right: 60, left: 10, bottom: 5 }}
                     >
                       <XAxis type="number" tickFormatter={(v) => formatBytes(v)} tick={{ fontSize: 11 }} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={140} />
                       <RechartsTooltip
                         formatter={(value: number) => [formatBytes(value), 'Traffic']}
                         contentStyle={{ fontSize: 12, borderRadius: 8 }}
@@ -621,6 +628,116 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
           </Box>
         </Box>
       )}
+
+      {/* VM Detail Dialog */}
+      <Dialog open={!!selectedVM} onClose={() => setSelectedVM(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className="ri-computer-line" style={{ fontSize: 20 }} />
+            {selectedVM?.vm_name || `VM ${selectedVM?.vmid}`}
+            <Chip label={`ID ${selectedVM?.vmid}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+          </Box>
+          <IconButton size="small" onClick={() => setSelectedVM(null)}>
+            <i className="ri-close-line" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {selectedVM && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Traffic summary */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, textAlign: 'center' }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                      <i className="ri-arrow-down-line" style={{ fontSize: 12, color: theme.palette.success.main }} /> Inbound
+                    </Typography>
+                    <Typography variant="h6" fontWeight={800} color="success.main">
+                      {formatBytes(selectedVM.bytes_in)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+                <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, textAlign: 'center' }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                      <i className="ri-arrow-up-line" style={{ fontSize: 12, color: theme.palette.warning.main }} /> Outbound
+                    </Typography>
+                    <Typography variant="h6" fontWeight={800} color="warning.main">
+                      {formatBytes(selectedVM.bytes_out)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Box>
+
+              {/* Related pairs */}
+              {topPairs.filter(p => p.src_vmid === selectedVM.vmid || p.dst_vmid === selectedVM.vmid).length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                    <i className="ri-arrow-left-right-line" style={{ fontSize: 14, marginRight: 6 }} />
+                    {t('networkFlows.communications')}
+                  </Typography>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('networkFlows.peer')}</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('networkFlows.direction')}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Bytes</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Proto</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {topPairs
+                          .filter(p => p.src_vmid === selectedVM.vmid || p.dst_vmid === selectedVM.vmid)
+                          .map((pair, idx) => {
+                            const isSource = pair.src_vmid === selectedVM.vmid
+                            const peerName = isSource ? (pair.dst_name || `VM ${pair.dst_vmid}`) : (pair.src_name || `VM ${pair.src_vmid}`)
+                            return (
+                              <TableRow key={idx}>
+                                <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <i className="ri-computer-line" style={{ fontSize: 12, opacity: 0.5 }} />
+                                    {peerName}
+                                  </Box>
+                                </TableCell>
+                                <TableCell sx={{ py: 0.75 }}>
+                                  <Chip
+                                    label={isSource ? '→ OUT' : '← IN'}
+                                    size="small"
+                                    color={isSource ? 'warning' : 'success'}
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.65rem' }}
+                                  />
+                                </TableCell>
+                                <TableCell align="right" sx={{ py: 0.75, fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                                  {formatBytes(pair.bytes)}
+                                </TableCell>
+                                <TableCell sx={{ py: 0.75 }}>
+                                  <Chip
+                                    label={`${pair.protocol}/${pair.dst_port}`}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.65rem' }}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
+
+              {/* Info note */}
+              <Alert severity="info" icon={<i className="ri-information-line" />}>
+                <Typography variant="caption">
+                  {t('networkFlows.vmDetailNote')}
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Configure sFlow Dialog */}
       <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="sm" fullWidth>

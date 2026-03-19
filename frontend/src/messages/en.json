@@ -5145,6 +5145,10 @@
     "collectorTargetHelp": "IP address and port of the ProxCenter server (where the orchestrator runs)",
     "nodesToConfigure": "Nodes to configure:",
     "reconfigure": "Reconfigure sFlow",
-    "configure": "Configure sFlow"
+    "configure": "Configure sFlow",
+    "communications": "Communications",
+    "peer": "Peer",
+    "direction": "Direction",
+    "vmDetailNote": "Time series and detailed flow analysis will be available in Phase 2 with InfluxDB integration."
   }
 }

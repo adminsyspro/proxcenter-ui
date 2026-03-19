@@ -51,31 +51,28 @@ export async function POST() {
 
           if (!bridgesResult.success || !bridgesResult.output) continue
 
-          const bridges = bridgesResult.output.trim().split("\n").filter(Boolean)
+          // Use ip -o link to get SNMP ifIndex (matches sFlow ifIndex)
+          // ovs-ofctl ofport numbers do NOT match sFlow ifIndex
+          const ipLinkResult = await executeSSHDirect({
+            ...sshOpts,
+            command: "ip -o link 2>/dev/null",
+          })
 
-          for (const bridge of bridges) {
-            // Get port mapping for each bridge
-            const ovsResult = await executeSSHDirect({
-              ...sshOpts,
-              command: `ovs-ofctl show ${bridge.trim()} 2>/dev/null`,
-            })
+          if (!ipLinkResult.success || !ipLinkResult.output) continue
 
-            if (!ovsResult.success || !ovsResult.output) continue
+          // Send to Go backend
+          try {
+            const result = await orchestratorFetch("/sflow/portmap", {
+              method: "POST",
+              body: {
+                agent_ip: host.ip,
+                ip_link_output: ipLinkResult.output,
+              },
+            }) as any
 
-            // Send to Go backend
-            try {
-              const result = await orchestratorFetch("/sflow/portmap", {
-                method: "POST",
-                body: {
-                  agent_ip: host.ip,
-                  ovs_output: ovsResult.output,
-                },
-              }) as any
-
-              totalMapped += result?.vm_ports_mapped || 0
-            } catch {
-              // Non-critical
-            }
+            totalMapped += result?.vm_ports_mapped || 0
+          } catch {
+            // Non-critical
           }
         } catch {
           // Skip host on SSH error

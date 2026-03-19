@@ -11,6 +11,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
   Tab,
   Tabs,
@@ -20,6 +24,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -95,6 +100,8 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
   }>>([])
   const [agentsLoading, setAgentsLoading] = useState(true)
   const [configuringNodes, setConfiguringNodes] = useState(false)
+  const [configDialogOpen, setConfigDialogOpen] = useState(false)
+  const [collectorTarget, setCollectorTarget] = useState('')
 
   const primaryColor = theme.palette.primary.main
 
@@ -122,16 +129,21 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
       .catch(() => {}) // Non-critical
   }, [portMapLoaded])
 
+  // Open configure dialog
+  const handleOpenConfigDialog = () => {
+    // Pre-fill with window location hostname + default port
+    if (!collectorTarget) {
+      setCollectorTarget(`${window.location.hostname}:6343`)
+    }
+    setConfigDialogOpen(true)
+  }
+
   // Configure sFlow on unconfigured nodes
   const handleConfigureNodes = async () => {
     const unconfigured = nodeAgents.filter(n => n.hasOvs && !n.sflowConfigured)
-    if (unconfigured.length === 0) return
+    if (unconfigured.length === 0 || !collectorTarget) return
 
-    // Determine collector target — use the orchestrator's IP
-    // The agents need to know where to send sFlow packets
-    const collectorTarget = prompt(t('networkFlows.enterCollectorTarget'), 'ORCHESTRATOR_IP:6343')
-    if (!collectorTarget) return
-
+    setConfigDialogOpen(false)
     setConfiguringNodes(true)
     try {
       const res = await fetch('/api/v1/orchestrator/sflow/agents', {
@@ -283,7 +295,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       variant="contained"
                       startIcon={configuringNodes ? <CircularProgress size={16} color="inherit" /> : <i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
                       disabled={configuringNodes}
-                      onClick={handleConfigureNodes}
+                      onClick={handleOpenConfigDialog}
                     >
                       {t('networkFlows.configureAll')}
                     </Button>
@@ -590,6 +602,56 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
           </Box>
         </Box>
       )}
+
+      {/* Configure sFlow Dialog */}
+      <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className="ri-settings-3-line" style={{ fontSize: 20 }} />
+          {t('networkFlows.configureSflowTitle')}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {t('networkFlows.configureSflowDesc')}
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
+            label={t('networkFlows.collectorTarget')}
+            value={collectorTarget}
+            onChange={(e) => setCollectorTarget(e.target.value)}
+            placeholder="10.0.0.1:6343"
+            helperText={t('networkFlows.collectorTargetHelp')}
+            InputProps={{ sx: { fontFamily: 'monospace' } }}
+          />
+          {nodeAgents.filter(n => n.hasOvs && !n.sflowConfigured).length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                {t('networkFlows.nodesToConfigure')}
+              </Typography>
+              {nodeAgents.filter(n => n.hasOvs && !n.sflowConfigured).map(n => (
+                <Chip
+                  key={n.ip}
+                  label={`${n.node} (${n.ip})`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ mr: 0.5, mb: 0.5, height: 24, fontSize: '0.75rem' }}
+                />
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfigDialogOpen(false)}>{t('common.cancel')}</Button>
+          <Button
+            variant="contained"
+            disabled={!collectorTarget || configuringNodes}
+            startIcon={configuringNodes ? <CircularProgress size={16} color="inherit" /> : <i className="ri-play-circle-line" />}
+            onClick={handleConfigureNodes}
+          >
+            {t('networkFlows.configureAll')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

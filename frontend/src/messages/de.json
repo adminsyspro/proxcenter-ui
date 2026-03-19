@@ -5134,6 +5134,11 @@
     "configureAll": "sFlow auf allen Nodes konfigurieren",
     "active": "Aktiv",
     "notConfigured": "Nicht konfiguriert",
-    "enterCollectorTarget": "Collector-Ziel eingeben (IP:Port des ProxCenter-Orchestrators)"
+    "enterCollectorTarget": "Collector-Ziel eingeben (IP:Port des ProxCenter-Orchestrators)",
+    "configureSflowTitle": "sFlow-Überwachung konfigurieren",
+    "configureSflowDesc": "sFlow wird auf allen OVS-Bridges der ausgewählten Nodes konfiguriert. Die Agents senden Flow-Samples an den angegebenen Collector.",
+    "collectorTarget": "Collector-Ziel",
+    "collectorTargetHelp": "IP-Adresse und Port des ProxCenter-Servers (wo der Orchestrator läuft)",
+    "nodesToConfigure": "Zu konfigurierende Nodes:"
   }
 }

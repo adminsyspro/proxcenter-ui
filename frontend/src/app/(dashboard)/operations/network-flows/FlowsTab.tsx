@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   LinearProgress,
   Tooltip as MuiTooltip,
   Tab,
@@ -120,6 +121,11 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
 
   // VM detail modal
   const [selectedVM, setSelectedVM] = useState<TopTalker | null>(null)
+
+  // Search filters
+  const [talkerSearch, setTalkerSearch] = useState('')
+  const [srcSearch, setSrcSearch] = useState('')
+  const [dstSearch, setDstSearch] = useState('')
 
   const primaryColor = theme.palette.primary.main
 
@@ -445,13 +451,25 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
             {/* Top Talkers */}
             <Card variant="outlined" sx={{ borderRadius: 2 }}>
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                   <Typography variant="subtitle2" fontWeight={700}>
                     <i className="ri-bar-chart-horizontal-line" style={{ fontSize: 16, marginRight: 6 }} />
                     {t('networkFlows.topTalkers')}
                   </Typography>
                   <Chip label={`${status?.total_flows || 0} flows`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                 </Box>
+                <TextField
+                  size="small"
+                  placeholder={t('common.search')}
+                  value={talkerSearch}
+                  onChange={(e) => setTalkerSearch(e.target.value)}
+                  sx={{ mb: 1 }}
+                  fullWidth
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><i className="ri-search-line" style={{ fontSize: 14, opacity: 0.5 }} /></InputAdornment>,
+                    sx: { fontSize: '0.8rem', height: 32 }
+                  }}
+                />
                 {topTalkers.length === 0 ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4, opacity: 0.4 }}>
                     <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
@@ -467,7 +485,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {topTalkers.map((talker) => (
+                        {topTalkers.filter(t => !talkerSearch || (t.vm_name || `VM ${t.vmid}`).toLowerCase().includes(talkerSearch.toLowerCase()) || String(t.vmid).includes(talkerSearch)).map((talker) => (
                           <TableRow key={talker.vmid} hover sx={{ cursor: 'pointer' }} onClick={() => setSelectedVM(talker)}>
                             <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -500,10 +518,22 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
               {/* Top Sources */}
               <Card variant="outlined" sx={{ borderRadius: 2 }}>
                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
                     <i className="ri-upload-2-line" style={{ fontSize: 16, marginRight: 6, color: theme.palette.warning.main }} />
                     {t('networkFlows.topSources')}
                   </Typography>
+                  <TextField
+                    size="small"
+                    placeholder={t('common.search')}
+                    value={srcSearch}
+                    onChange={(e) => setSrcSearch(e.target.value)}
+                    sx={{ mb: 1 }}
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start"><i className="ri-search-line" style={{ fontSize: 14, opacity: 0.5 }} /></InputAdornment>,
+                      sx: { fontSize: '0.8rem', height: 32 }
+                    }}
+                  />
                   {topSources.length === 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3, opacity: 0.4 }}>
                       <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
@@ -519,7 +549,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {topSources.map((src) => (
+                          {topSources.filter(s => !srcSearch || s.ip.includes(srcSearch)).map((src) => (
                             <TableRow key={src.ip} hover>
                               <TableCell sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{src.ip}</TableCell>
                               <TableCell align="right" sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatBytes(src.bytes)}</TableCell>
@@ -536,10 +566,22 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
               {/* Top Destinations */}
               <Card variant="outlined" sx={{ borderRadius: 2 }}>
                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
                     <i className="ri-download-2-line" style={{ fontSize: 16, marginRight: 6, color: theme.palette.success.main }} />
                     {t('networkFlows.topDestinations')}
                   </Typography>
+                  <TextField
+                    size="small"
+                    placeholder={t('common.search')}
+                    value={dstSearch}
+                    onChange={(e) => setDstSearch(e.target.value)}
+                    sx={{ mb: 1 }}
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start"><i className="ri-search-line" style={{ fontSize: 14, opacity: 0.5 }} /></InputAdornment>,
+                      sx: { fontSize: '0.8rem', height: 32 }
+                    }}
+                  />
                   {topDestinations.length === 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3, opacity: 0.4 }}>
                       <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
@@ -555,7 +597,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {topDestinations.map((dst) => (
+                          {topDestinations.filter(d => !dstSearch || d.ip.includes(dstSearch)).map((dst) => (
                             <TableRow key={dst.ip} hover>
                               <TableCell sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{dst.ip}</TableCell>
                               <TableCell align="right" sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatBytes(dst.bytes)}</TableCell>
@@ -600,7 +642,13 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={140} />
                       <RechartsTooltip
                         formatter={(value: number) => [formatBytes(value), 'Traffic']}
-                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                        contentStyle={{
+                          fontSize: 12,
+                          borderRadius: 8,
+                          backgroundColor: theme.palette.background.paper,
+                          borderColor: theme.palette.divider,
+                          color: theme.palette.text.primary,
+                        }}
                       />
                       <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20}>
                         {topPorts.map((_, idx) => (

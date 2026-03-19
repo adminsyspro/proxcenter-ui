@@ -5132,6 +5132,8 @@
     "timeSeriesComingSoon": "Analyse de séries temporelles — disponible en Phase 2",
     "securityComingSoon": "Sécurité et détection d'anomalies — disponible en Phase 3",
     "infraComingSoon": "Vue du trafic infrastructure — disponible en Phase 4",
-    "subtitle": "Surveillance sFlow et analyse du trafic"
+    "subtitle": "Surveillance sFlow et analyse du trafic",
+    "noSshConnections": "Aucune connexion SSH activée",
+    "noSshConnectionsDesc": "Les flux réseau nécessitent SSH configuré sur vos connexions PVE pour communiquer avec Open vSwitch. Activez SSH dans Paramètres > Connexions."
   }
 }

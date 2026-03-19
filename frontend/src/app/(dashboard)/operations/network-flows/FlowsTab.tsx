@@ -90,6 +90,15 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
 
   const primaryColor = theme.palette.primary.main
 
+  // Refresh OVS port map on mount (resolves ifIndex → VMID)
+  const [portMapLoaded, setPortMapLoaded] = useState(false)
+  useEffect(() => {
+    if (portMapLoaded) return
+    fetch('/api/v1/orchestrator/sflow/portmap', { method: 'POST' })
+      .then(() => setPortMapLoaded(true))
+      .catch(() => {}) // Non-critical
+  }, [portMapLoaded])
+
   const loadData = useCallback(async () => {
     try {
       setError(null)

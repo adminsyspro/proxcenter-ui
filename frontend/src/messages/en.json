@@ -5131,6 +5131,8 @@
     "timeSeriesComingSoon": "Time series analysis — coming in Phase 2",
     "securityComingSoon": "Security & anomaly detection — coming in Phase 3",
     "infraComingSoon": "Infrastructure traffic view — coming in Phase 4",
-    "subtitle": "sFlow monitoring and traffic analysis"
+    "subtitle": "sFlow monitoring and traffic analysis",
+    "noSshConnections": "No SSH-enabled connections",
+    "noSshConnectionsDesc": "Network Flows requires SSH configured on your PVE connections to communicate with Open vSwitch. Enable SSH in Settings > Connections."
   }
 }

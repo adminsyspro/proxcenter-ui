@@ -9,6 +9,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Typography,
 } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -23,7 +24,8 @@ export default function NetworkFlowsPage() {
   const [selectedConnection, setSelectedConnection] = useState<string>('')
 
   const { data: connectionsData } = usePVEConnections()
-  const connections = connectionsData?.data || []
+  // Only show PVE connections with SSH enabled (required for OVS/sFlow)
+  const connections = (connectionsData?.data || []).filter((c: any) => c.sshConfigured)
 
   useEffect(() => {
     setPageInfo(t('networkFlows.title'), t('networkFlows.subtitle'), 'ri-flow-chart')
@@ -35,6 +37,18 @@ export default function NetworkFlowsPage() {
       setSelectedConnection(connections[0].id)
     }
   }, [connections, selectedConnection])
+
+  if (connectionsData && connections.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 2 }}>
+        <i className="ri-link-unlink" style={{ fontSize: 48, opacity: 0.3 }} />
+        <Typography variant="h6" color="text.secondary">{t('networkFlows.noSshConnections')}</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 400, textAlign: 'center' }}>
+          {t('networkFlows.noSshConnectionsDesc')}
+        </Typography>
+      </Box>
+    )
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>

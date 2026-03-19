@@ -874,13 +874,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         throw new Error(`Failed to create ESXi snapshot (required for live migration): ${snapErr.message}`)
       }
 
-      await appendLog(jobId, "Cloning disks on ESXi via vmkfstools (VM stays running)...", "info")
+      await appendLog(jobId, "Transferring disks from ESXi (VM stays running)...", "info")
 
       // Phase 1: Clone + download all disks while VM runs
+      // vSAN: vmkfstools -i cannot create new objects on vSAN (Function not implemented).
+      // After snapshot the base -flat.vmdk is read-only, so dd can read it directly — no clone needed.
+      // VMFS: vmkfstools clone is required because even after snapshot, VMFS file locks may block dd.
       try {
         for (let i = 0; i < vmConfig.disks.length; i++) {
           await updateJob(jobId, "transferring", { currentDisk: i })
-          await downloadDiskViaSsh(i, vmConfig.disks[i], true)
+          const isVsanDisk = vmConfig.disks[i].datastoreName.toLowerCase().includes('vsan')
+          if (isVsanDisk) {
+            await appendLog(jobId, `vSAN datastore detected — reading base disk directly via SSH dd (snapshot makes it read-only)`, "info")
+            await downloadDiskViaSsh(i, vmConfig.disks[i], false)
+          } else {
+            await downloadDiskViaSsh(i, vmConfig.disks[i], true)
+          }
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
         }
       } finally {
@@ -913,11 +922,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // ── Offline mode: VM already powered off → sequential download → convert → import ──
       for (let i = 0; i < vmConfig.disks.length; i++) {
         await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
-        // vSAN datastores: use vmkfstools clone + SSH dd (HTTPS datastore browser may fail on vSAN objects)
+        // vSAN datastores: use SSH dd directly (HTTPS datastore browser fails on vSAN objects,
+        // and vmkfstools -i cannot create new objects on vSAN). VM is off so disk is not locked.
         const isVsanDs = vmConfig.disks[i].datastoreName.toLowerCase().includes('vsan')
         if (isVsanDs && esxiSshAvailable) {
-          await appendLog(jobId, `vSAN datastore detected — using vmkfstools clone instead of HTTPS download`, "info")
-          await downloadDiskViaSsh(i, vmConfig.disks[i], true)
+          await appendLog(jobId, `vSAN datastore detected — downloading via SSH dd (no vmkfstools clone needed, VM is off)`, "info")
+          await downloadDiskViaSsh(i, vmConfig.disks[i], false)
         } else {
           await downloadDisk(i, vmConfig.disks[i])
         }

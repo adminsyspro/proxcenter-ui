@@ -82,6 +82,14 @@ export const menuData = (t = (key) => key) => [
         permissions: ['admin.settings'],
         requiredFeature: 'microsegmentation'
       },
+      // Network Flows — hidden from menu, accessible via /operations/network-flows
+      // {
+      //   label: t('navigation.networkFlows'),
+      //   icon: 'ri-flow-chart',
+      //   href: '/operations/network-flows',
+      //   permissions: ['vm.view'],
+      //   requiredFeature: 'firewall'
+      // },
       {
         label: t('navigation.resources'),
         icon: 'ri-pie-chart-fill',

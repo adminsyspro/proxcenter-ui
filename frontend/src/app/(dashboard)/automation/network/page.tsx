@@ -236,6 +236,7 @@ export default function NetworkAutomationPage() {
               reload={loadFirewallData}
             />
           )}
+
         </Card>
       </Box>
     </EnterpriseGuard>

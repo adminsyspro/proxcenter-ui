@@ -180,7 +180,8 @@
     "reports": "Berichte",
     "topology": "Topologie",
     "compliance": "Compliance",
-    "changes": "Änderungen"
+    "changes": "Änderungen",
+    "networkFlows": "Netzwerk-Flows"
   },
   "navbar": {
     "language": "Sprache",
@@ -5097,5 +5098,35 @@
     "en": "Englisch",
     "de": "Deutsch",
     "zh-CN": "Chinesisch (vereinfacht)"
+  },
+  "networkFlows": {
+    "tabFlows": "Flows",
+    "title": "Netzwerk-Flows",
+    "setupDescription": "Aktivieren Sie sFlow-Überwachung, um den Netzwerkverkehr zwischen VMs zu visualisieren, Anomalien zu erkennen und die Bandbreitennutzung Ihrer Infrastruktur zu analysieren.",
+    "configuring": "sFlow wird konfiguriert...",
+    "enableSflow": "sFlow-Überwachung aktivieren",
+    "requiresOvs": "Erfordert Open vSwitch (OVS) auf Ihren Proxmox-Nodes. sFlow-Agents werden automatisch auf allen OVS-Bridges konfiguriert.",
+    "overview": "Übersicht",
+    "dependencyGraph": "Abhängigkeitsgraph",
+    "timeSeries": "Zeitreihen",
+    "security": "Sicherheit",
+    "infrastructure": "Infrastruktur",
+    "flowRate": "Flow-Rate",
+    "flowsPerSecond": "Flows/s",
+    "activeVms": "Aktive VMs",
+    "withTraffic": "mit Verkehr",
+    "totalBandwidth": "Gesamtbandbreite",
+    "currentWindow": "aktuelles Fenster",
+    "agents": "Agents",
+    "sflowAgents": "sFlow-Agents",
+    "topTalkers": "Größte Verbraucher",
+    "topPairs": "Top-Paare",
+    "topPorts": "Top-Ports",
+    "waitingForData": "Warten auf sFlow-Daten...",
+    "graphComingSoon": "Abhängigkeitsgraph — kommt in Phase 2",
+    "timeSeriesComingSoon": "Zeitreihenanalyse — kommt in Phase 2",
+    "securityComingSoon": "Sicherheit & Anomalieerkennung — kommt in Phase 3",
+    "infraComingSoon": "Infrastruktur-Verkehrsansicht — kommt in Phase 4",
+    "subtitle": "sFlow-Überwachung und Verkehrsanalyse"
   }
 }

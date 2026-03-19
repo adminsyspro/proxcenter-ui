@@ -86,8 +86,7 @@
     "node": "Node",
     "done": "Done",
     "tags": "Tags",
-    "created": "Created",
-    "close": "Close"
+    "created": "Created"
   },
   "whatsNew": {
     "title": "What's New"
@@ -185,7 +184,8 @@
     "reports": "Reports",
     "topology": "Topology",
     "compliance": "Compliance",
-    "changes": "Change Tracking"
+    "changes": "Change Tracking",
+    "networkFlows": "Network Flows"
   },
   "navbar": {
     "language": "Language",
@@ -455,7 +455,7 @@
     "pbsSize": "Size",
     "pbsEncrypted": "Encrypted",
     "pbsVerifyState": "Verify State",
-    "pbsVerified": "Verified OK",
+    "pbsVerified": "Verified",
     "pbsNotVerifiedYet": "Not verified",
     "pbsEncryptedYes": "Encrypted",
     "pbsEncryptedNo": "Not encrypted",
@@ -603,7 +603,6 @@
     "pbsVms": "VMs",
     "pbsContainers": "Containers",
     "pbsTotalSnapshots": "Total Snapshots",
-    "pbsVerified": "Verified",
     "pbsStorageUsage": "Storage Usage",
     "pbsDatastoreStatistics": "Datastore Statistics",
     "pbsTimeWeek": "7d",
@@ -625,7 +624,6 @@
     "pbsAllVerified": "All verified",
     "pbsNotVerified": "Not verified",
     "pbsPartiallyVerified": "{count}/{total} verified",
-    "backupMode": "Mode",
     "backupCompression": "Compression",
     "backupGzip": "GZIP",
     "pveFailoverError": "PVE failed: {error}. Falling back to PBS...",
@@ -1555,7 +1553,7 @@
     "apiTokenSecret": "Token Secret",
     "apiTokenSecretHelper": "The secret value of your API token",
     "apiTokenHelper": "Format: user@realm!tokenid=secret",
-    "apiTokenHelperEdit": "Leave empty to keep current token",
+    "apiTokenHelperEdit": "Leave empty to keep the current token",
     "pbsApiTokenHelper": "Format: user@realm!tokenid:secret (PBS uses : not =)",
     "pvePrivsepHint": "Ensure your API token was created with --privsep 0, or has explicit permissions assigned to the token itself (not just the user).",
     "tokenSetupGuide": "How to create an API token",
@@ -1731,7 +1729,6 @@
     "xcpngComingSoonDesc": "Support for XCP-ng / XenServer hypervisors is coming soon. You will be able to connect XCP-ng hosts and migrate VMs to Proxmox.",
     "nutanixComingSoonDesc": "Support for Nutanix AHV hypervisors is coming soon. You will be able to connect Nutanix clusters and migrate VMs to Proxmox.",
     "errorPasswordRequired": "Password is required",
-    "apiTokenHelperEdit": "Leave empty to keep the current token",
     "errorNameRequired": "Name is required",
     "errorUrlRequired": "URL is required",
     "errorTokenRequired": "API token is required",
@@ -3826,7 +3823,7 @@
     "excludedFromDRS": "Excluded from DRS",
     "metricsSmoothing": "Metrics smoothing",
     "metricsSmoothingDesc": "DRS uses Exponential Weighted Moving Average (EWMA) over the last 30 minutes of collected metrics to smooth out transient CPU and memory spikes. This prevents unnecessary migrations triggered by short-lived load bursts.",
-    "metricsSmoothingFormula": "S(t) = \u03b1 \u00d7 X(t) + (1-\u03b1) \u00d7 S(t-1), \u03b1 = 0.3",
+    "metricsSmoothingFormula": "S(t) = α × X(t) + (1-α) × S(t-1), α = 0.3",
     "metricsSmoothingFormulaDesc": "Each new data point contributes 30% to the smoothed value. Recent measurements have more weight, but older values still dampen sudden changes."
   },
   "usersPage": {
@@ -5105,5 +5102,35 @@
     "en": "English",
     "de": "German",
     "zh-CN": "Chinese (Simplified)"
+  },
+  "networkFlows": {
+    "tabFlows": "Flows",
+    "title": "Network Flows",
+    "setupDescription": "Enable sFlow monitoring to visualize network traffic between VMs, detect anomalies, and analyze bandwidth usage across your infrastructure.",
+    "configuring": "Configuring sFlow...",
+    "enableSflow": "Enable sFlow Monitoring",
+    "requiresOvs": "Requires Open vSwitch (OVS) configured on your Proxmox nodes. sFlow agents will be automatically configured on all OVS bridges.",
+    "overview": "Overview",
+    "dependencyGraph": "Dependency Graph",
+    "timeSeries": "Time Series",
+    "security": "Security",
+    "infrastructure": "Infrastructure",
+    "flowRate": "Flow Rate",
+    "flowsPerSecond": "flows/s",
+    "activeVms": "Active VMs",
+    "withTraffic": "with traffic",
+    "totalBandwidth": "Total Bandwidth",
+    "currentWindow": "current window",
+    "agents": "Agents",
+    "sflowAgents": "sFlow agents",
+    "topTalkers": "Top Talkers",
+    "topPairs": "Top Pairs",
+    "topPorts": "Top Ports",
+    "waitingForData": "Waiting for sFlow data...",
+    "graphComingSoon": "Dependency graph — coming in Phase 2",
+    "timeSeriesComingSoon": "Time series analysis — coming in Phase 2",
+    "securityComingSoon": "Security & anomaly detection — coming in Phase 3",
+    "infraComingSoon": "Infrastructure traffic view — coming in Phase 4",
+    "subtitle": "sFlow monitoring and traffic analysis"
   }
 }

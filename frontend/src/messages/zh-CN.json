@@ -184,7 +184,8 @@
     "reports": "报告",
     "topology": "拓扑",
     "compliance": "合规性",
-    "changes": "变更追踪"
+    "changes": "变更追踪",
+    "networkFlows": "网络流量"
   },
   "navbar": {
     "language": "语言",
@@ -5101,5 +5102,35 @@
     "en": "英语",
     "de": "德语",
     "zh-CN": "简体中文"
+  },
+  "networkFlows": {
+    "tabFlows": "流量",
+    "title": "网络流量",
+    "setupDescription": "启用 sFlow 监控，可视化 VM 之间的网络流量，检测异常并分析基础设施的带宽使用情况。",
+    "configuring": "正在配置 sFlow...",
+    "enableSflow": "启用 sFlow 监控",
+    "requiresOvs": "需要在 Proxmox 节点上配置 Open vSwitch (OVS)。sFlow 代理将自动配置在所有 OVS 网桥上。",
+    "overview": "概览",
+    "dependencyGraph": "依赖关系图",
+    "timeSeries": "时间序列",
+    "security": "安全",
+    "infrastructure": "基础设施",
+    "flowRate": "流量速率",
+    "flowsPerSecond": "流/秒",
+    "activeVms": "活跃 VM",
+    "withTraffic": "有流量",
+    "totalBandwidth": "总带宽",
+    "currentWindow": "当前窗口",
+    "agents": "代理",
+    "sflowAgents": "sFlow 代理",
+    "topTalkers": "最大消费者",
+    "topPairs": "最大配对",
+    "topPorts": "最大端口",
+    "waitingForData": "等待 sFlow 数据...",
+    "graphComingSoon": "依赖关系图 — 第 2 阶段",
+    "timeSeriesComingSoon": "时间序列分析 — 第 2 阶段",
+    "securityComingSoon": "安全与异常检测 — 第 3 阶段",
+    "infraComingSoon": "基础设施流量视图 — 第 4 阶段",
+    "subtitle": "sFlow 监控和流量分析"
   }
 }

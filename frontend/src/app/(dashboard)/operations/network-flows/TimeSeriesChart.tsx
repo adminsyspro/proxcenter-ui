@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Legend,
-  PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts'
 
 import {
@@ -255,6 +254,46 @@ export default function TimeSeriesChart() {
         </Box>
       )}
 
+      {/* KPI Cards — shown above the chart when data is available */}
+      {selectedVMs.length > 0 && hasData && (() => {
+        const totalIn = selectedVMs.length === 1
+          ? singleData.reduce((s, p) => s + (p.bytes_in || 0), 0)
+          : multiData.reduce((s, vm) => s + vm.points.reduce((ss, p) => ss + (p.bytes_in || 0), 0), 0)
+        const totalOut = selectedVMs.length === 1
+          ? singleData.reduce((s, p) => s + (p.bytes_out || 0), 0)
+          : multiData.reduce((s, vm) => s + vm.points.reduce((ss, p) => ss + (p.bytes_out || 0), 0), 0)
+        const dataPoints = selectedVMs.length === 1 ? singleData.length : mergedMultiData.length
+
+        return (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 2 }}>
+            <Card variant="outlined" sx={{ borderRadius: 2 }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>↓ {t('networkFlows.totalIn')}</Typography>
+                <Typography variant="h6" fontWeight={800} color="success.main">{formatBytes(totalIn)}</Typography>
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ borderRadius: 2 }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>↑ {t('networkFlows.totalOut')}</Typography>
+                <Typography variant="h6" fontWeight={800} color="warning.main">{formatBytes(totalOut)}</Typography>
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ borderRadius: 2 }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>{t('networkFlows.totalTraffic')}</Typography>
+                <Typography variant="h6" fontWeight={800} color="primary">{formatBytes(totalIn + totalOut)}</Typography>
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ borderRadius: 2 }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>{t('networkFlows.dataPoints')}</Typography>
+                <Typography variant="h6" fontWeight={800} color="text.primary">{dataPoints}</Typography>
+              </CardContent>
+            </Card>
+          </Box>
+        )
+      })()}
+
       {/* Single VM Chart — In/Out */}
       {selectedVMs.length === 1 && singleData.length > 0 && (
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -342,140 +381,6 @@ export default function TimeSeriesChart() {
         </Card>
       )}
 
-      {/* Additional visuals — shown when data is available */}
-      {selectedVMs.length > 0 && hasData && (() => {
-        // Compute stats for the selected VM(s)
-        const totalIn = selectedVMs.length === 1
-          ? singleData.reduce((s, p) => s + (p.bytes_in || 0), 0)
-          : multiData.reduce((s, vm) => s + vm.points.reduce((ss, p) => ss + (p.bytes_in || 0), 0), 0)
-        const totalOut = selectedVMs.length === 1
-          ? singleData.reduce((s, p) => s + (p.bytes_out || 0), 0)
-          : multiData.reduce((s, vm) => s + vm.points.reduce((ss, p) => ss + (p.bytes_out || 0), 0), 0)
-        const totalPackets = selectedVMs.length === 1
-          ? singleData.reduce((s, p) => s + (p.packets || 0), 0)
-          : multiData.reduce((s, vm) => s + vm.points.reduce((ss, p) => ss + (p.packets || 0), 0), 0)
-        const dataPoints = selectedVMs.length === 1 ? singleData.length : mergedMultiData.length
-
-        // In/Out donut data
-        const inOutData = [
-          { name: '↓ Inbound', value: totalIn, color: theme.palette.success.main },
-          { name: '↑ Outbound', value: totalOut, color: theme.palette.warning.main },
-        ]
-
-        // Per-VM donut data (for multi-VM)
-        const perVmData = multiData.map((vm, idx) => ({
-          name: vm.vm_name || `VM ${vm.vmid}`,
-          value: vm.points.reduce((s, p) => s + (p.bytes_in || 0) + (p.bytes_out || 0), 0),
-          color: VM_COLORS[idx % VM_COLORS.length],
-        }))
-
-        return (
-          <>
-            {/* KPI Cards */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 2 }}>
-              <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>↓ {t('networkFlows.totalIn')}</Typography>
-                  <Typography variant="h6" fontWeight={800} color="success.main">{formatBytes(totalIn)}</Typography>
-                </CardContent>
-              </Card>
-              <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>↑ {t('networkFlows.totalOut')}</Typography>
-                  <Typography variant="h6" fontWeight={800} color="warning.main">{formatBytes(totalOut)}</Typography>
-                </CardContent>
-              </Card>
-              <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>{t('networkFlows.totalTraffic')}</Typography>
-                  <Typography variant="h6" fontWeight={800} color="primary">{formatBytes(totalIn + totalOut)}</Typography>
-                </CardContent>
-              </Card>
-              <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>{t('networkFlows.dataPoints')}</Typography>
-                  <Typography variant="h6" fontWeight={800} color="text.primary">{dataPoints}</Typography>
-                </CardContent>
-              </Card>
-            </Box>
-
-            {/* Donuts row */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: selectedVMs.length > 1 ? '1fr 1fr' : '1fr' }, gap: 2 }}>
-              {/* In/Out Donut */}
-              <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-                    <i className="ri-donut-chart-line" style={{ fontSize: 16, marginRight: 6 }} />
-                    {t('networkFlows.inOutRatio')}
-                  </Typography>
-                  <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={inOutData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
-                          dataKey="value"
-                          strokeWidth={2}
-                          stroke={isDark ? '#0f172a' : '#ffffff'}
-                        >
-                          {inOutData.map((entry, idx) => (
-                            <Cell key={idx} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip
-                          formatter={(v: number, name: string) => [formatBytes(v), name]}
-                          contentStyle={{ backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, fontSize: 12, borderRadius: 8 }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </Box>
-                </CardContent>
-              </Card>
-
-              {/* Per-VM Donut (only in multi-VM mode) */}
-              {selectedVMs.length > 1 && (
-                <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-                      <i className="ri-pie-chart-line" style={{ fontSize: 16, marginRight: 6 }} />
-                      {t('networkFlows.trafficByVm')}
-                    </Typography>
-                    <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={perVmData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
-                            dataKey="value"
-                            strokeWidth={2}
-                            stroke={isDark ? '#0f172a' : '#ffffff'}
-                          >
-                            {perVmData.map((entry, idx) => (
-                              <Cell key={idx} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip
-                            formatter={(v: number, name: string) => [formatBytes(v), name]}
-                            contentStyle={{ backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, fontSize: 12, borderRadius: 8 }}
-                          />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  </CardContent>
-                </Card>
-              )}
-            </Box>
-          </>
-        )
-      })()}
 
       {/* Empty state */}
       {selectedVMs.length > 0 && !loading && !hasData && !error && (

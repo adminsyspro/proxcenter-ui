@@ -1731,6 +1731,115 @@ export function demoResponse(req: Request): NextResponse | Response | null {
     return buildInventorySSE()
   }
 
+  // --- sFlow mock data ---
+  if (cleanPath === '/api/v1/orchestrator/sflow') {
+    const endpoint = urlObj.searchParams.get('endpoint') || 'status'
+    const now = Math.floor(Date.now() / 1000)
+    const demoNodes = ['pve-node-01', 'pve-node-02', 'pve-node-03']
+    const demoIPs = ['10.10.10.1', '10.10.10.2', '10.10.10.3', '10.10.10.10', '10.10.10.20', '10.10.10.30', '192.168.1.100', '192.168.1.200']
+
+    if (endpoint === 'status') {
+      return NextResponse.json({
+        enabled: true, listen_address: '0.0.0.0:6343',
+        agents: demoNodes.map((node, i) => ({
+          agent_ip: `10.10.10.${i + 1}`, node, last_seen: new Date().toISOString(),
+          flow_rate: 50 + Math.random() * 200, sample_count: 10000 + Math.floor(Math.random() * 50000), active: true,
+        })),
+        total_flows: 150000, flow_rate: 180 + Math.random() * 100, active_vms: 12, uptime_seconds: 345600,
+      }, { headers: demoHeaders })
+    }
+
+    if (endpoint === 'top-talkers') {
+      const vms = [
+        { vmid: 100, vm_name: 'web-prod-01', node: 'pve-node-01' },
+        { vmid: 101, vm_name: 'api-gateway', node: 'pve-node-01' },
+        { vmid: 200, vm_name: 'db-primary', node: 'pve-node-02' },
+        { vmid: 201, vm_name: 'db-replica', node: 'pve-node-02' },
+        { vmid: 300, vm_name: 'monitoring', node: 'pve-node-03' },
+        { vmid: 301, vm_name: 'backup-srv', node: 'pve-node-03' },
+        { vmid: 102, vm_name: 'web-prod-02', node: 'pve-node-01' },
+        { vmid: 302, vm_name: 'ci-runner', node: 'pve-node-03' },
+      ]
+      return NextResponse.json(vms.map(vm => ({
+        ...vm, bytes_in: Math.floor(Math.random() * 5e9 + 1e8), bytes_out: Math.floor(Math.random() * 1e9 + 1e7), packets: Math.floor(Math.random() * 1e6),
+      })), { headers: demoHeaders })
+    }
+
+    if (endpoint === 'top-ports') {
+      const portList = [
+        { port: 443, protocol: 'TCP', service: 'HTTPS' },
+        { port: 80, protocol: 'TCP', service: 'HTTP' },
+        { port: 22, protocol: 'TCP', service: 'SSH' },
+        { port: 5432, protocol: 'TCP', service: 'PostgreSQL' },
+        { port: 8006, protocol: 'TCP', service: 'PVE API' },
+        { port: 53, protocol: 'UDP', service: 'DNS' },
+        { port: 3306, protocol: 'TCP', service: 'MySQL' },
+        { port: 9090, protocol: 'TCP', service: 'Prometheus' },
+      ]
+      const total = portList.length
+      return NextResponse.json(portList.map((p, i) => {
+        const bytes = Math.floor((total - i) * 1e9 * Math.random() + 5e7)
+        return { ...p, bytes, packets: Math.floor(bytes / 1000), percent: (total - i) * 10 + Math.random() * 5 }
+      }), { headers: demoHeaders })
+    }
+
+    if (endpoint === 'ip-pairs') {
+      const pairs = []
+      for (let i = 0; i < 25; i++) {
+        const src = demoIPs[Math.floor(Math.random() * demoIPs.length)]
+        let dst = demoIPs[Math.floor(Math.random() * demoIPs.length)]
+        while (dst === src) dst = demoIPs[Math.floor(Math.random() * demoIPs.length)]
+        const protos = [{ p: 'TCP', port: 443 }, { p: 'TCP', port: 22 }, { p: 'TCP', port: 5432 }, { p: 'UDP', port: 53 }, { p: 'TCP', port: 8006 }, { p: 'TCP', port: 80 }]
+        const proto = protos[Math.floor(Math.random() * protos.length)]
+        pairs.push({ src_ip: src, dst_ip: dst, bytes: Math.floor(Math.random() * 2e9 + 1e6), packets: Math.floor(Math.random() * 500000), protocol: proto.p, dst_port: proto.port })
+      }
+      pairs.sort((a, b) => b.bytes - a.bytes)
+      return NextResponse.json(pairs, { headers: demoHeaders })
+    }
+
+    if (endpoint === 'timeseries/vm') {
+      const points = Array.from({ length: 60 }, (_, i) => ({
+        time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 5e7 + 1e6), bytes_out: Math.floor(Math.random() * 1e7 + 5e5), packets: Math.floor(Math.random() * 50000),
+      }))
+      return NextResponse.json(points, { headers: demoHeaders })
+    }
+
+    if (endpoint === 'timeseries/all-vms') {
+      return NextResponse.json([
+        { vmid: 100, vm_name: 'web-prod-01', points: Array.from({ length: 60 }, (_, i) => ({ time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 3e7), bytes_out: Math.floor(Math.random() * 5e6) })) },
+        { vmid: 200, vm_name: 'db-primary', points: Array.from({ length: 60 }, (_, i) => ({ time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 8e7), bytes_out: Math.floor(Math.random() * 2e7) })) },
+      ], { headers: demoHeaders })
+    }
+
+    if (endpoint === 'timeseries/ip') {
+      const points = Array.from({ length: 60 }, (_, i) => ({
+        time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 2e7 + 5e5),
+      }))
+      return NextResponse.json(points, { headers: demoHeaders })
+    }
+
+    if (endpoint === 'agents') {
+      return NextResponse.json(demoNodes.map((node, i) => ({
+        agent_ip: `10.10.10.${i + 1}`, node, last_seen: new Date().toISOString(),
+        flow_rate: 50 + Math.random() * 200, sample_count: 10000 + Math.floor(Math.random() * 50000), active: true,
+      })), { headers: demoHeaders })
+    }
+
+    // Default: empty array
+    return NextResponse.json([], { headers: demoHeaders })
+  }
+
+  // sFlow agents (SSH-based)
+  if (cleanPath === '/api/v1/orchestrator/sflow/agents') {
+    return NextResponse.json({
+      data: [
+        { node: 'pve-node-01', ip: '10.10.10.1', connectionId: 'demo-pve-cluster-001', connectionName: 'PVE-CLUSTER-DEMO', online: true, hasOvs: true, ovsVersion: '3.1.0', sflowConfigured: true, sflowTarget: '10.10.10.254:6343', sflowSampling: 512, bridges: ['vmbr0'] },
+        { node: 'pve-node-02', ip: '10.10.10.2', connectionId: 'demo-pve-cluster-001', connectionName: 'PVE-CLUSTER-DEMO', online: true, hasOvs: true, ovsVersion: '3.1.0', sflowConfigured: true, sflowTarget: '10.10.10.254:6343', sflowSampling: 512, bridges: ['vmbr0'] },
+        { node: 'pve-node-03', ip: '10.10.10.3', connectionId: 'demo-pve-cluster-001', connectionName: 'PVE-CLUSTER-DEMO', online: true, hasOvs: true, ovsVersion: '3.1.0', sflowConfigured: true, sflowTarget: '10.10.10.254:6343', sflowSampling: 512, bridges: ['vmbr0'] },
+      ],
+    }, { headers: demoHeaders })
+  }
+
   // --- Dynamic RRD endpoints ---
   if (cleanPath.match(/\/api\/v1\/connections\/[^/]+\/rrd/) || cleanPath.match(/\/api\/v1\/connections\/[^/]+\/ceph\/rrd/)) {
     const timeframe = urlObj.searchParams.get('timeframe') || 'hour'

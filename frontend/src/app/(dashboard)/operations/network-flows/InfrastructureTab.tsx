@@ -38,15 +38,6 @@ interface TopPort {
   percent: number
 }
 
-interface IPPair {
-  src_ip: string
-  dst_ip: string
-  bytes: number
-  packets: number
-  protocol: string
-  dst_port: number
-}
-
 function portToService(port: number, protocol: string): string {
   const services: Record<number, string> = {
     22: 'SSH', 53: 'DNS', 80: 'HTTP', 443: 'HTTPS', 3306: 'MySQL',
@@ -56,12 +47,6 @@ function portToService(port: number, protocol: string): string {
     9090: 'Prometheus', 9100: 'Node Exp', 5044: 'Logstash',
   }
   return services[port] || `${port}/${protocol}`
-}
-
-// Ceph-related ports
-const CEPH_PORTS = new Set([6789, 3300, 6800, 6801, 6802, 6803, 6804, 6805, 6806, 6807, 6808, 6809, 6810])
-function isCephPort(port: number): boolean {
-  return CEPH_PORTS.has(port) || (port >= 6800 && port <= 7300)
 }
 
 async function fetchSFlow(endpoint: string, params?: Record<string, string>) {
@@ -81,7 +66,6 @@ export default function InfrastructureTab() {
 
   const [talkers, setTalkers] = useState<TopTalker[]>([])
   const [ports, setPorts] = useState<TopPort[]>([])
-  const [pairs, setPairs] = useState<IPPair[]>([])
   const [nodeConnectionMap, setNodeConnectionMap] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
 
@@ -89,12 +73,10 @@ export default function InfrastructureTab() {
     Promise.all([
       fetchSFlow('top-talkers', { n: '50' }),
       fetchSFlow('top-ports', { n: '15' }),
-      fetchSFlow('ip-pairs', { n: '100' }),
       fetch('/api/v1/orchestrator/sflow/agents').then(r => r.ok ? r.json() : { data: [] }),
-    ]).then(([talkersData, portsData, pairsData, agentsData]) => {
+    ]).then(([talkersData, portsData, agentsData]) => {
       setTalkers(Array.isArray(talkersData) ? talkersData : [])
       setPorts(Array.isArray(portsData) ? portsData : [])
-      setPairs(Array.isArray(pairsData) ? pairsData : [])
       // Build node→connectionName mapping
       const map = new Map<string, string>()
       for (const a of (agentsData?.data || [])) {
@@ -107,11 +89,9 @@ export default function InfrastructureTab() {
       Promise.all([
         fetchSFlow('top-talkers', { n: '50' }),
         fetchSFlow('top-ports', { n: '15' }),
-        fetchSFlow('ip-pairs', { n: '100' }),
-      ]).then(([talkersData, portsData, pairsData]) => {
+      ]).then(([talkersData, portsData]) => {
         setTalkers(Array.isArray(talkersData) ? talkersData : [])
         setPorts(Array.isArray(portsData) ? portsData : [])
-        setPairs(Array.isArray(pairsData) ? pairsData : [])
       })
     }, 15000)
     return () => clearInterval(interval)
@@ -159,19 +139,6 @@ export default function InfrastructureTab() {
     }
     return grouped
   }, [talkers, nodeConnectionMap])
-
-  // Ceph traffic analysis
-  const cephData = useMemo(() => {
-    const cephPorts = ports.filter(p => isCephPort(p.port))
-    const cephPairs = pairs.filter(p => isCephPort(p.dst_port))
-    const totalCephBytes = cephPorts.reduce((s, p) => s + p.bytes, 0)
-    const cephServices = cephPorts.map(p => ({
-      name: portToService(p.port, p.protocol),
-      port: p.port,
-      bytes: p.bytes,
-    }))
-    return { ports: cephPorts, pairs: cephPairs, totalBytes: totalCephBytes, services: cephServices }
-  }, [ports, pairs])
 
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress size={32} /></Box>
@@ -301,74 +268,6 @@ export default function InfrastructureTab() {
         </Card>
       )}
 
-      {/* Ceph Traffic */}
-      {cephData.totalBytes > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-              <i className="ri-database-2-line" style={{ fontSize: 16, marginRight: 6, color: theme.palette.error.main }} />
-              Ceph Traffic
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2, mb: 2 }}>
-              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover', textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">Total Ceph Traffic</Typography>
-                <Typography variant="h6" fontWeight={700} fontSize={16}>{formatBytes(cephData.totalBytes)}</Typography>
-              </Box>
-              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover', textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">Active Services</Typography>
-                <Typography variant="h6" fontWeight={700} fontSize={16}>{cephData.services.length}</Typography>
-              </Box>
-              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover', textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">IP Pairs</Typography>
-                <Typography variant="h6" fontWeight={700} fontSize={16}>{cephData.pairs.length}</Typography>
-              </Box>
-            </Box>
-
-            {/* Ceph services breakdown */}
-            {cephData.services.length > 0 && (
-              <Box>
-                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                  Service Breakdown
-                </Typography>
-                {cephData.services.map((svc, i) => (
-                  <Box key={i} sx={{ mb: 0.75 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                      <Typography variant="caption" fontSize="0.75rem">
-                        <Chip label={svc.name} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', mr: 1 }} />
-                        Port {svc.port}
-                      </Typography>
-                      <Typography variant="caption" fontFamily="JetBrains Mono, monospace" fontSize="0.7rem">{formatBytes(svc.bytes)}</Typography>
-                    </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={cephData.totalBytes > 0 ? (svc.bytes / cephData.totalBytes) * 100 : 0}
-                      sx={{ height: 5, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { borderRadius: 3, bgcolor: theme.palette.error.main } }}
-                    />
-                  </Box>
-                ))}
-              </Box>
-            )}
-
-            {/* Top Ceph IP pairs */}
-            {cephData.pairs.length > 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                  Top Ceph Flows
-                </Typography>
-                {cephData.pairs.slice(0, 8).map((p, i) => (
-                  <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, borderBottom: i < Math.min(cephData.pairs.length, 8) - 1 ? `1px solid ${theme.palette.divider}` : 'none' }}>
-                    <Typography variant="caption" fontFamily="JetBrains Mono, monospace" fontSize="0.7rem" sx={{ flex: 1 }}>{p.src_ip}</Typography>
-                    <i className="ri-arrow-right-line" style={{ fontSize: 12, opacity: 0.4 }} />
-                    <Typography variant="caption" fontFamily="JetBrains Mono, monospace" fontSize="0.7rem" sx={{ flex: 1 }}>{p.dst_ip}</Typography>
-                    <Chip label={portToService(p.dst_port, p.protocol)} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
-                    <Typography variant="caption" fontFamily="JetBrains Mono, monospace" fontSize="0.7rem" fontWeight={600}>{formatBytes(p.bytes)}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </Box>
   )
 }

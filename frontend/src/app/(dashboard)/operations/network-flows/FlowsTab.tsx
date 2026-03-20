@@ -723,6 +723,8 @@ export default function FlowsTab() {
                           borderColor: theme.palette.divider,
                           color: theme.palette.text.primary,
                         }}
+                        itemStyle={{ color: theme.palette.text.primary }}
+                        labelStyle={{ color: theme.palette.text.secondary }}
                       />
                       <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20} onClick={(_data: any, idx: number) => handlePortClick(topPorts[idx])} style={{ cursor: 'pointer' }}>
                         {topPorts.map((_, idx) => (

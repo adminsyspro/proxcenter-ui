@@ -1,5 +1,18 @@
 [
   {
+    "version": "2026-03-20",
+    "title": "Network Flows — sFlow Monitoring",
+    "items": [
+      { "type": "new", "text": "Real-time network traffic visualization powered by sFlow and Open vSwitch" },
+      { "type": "new", "text": "Sankey flow diagram — interactive Source → Application → Destination visualization with animated flows" },
+      { "type": "new", "text": "Time series bandwidth charts per VM with InfluxDB storage" },
+      { "type": "new", "text": "Top Talkers, Top Pairs, and Top Ports overview with click-through details" },
+      { "type": "new", "text": "sFlow agent management — configure OVS sFlow directly from the UI" },
+      { "type": "new", "text": "Configurable sampling rate with recommendations based on network speed" },
+      { "type": "new", "text": "InfluxDB integration for historical time series data" }
+    ]
+  },
+  {
     "version": "2026-03-19",
     "title": "German Language Support",
     "items": [

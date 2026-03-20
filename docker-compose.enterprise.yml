@@ -54,6 +54,8 @@ services:
     image: ghcr.io/adminsyspro/proxcenter-orchestrator:${VERSION:-latest}
     container_name: proxcenter-orchestrator
     restart: unless-stopped
+    ports:
+      - "6343:6343/udp"  # sFlow collector (receives from OVS agents)
     environment:
       - APP_SECRET=${APP_SECRET}
       - LICENSE_KEY=${LICENSE_KEY:-}
@@ -61,6 +63,13 @@ services:
       - LOG_LEVEL=info
       - LOG_FORMAT=json
       - TZ=${TZ:-Europe/Paris}
+      # sFlow + InfluxDB (auto-configured with defaults)
+      - PROXCENTER_SFLOW_ENABLED=true
+      - PROXCENTER_SFLOW_LISTEN_ADDRESS=0.0.0.0:6343
+      - PROXCENTER_SFLOW_INFLUXDB_URL=http://influxdb:8086
+      - PROXCENTER_SFLOW_INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-proxcenter-influx-token}
+      - PROXCENTER_SFLOW_INFLUXDB_ORG=proxcenter
+      - PROXCENTER_SFLOW_INFLUXDB_BUCKET=sflow
       #
       # Docker Secrets support (Swarm / file-based):
       # - APP_SECRET_FILE=/run/secrets/app_secret
@@ -75,8 +84,37 @@ services:
     #   - license_key
     networks:
       - proxcenter
+    depends_on:
+      influxdb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ========================================
+  # InfluxDB (Time Series for sFlow)
+  # ========================================
+  influxdb:
+    image: influxdb:2.7
+    container_name: proxcenter-influxdb
+    restart: unless-stopped
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=proxcenter
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD:-proxcenter-sflow}
+      - DOCKER_INFLUXDB_INIT_ORG=proxcenter
+      - DOCKER_INFLUXDB_INIT_BUCKET=sflow
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-proxcenter-influx-token}
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - proxcenter
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -111,3 +149,5 @@ volumes:
   orchestrator_data:
     name: orchestrator_data
     external: true
+  influxdb_data:
+    name: proxcenter_influxdb_data

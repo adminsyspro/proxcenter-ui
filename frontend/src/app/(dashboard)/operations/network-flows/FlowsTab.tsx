@@ -39,7 +39,6 @@ import dynamic from 'next/dynamic'
 
 const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 const TimeSeriesChart = dynamic(() => import('./TimeSeriesChart'), { ssr: false })
-const SecurityTab = dynamic(() => import('./SecurityTab'), { ssr: false })
 const InfrastructureTab = dynamic(() => import('./InfrastructureTab'), { ssr: false })
 
 
@@ -355,12 +354,6 @@ export default function FlowsTab() {
           sx={{ textTransform: 'none', fontSize: 13 }}
         />
         <Tab
-          icon={<i className="ri-shield-cross-line" style={{ fontSize: 16 }} />}
-          iconPosition="start"
-          label={t('networkFlows.security')}
-          sx={{ textTransform: 'none', fontSize: 13 }}
-        />
-        <Tab
           icon={<i className="ri-server-line" style={{ fontSize: 16 }} />}
           iconPosition="start"
           label={t('networkFlows.infrastructure')}
@@ -415,6 +408,9 @@ export default function FlowsTab() {
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>sFlow</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Target</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Sampling</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Flow Rate</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Samples</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Last Seen</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}></TableCell>
                         </TableRow>
                       </TableHead>
@@ -425,7 +421,7 @@ export default function FlowsTab() {
                           return [
                             multipleConnections && (
                               <TableRow key={`header-${connName}`}>
-                                <TableCell colSpan={7} sx={{ py: 0.5, border: 0, bgcolor: 'action.hover' }}>
+                                <TableCell colSpan={10} sx={{ py: 0.5, border: 0, bgcolor: 'action.hover' }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-database-2-line" style={{ fontSize: 13, opacity: 0.6 }} />
                                     <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -471,6 +467,20 @@ export default function FlowsTab() {
                                 <TableCell sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
                                   {agent.sflowSampling ? `1:${agent.sflowSampling}` : '—'}
                                 </TableCell>
+                                {(() => {
+                                  const sflowAgent = status?.agents?.find(a => a.agent_ip === agent.ip)
+                                  return (<>
+                                    <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
+                                      {sflowAgent ? `${sflowAgent.flow_rate.toFixed(1)} f/s` : '—'}
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
+                                      {sflowAgent ? sflowAgent.sample_count.toLocaleString() : '—'}
+                                    </TableCell>
+                                    <TableCell sx={{ py: 0.75, fontSize: '0.75rem', color: 'text.secondary' }}>
+                                      {sflowAgent?.last_seen ? new Date(sflowAgent.last_seen).toLocaleTimeString() : '—'}
+                                    </TableCell>
+                                  </>)
+                                })()}
                                 <TableCell sx={{ py: 0.75 }}>
                                   {agent.hasOvs && (
                                     <MuiTooltip title={agent.sflowConfigured ? t('networkFlows.reconfigure') : t('networkFlows.configure')}>
@@ -737,13 +747,8 @@ export default function FlowsTab() {
         <TimeSeriesChart />
       )}
 
-      {/* Security sub-tab */}
-      {subTab === 3 && (
-        <SecurityTab />
-      )}
-
       {/* Infrastructure sub-tab */}
-      {subTab === 4 && (
+      {subTab === 3 && (
         <InfrastructureTab />
       )}
 

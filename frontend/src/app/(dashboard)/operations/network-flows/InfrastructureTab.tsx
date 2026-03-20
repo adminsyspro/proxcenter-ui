@@ -14,12 +14,6 @@ import {
   Chip,
   CircularProgress,
   LinearProgress,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -44,15 +38,6 @@ interface TopPort {
   percent: number
 }
 
-interface SFlowStatus {
-  enabled: boolean
-  agents: Array<{ agent_ip: string; node: string; last_seen: string; flow_rate: number; sample_count: number; active: boolean }>
-  total_flows: number
-  flow_rate: number
-  active_vms: number
-  uptime_seconds: number
-}
-
 // Well-known port → service name
 function portToService(port: number, protocol: string): string {
   const services: Record<number, string> = {
@@ -72,15 +57,6 @@ async function fetchSFlow(endpoint: string, params?: Record<string, string>) {
   return res.json()
 }
 
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}d ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
-}
-
 const NODE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6']
 const SERVICE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1']
 
@@ -91,29 +67,24 @@ export default function InfrastructureTab() {
 
   const [talkers, setTalkers] = useState<TopTalker[]>([])
   const [ports, setPorts] = useState<TopPort[]>([])
-  const [status, setStatus] = useState<SFlowStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       fetchSFlow('top-talkers', { n: '50' }),
       fetchSFlow('top-ports', { n: '15' }),
-      fetchSFlow('status'),
-    ]).then(([talkersData, portsData, statusData]) => {
+    ]).then(([talkersData, portsData]) => {
       setTalkers(Array.isArray(talkersData) ? talkersData : [])
       setPorts(Array.isArray(portsData) ? portsData : [])
-      setStatus(statusData)
     }).finally(() => setLoading(false))
 
     const interval = setInterval(() => {
       Promise.all([
         fetchSFlow('top-talkers', { n: '50' }),
         fetchSFlow('top-ports', { n: '15' }),
-        fetchSFlow('status'),
-      ]).then(([talkersData, portsData, statusData]) => {
+      ]).then(([talkersData, portsData]) => {
         setTalkers(Array.isArray(talkersData) ? talkersData : [])
         setPorts(Array.isArray(portsData) ? portsData : [])
-        setStatus(statusData)
       })
     }, 15000)
     return () => clearInterval(interval)
@@ -149,15 +120,11 @@ export default function InfrastructureTab() {
       if (!grouped.has(node)) grouped.set(node, [])
       grouped.get(node)!.push(t)
     }
-    // Sort VMs within each node
     for (const vms of grouped.values()) {
       vms.sort((a, b) => (b.bytes_in + b.bytes_out) - (a.bytes_in + a.bytes_out))
     }
     return grouped
   }, [talkers])
-
-  // Agents health
-  const agents = status?.agents || []
 
   if (loading) {
     return (
@@ -167,7 +134,7 @@ export default function InfrastructureTab() {
     )
   }
 
-  if (talkers.length === 0 && agents.length === 0) {
+  if (talkers.length === 0) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400, opacity: 0.5 }}>
         <Box sx={{ textAlign: 'center' }}>
@@ -178,54 +145,8 @@ export default function InfrastructureTab() {
     )
   }
 
-  const totalTraffic = nodeTraffic.reduce((s, n) => s + n.bytesIn + n.bytesOut, 0)
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-
-      {/* KPI Summary */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2 }}>
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-              <i className="ri-server-line" style={{ fontSize: 12, marginRight: 4 }} />
-              Nodes
-            </Typography>
-            <Typography variant="h5" fontWeight={800} color="primary">{nodeTraffic.length}</Typography>
-            <Typography variant="caption" color="text.secondary">with traffic</Typography>
-          </CardContent>
-        </Card>
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-              <i className="ri-radar-line" style={{ fontSize: 12, marginRight: 4 }} />
-              Agents
-            </Typography>
-            <Typography variant="h5" fontWeight={800} color="primary">{agents.filter(a => a.active).length}/{agents.length}</Typography>
-            <Typography variant="caption" color="text.secondary">active</Typography>
-          </CardContent>
-        </Card>
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-              <i className="ri-speed-line" style={{ fontSize: 12, marginRight: 4 }} />
-              Flow Rate
-            </Typography>
-            <Typography variant="h5" fontWeight={800} color="primary">{(status?.flow_rate || 0).toFixed(1)}</Typography>
-            <Typography variant="caption" color="text.secondary">flows/s</Typography>
-          </CardContent>
-        </Card>
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-              <i className="ri-time-line" style={{ fontSize: 12, marginRight: 4 }} />
-              Uptime
-            </Typography>
-            <Typography variant="h5" fontWeight={800} color="primary">{formatUptime(status?.uptime_seconds || 0)}</Typography>
-            <Typography variant="caption" color="text.secondary">collector</Typography>
-          </CardContent>
-        </Card>
-      </Box>
 
       {/* Traffic per Node (bar chart) + Service Distribution (donut) */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 2 }}>
@@ -234,7 +155,7 @@ export default function InfrastructureTab() {
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-              <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, marginRight: 6, verticalAlign: 'middle' }} />
+              <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, marginRight: 6, verticalAlign: 'middle' }} />
               Traffic per Node
             </Typography>
             {nodeTraffic.length > 0 ? (
@@ -248,7 +169,7 @@ export default function InfrastructureTab() {
                       formatter={(v: number, name: string) => [formatBytes(v), name === 'bytesIn' ? '↓ Inbound' : '↑ Outbound']}
                       contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }}
                     />
-                    <Bar dataKey="bytesIn" name="bytesIn" stackId="a" fill={theme.palette.success.main} radius={[0, 0, 0, 0]} maxBarSize={18} />
+                    <Bar dataKey="bytesIn" name="bytesIn" stackId="a" fill={theme.palette.success.main} maxBarSize={18} />
                     <Bar dataKey="bytesOut" name="bytesOut" stackId="a" fill={theme.palette.warning.main} radius={[0, 4, 4, 0]} maxBarSize={18} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -267,7 +188,7 @@ export default function InfrastructureTab() {
               Service Distribution
             </Typography>
             {serviceDist.length > 0 ? (
-              <Box sx={{ height: 220 }}>
+              <Box sx={{ height: Math.max(200, nodeTraffic.length * 40 + 40) }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -300,52 +221,6 @@ export default function InfrastructureTab() {
         </Card>
       </Box>
 
-      {/* Agent Health */}
-      {agents.length > 0 && (
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-              <i className="ri-radar-line" style={{ fontSize: 16, marginRight: 6 }} />
-              Agent Health
-            </Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Agent</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Node</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Status</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Flow Rate</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Samples</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Last Seen</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {agents.map((agent, i) => (
-                    <TableRow key={i}>
-                      <TableCell sx={{ py: 0.75, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem' }}>{agent.agent_ip}</TableCell>
-                      <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>{agent.node || '—'}</TableCell>
-                      <TableCell sx={{ py: 0.75 }}>
-                        <Chip label={agent.active ? 'Active' : 'Inactive'} size="small" color={agent.active ? 'success' : 'default'} sx={{ height: 20, fontSize: '0.65rem' }} />
-                      </TableCell>
-                      <TableCell align="right" sx={{ py: 0.75, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem' }}>
-                        {agent.flow_rate.toFixed(1)} f/s
-                      </TableCell>
-                      <TableCell align="right" sx={{ py: 0.75, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem' }}>
-                        {agent.sample_count.toLocaleString()}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75, fontSize: '0.75rem', color: 'text.secondary' }}>
-                        {agent.last_seen ? new Date(agent.last_seen).toLocaleTimeString() : '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Top VMs per Node */}
       {nodeTraffic.length > 0 && (
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -360,11 +235,11 @@ export default function InfrastructureTab() {
                 return (
                   <Box key={node}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14 }} />
+                      <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14 }} />
                       <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase' }}>{node}</Typography>
                       <Chip label={`${vms.length} VMs`} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
                     </Box>
-                    {vms.slice(0, 5).map((vm, i) => {
+                    {vms.slice(0, 5).map((vm) => {
                       const vmTotal = vm.bytes_in + vm.bytes_out
                       const pct = nodeTotal > 0 ? (vmTotal / nodeTotal) * 100 : 0
                       return (
@@ -398,64 +273,6 @@ export default function InfrastructureTab() {
                 )
               })}
             </Box>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Node Traffic Share */}
-      {nodeTraffic.length > 1 && (
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-              <i className="ri-pie-chart-2-line" style={{ fontSize: 16, marginRight: 6 }} />
-              Node Traffic Share
-            </Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Node</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>VMs</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>↓ In</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>↑ Out</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Total</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5, width: 120 }}>Share</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {nodeTraffic.map((n, i) => {
-                    const total = n.bytesIn + n.bytesOut
-                    const pct = totalTraffic > 0 ? (total / totalTraffic) * 100 : 0
-                    return (
-                      <TableRow key={n.node}>
-                        <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.7 }} />
-                            {n.node}
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ py: 0.75 }}>
-                          <Chip label={n.vmCount} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                        </TableCell>
-                        <TableCell align="right" sx={{ py: 0.75, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', color: 'success.main' }}>{formatBytes(n.bytesIn)}</TableCell>
-                        <TableCell align="right" sx={{ py: 0.75, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', color: 'warning.main' }}>{formatBytes(n.bytesOut)}</TableCell>
-                        <TableCell align="right" sx={{ py: 0.75, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', fontWeight: 600 }}>{formatBytes(total)}</TableCell>
-                        <TableCell sx={{ py: 0.75 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <LinearProgress
-                              variant="determinate"
-                              value={pct}
-                              sx={{ flex: 1, height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { borderRadius: 3, bgcolor: NODE_COLORS[i % NODE_COLORS.length] } }}
-                            />
-                            <Typography variant="caption" fontSize="0.7rem" sx={{ minWidth: 30 }}>{pct.toFixed(0)}%</Typography>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
           </CardContent>
         </Card>
       )}

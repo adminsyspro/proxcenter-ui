@@ -5113,6 +5113,7 @@
     "requiresOvs": "需要在 Proxmox 节点上配置 Open vSwitch (OVS)。sFlow 代理将自动配置在所有 OVS 网桥上。",
     "overview": "概览",
     "dependencyGraph": "依赖关系图",
+    "flowDiagram": "流量图",
     "timeSeries": "时间序列",
     "security": "安全",
     "infrastructure": "基础设施",

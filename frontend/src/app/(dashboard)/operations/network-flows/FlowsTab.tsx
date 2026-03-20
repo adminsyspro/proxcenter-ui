@@ -36,7 +36,7 @@ import {
 import { formatBytes } from '@/utils/format'
 import dynamic from 'next/dynamic'
 
-const DependencyGraph = dynamic(() => import('./DependencyGraph'), { ssr: false })
+const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 const TimeSeriesChart = dynamic(() => import('./TimeSeriesChart'), { ssr: false })
 
 interface FlowsTabProps {
@@ -292,7 +292,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
         <Tab
           icon={<i className="ri-git-branch-line" style={{ fontSize: 16 }} />}
           iconPosition="start"
-          label={t('networkFlows.dependencyGraph')}
+          label={t('networkFlows.flowDiagram')}
           sx={{ textTransform: 'none', fontSize: 13 }}
         />
         <Tab
@@ -668,9 +668,9 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
         </Box>
       )}
 
-      {/* Dependency Graph sub-tab */}
+      {/* Sankey Flow Diagram sub-tab */}
       {subTab === 1 && (
-        <DependencyGraph connectionId={connectionId} />
+        <SankeyChart />
       )}
 
       {/* Time Series sub-tab */}

@@ -5113,6 +5113,7 @@
     "requiresOvs": "Requires Open vSwitch (OVS) configured on your Proxmox nodes. sFlow agents will be automatically configured on all OVS bridges.",
     "overview": "Overview",
     "dependencyGraph": "Dependency Graph",
+    "flowDiagram": "Flow Diagram",
     "timeSeries": "Time Series",
     "security": "Security",
     "infrastructure": "Infrastructure",

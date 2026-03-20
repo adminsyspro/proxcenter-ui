@@ -5165,6 +5165,18 @@
     "totalTraffic": "Trafic total",
     "dataPoints": "Points de données",
     "inOutRatio": "Entrant / Sortant",
-    "trafficByVm": "Trafic par VM"
+    "trafficByVm": "Trafic par VM",
+    "source": "Source",
+    "application": "Application",
+    "destination": "Destination",
+    "connections": "Connexions",
+    "trafficBreakdown": "Répartition du trafic",
+    "volume": "Volume",
+    "flowDetails": "Détails du flux",
+    "target": "Cible",
+    "protocol": "Protocole",
+    "port": "Port",
+    "shareOfTotal": "Part du trafic total",
+    "packets": "Paquets"
   }
 }

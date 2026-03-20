@@ -5164,6 +5164,18 @@
     "totalTraffic": "总流量",
     "dataPoints": "数据点",
     "inOutRatio": "入站 / 出站",
-    "trafficByVm": "按 VM 流量"
+    "trafficByVm": "按 VM 流量",
+    "source": "来源",
+    "application": "应用",
+    "destination": "目标",
+    "connections": "连接数",
+    "trafficBreakdown": "流量分布",
+    "volume": "流量",
+    "flowDetails": "流详情",
+    "target": "目标",
+    "protocol": "协议",
+    "port": "端口",
+    "shareOfTotal": "占总流量比例",
+    "packets": "数据包"
   }
 }

@@ -126,12 +126,35 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
   // VM detail modal
   const [selectedVM, setSelectedVM] = useState<TopTalker | null>(null)
 
+  // Port detail modal
+  const [selectedPort, setSelectedPort] = useState<TopPort | null>(null)
+  const [portPairs, setPortPairs] = useState<Array<{ src_ip: string; dst_ip: string; bytes: number; packets: number; protocol: string; dst_port: number }>>([])
+  const [portPairsLoading, setPortPairsLoading] = useState(false)
+
   // Search filters
   const [talkerSearch, setTalkerSearch] = useState('')
   const [srcSearch, setSrcSearch] = useState('')
   const [dstSearch, setDstSearch] = useState('')
 
   const primaryColor = theme.palette.primary.main
+
+  // Handle port bar click
+  const handlePortClick = useCallback(async (port: TopPort) => {
+    setSelectedPort(port)
+    setPortPairs([])
+    setPortPairsLoading(true)
+    try {
+      const data = await fetchSFlow('ip-pairs', { n: '200' })
+      const pairs = Array.isArray(data) ? data : []
+      const filtered = pairs.filter((p: any) => p.dst_port === port.port && p.protocol === port.protocol)
+      filtered.sort((a: any, b: any) => b.bytes - a.bytes)
+      setPortPairs(filtered)
+    } catch {
+      setPortPairs([])
+    } finally {
+      setPortPairsLoading(false)
+    }
+  }, [])
 
   // Load node agent status
   const loadAgents = useCallback(async () => {
@@ -654,7 +677,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                           color: theme.palette.text.primary,
                         }}
                       />
-                      <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                      <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20} onClick={(_data: any, idx: number) => handlePortClick(topPorts[idx])} style={{ cursor: 'pointer' }}>
                         {topPorts.map((_, idx) => (
                           <Cell key={idx} fill={idx === 0 ? primaryColor : `${primaryColor}${Math.max(30, 90 - idx * 8).toString(16)}`} />
                         ))}
@@ -806,6 +829,118 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
             </Box>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* Port Detail Dialog */}
+      <Dialog open={!!selectedPort} onClose={() => setSelectedPort(null)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+        {selectedPort && (
+          <>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <i className="ri-router-line" style={{ fontSize: 20, color: primaryColor }} />
+                <Typography variant="h6" fontSize={16} fontWeight={700}>
+                  {selectedPort.service || `${selectedPort.port}/${selectedPort.protocol}`}
+                </Typography>
+                <Chip
+                  label={`${selectedPort.port}/${selectedPort.protocol.toUpperCase()}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}
+                />
+              </Box>
+              <IconButton size="small" onClick={() => setSelectedPort(null)}>
+                <i className="ri-close-line" />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent>
+              {/* KPI summary */}
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Box sx={{ flex: 1, p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.totalTraffic')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{formatBytes(selectedPort.bytes)}</Typography>
+                </Box>
+                <Box sx={{ flex: 1, p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.packets')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{selectedPort.packets.toLocaleString()}</Typography>
+                </Box>
+                <Box sx={{ flex: 1, p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.shareOfTotal')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{selectedPort.percent.toFixed(1)}%</Typography>
+                </Box>
+              </Box>
+
+              {/* IP pairs using this port */}
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                <i className="ri-arrow-left-right-line" style={{ fontSize: 14, marginRight: 6 }} />
+                {t('networkFlows.communications')}
+              </Typography>
+              {portPairsLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : portPairs.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 3, opacity: 0.5 }}>
+                  <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
+                </Box>
+              ) : (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('networkFlows.source')}</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('networkFlows.destination')}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600, fontSize: 12 }}>{t('networkFlows.volume')}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600, fontSize: 12 }}>%</TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 100 }}></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {portPairs.slice(0, 20).map((pair, i) => {
+                        const pct = selectedPort.bytes > 0 ? (pair.bytes / selectedPort.bytes) * 100 : 0
+                        return (
+                          <TableRow key={i} hover>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="JetBrains Mono, monospace" fontSize={12}>
+                                {pair.src_ip}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontFamily="JetBrains Mono, monospace" fontSize={12}>
+                                {pair.dst_ip}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" fontWeight={600} fontSize={12}>
+                                {formatBytes(pair.bytes)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" fontSize={12} color="text.secondary">
+                                {pct.toFixed(1)}%
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <LinearProgress
+                                variant="determinate"
+                                value={Math.min(100, pct)}
+                                sx={{
+                                  height: 6,
+                                  borderRadius: 3,
+                                  bgcolor: theme.palette.action.hover,
+                                  '& .MuiLinearProgress-bar': { borderRadius: 3 },
+                                }}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </DialogContent>
+          </>
+        )}
       </Dialog>
 
       {/* Configure sFlow Dialog */}

@@ -60,23 +60,13 @@ interface TopTalker {
   packets: number
 }
 
-interface TopPair {
-  src_vmid: number
-  src_name: string
-  dst_vmid: number
-  dst_name: string
-  bytes: number
-  protocol: string
-  dst_port: number
-}
-
-interface TopEndpoint {
-  ip: string
-  vmid?: number
-  vm_name?: string
+interface IPPair {
+  src_ip: string
+  dst_ip: string
   bytes: number
   packets: number
-  flow_count: number
+  protocol: string
+  dst_port: number
 }
 
 interface TopPort {
@@ -102,7 +92,7 @@ export default function FlowsTab() {
 
   const [status, setStatus] = useState<SFlowStatus | null>(null)
   const [topTalkers, setTopTalkers] = useState<TopTalker[]>([])
-  const [topPairs, setTopPairs] = useState<TopPair[]>([])
+  const [topPairs, setTopPairs] = useState<IPPair[]>([])
   const [topPorts, setTopPorts] = useState<TopPort[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -238,7 +228,7 @@ export default function FlowsTab() {
       const [statusData, talkersData, pairsData, portsData] = await Promise.all([
         fetchSFlow('status'),
         fetchSFlow('top-talkers', { n: '10' }),
-        fetchSFlow('top-pairs', { n: '20' }),
+        fetchSFlow('ip-pairs', { n: '30' }),
         fetchSFlow('top-ports', { n: '10' }),
       ])
       setStatus(statusData)
@@ -621,23 +611,17 @@ export default function FlowsTab() {
                       </TableHead>
                       <TableBody>
                         {topPairs
-                          .filter(p => !pairSearch || (p.src_name || `VM ${p.src_vmid}`).toLowerCase().includes(pairSearch.toLowerCase()) || (p.dst_name || `VM ${p.dst_vmid}`).toLowerCase().includes(pairSearch.toLowerCase()) || String(p.src_vmid).includes(pairSearch) || String(p.dst_vmid).includes(pairSearch))
+                          .filter(p => !pairSearch || p.src_ip.includes(pairSearch) || p.dst_ip.includes(pairSearch) || String(p.dst_port).includes(pairSearch))
                           .map((pair, idx) => (
                           <TableRow key={idx} hover>
-                            <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <i className="ri-computer-line" style={{ fontSize: 12, opacity: 0.5 }} />
-                                <Typography variant="body2" fontSize="0.8rem">{pair.src_name || `VM ${pair.src_vmid}`}</Typography>
-                              </Box>
+                            <TableCell sx={{ py: 0.75 }}>
+                              <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.src_ip}</Typography>
                             </TableCell>
                             <TableCell sx={{ py: 0.75, textAlign: 'center' }}>
                               <i className="ri-arrow-right-line" style={{ fontSize: 14, opacity: 0.4 }} />
                             </TableCell>
-                            <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <i className="ri-computer-line" style={{ fontSize: 12, opacity: 0.5 }} />
-                                <Typography variant="body2" fontSize="0.8rem">{pair.dst_name || `VM ${pair.dst_vmid}`}</Typography>
-                              </Box>
+                            <TableCell sx={{ py: 0.75 }}>
+                              <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.dst_ip}</Typography>
                             </TableCell>
                             <TableCell align="right" sx={{ py: 0.75, fontSize: '0.8rem', fontFamily: 'monospace' }}>
                               {formatBytes(pair.bytes)}
@@ -774,66 +758,6 @@ export default function FlowsTab() {
                   </CardContent>
                 </Card>
               </Box>
-
-              {/* Related pairs */}
-              {topPairs.filter(p => p.src_vmid === selectedVM.vmid || p.dst_vmid === selectedVM.vmid).length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-                    <i className="ri-arrow-left-right-line" style={{ fontSize: 14, marginRight: 6 }} />
-                    {t('networkFlows.communications')}
-                  </Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('networkFlows.peer')}</TableCell>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('networkFlows.direction')}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Bytes</TableCell>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Proto</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {topPairs
-                          .filter(p => p.src_vmid === selectedVM.vmid || p.dst_vmid === selectedVM.vmid)
-                          .map((pair, idx) => {
-                            const isSource = pair.src_vmid === selectedVM.vmid
-                            const peerName = isSource ? (pair.dst_name || `VM ${pair.dst_vmid}`) : (pair.src_name || `VM ${pair.src_vmid}`)
-                            return (
-                              <TableRow key={idx}>
-                                <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    <i className="ri-computer-line" style={{ fontSize: 12, opacity: 0.5 }} />
-                                    {peerName}
-                                  </Box>
-                                </TableCell>
-                                <TableCell sx={{ py: 0.75 }}>
-                                  <Chip
-                                    label={isSource ? '→ OUT' : '← IN'}
-                                    size="small"
-                                    color={isSource ? 'warning' : 'success'}
-                                    variant="outlined"
-                                    sx={{ height: 20, fontSize: '0.65rem' }}
-                                  />
-                                </TableCell>
-                                <TableCell align="right" sx={{ py: 0.75, fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                                  {formatBytes(pair.bytes)}
-                                </TableCell>
-                                <TableCell sx={{ py: 0.75 }}>
-                                  <Chip
-                                    label={`${pair.protocol}/${pair.dst_port}`}
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{ height: 20, fontSize: '0.65rem' }}
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )}
 
               {/* Mini Time Series */}
               <Box>

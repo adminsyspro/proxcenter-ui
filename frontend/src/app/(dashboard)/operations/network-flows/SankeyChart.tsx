@@ -385,11 +385,12 @@ export default function SankeyChart() {
   const { nodes: layoutNodes, links: layoutLinks, margin } = layout
   const linkPathGenerator = sankeyLinkHorizontal()
 
-  // Category labels
+  // Category labels — aligned with the Sankey columns (inside the margin area)
+  const layoutWidth = svgWidth - margin.left - margin.right
   const categories = [
     { label: t('networkFlows.source'), x: margin.left },
-    { label: t('networkFlows.application'), x: svgWidth / 2 - 30 },
-    { label: t('networkFlows.destination'), x: svgWidth - margin.right - 60 },
+    { label: t('networkFlows.application'), x: margin.left + layoutWidth / 2 - 30 },
+    { label: t('networkFlows.destination'), x: margin.left + layoutWidth - 60 },
   ]
 
   const categoryColors: Record<string, string> = {
@@ -423,7 +424,7 @@ export default function SankeyChart() {
               {categories.map((cat, i) => (
                 <text
                   key={i}
-                  x={cat.x + margin.left}
+                  x={cat.x}
                   y={16}
                   fill={theme.palette.text.secondary}
                   fontSize={12}

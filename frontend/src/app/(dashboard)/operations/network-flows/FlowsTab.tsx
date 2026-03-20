@@ -166,49 +166,22 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
     }
   }, [nodeAgents, connectionId, connectionNodeNames])
 
-  // Filter sFlow data by selected connection's nodes
-  // Only actually filter if the backend has populated the `node` field on talkers
-  const canFilter = useMemo(() => {
+  // Filter Top Talkers & Pairs by connection nodes (only these have node/vmid info)
+  const canFilterByNode = useMemo(() => {
     if (connectionNodes.names.size === 0) return false
-    // Check if ANY talker has a node field set — if not, backend hasn't enriched yet
     return topTalkers.some(t => !!t.node)
   }, [topTalkers, connectionNodes])
 
   const filteredTalkers = useMemo(() => {
-    if (!canFilter) return topTalkers
+    if (!canFilterByNode) return topTalkers
     return topTalkers.filter(t => connectionNodes.names.has(t.node))
-  }, [topTalkers, connectionNodes, canFilter])
-
-  const connectionVmids = useMemo(() => {
-    if (!canFilter) return null // null = no filtering
-    return new Set(filteredTalkers.map(t => t.vmid))
-  }, [filteredTalkers, canFilter])
+  }, [topTalkers, connectionNodes, canFilterByNode])
 
   const filteredPairs = useMemo(() => {
-    if (!connectionVmids) return topPairs
-    return topPairs.filter(p => connectionVmids.has(p.src_vmid) || connectionVmids.has(p.dst_vmid))
-  }, [topPairs, connectionVmids])
-
-  const filteredSources = useMemo(() => {
-    if (!connectionVmids) return topSources
-    return topSources.filter(s =>
-      (s.vmid && connectionVmids.has(s.vmid)) || connectionNodes.ips.has(s.ip)
-    )
-  }, [topSources, connectionVmids, connectionNodes])
-
-  const filteredDestinations = useMemo(() => {
-    if (!connectionVmids) return topDestinations
-    return topDestinations.filter(d =>
-      (d.vmid && connectionVmids.has(d.vmid)) || connectionNodes.ips.has(d.ip)
-    )
-  }, [topDestinations, connectionVmids, connectionNodes])
-
-  const filteredPorts = useMemo(() => {
-    if (!connectionVmids) return topPorts
-    if (filteredPairs.length === 0) return topPorts
-    const portSet = new Set(filteredPairs.map(p => `${p.dst_port}/${p.protocol}`))
-    return topPorts.filter(p => portSet.has(`${p.port}/${p.protocol}`))
-  }, [topPorts, filteredPairs, connectionVmids])
+    if (!canFilterByNode) return topPairs
+    const vmids = new Set(filteredTalkers.map(t => t.vmid))
+    return topPairs.filter(p => vmids.has(p.src_vmid) || vmids.has(p.dst_vmid))
+  }, [topPairs, filteredTalkers, canFilterByNode])
 
   // Handle port bar click
   const handlePortClick = useCallback(async (port: TopPort) => {
@@ -656,7 +629,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       sx: { fontSize: '0.8rem', height: 32 }
                     }}
                   />
-                  {filteredSources.length === 0 ? (
+                  {topSources.length === 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 3, opacity: 0.5 }}>
                       <CircularProgress size={16} />
                       <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
@@ -672,7 +645,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {filteredSources.filter(s => !srcSearch || s.ip.includes(srcSearch)).map((src) => (
+                          {topSources.filter(s => !srcSearch || s.ip.includes(srcSearch)).map((src) => (
                             <TableRow key={src.ip} hover>
                               <TableCell sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{src.ip}</TableCell>
                               <TableCell align="right" sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatBytes(src.bytes)}</TableCell>
@@ -705,7 +678,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       sx: { fontSize: '0.8rem', height: 32 }
                     }}
                   />
-                  {filteredDestinations.length === 0 ? (
+                  {topDestinations.length === 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 3, opacity: 0.5 }}>
                       <CircularProgress size={16} />
                       <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
@@ -721,7 +694,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {filteredDestinations.filter(d => !dstSearch || d.ip.includes(dstSearch)).map((dst) => (
+                          {topDestinations.filter(d => !dstSearch || d.ip.includes(dstSearch)).map((dst) => (
                             <TableRow key={dst.ip} hover>
                               <TableCell sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{dst.ip}</TableCell>
                               <TableCell align="right" sx={{ py: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatBytes(dst.bytes)}</TableCell>
@@ -746,15 +719,15 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                   {t('networkFlows.topPorts')}
                 </Typography>
               </Box>
-              {filteredPorts.length === 0 ? (
+              {topPorts.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4, opacity: 0.4 }}>
                   <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
                 </Box>
               ) : (
-                <Box sx={{ height: Math.max(200, filteredPorts.length * 32 + 40) }}>
+                <Box sx={{ height: Math.max(200, topPorts.length * 32 + 40) }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={filteredPorts.map(p => ({
+                      data={topPorts.map(p => ({
                         name: `${p.port}/${p.protocol}${p.service ? ` (${p.service})` : ''}`,
                         bytes: p.bytes,
                         percent: p.percent,
@@ -774,8 +747,8 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                           color: theme.palette.text.primary,
                         }}
                       />
-                      <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20} onClick={(_data: any, idx: number) => handlePortClick(filteredPorts[idx])} style={{ cursor: 'pointer' }}>
-                        {filteredPorts.map((_, idx) => (
+                      <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20} onClick={(_data: any, idx: number) => handlePortClick(topPorts[idx])} style={{ cursor: 'pointer' }}>
+                        {topPorts.map((_, idx) => (
                           <Cell key={idx} fill={idx === 0 ? primaryColor : `${primaryColor}${Math.max(30, 90 - idx * 8).toString(16)}`} />
                         ))}
                       </Bar>

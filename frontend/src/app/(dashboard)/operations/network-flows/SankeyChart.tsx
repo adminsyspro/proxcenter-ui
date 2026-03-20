@@ -221,17 +221,19 @@ export default function SankeyChart() {
   ]
 
   return (
-    <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+    <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', width: '100%' }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
           <i className="ri-flow-chart" style={{ fontSize: 16, marginRight: 6 }} />
           {t('networkFlows.flowDiagram')}
         </Typography>
 
-        <Box ref={containerRef} sx={{ width: '100%', overflow: 'hidden' }}>
+        <Box ref={containerRef} sx={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
           <svg
-            width={dimensions.width}
+            width="100%"
             height={dimensions.height}
+            viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
+            preserveAspectRatio="xMidYMid meet"
             style={{ display: 'block' }}
           >
             {/* Column headers */}

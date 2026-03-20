@@ -340,7 +340,7 @@ async function waitForTask(
   conn: { baseUrl: string; apiToken: string; insecureDev: boolean; id: string },
   node: string,
   upid: string,
-  timeoutMs = 240000
+  timeoutMs = 600000
 ): Promise<void> {
   const start = Date.now()
   const interval = 3000

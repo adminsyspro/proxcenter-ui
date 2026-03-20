@@ -196,6 +196,7 @@ export default function TimeSeriesChart() {
                   height: 24,
                   bgcolor: `${VM_COLORS[idx % VM_COLORS.length]}20`,
                   borderColor: VM_COLORS[idx % VM_COLORS.length],
+                  borderRadius: 'calc(var(--proxcenter-button-radius, 12px) * 2)',
                   '& .MuiChip-label': { fontSize: '0.75rem' },
                 }}
                 variant="outlined"

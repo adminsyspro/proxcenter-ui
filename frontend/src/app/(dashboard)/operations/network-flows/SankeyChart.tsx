@@ -105,7 +105,7 @@ interface LinkDetail {
 
 type DetailData = NodeDetail | LinkDetail
 
-export default function SankeyChart() {
+export default function SankeyChart({ connectionId }: { connectionId?: string }) {
   const t = useTranslations()
   const theme = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -215,7 +215,7 @@ export default function SankeyChart() {
   const layout = useMemo(() => {
     if (!sankeyData) return null
 
-    const margin = { top: 30, right: 20, bottom: 10, left: 20 }
+    const margin = { top: 30, right: 120, bottom: 10, left: 120 }
     const width = svgWidth - margin.left - margin.right
     const height = svgHeight - margin.top - margin.bottom
 

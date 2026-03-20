@@ -167,48 +167,48 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
   }, [nodeAgents, connectionId, connectionNodeNames])
 
   // Filter sFlow data by selected connection's nodes
-  const filteredTalkers = useMemo(() => {
-    if (connectionNodes.names.size === 0) return topTalkers
-    // Only filter talkers that have a node field set
-    return topTalkers.filter(t => !t.node || connectionNodes.names.has(t.node))
+  // Only actually filter if the backend has populated the `node` field on talkers
+  const canFilter = useMemo(() => {
+    if (connectionNodes.names.size === 0) return false
+    // Check if ANY talker has a node field set — if not, backend hasn't enriched yet
+    return topTalkers.some(t => !!t.node)
   }, [topTalkers, connectionNodes])
 
-  // Set of VMIDs for the selected connection (derived from filtered talkers)
+  const filteredTalkers = useMemo(() => {
+    if (!canFilter) return topTalkers
+    return topTalkers.filter(t => connectionNodes.names.has(t.node))
+  }, [topTalkers, connectionNodes, canFilter])
+
   const connectionVmids = useMemo(() => {
+    if (!canFilter) return null // null = no filtering
     return new Set(filteredTalkers.map(t => t.vmid))
-  }, [filteredTalkers])
+  }, [filteredTalkers, canFilter])
 
   const filteredPairs = useMemo(() => {
-    if (connectionNodes.names.size === 0) return topPairs
-    if (connectionVmids.size === 0) return topPairs
+    if (!connectionVmids) return topPairs
     return topPairs.filter(p => connectionVmids.has(p.src_vmid) || connectionVmids.has(p.dst_vmid))
-  }, [topPairs, connectionVmids, connectionNodes])
+  }, [topPairs, connectionVmids])
 
-  // Filter sources/destinations by matching VMIDs or node IPs
   const filteredSources = useMemo(() => {
-    if (connectionNodes.names.size === 0) return topSources
-    if (connectionVmids.size === 0) return topSources
+    if (!connectionVmids) return topSources
     return topSources.filter(s =>
       (s.vmid && connectionVmids.has(s.vmid)) || connectionNodes.ips.has(s.ip)
     )
   }, [topSources, connectionVmids, connectionNodes])
 
   const filteredDestinations = useMemo(() => {
-    if (connectionNodes.names.size === 0) return topDestinations
-    if (connectionVmids.size === 0) return topDestinations
+    if (!connectionVmids) return topDestinations
     return topDestinations.filter(d =>
       (d.vmid && connectionVmids.has(d.vmid)) || connectionNodes.ips.has(d.ip)
     )
   }, [topDestinations, connectionVmids, connectionNodes])
 
-  // Filter ports: keep ports that appear in the filtered pairs
   const filteredPorts = useMemo(() => {
-    if (connectionNodes.names.size === 0) return topPorts
-    if (filteredPairs.length === 0 && filteredTalkers.length > 0) return []
+    if (!connectionVmids) return topPorts
     if (filteredPairs.length === 0) return topPorts
     const portSet = new Set(filteredPairs.map(p => `${p.dst_port}/${p.protocol}`))
     return topPorts.filter(p => portSet.has(`${p.port}/${p.protocol}`))
-  }, [topPorts, filteredPairs, filteredTalkers, connectionNodes])
+  }, [topPorts, filteredPairs, connectionVmids])
 
   // Handle port bar click
   const handlePortClick = useCallback(async (port: TopPort) => {
@@ -790,12 +790,12 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
 
       {/* Sankey Flow Diagram sub-tab */}
       {subTab === 1 && (
-        <SankeyChart />
+        <SankeyChart connectionId={connectionId} />
       )}
 
       {/* Time Series sub-tab */}
       {subTab === 2 && (
-        <TimeSeriesChart />
+        <TimeSeriesChart connectionId={connectionId} />
       )}
 
       {/* Security sub-tab */}

@@ -196,7 +196,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
     // If configuring a single node, use that; otherwise configure all unconfigured
     const nodesToConfigure = configSingleNode
       ? [configSingleNode]
-      : nodeAgents.filter(n => n.hasOvs && !n.sflowConfigured)
+      : nodeAgents.filter(n => n.connectionId === connectionId && n.hasOvs && !n.sflowConfigured)
 
     if (nodesToConfigure.length === 0) return
 
@@ -343,7 +343,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 
           {/* sFlow Agents Status */}
-          {!agentsLoading && nodeAgents.length > 0 && (
+          {!agentsLoading && nodeAgents.filter(n => n.connectionId === connectionId).length > 0 && (
             <Card variant="outlined" sx={{ borderRadius: 2 }}>
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
@@ -351,7 +351,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                     <i className="ri-radar-line" style={{ fontSize: 16, marginRight: 6 }} />
                     {t('networkFlows.sflowAgents')}
                   </Typography>
-                  {nodeAgents.some(n => n.hasOvs && !n.sflowConfigured) && (
+                  {nodeAgents.filter(n => n.connectionId === connectionId).some(n => n.hasOvs && !n.sflowConfigured) && (
                     <Button
                       size="small"
                       variant="contained"
@@ -376,7 +376,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {nodeAgents.map((agent) => (
+                      {nodeAgents.filter(n => n.connectionId === connectionId).map((agent) => (
                         <TableRow key={agent.ip}>
                           <TableCell sx={{ py: 0.75, fontSize: '0.8rem' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -976,7 +976,7 @@ export default function FlowsTab({ connectionId, connectionName }: FlowsTabProps
                 sx={{ height: 24, fontSize: '0.75rem' }}
               />
             ) : (
-              nodeAgents.filter(n => n.hasOvs && !n.sflowConfigured).map(n => (
+              nodeAgents.filter(n => n.connectionId === connectionId && n.hasOvs && !n.sflowConfigured).map(n => (
                 <Chip
                   key={n.ip}
                   label={`${n.node} (${n.ip})`}

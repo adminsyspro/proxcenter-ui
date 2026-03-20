@@ -64,20 +64,41 @@ export async function GET() {
         }
 
         try {
-          // Check if OVS is installed
+          // Check if OVS is installed — try list-br first, fallback to which
           const bridgesResult = await executeSSHDirect({
             ...sshOpts,
-            command: "ovs-vsctl list-br 2>/dev/null",
+            command: "ovs-vsctl list-br 2>/dev/null || true",
           })
 
-          if (bridgesResult.success && bridgesResult.output?.trim()) {
+          // Also try `which ovs-vsctl` as fallback if list-br returned empty
+          let hasBridges = bridgesResult.success && !!bridgesResult.output?.trim()
+
+          if (!hasBridges) {
+            const whichResult = await executeSSHDirect({
+              ...sshOpts,
+              command: "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br",
+            })
+            if (whichResult.success && whichResult.output?.trim()) {
+              // Parse: first line is path, rest are bridges
+              const lines = whichResult.output.trim().split("\n").filter(Boolean)
+              if (lines.length > 0 && lines[0].includes("ovs-vsctl")) {
+                hasBridges = true
+                nodeStatus.hasOvs = true
+                nodeStatus.bridges = lines.slice(1)
+              }
+            }
+          }
+
+          if (hasBridges) {
             nodeStatus.hasOvs = true
-            nodeStatus.bridges = bridgesResult.output.trim().split("\n").filter(Boolean)
+            if (!nodeStatus.bridges.length && bridgesResult.output?.trim()) {
+              nodeStatus.bridges = bridgesResult.output.trim().split("\n").filter(Boolean)
+            }
 
             // Check if sFlow is configured on the first bridge
             const sflowResult = await executeSSHDirect({
               ...sshOpts,
-              command: "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent'",
+              command: "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent' || true",
             })
 
             if (sflowResult.success && sflowResult.output?.includes("targets")) {

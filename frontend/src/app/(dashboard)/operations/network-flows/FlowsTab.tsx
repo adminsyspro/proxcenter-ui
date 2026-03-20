@@ -125,6 +125,11 @@ export default function FlowsTab() {
   const [vmTimeSeries, setVmTimeSeries] = useState<Array<{ time: number; bytes_in: number; bytes_out: number }>>([])
   const [vmTsLoading, setVmTsLoading] = useState(false)
 
+  // Pair detail modal
+  const [selectedPair, setSelectedPair] = useState<IPPair | null>(null)
+  const [pairTimeSeries, setPairTimeSeries] = useState<Array<{ time: number; bytes_in: number }>>([])
+  const [pairTsLoading, setPairTsLoading] = useState(false)
+
   const primaryColor = theme.palette.primary.main
 
   // Fetch VM time-series when VM dialog opens
@@ -138,6 +143,18 @@ export default function FlowsTab() {
       .catch(() => setVmTimeSeries([]))
       .finally(() => setVmTsLoading(false))
   }, [selectedVM])
+
+  // Fetch IP pair time-series when pair dialog opens
+  useEffect(() => {
+    if (!selectedPair) { setPairTimeSeries([]); return }
+    setPairTsLoading(true)
+    const now = new Date()
+    const from = new Date(now.getTime() - 60 * 60 * 1000)
+    fetchSFlow('timeseries/ip', { src_ip: selectedPair.src_ip, dst_ip: selectedPair.dst_ip, from: from.toISOString(), to: now.toISOString() })
+      .then(d => setPairTimeSeries(Array.isArray(d) ? d : []))
+      .catch(() => setPairTimeSeries([]))
+      .finally(() => setPairTsLoading(false))
+  }, [selectedPair])
 
   // Handle port bar click
   const handlePortClick = useCallback(async (port: TopPort) => {
@@ -613,7 +630,7 @@ export default function FlowsTab() {
                         {topPairs
                           .filter(p => !pairSearch || p.src_ip.includes(pairSearch) || p.dst_ip.includes(pairSearch) || String(p.dst_port).includes(pairSearch))
                           .map((pair, idx) => (
-                          <TableRow key={idx} hover>
+                          <TableRow key={idx} hover sx={{ cursor: 'pointer' }} onClick={() => setSelectedPair(pair)}>
                             <TableCell sx={{ py: 0.75 }}>
                               <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.src_ip}</Typography>
                             </TableCell>
@@ -676,7 +693,7 @@ export default function FlowsTab() {
                           color: theme.palette.text.primary,
                         }}
                       />
-                      <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20} onClick={(_data: any, idx: number) => handlePortClick(topPorts[idx])} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="bytes" radius={[0, 4, 4, 0]} maxBarSize={20} onClick={(_data: any, idx: number) => handlePortClick(topPorts[idx])} style={{ cursor: 'pointer' }} cursor={{ fill: theme.palette.action.hover } as any}>
                         {topPorts.map((_, idx) => (
                           <Cell key={idx} fill={idx === 0 ? primaryColor : `${primaryColor}${Math.max(30, 90 - idx * 8).toString(16)}`} />
                         ))}
@@ -793,6 +810,97 @@ export default function FlowsTab() {
             </Box>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* IP Pair Detail Dialog */}
+      <Dialog open={!!selectedPair} onClose={() => setSelectedPair(null)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+        {selectedPair && (
+          <>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <i className="ri-arrow-left-right-line" style={{ fontSize: 20 }} />
+                <Typography variant="h6" fontSize={16} fontWeight={700}>
+                  {t('networkFlows.flowDetails')}
+                </Typography>
+              </Box>
+              <IconButton size="small" onClick={() => setSelectedPair(null)}>
+                <i className="ri-close-line" />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent>
+              {/* Flow path */}
+              <Box sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, p: 2, mb: 2,
+                borderRadius: 1.5, bgcolor: theme.palette.action.hover,
+              }}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary" display="block">{t('networkFlows.source')}</Typography>
+                  <Typography fontFamily="JetBrains Mono, monospace" fontWeight={700} fontSize={14} color="warning.main">
+                    {selectedPair.src_ip}
+                  </Typography>
+                </Box>
+                <i className="ri-arrow-right-line" style={{ fontSize: 20, color: theme.palette.text.secondary }} />
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary" display="block">{t('networkFlows.destination')}</Typography>
+                  <Typography fontFamily="JetBrains Mono, monospace" fontWeight={700} fontSize={14} color="success.main">
+                    {selectedPair.dst_ip}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* KPIs */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 2, mb: 2 }}>
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.volume')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{formatBytes(selectedPair.bytes)}</Typography>
+                </Box>
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.packets')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{selectedPair.packets.toLocaleString()}</Typography>
+                </Box>
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.protocol')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{selectedPair.protocol.toUpperCase()}</Typography>
+                </Box>
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.action.hover }}>
+                  <Typography variant="caption" color="text.secondary">{t('networkFlows.port')}</Typography>
+                  <Typography variant="h6" fontWeight={700} fontSize={16}>{selectedPair.dst_port}</Typography>
+                </Box>
+              </Box>
+
+              {/* Time Series */}
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                  <i className="ri-line-chart-line" style={{ fontSize: 14, marginRight: 6 }} />
+                  {t('networkFlows.timeSeries')} (1h)
+                </Typography>
+                {pairTsLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={20} /></Box>
+                ) : pairTimeSeries.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 2, opacity: 0.4 }}>
+                    <Typography variant="caption">{t('networkFlows.noTimeSeriesData')}</Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ height: 180 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={pairTimeSeries.map(p => ({ time: p.time * 1000, bytes: p.bytes_in || 0 }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
+                        <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} tick={{ fontSize: 10 }} />
+                        <YAxis tickFormatter={(v) => formatBytes(v)} tick={{ fontSize: 10 }} width={60} />
+                        <RechartsTooltip
+                          labelFormatter={(v) => new Date(v as number).toLocaleTimeString()}
+                          formatter={(value: number) => [formatBytes(value), 'Traffic']}
+                          contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }}
+                        />
+                        <Area type="monotone" dataKey="bytes" stroke={theme.palette.primary.main} fill={`${theme.palette.primary.main}30`} strokeWidth={1.5} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </Box>
+                )}
+              </Box>
+            </DialogContent>
+          </>
+        )}
       </Dialog>
 
       {/* Port Detail Dialog */}

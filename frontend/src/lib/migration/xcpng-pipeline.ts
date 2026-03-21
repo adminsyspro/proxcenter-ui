@@ -5,7 +5,9 @@
  * 1. Pre-flight checks (XO reachable, PVE reachable, VM config, disk space)
  * 2. Retrieve full VM config from XO REST API
  * 3. Create empty VM shell on Proxmox via API
- * 4. For each disk: SSH to Proxmox node → download VDI from XO (VHD) → convert → import
+ * 4. For each disk:
+ *    - Block storage (LVM, ZFS, RBD): download VHD → pvesm alloc → qemu-img convert directly to device
+ *    - File-based storage (dir, NFS, CIFS): download VHD to storage path → convert → qm disk import
  * 5. Attach disks, configure boot order
  * 6. Optionally start the VM
  *
@@ -212,6 +214,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
   jobPrisma.set(jobId, prisma)
 
   let targetVmid: number | null = null
+  let storageTempDir = ''
 
   try {
     // ── STEP 0: Pre-flight ──
@@ -350,6 +353,118 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     const isFileBased = isFileBasedStorage(storageType)
     const importFormat = isFileBased ? "qcow2" : "raw"
 
+    // Resolve temp directory for VHD downloads
+    // File-based: use target storage path (plenty of space)
+    // Block: use /var/lib/vz (VHD is temporary, converted directly to block device)
+    if (isFileBased) {
+      const storagePath = storageConfig?.path || '/var/lib/vz'
+      storageTempDir = `${storagePath}/images/${targetVmid}`
+    } else {
+      storageTempDir = `/var/lib/vz/tmp`
+    }
+    await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${storageTempDir}"`)
+    await appendLog(jobId, `Temp directory: ${storageTempDir}`)
+
+    // Track allocated block volumes (for cleanup on error)
+    const allocatedVolumes: { volumeId: string, devicePath: string, rbdMapped?: boolean }[] = []
+
+    // Allocate a raw volume on block storage and return the device path
+    async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string, rbdMapped?: boolean }> {
+      const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
+      let maxDiskNum = -1
+      for (const val of Object.values(vmConf || {})) {
+        if (typeof val === 'string') {
+          const m = (val as string).match(/vm-\d+-disk-(\d+)/)
+          if (m) maxDiskNum = Math.max(maxDiskNum, parseInt(m[1]))
+        }
+      }
+      for (const av of allocatedVolumes) {
+        const m = av.volumeId.match(/disk-(\d+)/)
+        if (m) maxDiskNum = Math.max(maxDiskNum, parseInt(m[1]))
+      }
+      const diskNum = maxDiskNum + 1
+      const sizeKB = Math.ceil(sizeBytes / 1024)
+      const volName = `vm-${targetVmid}-disk-${diskNum}`
+
+      const allocResult = await executeSSH(config.targetConnectionId, nodeIp,
+        `pvesm alloc "${config.targetStorage}" ${targetVmid} "${volName}" ${sizeKB} 2>&1`)
+      if (!allocResult.success || !allocResult.output?.trim()) {
+        throw new Error(`Failed to allocate volume: ${allocResult.error || allocResult.output}`)
+      }
+      const allocOutput = allocResult.output.trim()
+      const quotedMatch = allocOutput.match(/'([^']+)'/)
+      const volumeId = quotedMatch ? quotedMatch[1] : allocOutput
+
+      const pathResult = await executeSSH(config.targetConnectionId, nodeIp,
+        `pvesm path "${volumeId}" 2>&1`)
+      if (!pathResult.success || !pathResult.output?.trim()) {
+        throw new Error(`Failed to resolve device path for ${volumeId}: ${pathResult.error}`)
+      }
+      let devicePath = pathResult.output.trim()
+
+      // RBD/Ceph: pvesm path returns "rbd:pool/image:..." — need rbd map
+      let rbdMapped = false
+      if (devicePath.startsWith('rbd:')) {
+        const rbdSpec = devicePath.split(':')[1]
+        if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
+        const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
+          `rbd map "${rbdSpec}" 2>&1`)
+        if (!mapResult.success || !mapResult.output?.trim()) {
+          throw new Error(`Failed to rbd map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
+        }
+        devicePath = mapResult.output.trim()
+        rbdMapped = true
+        await appendLog(jobId, `RBD mapped ${rbdSpec} → ${devicePath}`)
+      }
+
+      const result = { volumeId, devicePath, rbdMapped }
+      allocatedVolumes.push(result)
+      await appendLog(jobId, `Allocated volume ${volumeId} → ${devicePath}`)
+      return result
+    }
+
+    // Attach a pre-allocated block volume to a SCSI slot
+    async function attachBlockDisk(i: number, volumeId: string) {
+      const scsiSlot = `scsi${i}`
+      const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
+      try {
+        await pveFetch<any>(
+          pveConn,
+          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
+          { method: "PUT", body: attachBody }
+        )
+        await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
+      } catch (attachErr: any) {
+        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
+      }
+    }
+
+    // Convert VHD directly to a pre-allocated block device (no qm disk import needed)
+    async function convertToBlockDevice(i: number, devicePath: string) {
+      const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
+      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting VHD directly to block device...`)
+      await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })
+
+      const convertResult = await executeSSHWithTimeout(
+        prisma, config.targetConnectionId, nodeIp,
+        `qemu-img convert -f vpc -O raw "${tmpFile}.vhd" "${devicePath}" 2>&1 && echo CONVERT_OK`,
+        14400000
+      )
+      // Clean up VHD regardless of result
+      await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd"`)
+
+      if (!convertResult.success || !convertResult.output?.includes("CONVERT_OK")) {
+        throw new Error(`Conversion to block device failed: ${convertResult.error || convertResult.output}`)
+      }
+      await appendLog(jobId, `Conversion to block device complete`, "success")
+
+      // Unmap RBD if needed
+      const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
+      if (allocVol?.rbdMapped) {
+        await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${devicePath}" 2>/dev/null`).catch(() => {})
+      }
+    }
+
     // Build XO auth for curl (Basic auth)
     const xoCreds = decryptSecret(
       (await prisma.connection.findUnique({
@@ -365,7 +480,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)...`)
 
       const downloadUrl = buildVdiDownloadUrl(xo.baseUrl, disk.vdiUuid, "vhd")
-      const tmpFile = `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
 
       await updateJob(jobId, "transferring", {
         currentStep: `downloading_disk_${i + 1}`,
@@ -453,7 +568,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
-      const tmpFile = `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
       const scsiSlot = `scsi${i}`
 
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting VHD to ${importFormat} format...`)
@@ -622,12 +737,24 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
 
       // Phase 5: Convert and import all disks (downtime continues)
-      await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
-      for (let i = 0; i < vmConfig.disks.length; i++) {
-        const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-        await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
-        await convertAndImportDisk(i)
-        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+      if (isFileBased) {
+        await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
+        for (let i = 0; i < vmConfig.disks.length; i++) {
+          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
+          await convertAndImportDisk(i)
+          if (isCancelled(jobId)) throw new Error("Migration cancelled")
+        }
+      } else {
+        await appendLog(jobId, "Converting VHDs to block storage (downtime phase)...")
+        for (let i = 0; i < vmConfig.disks.length; i++) {
+          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
+          const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
+          await convertToBlockDevice(i, vol.devicePath)
+          if (isCancelled(jobId)) throw new Error("Migration cancelled")
+          await attachBlockDisk(i, vol.volumeId)
+        }
       }
 
       const downtimeSec = Math.round((Date.now() - downtimeStart) / 1000)
@@ -640,7 +767,16 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
         await downloadDisk(i, vmConfig.disks[i])
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        await convertAndImportDisk(i)
+
+        if (isFileBased) {
+          await convertAndImportDisk(i)
+        } else {
+          // Block storage: allocate volume, convert VHD directly to device
+          const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
+          await convertToBlockDevice(i, vol.devicePath)
+          if (isCancelled(jobId)) throw new Error("Migration cancelled")
+          await attachBlockDisk(i, vol.volumeId)
+        }
         await updateJob(jobId, "transferring", {
           currentDisk: i + 1,
           progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
@@ -702,6 +838,18 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     const errorMsg = err?.message || String(err)
     await updateJob(jobId, "failed", { error: errorMsg })
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
+
+    // Cleanup: remove temp files
+    try {
+      const nodeIp = await getNodeIp(prisma, config.targetConnectionId, config.targetNode,
+        (await getConnectionById(config.targetConnectionId)).baseUrl)
+      if (storageTempDir) {
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
+      }
+    } catch {
+      // Best effort cleanup
+    }
 
     // Cleanup: if we created a VM, try to destroy it
     if (targetVmid && config.targetConnectionId) {

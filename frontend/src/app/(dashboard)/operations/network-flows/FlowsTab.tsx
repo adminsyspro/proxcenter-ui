@@ -145,23 +145,6 @@ export default function FlowsTab() {
 
   const primaryColor = theme.palette.primary.main
 
-  // Accumulate agent flow_rate history for sparklines (keyed by agent IP)
-  const agentFlowHistory = useRef<Map<string, { time: number; rate: number }[]>>(new Map())
-  const MAX_AGENT_HISTORY = 30 // ~5 min at 10s interval
-
-  useEffect(() => {
-    if (!status?.agents) return
-    const now = Math.floor(Date.now() / 1000)
-    const updated = new Map(agentFlowHistory.current)
-    for (const agent of status.agents) {
-      const history = updated.get(agent.agent_ip) || []
-      history.push({ time: now, rate: agent.flow_rate })
-      if (history.length > MAX_AGENT_HISTORY) history.shift()
-      updated.set(agent.agent_ip, history)
-    }
-    agentFlowHistory.current = updated
-  }, [status])
-
   // Sparkline data for top talkers (keyed by vmid)
   const [sparklineData, setSparklineData] = useState<Map<number, { time: number; total: number }[]>>(new Map())
 
@@ -496,7 +479,6 @@ export default function FlowsTab() {
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Target</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Sampling</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Flow Rate</TableCell>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5, width: 70 }}>Trend</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Samples</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Last Seen</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}></TableCell>
@@ -509,7 +491,7 @@ export default function FlowsTab() {
                           return [
                             multipleConnections && (
                               <TableRow key={`header-${connName}`}>
-                                <TableCell colSpan={11} sx={{ py: 0.5, border: 0, bgcolor: 'action.hover' }}>
+                                <TableCell colSpan={10} sx={{ py: 0.5, border: 0, bgcolor: 'action.hover' }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-database-2-line" style={{ fontSize: 13, opacity: 0.6 }} />
                                     <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -560,19 +542,6 @@ export default function FlowsTab() {
                                   return (<>
                                     <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
                                       {sflowAgent ? `${sflowAgent.flow_rate.toFixed(1)} f/s` : '—'}
-                                    </TableCell>
-                                    <TableCell sx={{ py: 0.75 }}>
-                                      {(() => {
-                                        const history = agentFlowHistory.current.get(agent.ip)
-                                        if (!history || history.length < 2) return <Typography variant="caption" color="text.disabled">—</Typography>
-                                        return (
-                                          <ResponsiveContainer width={60} height={24}>
-                                            <AreaChart data={history} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                                              <Area type="monotone" dataKey="rate" stroke={theme.palette.primary.main} fill={theme.palette.primary.main} fillOpacity={0.2} strokeWidth={1.5} isAnimationActive={false} dot={false} />
-                                            </AreaChart>
-                                          </ResponsiveContainer>
-                                        )
-                                      })()}
                                     </TableCell>
                                     <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
                                       {sflowAgent ? sflowAgent.sample_count.toLocaleString() : '—'}

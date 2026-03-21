@@ -5193,6 +5193,8 @@
     "uniquePeers": "Pairs uniques",
     "external": "Externe",
     "portFilter": "Port",
-    "noTimelineData": "Pas de données temporelles pour cette paire (nécessite InfluxDB)"
+    "noTimelineData": "Pas de données temporelles pour cette paire (nécessite InfluxDB)",
+    "compare": "Comparer",
+    "yesterday": "Hier"
   }
 }

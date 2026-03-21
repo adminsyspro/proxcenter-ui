@@ -145,6 +145,41 @@ export default function FlowsTab() {
 
   const primaryColor = theme.palette.primary.main
 
+  // Sparkline data for top talkers (keyed by vmid)
+  const [sparklineData, setSparklineData] = useState<Map<number, { time: number; total: number }[]>>(new Map())
+
+  // Fetch sparklines for top 10 talkers whenever topTalkers changes
+  useEffect(() => {
+    if (topTalkers.length === 0) return
+    let cancelled = false
+    const top10 = topTalkers.slice(0, 10)
+    const now = Math.floor(Date.now() / 1000)
+    const from = now - 1800 // last 30 minutes
+
+    Promise.all(
+      top10.map(async (talker) => {
+        try {
+          const data = await fetchSFlow('timeseries/vm', {
+            vmid: String(talker.vmid),
+            from: String(from),
+            to: String(now),
+          })
+          const points = Array.isArray(data)
+            ? data.map((d: any) => ({ time: d.time ?? d.t ?? 0, total: (d.bytes_in ?? 0) + (d.bytes_out ?? 0) }))
+            : []
+          return [talker.vmid, points] as [number, { time: number; total: number }[]]
+        } catch {
+          return [talker.vmid, []] as [number, { time: number; total: number }[]]
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return
+      setSparklineData(new Map(results))
+    })
+
+    return () => { cancelled = true }
+  }, [topTalkers])
+
   // Fetch VM time-series when VM dialog opens
   useEffect(() => {
     if (!selectedVM) { setVmTimeSeries([]); return }
@@ -590,6 +625,7 @@ export default function FlowsTab() {
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>VM</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>In</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Out</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5, width: 70 }}>Trend</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -611,6 +647,30 @@ export default function FlowsTab() {
                             </TableCell>
                             <TableCell align="right" sx={{ py: 0.75, fontSize: '0.8rem', fontFamily: 'monospace', color: 'warning.main' }}>
                               {formatBytes(talker.bytes_out)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ py: 0.75, px: 0.5, width: 70 }}>
+                              {sparklineData.get(talker.vmid)?.length ? (
+                                <ResponsiveContainer width={60} height={24}>
+                                  <AreaChart data={sparklineData.get(talker.vmid)} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                    <defs>
+                                      <linearGradient id={`spark-${talker.vmid}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={primaryColor} stopOpacity={0.3} />
+                                        <stop offset="100%" stopColor={primaryColor} stopOpacity={0.05} />
+                                      </linearGradient>
+                                    </defs>
+                                    <Area
+                                      type="monotone"
+                                      dataKey="total"
+                                      stroke={primaryColor}
+                                      strokeWidth={1.5}
+                                      fill={`url(#spark-${talker.vmid})`}
+                                      isAnimationActive={false}
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              ) : (
+                                <Typography variant="caption" color="text.disabled">—</Typography>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

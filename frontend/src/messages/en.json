@@ -5192,6 +5192,8 @@
     "uniquePeers": "Unique Peers",
     "external": "External",
     "portFilter": "Port",
-    "noTimelineData": "No timeline data available for this pair (requires InfluxDB)"
+    "noTimelineData": "No timeline data available for this pair (requires InfluxDB)",
+    "compare": "Compare",
+    "yesterday": "Yesterday"
   }
 }

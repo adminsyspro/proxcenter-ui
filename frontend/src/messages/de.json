@@ -5188,6 +5188,8 @@
     "uniquePeers": "Eindeutige Peers",
     "external": "Extern",
     "portFilter": "Port",
-    "noTimelineData": "Keine Zeitreihendaten für dieses Paar verfügbar (erfordert InfluxDB)"
+    "noTimelineData": "Keine Zeitreihendaten für dieses Paar verfügbar (erfordert InfluxDB)",
+    "compare": "Vergleichen",
+    "yesterday": "Gestern"
   }
 }

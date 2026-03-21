@@ -10,6 +10,7 @@ import {
   Alert,
   Autocomplete,
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
@@ -23,6 +24,7 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
@@ -68,6 +70,8 @@ const timeRanges = [
   { label: '7d', value: 10080 },
 ]
 
+const COMPARE_SHIFT_MS = 24 * 60 * 60 * 1000 // 24 hours in ms
+
 // Colors for multi-VM chart
 const VM_COLORS = [
   '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -88,6 +92,11 @@ export default function TimeSeriesChart() {
   const [singleData, setSingleData] = useState<TimeSeriesPoint[]>([])
   // Multi VM data
   const [multiData, setMultiData] = useState<VMTimeSeries[]>([])
+
+  // Comparison mode
+  const [compareEnabled, setCompareEnabled] = useState(false)
+  const [compareSingleData, setCompareSingleData] = useState<TimeSeriesPoint[]>([])
+  const [compareMultiData, setCompareMultiData] = useState<VMTimeSeries[]>([])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,24 +130,54 @@ export default function TimeSeriesChart() {
         to: now.toISOString(),
       }
 
+      // Comparison period: same duration but 24h earlier
+      const compareFrom = new Date(from.getTime() - COMPARE_SHIFT_MS)
+      const compareTo = new Date(now.getTime() - COMPARE_SHIFT_MS)
+      const compareParams: Record<string, string> = {
+        from: compareFrom.toISOString(),
+        to: compareTo.toISOString(),
+      }
+
       if (selectedVMs.length === 1 && !destFilter) {
         // Single VM mode
         const data = await fetchSFlow('timeseries/vm', { ...params, vmid: String(selectedVMs[0].vmid) })
         setSingleData(Array.isArray(data) ? data : [])
         setMultiData([])
+
+        // Fetch comparison data if enabled
+        if (compareEnabled) {
+          try {
+            const cmpData = await fetchSFlow('timeseries/vm', { ...compareParams, vmid: String(selectedVMs[0].vmid) })
+            setCompareSingleData(Array.isArray(cmpData) ? cmpData : [])
+          } catch { setCompareSingleData([]) }
+        } else {
+          setCompareSingleData([])
+        }
+        setCompareMultiData([])
       } else {
         // Multi VM mode or filtered
         const vmids = selectedVMs.map(v => v.vmid).join(',')
         const data = await fetchSFlow('timeseries/all-vms', { ...params, vmids })
         setMultiData(Array.isArray(data) ? data : [])
         setSingleData([])
+
+        // Fetch comparison data if enabled
+        if (compareEnabled) {
+          try {
+            const cmpData = await fetchSFlow('timeseries/all-vms', { ...compareParams, vmids })
+            setCompareMultiData(Array.isArray(cmpData) ? cmpData : [])
+          } catch { setCompareMultiData([]) }
+        } else {
+          setCompareMultiData([])
+        }
+        setCompareSingleData([])
       }
     } catch (e: any) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [selectedVMs, timeRange, destFilter])
+  }, [selectedVMs, timeRange, destFilter, compareEnabled])
 
   useEffect(() => {
     loadTimeSeries()
@@ -205,6 +244,79 @@ export default function TimeSeriesChart() {
 
     return Array.from(timeMap.values()).sort((a, b) => a.time - b.time)
   }, [multiData])
+
+  // Comparison bandwidth (bytes/s) — single VM, time-shifted forward by 24h to align on chart
+  const compareSingleBandwidthData = useMemo(() => {
+    if (compareSingleData.length < 2) return []
+    const shiftSec = COMPARE_SHIFT_MS / 1000
+    return compareSingleData.slice(1).map((p, i) => {
+      const prev = compareSingleData[i]
+      const dt = p.time - prev.time
+      if (dt <= 0) return null
+      return {
+        time: p.time + shiftSec, // shift forward so it aligns with current data
+        cmp_bps_in: (p.bytes_in || 0) / dt,
+        cmp_bps_out: (p.bytes_out || 0) / dt,
+      }
+    }).filter(Boolean) as { time: number; cmp_bps_in: number; cmp_bps_out: number }[]
+  }, [compareSingleData])
+
+  // Merge current + comparison single bandwidth data by time
+  const mergedSingleBandwidthData = useMemo(() => {
+    if (!compareEnabled || compareSingleBandwidthData.length === 0) return singleBandwidthData
+    const map = new Map<number, Record<string, number>>()
+    for (const p of singleBandwidthData) {
+      map.set(p.time, { ...p })
+    }
+    for (const p of compareSingleBandwidthData) {
+      const existing = map.get(p.time)
+      if (existing) {
+        existing.cmp_bps_in = p.cmp_bps_in
+        existing.cmp_bps_out = p.cmp_bps_out
+      } else {
+        map.set(p.time, { time: p.time, cmp_bps_in: p.cmp_bps_in, cmp_bps_out: p.cmp_bps_out })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.time - b.time)
+  }, [singleBandwidthData, compareSingleBandwidthData, compareEnabled])
+
+  // Comparison bandwidth (bytes/s) — multi VM, time-shifted forward by 24h
+  const compareMultiBandwidthData = useMemo(() => {
+    if (compareMultiData.length === 0) return []
+    const shiftSec = COMPARE_SHIFT_MS / 1000
+    const timeMap = new Map<number, Record<string, number>>()
+    for (const vm of compareMultiData) {
+      const pts = vm.points
+      for (let i = 1; i < pts.length; i++) {
+        const dt = pts[i].time - pts[i - 1].time
+        if (dt <= 0) continue
+        const bps = ((pts[i].bytes_in || 0) + (pts[i].bytes_out || 0)) / dt
+        const shiftedTime = pts[i].time + shiftSec
+        if (!timeMap.has(shiftedTime)) timeMap.set(shiftedTime, { time: shiftedTime })
+        timeMap.get(shiftedTime)![`cmp_vm_${vm.vmid}_bps`] = bps
+      }
+    }
+    return Array.from(timeMap.values()).sort((a, b) => a.time - b.time)
+  }, [compareMultiData])
+
+  // Merge current + comparison multi bandwidth data by time
+  const mergedMultiBandwidthWithCompare = useMemo(() => {
+    if (!compareEnabled || compareMultiBandwidthData.length === 0) return mergedMultiBandwidthData
+    const map = new Map<number, Record<string, number>>()
+    for (const p of mergedMultiBandwidthData) {
+      map.set(p.time, { ...p })
+    }
+    for (const p of compareMultiBandwidthData) {
+      const existing = map.get(p.time)
+      if (existing) {
+        Object.assign(existing, p)
+        existing.time = p.time
+      } else {
+        map.set(p.time, { ...p })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.time - b.time)
+  }, [mergedMultiBandwidthData, compareMultiBandwidthData, compareEnabled])
 
   const formatBandwidth = (v: number) => `${formatBytes(v)}/s`
 
@@ -275,6 +387,24 @@ export default function TimeSeriesChart() {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+
+        <Tooltip title={`${t('networkFlows.compare')} — ${t('networkFlows.yesterday')}`}>
+          <Button
+            variant={compareEnabled ? 'contained' : 'outlined'}
+            size="small"
+            onClick={() => setCompareEnabled(prev => !prev)}
+            startIcon={<i className="ri-time-line" style={{ fontSize: 16 }} />}
+            sx={{
+              fontSize: '0.75rem',
+              textTransform: 'none',
+              minWidth: 'auto',
+              borderRadius: 'var(--proxcenter-button-radius, 12px)',
+              ...(compareEnabled ? {} : { borderColor: 'divider' }),
+            }}
+          >
+            {t('networkFlows.compare')}
+          </Button>
+        </Tooltip>
       </Box>
 
       {/* Error */}
@@ -353,22 +483,35 @@ export default function TimeSeriesChart() {
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Chip label="↓ In" size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${theme.palette.success.main}20`, color: theme.palette.success.main }} />
                 <Chip label="↑ Out" size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${theme.palette.warning.main}20`, color: theme.palette.warning.main }} />
+                {compareEnabled && compareSingleBandwidthData.length > 0 && (
+                  <Chip label={`--- ${t('networkFlows.yesterday')}`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: isDark ? '#ffffff10' : '#00000008', color: theme.palette.text.secondary }} />
+                )}
               </Box>
             </Box>
 
             <Box sx={{ height: 350 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={singleBandwidthData}>
+                <AreaChart data={mergedSingleBandwidthData}>
                   <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} />
                   <XAxis dataKey="time" tickFormatter={formatTime} tick={{ fontSize: 10 }} stroke={theme.palette.text.secondary} />
                   <YAxis tickFormatter={formatBandwidth} tick={{ fontSize: 10 }} width={80} stroke={theme.palette.text.secondary} />
                   <RechartsTooltip
                     labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
-                    formatter={(v: number, name: string) => [formatBandwidth(v), name === 'bps_in' ? '↓ Inbound' : '↑ Outbound']}
+                    formatter={(v: number, name: string) => {
+                      if (name === 'cmp_bps_in') return [formatBandwidth(v), `↓ Inbound (${t('networkFlows.yesterday')})`]
+                      if (name === 'cmp_bps_out') return [formatBandwidth(v), `↑ Outbound (${t('networkFlows.yesterday')})`]
+                      return [formatBandwidth(v), name === 'bps_in' ? '↓ Inbound' : '↑ Outbound']
+                    }}
                     contentStyle={{ backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, fontSize: 12, borderRadius: 8 }}
                   />
                   <Area type="monotone" dataKey="bps_in" stroke={theme.palette.success.main} fill={theme.palette.success.main} fillOpacity={0.2} strokeWidth={2} isAnimationActive={false} />
                   <Area type="monotone" dataKey="bps_out" stroke={theme.palette.warning.main} fill={theme.palette.warning.main} fillOpacity={0.2} strokeWidth={2} isAnimationActive={false} />
+                  {compareEnabled && compareSingleBandwidthData.length > 0 && (
+                    <>
+                      <Area type="monotone" dataKey="cmp_bps_in" stroke={theme.palette.success.main} fill={theme.palette.success.main} fillOpacity={0.05} strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={false} connectNulls />
+                      <Area type="monotone" dataKey="cmp_bps_out" stroke={theme.palette.warning.main} fill={theme.palette.warning.main} fillOpacity={0.05} strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={false} connectNulls />
+                    </>
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </Box>
@@ -385,26 +528,37 @@ export default function TimeSeriesChart() {
                 <i className="ri-line-chart-line" style={{ fontSize: 16, marginRight: 6 }} />
                 {t('networkFlows.multiVmBandwidthRate')} ({selectedVMs.length} VMs)
               </Typography>
+              {compareEnabled && compareMultiBandwidthData.length > 0 && (
+                <Chip label={`--- ${t('networkFlows.yesterday')}`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: isDark ? '#ffffff10' : '#00000008', color: theme.palette.text.secondary }} />
+              )}
             </Box>
 
             <Box sx={{ height: 350 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mergedMultiBandwidthData}>
+                <AreaChart data={mergedMultiBandwidthWithCompare}>
                   <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} />
                   <XAxis dataKey="time" tickFormatter={formatTime} tick={{ fontSize: 10 }} stroke={theme.palette.text.secondary} />
                   <YAxis tickFormatter={formatBandwidth} tick={{ fontSize: 10 }} width={80} stroke={theme.palette.text.secondary} />
                   <RechartsTooltip
                     labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
                     formatter={(v: number, name: string) => {
-                      const vm = multiData.find(m => `vm_${m.vmid}_bps` === name)
-                      return [formatBandwidth(v), vm?.vm_name || name]
+                      const isCmp = name.startsWith('cmp_')
+                      const lookupName = isCmp ? name.replace('cmp_', '') : name
+                      const vm = multiData.find(m => `vm_${m.vmid}_bps` === lookupName)
+                        || compareMultiData.find(m => `vm_${m.vmid}_bps` === lookupName)
+                      const label = vm?.vm_name || lookupName
+                      return [formatBandwidth(v), isCmp ? `${label} (${t('networkFlows.yesterday')})` : label]
                     }}
                     contentStyle={{ backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, fontSize: 12, borderRadius: 8 }}
                   />
                   <Legend
                     formatter={(value: string) => {
-                      const vm = multiData.find(m => `vm_${m.vmid}_bps` === value)
-                      return vm?.vm_name || value
+                      const isCmp = value.startsWith('cmp_')
+                      const lookupName = isCmp ? value.replace('cmp_', '') : value
+                      const vm = multiData.find(m => `vm_${m.vmid}_bps` === lookupName)
+                        || compareMultiData.find(m => `vm_${m.vmid}_bps` === lookupName)
+                      const label = vm?.vm_name || lookupName
+                      return isCmp ? `${label} (${t('networkFlows.yesterday')})` : label
                     }}
                     wrapperStyle={{ fontSize: 11 }}
                   />
@@ -422,6 +576,25 @@ export default function TimeSeriesChart() {
                         fillOpacity={0.15}
                         strokeWidth={2}
                         isAnimationActive={false}
+                      />
+                    )
+                  })}
+                  {compareEnabled && compareMultiData.map((vm) => {
+                    const colorIdx = selectedVMs.findIndex(s => s.vmid === vm.vmid)
+                    const color = VM_COLORS[(colorIdx >= 0 ? colorIdx : 0) % VM_COLORS.length]
+                    return (
+                      <Area
+                        key={`cmp_${vm.vmid}`}
+                        type="monotone"
+                        dataKey={`cmp_vm_${vm.vmid}_bps`}
+                        name={`cmp_vm_${vm.vmid}_bps`}
+                        stroke={color}
+                        fill={color}
+                        fillOpacity={0.05}
+                        strokeWidth={1.5}
+                        strokeDasharray="4 4"
+                        isAnimationActive={false}
+                        connectNulls
                       />
                     )
                   })}

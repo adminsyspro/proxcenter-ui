@@ -5192,6 +5192,8 @@
     "uniquePeers": "唯一对端",
     "external": "外部",
     "portFilter": "端口",
-    "noTimelineData": "此对端没有可用的时间线数据（需要 InfluxDB）"
+    "noTimelineData": "此对端没有可用的时间线数据（需要 InfluxDB）",
+    "compare": "对比",
+    "yesterday": "昨天"
   }
 }

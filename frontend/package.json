@@ -44,7 +44,7 @@
     "d3-sankey": "^0.12.3",
     "dompurify": "^3.3.3",
     "exceljs": "^4.4.0",
-    "flatted": "^3.4.0",
+    "flatted": "^3.4.2",
     "form-data": "^4.0.5",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",

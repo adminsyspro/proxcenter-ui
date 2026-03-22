@@ -38,11 +38,12 @@ const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ font
 import { useLicense } from '@/contexts/LicenseContext'
 import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts'
 import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
 import type { InventorySelection } from './types'
+import { fetchRrd, buildSeriesFromRrd, formatTime, formatBps } from './helpers'
 import { useResourceData } from '../resources/hooks/useResourceData'
 import { calculateImprovedPredictions } from '../resources/algorithms/improvedPrediction'
 import { calculateHealthScoreWithDetails } from '../resources/algorithms/healthScore'
@@ -313,6 +314,59 @@ function RootInventoryView({
     }
     return Math.round(total / clusters.length)
   }, [drsMetrics])
+
+  // Per-node RRD graphs for infrastructure overview
+  const [infraRrdTf, setInfraRrdTf] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('hour')
+  const [infraRrdPerNode, setInfraRrdPerNode] = useState<Record<string, any[]>>({})
+  const [infraRrdNodeNames, setInfraRrdNodeNames] = useState<string[]>([])
+  const [infraRrdSeries, setInfraRrdSeries] = useState<any[]>([])
+  const [infraRrdLoading, setInfraRrdLoading] = useState(false)
+
+  const infraNodeColors = useMemo(() => {
+    const palette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1']
+    const map: Record<string, string> = {}
+    infraRrdNodeNames.forEach((name, i) => { map[name] = palette[i % palette.length] })
+    return map
+  }, [infraRrdNodeNames])
+
+  useEffect(() => {
+    if (hosts.length === 0) return
+    let cancelled = false
+    setInfraRrdLoading(true)
+
+    ;(async () => {
+      const perNode: Record<string, any[]> = {}
+      await Promise.all(hosts.map(async (host) => {
+        try {
+          const raw = await fetchRrd(host.connId, `/nodes/${host.node}`, infraRrdTf)
+          if (!cancelled) perNode[host.node] = buildSeriesFromRrd(raw)
+        } catch { /* ignore */ }
+      }))
+      if (cancelled) return
+
+      const nodeNames = Object.keys(perNode).sort()
+      setInfraRrdPerNode(perNode)
+      setInfraRrdNodeNames(nodeNames)
+
+      // Merge into unified time series with per-node keys
+      const timeMap = new Map<number, Record<string, number>>()
+      for (const [nodeName, series] of Object.entries(perNode)) {
+        for (const point of series) {
+          if (!point.t) continue
+          if (!timeMap.has(point.t)) timeMap.set(point.t, { t: point.t })
+          const entry = timeMap.get(point.t)!
+          if (point.cpuPct != null) entry[`cpu_${nodeName}`] = point.cpuPct
+          if (point.ramPct != null) entry[`ram_${nodeName}`] = point.ramPct
+          if (point.netInBps != null) entry[`netIn_${nodeName}`] = point.netInBps
+          if (point.netOutBps != null) entry[`netOut_${nodeName}`] = point.netOutBps
+        }
+      }
+      setInfraRrdSeries(Array.from(timeMap.values()).sort((a, b) => a.t - b.t))
+      setInfraRrdLoading(false)
+    })()
+
+    return () => { cancelled = true }
+  }, [hosts, infraRrdTf])
 
   const toggleCluster = (connId: string) => {
     setExpandedClusters(prev => {
@@ -710,6 +764,169 @@ function RootInventoryView({
           </Card>
         )}
       </Box>
+
+      {/* Aggregated Infrastructure Graphs */}
+      {infraRrdSeries.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+            <Typography fontWeight={700} fontSize={14}>{t('inventory.performances')}</Typography>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              {([
+                { label: '1h', value: 'hour' as const },
+                { label: '24h', value: 'day' as const },
+                { label: '7d', value: 'week' as const },
+                { label: '30d', value: 'month' as const },
+                { label: '1y', value: 'year' as const },
+              ]).map(opt => (
+                <Chip
+                  key={opt.value}
+                  label={opt.label}
+                  size="small"
+                  onClick={() => setInfraRrdTf(opt.value)}
+                  sx={{
+                    height: 24, fontSize: 11, fontWeight: 600,
+                    bgcolor: infraRrdTf === opt.value ? 'primary.main' : 'action.hover',
+                    color: infraRrdTf === opt.value ? 'primary.contrastText' : 'text.secondary',
+                    '&:hover': { bgcolor: infraRrdTf === opt.value ? 'primary.dark' : 'action.selected' },
+                    cursor: 'pointer',
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5 }}>
+            {/* CPU per node */}
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>CPU</Typography>
+              <Box sx={{ height: 120 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <linearGradient key={`gcpu_${name}`} id={`infraGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                    <RechartsTooltip
+                      contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }}
+                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                      formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name.replace('cpu_', '')]}
+                    />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={name} type="monotone" dataKey={`cpu_${name}`} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+              {infraRrdNodeNames.length > 1 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                  {infraRrdNodeNames.map(name => (
+                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
+                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+            {/* RAM per node */}
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>RAM</Typography>
+              <Box sx={{ height: 120 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <linearGradient key={`gram_${name}`} id={`infraGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                    <RechartsTooltip
+                      contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }}
+                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                      formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name.replace('ram_', '')]}
+                    />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={name} type="monotone" dataKey={`ram_${name}`} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+              {infraRrdNodeNames.length > 1 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                  {infraRrdNodeNames.map(name => (
+                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
+                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+            {/* Network per node (In + Out stacked) */}
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>Network</Typography>
+              <Box sx={{ height: 120 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <React.Fragment key={`gnet_${name}`}>
+                          <linearGradient id={`infraGradNetIn_${name}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                            <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                          </linearGradient>
+                        </React.Fragment>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                    <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={45} />
+                    <RechartsTooltip
+                      contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary }}
+                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                      formatter={(v: any, name: string) => {
+                        const isOut = name.startsWith('netOut_')
+                        const nodeName = name.replace(/^net(In|Out)_/, '')
+                        return [formatBps(Number(v)), `${nodeName} ${isOut ? '↑ Out' : '↓ In'}`]
+                      }}
+                    />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} name={`netIn_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradNetIn_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    ))}
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} name={`netOut_${name}`} stroke={infraNodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+              {infraRrdNodeNames.length > 1 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                  {infraRrdNodeNames.map(name => (
+                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
+                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      )}
+      {infraRrdLoading && infraRrdSeries.length === 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, opacity: 0.6 }}>
+          <CircularProgress size={16} />
+          <Typography variant="caption">{t('inventory.performances')}...</Typography>
+        </Box>
+      )}
 
       {/* Séparateur PVE */}
       <Box sx={{

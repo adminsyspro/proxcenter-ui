@@ -267,7 +267,7 @@ export default function ClusterTabs(props: any) {
   const connId = selection?.type === 'cluster' ? selection.id : ''
   const [clusterNodeRrd, setClusterNodeRrd] = useState<Record<string, any[]>>({})
   const [clusterNodeRrdLoading, setClusterNodeRrdLoading] = useState(false)
-  const clusterNodeRrdTf = 'hour'
+  const [clusterNodeRrdTf, setClusterNodeRrdTf] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('hour')
 
   useEffect(() => {
     if (clusterTab !== 0 || !connId || !data.nodesData?.length) return
@@ -292,7 +292,7 @@ export default function ClusterTabs(props: any) {
     })()
 
     return () => { cancelled = true }
-  }, [clusterTab, connId, data.nodesData?.length])
+  }, [clusterTab, connId, data.nodesData?.length, clusterNodeRrdTf])
 
   // Merge RRD data into unified series with per-node keys
   const clusterRrdSeries = useMemo(() => {
@@ -1087,7 +1087,34 @@ export default function ClusterTabs(props: any) {
                     {/* Section Nodes Table removed — now in dedicated Nodes tab */}
                     {/* Cluster RRD Charts — all nodes overlaid */}
                     {clusterRrdSeries.length > 0 && (
-                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mt: 2 }}>
+                      <>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, mb: 1.5 }}>
+                        <Typography fontWeight={700} fontSize={14}>{t('inventory.performances')}</Typography>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          {([
+                            { label: '1h', value: 'hour' as const },
+                            { label: '24h', value: 'day' as const },
+                            { label: '7d', value: 'week' as const },
+                            { label: '30d', value: 'month' as const },
+                            { label: '1y', value: 'year' as const },
+                          ]).map(opt => (
+                            <Chip
+                              key={opt.value}
+                              label={opt.label}
+                              size="small"
+                              onClick={() => setClusterNodeRrdTf(opt.value)}
+                              sx={{
+                                height: 24, fontSize: 11, fontWeight: 600,
+                                bgcolor: clusterNodeRrdTf === opt.value ? 'primary.main' : 'action.hover',
+                                color: clusterNodeRrdTf === opt.value ? 'primary.contrastText' : 'text.secondary',
+                                '&:hover': { bgcolor: clusterNodeRrdTf === opt.value ? 'primary.dark' : 'action.selected' },
+                                cursor: 'pointer',
+                              }}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
                         <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                           <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
@@ -1232,7 +1259,7 @@ export default function ClusterTabs(props: any) {
                           </Box>
                         </Box>
                       </Box>
-                    )}
+                    </>)}
                     {clusterNodeRrdLoading && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, opacity: 0.6 }}>
                         <CircularProgress size={16} />

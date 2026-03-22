@@ -402,6 +402,7 @@ export default function NodeTabs(props: any) {
                       {t('inventory.tabSubscription')}
                     </Box>
                   }
+                  sx={branding.enabled && branding.showSubscription === false ? { display: 'none' } : {}}
                 />
                 {/* Onglet CVE Scanner */}
                 <Tab

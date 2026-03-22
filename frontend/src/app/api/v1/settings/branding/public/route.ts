@@ -42,6 +42,10 @@ export async function GET() {
       primaryColor: settings.primaryColor,
       browserTitle: settings.browserTitle,
       poweredByVisible: settings.poweredByVisible,
+      showGithubStars: settings.showGithubStars,
+      showWhatsNew: settings.showWhatsNew,
+      showAbout: settings.showAbout,
+      showSubscription: settings.showSubscription,
     })
   } catch {
     return NextResponse.json(DEFAULT_BRANDING)

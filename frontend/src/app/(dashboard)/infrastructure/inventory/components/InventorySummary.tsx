@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useBranding } from '@/contexts/BrandingContext'
 
 import {
   Accordion,
@@ -94,6 +95,7 @@ function InventorySummary({
   vmNotes?: string | null
 }) {
   const t = useTranslations()
+  const { branding } = useBranding()
   const theme = useTheme()
   const primaryColor = theme.palette.primary.main
   const primaryColorLight = lighten(primaryColor, 0.3)
@@ -655,7 +657,7 @@ return `${mins}m`
             )}
 
             {/* Colonne 5 - Subscription Status */}
-            {hostInfo.subscription && (() => {
+            {(!branding.enabled || branding.showSubscription !== false) && hostInfo.subscription && (() => {
               // Calculer si l'échéance est proche (moins de 30 jours)
               const isActive = hostInfo.subscription.status === 'active'
               const nextDueDate = hostInfo.subscription.nextDueDate ? new Date(hostInfo.subscription.nextDueDate) : null

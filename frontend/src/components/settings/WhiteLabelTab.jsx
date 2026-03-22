@@ -46,7 +46,7 @@ export default function WhiteLabelTab() {
     fetch('/api/v1/settings/branding')
       .then(r => r.json())
       .then(data => {
-        if (!data.error) setConfig(data)
+        if (!data.error) setConfig(prev => ({ ...prev, ...data }))
       })
       .catch(() => {})
       .finally(() => setLoading(false))

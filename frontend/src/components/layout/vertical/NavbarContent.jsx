@@ -1335,7 +1335,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
         </MenuItem>
         )}
 
-        {(!branding.enabled || branding.showAbout !== false) && (
+        {(branding.showAbout !== false) && (
         <MenuItem
           onClick={() => {
             setUserAnchor(null)

@@ -41,6 +41,8 @@ export async function POST(
       select: {
         id: true,
         name: true,
+        type: true,
+        baseUrl: true,
         sshEnabled: true,
         sshPort: true,
         sshUser: true,
@@ -91,7 +93,46 @@ export async function POST(
       }
     }
 
-    // 1. Try orchestrator first
+    // For non-PVE connections (VMware ESXi, XCP-ng), test SSH directly to the host
+    if (connection.type !== 'pve' && connection.type !== 'pbs') {
+      const host = connection.baseUrl.replace(/^https?:\/\//, '').replace(/[:\/].*$/, '')
+      const port = connection.sshPort || 22
+      const user = connection.sshUser || 'root'
+
+      try {
+        const result = await executeSSHDirect({
+          host,
+          port,
+          user,
+          key: sshKey,
+          password: sshPassword,
+          passphrase: sshPassphrase,
+          command: 'hostname',
+        })
+
+        return NextResponse.json({
+          success: result.success,
+          nodes: [{
+            node: connection.name,
+            ip: host,
+            status: result.success ? 'ok' : 'error',
+            error: result.success ? undefined : result.error,
+          }],
+        })
+      } catch (e: any) {
+        return NextResponse.json({
+          success: false,
+          nodes: [{
+            node: connection.name,
+            ip: host,
+            status: 'error',
+            error: e.message,
+          }],
+        })
+      }
+    }
+
+    // 1. Try orchestrator first (PVE/PBS only)
     try {
       const sshCredentials: Record<string, unknown> = {
         sshEnabled: connection.sshEnabled,

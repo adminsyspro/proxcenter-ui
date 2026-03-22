@@ -186,6 +186,15 @@ export function executeSSHDirect(opts: {
       resolve({ success: false, error: err.message })
     })
 
+    // Handle keyboard-interactive auth (used by ESXi and some other hosts)
+    conn.on("keyboard-interactive", (_name, _instructions, _instructionsLang, prompts, finish) => {
+      if (opts.password && prompts.length > 0) {
+        finish([opts.password])
+      } else {
+        finish([])
+      }
+    })
+
     const connectConfig: Record<string, unknown> = {
       host: opts.host,
       port: opts.port,
@@ -196,8 +205,10 @@ export function executeSSHDirect(opts: {
     if (opts.key) {
       connectConfig.privateKey = opts.key
       if (opts.passphrase) connectConfig.passphrase = opts.passphrase
-    } else if (opts.password) {
+    }
+    if (opts.password) {
       connectConfig.password = opts.password
+      connectConfig.tryKeyboard = true
     }
 
     conn.connect(connectConfig as any)

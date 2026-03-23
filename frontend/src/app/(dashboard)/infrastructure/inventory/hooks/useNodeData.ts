@@ -146,11 +146,11 @@ export function useNodeData(
       .finally(() => { setNodeDisksLoading(false); setNodeDisksLoaded(true) })
   }, [isNode, selectionId, nodeTab, nodeDisksLoaded, nodeDisksLoading])
 
-  // Load Subscription (cluster: tab 10, standalone: tab 11)
+  // Load Subscription (cluster: tab 11, standalone: tab 12)
   useEffect(() => {
     if (!isNode || nodeSubscriptionLoaded || nodeSubscriptionLoading) return
     const isInCluster = !!clusterName
-    const subscriptionTabIndex = isInCluster ? 10 : 11
+    const subscriptionTabIndex = isInCluster ? 11 : 12
     if (nodeTab !== subscriptionTabIndex) return
 
     setNodeSubscriptionLoading(true)

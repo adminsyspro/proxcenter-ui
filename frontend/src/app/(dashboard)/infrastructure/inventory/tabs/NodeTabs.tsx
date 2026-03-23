@@ -54,6 +54,8 @@ import ChangeTrackingTab from './ChangeTrackingTab'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
+import NodeUpdateDialog from '@/components/NodeUpdateDialog'
+import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import ComplianceTab from '@/components/ComplianceTab'
 import NetworkInterfaceDialog from '@/components/network/NetworkInterfaceDialog'
 
@@ -205,7 +207,12 @@ export default function NodeTabs(props: any) {
     setNodeUpdates,
     nodeLocalVms,
     setNodeLocalVms,
+    rollingUpdateAvailable,
+    rollingUpdateWizardOpen,
+    setRollingUpdateWizardOpen,
   } = props
+
+  const [nodeUpdateDialogOpen, setNodeUpdateDialogOpen] = React.useState(false)
 
   const { hasFeature } = useLicense()
   const changeTrackingAvailable = hasFeature(Features.CHANGE_TRACKING)
@@ -391,6 +398,15 @@ export default function NodeTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-refresh-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabReplication')}
+                    </Box>
+                  }
+                />
+                {/* Onglet Updates — always accessible */}
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-download-cloud-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabUpdates')}
                     </Box>
                   }
                 />
@@ -3132,9 +3148,341 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
+                {/* Onglet Updates - Index 10 pour cluster, Index 11 pour standalone */}
+                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (() => {
+                  const nodeName = data.nodeName || selection?.id?.split(':').pop() || ''
+                  const nodeUpdate = nodeUpdates?.[nodeName]
+                  const pkgCount = nodeUpdate?.count || 0
+                  const hasKernel = nodeUpdate?.updates?.some((u: any) =>
+                    (u.Package || u.package || '').toLowerCase().includes('kernel') ||
+                    (u.Package || u.package || '').toLowerCase().includes('linux-image') ||
+                    (u.Package || u.package || '').toLowerCase().includes('pve-kernel')
+                  )
+                  const estimatedMinutes = pkgCount > 0
+                    ? Math.ceil(2 + 5 + Math.ceil(pkgCount * 3 / 60) + (hasKernel ? 5 : 0) + 2)
+                    : 0
 
-                {/* Onglet Subscription - Index 10 pour cluster, Index 11 pour standalone */}
-                {((nodeTab === 10 && data.clusterName) || (nodeTab === 11 && !data.clusterName)) && (
+                  return (
+                    <Box sx={{ p: 2 }}>
+                      <Stack spacing={3}>
+                        {/* Header */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <i className="ri-download-cloud-line" style={{ fontSize: 20 }} />
+                            {t('updates.availableUpdates')}
+                          </Typography>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<i className="ri-refresh-line" />}
+                            onClick={() => {
+                              setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
+                            }}
+                          >
+                            {t('updates.refresh')}
+                          </Button>
+                        </Box>
+
+                        {/* Loading state */}
+                        {nodeUpdate?.loading ? (
+                          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                            <CircularProgress size={32} />
+                          </Box>
+                        ) : !nodeUpdate ? (
+                          <Alert severity="info" icon={<i className="ri-information-line" />}>
+                            <Typography variant="body2">
+                              {t('updates.checkUpdates')}
+                            </Typography>
+                          </Alert>
+                        ) : (
+                          <>
+                            {/* Version card */}
+                            <Card variant="outlined">
+                              <CardContent>
+                                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <i className="ri-server-line" style={{ fontSize: 18 }} />
+                                  {nodeName}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                  {nodeUpdate?.version && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('updates.version')}:</Typography>
+                                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>{nodeUpdate.version}</Typography>
+                                    </Box>
+                                  )}
+                                  <Chip
+                                    size="small"
+                                    label={`${pkgCount} ${t('updates.packages').toLowerCase()}`}
+                                    color={pkgCount > 0 ? 'warning' : 'success'}
+                                    icon={pkgCount > 0 ? <i className="ri-arrow-up-circle-fill" style={{ fontSize: 14 }} /> : <i className="ri-checkbox-circle-fill" style={{ fontSize: 14 }} />}
+                                    sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                  />
+                                  {pkgCount > 0 && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <i className="ri-time-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                                      <Typography variant="caption">~{estimatedMinutes} min</Typography>
+                                    </Box>
+                                  )}
+                                  {hasKernel && (
+                                    <MuiTooltip title={t('updates.rebootRequired')}>
+                                      <Chip
+                                        size="small"
+                                        label={t('updates.rebootRequired')}
+                                        color="warning"
+                                        icon={<i className="ri-restart-line" style={{ fontSize: 14 }} />}
+                                        sx={{ height: 24, fontSize: 11 }}
+                                      />
+                                    </MuiTooltip>
+                                  )}
+                                </Box>
+                              </CardContent>
+                            </Card>
+
+                            {/* Package list table */}
+                            {pkgCount > 0 && (
+                              <Card variant="outlined">
+                                <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                                  <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                                    {/* Header */}
+                                    <Box sx={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr 160px 160px',
+                                      gap: 1,
+                                      px: 1.5,
+                                      py: 0.75,
+                                      bgcolor: 'background.paper',
+                                      borderBottom: '1px solid',
+                                      borderColor: 'divider',
+                                      position: 'sticky',
+                                      top: 0,
+                                      zIndex: 2
+                                    }}>
+                                      <Typography variant="caption" fontWeight={600}>{t('updates.package')}</Typography>
+                                      <Typography variant="caption" fontWeight={600}>{t('updates.currentVersion')}</Typography>
+                                      <Typography variant="caption" fontWeight={600}>{t('updates.newVersion')}</Typography>
+                                    </Box>
+                                    {/* Rows */}
+                                    {nodeUpdate.updates.map((upd: any, idx: number) => {
+                                      const pkgName = upd.Package || upd.package || ''
+                                      const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
+                                      return (
+                                        <Box
+                                          key={idx}
+                                          sx={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 160px 160px',
+                                            gap: 1,
+                                            px: 1.5,
+                                            py: 0.5,
+                                            borderBottom: '1px solid',
+                                            borderColor: 'divider',
+                                            '&:last-child': { borderBottom: 'none' },
+                                            '&:hover': { bgcolor: 'action.hover' },
+                                            bgcolor: isKernel ? 'rgba(255, 152, 0, 0.1)' : 'transparent'
+                                          }}
+                                        >
+                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                                            {isKernel && (
+                                              <i className="ri-restart-line" style={{ fontSize: 12, color: '#ff9800', flexShrink: 0 }} />
+                                            )}
+                                            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
+                                              {pkgName}
+                                            </Typography>
+                                          </Box>
+                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.OldVersion || upd.old_version || '—'}
+                                          </Typography>
+                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.Version || upd.version || upd.new_version || '—'}
+                                          </Typography>
+                                        </Box>
+                                      )
+                                    })}
+                                  </Box>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* Summary alert */}
+                            {pkgCount === 0 ? (
+                              <Alert severity="success" icon={<i className="ri-checkbox-circle-line" />}>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {t('updates.upToDate')}
+                                </Typography>
+                              </Alert>
+                            ) : (
+                              <Alert
+                                severity="warning"
+                                icon={<i className="ri-error-warning-line" />}
+                              >
+                                <Box>
+                                  <Typography variant="body2" fontWeight={600}>
+                                    {t('updates.summaryUpdates', { count: pkgCount, nodes: 1 })}
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5, flexWrap: 'wrap' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <i className="ri-time-line" style={{ fontSize: 14 }} />
+                                      <Typography variant="caption">
+                                        {t('updates.totalEstimatedTime')}: ~{estimatedMinutes} min
+                                      </Typography>
+                                    </Box>
+                                    {hasKernel && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                        <i className="ri-restart-line" style={{ fontSize: 14, color: '#ff9800' }} />
+                                        <Typography variant="caption">
+                                          {t('updates.rebootsRequired', { count: 1 })}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </Box>
+                              </Alert>
+                            )}
+
+                            {/* Pre-flight checks (cluster nodes with updates) */}
+                            {pkgCount > 0 && data.clusterName && (() => {
+                              const cephHealth = nodeCephData?.health?.status || nodeCephData?.health?.overall_status
+                              const hasCeph = nodeCephData && nodeCephData.hasCeph !== false
+                              const localVmData = nodeLocalVms?.[nodeName]
+                              const cephHealthy = !hasCeph || cephHealth === 'HEALTH_OK'
+
+                              return (
+                                <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                    <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <i className="ri-shield-check-line" style={{ fontSize: 18 }} />
+                                      {t('updates.preflightChecks')}
+                                    </Typography>
+                                    <Stack spacing={1.5}>
+                                      {/* Ceph Health */}
+                                      {hasCeph && (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                          <Chip
+                                            size="small"
+                                            label={cephHealth || 'LOADING'}
+                                            color={cephHealth === 'HEALTH_OK' ? 'success' : cephHealth === 'HEALTH_WARN' ? 'warning' : 'error'}
+                                            icon={<i className={cephHealth === 'HEALTH_OK' ? 'ri-checkbox-circle-line' : 'ri-alert-line'} style={{ fontSize: 14 }} />}
+                                            sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                          />
+                                          <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                                            {t('updates.cephHealth')}
+                                          </Typography>
+                                          {!cephHealthy && (
+                                            <Typography variant="caption" color="error">
+                                              {t('updates.cephMustBeHealthy')}
+                                            </Typography>
+                                          )}
+                                        </Box>
+                                      )}
+
+                                      {/* VM Migration Readiness */}
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        {localVmData?.loading ? (
+                                          <CircularProgress size={16} />
+                                        ) : localVmData && localVmData.total > 0 ? (
+                                          <Chip
+                                            size="small"
+                                            label={`${localVmData.total} VM${localVmData.total > 1 ? 's' : ''}`}
+                                            color={localVmData.blockingMigration > 0 ? 'error' : 'warning'}
+                                            icon={<i className={localVmData.blockingMigration > 0 ? 'ri-error-warning-line' : 'ri-information-line'} style={{ fontSize: 14 }} />}
+                                            sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                          />
+                                        ) : (
+                                          <Chip
+                                            size="small"
+                                            label="OK"
+                                            color="success"
+                                            icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 14 }} />}
+                                            sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                          />
+                                        )}
+                                        <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                                          {t('updates.vmMigration')}
+                                          {localVmData && !localVmData.loading && localVmData.total === 0 && (
+                                            <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.6 }}>
+                                              — {t('updates.allOnSharedStorage')}
+                                            </Typography>
+                                          )}
+                                        </Typography>
+                                      </Box>
+
+                                      {/* Maintenance Mode Notice */}
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        <Chip
+                                          size="small"
+                                          label="Auto"
+                                          color="info"
+                                          icon={<i className="ri-tools-line" style={{ fontSize: 14 }} />}
+                                          sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+                                        />
+                                        <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                                          {t('updates.maintenanceNotice')}
+                                          <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.6 }}>
+                                            — {t('updates.willBeActivated')}
+                                          </Typography>
+                                        </Typography>
+                                      </Box>
+                                    </Stack>
+                                  </CardContent>
+                                </Card>
+                              )
+                            })()}
+
+                            {/* Action buttons */}
+                            {pkgCount > 0 && (
+                              <Button
+                                variant="contained"
+                                color="warning"
+                                size="large"
+                                startIcon={<i className="ri-play-circle-line" style={{ fontSize: 20 }} />}
+                                onClick={() => data.clusterName ? setRollingUpdateWizardOpen(true) : setNodeUpdateDialogOpen(true)}
+                                sx={{ alignSelf: 'flex-start' }}
+                                disabled={
+                                  !!(data.clusterName && (!rollingUpdateAvailable ||
+                                    (nodeCephData && nodeCephData.hasCeph !== false &&
+                                    (nodeCephData?.health?.status || nodeCephData?.health?.overall_status) !== 'HEALTH_OK')))
+                                }
+                              >
+                                {t('updates.update')}
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </Stack>
+
+                      {/* Rolling Update Wizard (cluster nodes) */}
+                      {data.clusterName && (
+                        <RollingUpdateWizard
+                          open={rollingUpdateWizardOpen}
+                          onClose={() => setRollingUpdateWizardOpen(false)}
+                          connectionId={selection?.id?.split(':')[0] || ''}
+                          nodes={[{
+                            node: nodeName,
+                            version: nodeUpdate?.version || '',
+                            vms: data.vmsData?.length || 0,
+                            status: 'online',
+                          }]}
+                          nodeUpdates={nodeUpdates}
+                        />
+                      )}
+
+                      {/* Node Update Dialog (standalone nodes) */}
+                      {!data.clusterName && (
+                        <NodeUpdateDialog
+                          open={nodeUpdateDialogOpen}
+                          onClose={() => setNodeUpdateDialogOpen(false)}
+                          connectionId={selection?.id?.split(':')[0] || ''}
+                          nodeName={nodeName}
+                          vmCount={data.vmsData?.filter((vm: any) => vm.status === 'running').length || 0}
+                          nodeUpdates={nodeUpdates}
+                        />
+                      )}
+                    </Box>
+                  )
+                })()}
+
+                {/* Onglet Subscription - Index 11 pour cluster, Index 12 pour standalone */}
+                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
                   <Box sx={{ p: 2 }}>
                     {nodeSubscriptionLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -3462,23 +3810,23 @@ export default function NodeTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet CVE - Index 11 pour cluster, Index 12 pour standalone */}
-                {((nodeTab === 11 && data.clusterName) || (nodeTab === 12 && !data.clusterName)) && (
+                {/* Onglet CVE - Index 12 pour cluster, Index 13 pour standalone */}
+                {((nodeTab === 12 && data.clusterName) || (nodeTab === 13 && !data.clusterName)) && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} node={data.nodeName || selection?.id?.split(':').pop() || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Change Tracking - Index 12 pour cluster, Index 13 pour standalone */}
-                {((nodeTab === 12 && data.clusterName) || (nodeTab === 13 && !data.clusterName)) && (
+                {/* Onglet Change Tracking - Index 13 pour cluster, Index 14 pour standalone */}
+                {((nodeTab === 13 && data.clusterName) || (nodeTab === 14 && !data.clusterName)) && (
                   <ChangeTrackingTab
                     connectionId={parseNodeId(selection?.id || '').connId}
                     node={parseNodeId(selection?.id || '').node}
                   />
                 )}
 
-                {/* Onglet Compliance - Index 13 pour cluster, Index 14 pour standalone */}
-                {((nodeTab === 13 && data.clusterName) || (nodeTab === 14 && !data.clusterName)) && (
+                {/* Onglet Compliance - Index 14 pour cluster, Index 15 pour standalone */}
+                {((nodeTab === 14 && data.clusterName) || (nodeTab === 15 && !data.clusterName)) && (
                   <ComplianceTab
                     connectionId={parseNodeId(selection?.id || '').connId}
                     node={parseNodeId(selection?.id || '').node}

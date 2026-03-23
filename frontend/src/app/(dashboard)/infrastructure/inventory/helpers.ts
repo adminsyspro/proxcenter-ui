@@ -280,16 +280,30 @@ return out
 }
 
 export async function fetchRrd(connectionId: string, path: string, timeframe: RrdTimeframe) {
-  const res = await fetch(
-    `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd?path=${encodeURIComponent(path)}&timeframe=${encodeURIComponent(timeframe)}`,
-    { cache: 'no-store' }
-  )
+  const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd?path=${encodeURIComponent(path)}&timeframe=${encodeURIComponent(timeframe)}`
+  console.log(`[fetchRrd] GET ${url}`)
+
+  const res = await fetch(url, { cache: 'no-store' })
 
   const json = await res.json()
 
-  if (!res.ok) throw new Error(json?.error || `RRD HTTP ${res.status}`)
+  if (!res.ok) {
+    console.error(`[fetchRrd] HTTP ${res.status} for connId=${connectionId} path=${path}:`, json?.error)
+    throw new Error(json?.error || `RRD HTTP ${res.status}`)
+  }
 
-return asArray<any>(safeJson<any>(json))
+  const result = asArray<any>(safeJson<any>(json))
+  console.log(`[fetchRrd] connId=${connectionId} path=${path}: HTTP ${res.status}, parsed ${result.length} data points, json type=${typeof json}, isArray=${Array.isArray(json)}`)
+  if (result.length > 0) {
+    const first = result[0]
+    const last = result[result.length - 1]
+    console.log(`[fetchRrd]   first point keys:`, Object.keys(first), `time=${first.time || first.t || first.timestamp}`)
+    console.log(`[fetchRrd]   last point keys:`, Object.keys(last), `time=${last.time || last.t || last.timestamp}`)
+  } else {
+    console.warn(`[fetchRrd] ⚠ EMPTY result for connId=${connectionId} path=${path}`)
+  }
+
+return result
 }
 
 export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
@@ -489,11 +503,12 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     }
 
     // Node is online — fetch all details in parallel
-    // Only fetch essential data for Summary tab — subscription, apt, maintenance are deferred to their tabs
-    const [statusR, resourcesR, versionR, maintenanceR] = await Promise.all([
+    const [statusR, resourcesR, versionR, subscriptionR, updatesR, maintenanceR] = await Promise.all([
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/version`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`, { cache: 'no-store' }).catch(() => null),
       fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { cache: 'no-store' }).catch(() => null),
     ])
 
@@ -540,6 +555,24 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     if (versionR && versionR.ok) {
       try {
         versionData = safeJson<any>(await versionR.json())
+      } catch {}
+    }
+
+    let subscriptionData: any = null
+
+    if (subscriptionR && subscriptionR.ok) {
+      try {
+        const subResponse = await subscriptionR.json()
+        subscriptionData = subResponse?.data || null
+      } catch {}
+    }
+
+    let updatesData: any[] = []
+
+    if (updatesR && updatesR.ok) {
+      try {
+        const updResponse = await updatesR.json()
+        updatesData = updResponse?.data || []
       } catch {}
     }
 
@@ -645,7 +678,8 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         loadAvg,
         ioDelay,
         ksmSharing,
-        updates: [],
+        updates: updatesData || [],
+        subscription: subscriptionData,
         maintenance: maintenanceValue,
       },
       vmsData,

@@ -1762,6 +1762,39 @@ return
     }
   }, [selection?.type, selection?.id, clusterTab, clusterStorageLoaded, clusterStorageLoading, loadClusterStorage])
 
+  // Charger les mises à jour quand on sélectionne l'onglet Updates sur un node
+  useEffect(() => {
+    if (selection?.type !== 'node') return
+    const isInCluster = !!data?.clusterName
+    const updatesTabIndex = isInCluster ? 10 : 11
+    if (nodeTab !== updatesTabIndex) return
+
+    const { connId, node } = parseNodeId(selection.id)
+    if (nodeUpdates[node] !== undefined) return // Already loaded or loading
+
+    setNodeUpdates(prev => ({
+      ...prev,
+      [node]: { count: 0, updates: [], version: null, loading: true }
+    }))
+
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`)
+      .then(res => res.json())
+      .then(json => {
+        const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
+        const pveVersion = pvePkg?.currentVersion || null
+        setNodeUpdates(prev => ({
+          ...prev,
+          [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false }
+        }))
+      })
+      .catch(() => {
+        setNodeUpdates(prev => ({
+          ...prev,
+          [node]: { count: 0, updates: [], version: null, loading: false }
+        }))
+      })
+  }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeUpdates])
+
   // Charger les mises à jour quand on sélectionne l'onglet Rolling Update
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 11 && data?.nodesData?.length > 0) {

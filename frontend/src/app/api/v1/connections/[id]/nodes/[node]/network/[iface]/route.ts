@@ -49,8 +49,10 @@ export async function PUT(req: Request, ctx: Ctx) {
     ]
 
     // Type-specific fields
-    const bridgeFields = ['bridge_ports', 'bridge_stp', 'bridge_fd', 'bridge_vlan_aware']
-    const bondFields = ['bond_mode', 'bond_primary', 'bond-xmit-hash-policy', 'slaves']
+    // Note: bridge_stp and bridge_fd are NOT accepted by the PVE API PUT endpoint
+    const bridgeFields = ['bridge_ports', 'bridge_vlan_aware']
+    // PVE uses mixed naming: bond_mode (underscore), bond-primary (hyphen), bond_xmit_hash_policy (underscore)
+    const bondFields = ['bond_mode', 'bond-primary', 'bond_xmit_hash_policy', 'slaves']
     const vlanFields = ['vlan-id', 'vlan-raw-device']
     const ovsFields = ['ovs_bridge', 'ovs_options', 'ovs_tag', 'ovs_bonds', 'ovs_ports']
 

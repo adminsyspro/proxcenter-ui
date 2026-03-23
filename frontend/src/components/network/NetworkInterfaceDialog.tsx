@@ -110,8 +110,8 @@ export default function NetworkInterfaceDialog({
           bridge_fd: iface.bridge_fd ?? '',
           bridge_vlan_aware: !!iface.bridge_vlan_aware,
           bond_mode: iface.bond_mode || '',
-          bond_primary: iface.bond_primary || '',
-          'bond-xmit-hash-policy': iface.bond_xmit_hash_policy || '',
+          'bond-primary': iface.bond_primary || iface['bond-primary'] || '',
+          bond_xmit_hash_policy: iface.bond_xmit_hash_policy || iface['bond-xmit-hash-policy'] || '',
           slaves: iface.slaves || '',
           'vlan-id': iface.vlan_id || '',
           'vlan-raw-device': iface.vlan_raw_device || '',
@@ -307,25 +307,26 @@ export default function NetworkInterfaceDialog({
                 helperText="Space-separated list of slave interfaces"
               />
 
-              <TextField
-                label="Bridge STP"
-                size="small"
-                fullWidth
-                value={form.bridge_stp ?? ''}
-                onChange={e => set('bridge_stp', e.target.value)}
-                disabled={isReadonly}
-                placeholder="off"
-              />
+              {/* bridge_stp and bridge_fd are read-only — PVE API does not accept them via PUT */}
+              {(form.bridge_stp !== undefined && form.bridge_stp !== '') && (
+                <TextField
+                  label="Bridge STP"
+                  size="small"
+                  fullWidth
+                  value={form.bridge_stp ?? ''}
+                  disabled
+                />
+              )}
 
-              <TextField
-                label="Bridge Forward Delay"
-                size="small"
-                fullWidth
-                value={form.bridge_fd ?? ''}
-                onChange={e => set('bridge_fd', e.target.value)}
-                disabled={isReadonly}
-                placeholder="0"
-              />
+              {(form.bridge_fd !== undefined && form.bridge_fd !== '') && (
+                <TextField
+                  label="Bridge Forward Delay"
+                  size="small"
+                  fullWidth
+                  value={form.bridge_fd ?? ''}
+                  disabled
+                />
+              )}
 
               <FormControlLabel
                 control={
@@ -373,9 +374,9 @@ export default function NetworkInterfaceDialog({
               <FormControl size="small" fullWidth disabled={isReadonly}>
                 <InputLabel>Hash Policy</InputLabel>
                 <Select
-                  value={form['bond-xmit-hash-policy'] || ''}
+                  value={form.bond_xmit_hash_policy || ''}
                   label="Hash Policy"
-                  onChange={e => set('bond-xmit-hash-policy', e.target.value)}
+                  onChange={e => set('bond_xmit_hash_policy', e.target.value)}
                 >
                   <MenuItem value="">Default</MenuItem>
                   {HASH_POLICIES.map(p => (
@@ -388,8 +389,8 @@ export default function NetworkInterfaceDialog({
                 label="Bond Primary"
                 size="small"
                 fullWidth
-                value={form.bond_primary || ''}
-                onChange={e => set('bond_primary', e.target.value)}
+                value={form['bond-primary'] || ''}
+                onChange={e => set('bond-primary', e.target.value)}
                 disabled={isReadonly}
                 placeholder="eno1"
               />

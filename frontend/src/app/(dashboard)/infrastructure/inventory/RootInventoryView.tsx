@@ -1050,10 +1050,10 @@ function RootInventoryView({
                   alignItems: 'center', 
                   gap: 1.5,
                   cursor: 'pointer',
-                  bgcolor: theme.palette.mode === 'dark' ? 'rgba(242, 146, 33, 0.08)' : 'rgba(242, 146, 33, 0.05)',
+                  bgcolor: theme.palette.mode === 'dark' ? '#262635' : '#f4f4f8',
                   borderBottom: isClusterCollapsed ? 'none' : '1px solid',
                   borderColor: 'divider',
-                  '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(242, 146, 33, 0.12)' : 'rgba(242, 146, 33, 0.08)' }
+                  '&:hover': { bgcolor: theme.palette.mode === 'dark' ? '#2c2c3e' : '#ebebf0' }
                 }}
               >
                 <i 
@@ -1290,7 +1290,7 @@ function RootInventoryView({
                       display: 'flex',
                       alignItems: 'center',
                       gap: 1.5,
-                      bgcolor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.08)' : 'rgba(33, 150, 243, 0.05)',
+                      bgcolor: theme.palette.mode === 'dark' ? '#262635' : '#f4f4f8',
                     }}
                   >
                     <i className="ri-hard-drive-2-fill" style={{ fontSize: 18, color: '#2196f3' }} />
@@ -1338,7 +1338,7 @@ function RootInventoryView({
                     <Card key={type} variant="outlined">
                       <Box sx={{
                         px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5,
-                        bgcolor: theme.palette.mode === 'dark' ? `${cfg.color}15` : `${cfg.color}08`,
+                        bgcolor: theme.palette.mode === 'dark' ? '#262635' : '#f4f4f8',
                       }}>
                         {cfg.svgIcon
                           ? <img src={cfg.svgIcon} alt="" width={18} height={18} style={{ opacity: 0.8 }} />

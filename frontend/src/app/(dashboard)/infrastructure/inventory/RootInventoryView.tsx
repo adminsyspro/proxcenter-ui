@@ -895,9 +895,23 @@ function RootInventoryView({
                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                     <RechartsTooltip
-                      wrapperStyle={{ zIndex: 10 }} contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, boxShadow: '0 4px 14px rgba(0,0,0,0.15)' }}
-                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                      formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name.replace('cpu_', '')]}
+                      wrapperStyle={{ zIndex: 10 }}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                        return (
+                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                            {sorted.map(entry => (
+                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                              </Box>
+                            ))}
+                          </Box>
+                        )
+                      }}
                     />
                     {infraRrdNodeNames.map(name => (
                       <Area key={name} type="monotone" dataKey={`cpu_${name}`} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
@@ -933,9 +947,23 @@ function RootInventoryView({
                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                     <RechartsTooltip
-                      wrapperStyle={{ zIndex: 10 }} contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, boxShadow: '0 4px 14px rgba(0,0,0,0.15)' }}
-                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                      formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name.replace('ram_', '')]}
+                      wrapperStyle={{ zIndex: 10 }}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                        return (
+                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                            {sorted.map(entry => (
+                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                              </Box>
+                            ))}
+                          </Box>
+                        )
+                      }}
                     />
                     {infraRrdNodeNames.map(name => (
                       <Area key={name} type="monotone" dataKey={`ram_${name}`} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
@@ -973,12 +1001,26 @@ function RootInventoryView({
                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={45} />
                     <RechartsTooltip
-                      wrapperStyle={{ zIndex: 10 }} contentStyle={{ fontSize: 11, borderRadius: 8, backgroundColor: theme.palette.background.paper, borderColor: theme.palette.divider, color: theme.palette.text.primary, boxShadow: '0 4px 14px rgba(0,0,0,0.15)' }}
-                      labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                      formatter={(v: any, name: string) => {
-                        const isOut = name.startsWith('netOut_')
-                        const nodeName = name.replace(/^net(In|Out)_/, '')
-                        return [formatBps(Number(v)), `${nodeName} ${isOut ? '↑ Out' : '↓ In'}`]
+                      wrapperStyle={{ zIndex: 10 }}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                        return (
+                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                            {sorted.map(entry => {
+                              const isOut = String(entry.name).startsWith('netOut_')
+                              const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
+                              return (
+                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                  <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
+                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                </Box>
+                              )
+                            })}
+                          </Box>
+                        )
                       }}
                     />
                     {infraRrdNodeNames.map(name => (
@@ -1013,8 +1055,8 @@ function RootInventoryView({
 
       {/* Séparateur PVE */}
       <Box sx={{
-        display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mb: 1, mx: -2.5,
-        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+        display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mt: 3, mb: 1, mx: -2.5,
+        background: theme.palette.mode === 'dark' ? 'linear-gradient(90deg, #2b2b39 0%, #32324a 100%)' : 'linear-gradient(90deg, #ededf2 0%, #e5e5ee 100%)',
         borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
       }}>
         <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18 }} />
@@ -1197,14 +1239,14 @@ function RootInventoryView({
           <>
             <Box sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mt: 3, mb: 1, mx: -2.5,
-              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+              background: theme.palette.mode === 'dark' ? 'linear-gradient(90deg, #2b2b39 0%, #32324a 100%)' : 'linear-gradient(90deg, #ededf2 0%, #e5e5ee 100%)',
               borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
             }}>
               <i className="ri-database-2-fill" style={{ fontSize: 16, opacity: 0.7 }} />
               <Typography variant="body2" fontWeight={700}>STORAGE</Typography>
               <Chip size="small" label={clusterStorages.reduce((acc, cs) => acc + cs.sharedStorages.length + cs.nodes.reduce((a, n) => a + n.storages.length, 0), 0)} sx={{ height: 18, fontSize: 10 }} />
             </Box>
-            <Stack spacing={1}>
+            <Stack spacing={2}>
               {clusterStorages.map(cs => {
                 const allStorages = cs.sharedStorages.concat(cs.nodes.flatMap(n => n.storages))
                 const totalUsed = allStorages.reduce((a, s) => a + s.used, 0)
@@ -1246,10 +1288,10 @@ function RootInventoryView({
         <Box
           onClick={() => onSelect?.({ type: 'root', id: 'root' })}
           sx={{
-            display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mt: 3, mx: -2.5,
-            bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+            display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mt: 3, mb: 1, mx: -2.5,
+            background: theme.palette.mode === 'dark' ? 'linear-gradient(90deg, #2b2b39 0%, #32324a 100%)' : 'linear-gradient(90deg, #ededf2 0%, #e5e5ee 100%)',
             borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
-            cursor: 'pointer', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)' },
+            cursor: 'pointer', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? '#32323f' : '#e5e5ea' },
           }}
         >
           <i className="ri-router-fill" style={{ fontSize: 16, opacity: 0.7 }} />
@@ -1264,7 +1306,7 @@ function RootInventoryView({
           <>
             <Box sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mt: 3, mb: 1, mx: -2.5,
-              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+              background: theme.palette.mode === 'dark' ? 'linear-gradient(90deg, #2b2b39 0%, #32324a 100%)' : 'linear-gradient(90deg, #ededf2 0%, #e5e5ee 100%)',
               borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
             }}>
               <i className="ri-hard-drive-2-fill" style={{ fontSize: 16, opacity: 0.7 }} />
@@ -1272,7 +1314,7 @@ function RootInventoryView({
               <Chip size="small" label={t('inventory.nBackups', { count: pbsServers.reduce((acc, pbs) => acc + pbs.backupCount, 0) })} sx={{ height: 18, fontSize: 10 }} />
             </Box>
 
-            <Stack spacing={1}>
+            <Stack spacing={2}>
               {pbsServers.map(pbs => (
                 <Card
                   key={pbs.connId}
@@ -1323,14 +1365,14 @@ function RootInventoryView({
             <>
               <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, mt: 3, mb: 1, mx: -2.5,
-                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                background: theme.palette.mode === 'dark' ? 'linear-gradient(90deg, #2b2b39 0%, #32324a 100%)' : 'linear-gradient(90deg, #ededf2 0%, #e5e5ee 100%)',
                 borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
               }}>
                 <img src="/images/esxi-logo.svg" alt="" width={16} height={16} style={{ opacity: 0.7 }} />
                 <Typography variant="body2" fontWeight={700}>MIGRATIONS</Typography>
                 <Chip size="small" label={`${externalHypervisors.length} hosts${totalExtVms > 0 ? `, ${totalExtVms} VMs` : ''}`} sx={{ height: 18, fontSize: 10 }} />
               </Box>
-              <Stack spacing={1}>
+              <Stack spacing={2}>
                 {Object.entries(grouped).map(([type, conns]) => {
                   const cfg = hypervisorConfig[type] || { label: type, icon: 'ri-server-line', color: '#999' }
                   const typeVms = conns.reduce((acc, c) => acc + (c.vms?.length || 0), 0)

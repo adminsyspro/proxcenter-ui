@@ -1169,7 +1169,25 @@ export default function ClusterTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                                <Tooltip contentStyle={chartTooltipStyle} labelFormatter={v => new Date(Number(v)).toLocaleString()} formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name.replace('cpu_', '')]} />
+                                <Tooltip
+                                  wrapperStyle={{ zIndex: 10 }}
+                                  content={({ active, payload, label }) => {
+                                    if (!active || !payload?.length) return null
+                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                    return (
+                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                        {sorted.map(entry => (
+                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    )
+                                  }}
+                                />
                                 {clusterRrdNodeNames.map(name => (
                                   <Area key={name} type="monotone" dataKey={`cpu_${name}`} stroke={nodeColors[name]} fill={`url(#cGradCpu_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                                 ))}
@@ -1204,7 +1222,25 @@ export default function ClusterTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                                <Tooltip contentStyle={chartTooltipStyle} labelFormatter={v => new Date(Number(v)).toLocaleString()} formatter={(v: any, name: string) => [`${Number(v).toFixed(1)}%`, name.replace('ram_', '')]} />
+                                <Tooltip
+                                  wrapperStyle={{ zIndex: 10 }}
+                                  content={({ active, payload, label }) => {
+                                    if (!active || !payload?.length) return null
+                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                    return (
+                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                        {sorted.map(entry => (
+                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    )
+                                  }}
+                                />
                                 {clusterRrdNodeNames.map(name => (
                                   <Area key={name} type="monotone" dataKey={`ram_${name}`} stroke={nodeColors[name]} fill={`url(#cGradRam_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                                 ))}
@@ -1239,7 +1275,29 @@ export default function ClusterTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
-                                <Tooltip contentStyle={chartTooltipStyle} labelFormatter={v => new Date(Number(v)).toLocaleString()} formatter={(v: any, name: string) => [formatBps(Number(v)), name.replace('netIn_', '').replace('netOut_', '') + (name.startsWith('netIn_') ? ' In' : ' Out')]} />
+                                <Tooltip
+                                  wrapperStyle={{ zIndex: 10 }}
+                                  content={({ active, payload, label }) => {
+                                    if (!active || !payload?.length) return null
+                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                    return (
+                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                        {sorted.map(entry => {
+                                          const isOut = String(entry.name).startsWith('netOut_')
+                                          const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
+                                          return (
+                                            <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                              <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
+                                              <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                            </Box>
+                                          )
+                                        })}
+                                      </Box>
+                                    )
+                                  }}
+                                />
                                 {clusterRrdNodeNames.map(name => (
                                   <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} stroke={nodeColors[name]} fill={`url(#cGradNet_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                                 ))}
@@ -1278,7 +1336,25 @@ export default function ClusterTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
-                                <Tooltip contentStyle={chartTooltipStyle} labelFormatter={v => new Date(Number(v)).toLocaleString()} formatter={(v: any, name: string) => [Number(v).toFixed(2), name.replace('load_', '')]} />
+                                <Tooltip
+                                  wrapperStyle={{ zIndex: 10 }}
+                                  content={({ active, payload, label }) => {
+                                    if (!active || !payload?.length) return null
+                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                    return (
+                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                        {sorted.map(entry => (
+                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    )
+                                  }}
+                                />
                                 {clusterRrdNodeNames.map(name => (
                                   <Area key={name} type="monotone" dataKey={`load_${name}`} stroke={nodeColors[name]} fill={`url(#cGradLoad_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                                 ))}

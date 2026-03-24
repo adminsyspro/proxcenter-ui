@@ -96,11 +96,11 @@ export default function NetworkInterfaceDialog({
           iface: iface.iface,
           type: iface.type,
           method: iface.method || 'static',
-          address: iface.address || '',
-          netmask: iface.netmask || '',
+          address: iface.cidr || iface.address || '',
+          netmask: iface.cidr ? '' : (iface.netmask || ''),
           gateway: iface.gateway || '',
-          address6: iface.address6 || '',
-          netmask6: iface.netmask6 || '',
+          address6: iface.cidr6 || iface.address6 || '',
+          netmask6: iface.cidr6 ? '' : (iface.netmask6 || ''),
           gateway6: iface.gateway6 || '',
           autostart: !!iface.autostart,
           mtu: iface.mtu || '',
@@ -230,24 +230,27 @@ export default function NetworkInterfaceDialog({
           <Typography variant="subtitle2" fontWeight={700}>IPv4</Typography>
 
           <TextField
-            label="IPv4 Address"
+            label="IPv4/CIDR"
             size="small"
             fullWidth
             value={form.address || ''}
             onChange={e => set('address', e.target.value)}
             disabled={isReadonly}
-            placeholder="192.168.1.10"
+            placeholder="10.0.0.1/24"
+            helperText={!isReadonly ? 'CIDR (10.0.0.1/24) or plain IP' : undefined}
           />
 
-          <TextField
-            label="Subnet Mask"
-            size="small"
-            fullWidth
-            value={form.netmask || ''}
-            onChange={e => set('netmask', e.target.value)}
-            disabled={isReadonly}
-            placeholder="255.255.255.0"
-          />
+          {!(form.address || '').includes('/') && (
+            <TextField
+              label="Subnet Mask"
+              size="small"
+              fullWidth
+              value={form.netmask || ''}
+              onChange={e => set('netmask', e.target.value)}
+              disabled={isReadonly}
+              placeholder="255.255.255.0"
+            />
+          )}
 
           <TextField
             label="Gateway"
@@ -264,22 +267,26 @@ export default function NetworkInterfaceDialog({
           <Typography variant="subtitle2" fontWeight={700}>IPv6</Typography>
 
           <TextField
-            label="IPv6 Address"
+            label="IPv6/CIDR"
             size="small"
             fullWidth
             value={form.address6 || ''}
             onChange={e => set('address6', e.target.value)}
             disabled={isReadonly}
+            placeholder="fd00::1/64"
+            helperText={!isReadonly ? 'CIDR (fd00::1/64) or plain IP' : undefined}
           />
 
-          <TextField
-            label="IPv6 Prefix Length"
-            size="small"
-            fullWidth
-            value={form.netmask6 || ''}
-            onChange={e => set('netmask6', e.target.value)}
-            disabled={isReadonly}
-          />
+          {!(form.address6 || '').includes('/') && (
+            <TextField
+              label="Prefix Length"
+              size="small"
+              fullWidth
+              value={form.netmask6 || ''}
+              onChange={e => set('netmask6', e.target.value)}
+              disabled={isReadonly}
+            />
+          )}
 
           <TextField
             label="IPv6 Gateway"

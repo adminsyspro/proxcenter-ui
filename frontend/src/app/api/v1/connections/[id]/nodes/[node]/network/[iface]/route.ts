@@ -42,6 +42,21 @@ export async function PUT(req: Request, ctx: Ctx) {
     // Required field
     params.append('type', type)
 
+    // Detect CIDR notation: if address contains '/', send as 'cidr' instead of 'address'+'netmask'
+    const ipv4IsCidr = typeof body.address === 'string' && body.address.includes('/')
+    const ipv6IsCidr = typeof body.address6 === 'string' && body.address6.includes('/')
+
+    if (ipv4IsCidr) {
+      body.cidr = body.address
+      delete body.address
+      delete body.netmask
+    }
+    if (ipv6IsCidr) {
+      body.cidr6 = body.address6
+      delete body.address6
+      delete body.netmask6
+    }
+
     // Common fields for all types
     const commonFields = [
       'address', 'netmask', 'gateway', 'address6', 'netmask6', 'gateway6',

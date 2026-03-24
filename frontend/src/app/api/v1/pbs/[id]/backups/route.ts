@@ -3,8 +3,176 @@ import { NextResponse } from "next/server"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
+import {
+  type CachedBackup,
+  getPbsBackupsFromCache,
+  setCachedPbsBackups,
+  getInflightPbsFetch,
+  setInflightPbsFetch,
+} from "@/lib/cache/pbsBackupCache"
 
 export const runtime = "nodejs"
+
+/**
+ * Fetch ALL snapshots from a PBS connection (all datastores, all namespaces).
+ * This is the expensive operation we want to cache.
+ */
+async function fetchAllPbsBackups(
+  conn: any,
+): Promise<{ data: CachedBackup[]; warnings: string[] }> {
+  const datastores = await pbsFetch<any[]>(conn, "/admin/datastore")
+  const allBackups: CachedBackup[] = []
+  const warnings: string[] = []
+
+  const datastorePromises = datastores.map(async (ds) => {
+    const storeName = ds.store || ds.name
+    if (!storeName) return []
+
+    try {
+      // List all namespaces (empty string = root, plus any sub-namespaces)
+      let namespaces: string[] = ['']
+
+      try {
+        const nsData = await pbsFetch<any[]>(
+          conn,
+          `/admin/datastore/${encodeURIComponent(storeName)}/namespace`
+        )
+
+        if (Array.isArray(nsData)) {
+          const subNs = nsData.map(n => n.ns || '').filter(Boolean)
+          namespaces = ['', ...subNs]
+        }
+      } catch {
+        // Older PBS versions may not support namespace endpoint — use root only
+      }
+
+      // Fetch snapshots for each namespace in parallel
+      const nsPromises = namespaces.map(async (ns) => {
+        const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
+        const snapshots = await pbsFetch<any[]>(
+          conn,
+          `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`
+        )
+
+        return (snapshots || []).map(snap => {
+          const backupTime = snap['backup-time']
+            ? new Date(snap['backup-time'] * 1000)
+            : null
+
+          const vmName = snap.comment || ''
+
+          return {
+            id: `${storeName}/${ns ? ns + '/' : ''}${snap['backup-type']}/${snap['backup-id']}/${snap['backup-time']}`,
+            datastore: storeName,
+            namespace: ns,
+            backupType: snap['backup-type'],
+            backupId: snap['backup-id'],
+            vmName: vmName,
+            backupTime: snap['backup-time'] || 0,
+            backupTimeFormatted: backupTime?.toLocaleString('fr-FR') || '-',
+            backupTimeIso: backupTime?.toISOString() || '',
+
+            // Taille
+            size: snap.size || 0,
+            sizeFormatted: formatBytes(snap.size || 0),
+
+            // Fichiers
+            files: snap.files || [],
+            fileCount: snap.files?.length || 0,
+
+            // Vérification
+            verification: snap.verification || null,
+            verified: snap.verification?.state === 'ok',
+            verifiedAt: snap.verification?.upid
+              ? new Date((snap.verification['last-run'] || 0) * 1000).toLocaleString('fr-FR')
+              : null,
+
+            // Protection
+            protected: snap.protected || false,
+
+            // Owner
+            owner: snap.owner || '',
+            comment: snap.comment || '',
+          } as CachedBackup
+        })
+      })
+
+      const nsResults = await Promise.all(nsPromises)
+      return nsResults.flat()
+    } catch (e: any) {
+      console.warn(`Failed to get snapshots for datastore ${storeName}:`, e)
+      warnings.push(`Failed to fetch datastore '${storeName}': ${e?.message || String(e)}`)
+      return []
+    }
+  })
+
+  const results = await Promise.all(datastorePromises)
+  results.forEach(backups => allBackups.push(...backups))
+
+  // Pre-sort by date (most recent first) so cached data is already sorted
+  allBackups.sort((a, b) => b.backupTime - a.backupTime)
+
+  return { data: allBackups, warnings }
+}
+
+/**
+ * Get all backups for a PBS connection, using cache with stale-while-revalidate.
+ * Returns cached data when available, triggers background refresh when stale.
+ */
+async function getAllBackups(
+  id: string,
+  conn: any,
+  tenantId = 'default'
+): Promise<{ data: CachedBackup[]; warnings: string[]; fromCache: boolean }> {
+  const cached = getPbsBackupsFromCache(id, tenantId)
+
+  if (cached.status === 'fresh') {
+    return { data: cached.data, warnings: cached.warnings, fromCache: true }
+  }
+
+  if (cached.status === 'stale') {
+    // Serve stale data immediately, refresh in background
+    const existing = getInflightPbsFetch(id, tenantId)
+    if (!existing) {
+      const refreshPromise = fetchAllPbsBackups(conn)
+        .then(result => {
+          setCachedPbsBackups(id, result.data, result.warnings, tenantId)
+          return result
+        })
+        .catch(err => {
+          console.warn(`Background PBS backup refresh failed for ${id}:`, err)
+          return { data: cached.data, warnings: cached.warnings }
+        })
+        .finally(() => {
+          setInflightPbsFetch(null, id, tenantId)
+        })
+
+      setInflightPbsFetch(refreshPromise, id, tenantId)
+    }
+
+    return { data: cached.data, warnings: cached.warnings, fromCache: true }
+  }
+
+  // Cache miss — blocking fetch required (but deduplicate concurrent requests)
+  let inflight = getInflightPbsFetch(id, tenantId)
+  if (inflight) {
+    const result = await inflight
+    return { data: result.data, warnings: result.warnings, fromCache: false }
+  }
+
+  const fetchPromise = fetchAllPbsBackups(conn)
+    .then(result => {
+      setCachedPbsBackups(id, result.data, result.warnings, tenantId)
+      return result
+    })
+    .finally(() => {
+      setInflightPbsFetch(null, id, tenantId)
+    })
+
+  setInflightPbsFetch(fetchPromise, id, tenantId)
+  const result = await fetchPromise
+  return { data: result.data, warnings: result.warnings, fromCache: false }
+}
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
@@ -15,121 +183,61 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     const url = new URL(req.url)
     const datastoreFilter = url.searchParams.get('datastore')
+    const namespaceFilter = url.searchParams.get('namespace') // exact namespace string, '' for root
     const typeFilter = url.searchParams.get('type') // 'vm' | 'ct' | 'host'
     const page = parseInt(url.searchParams.get('page') || '1', 10)
     const pageSize = parseInt(url.searchParams.get('pageSize') || '50', 10)
     const search = url.searchParams.get('search')?.toLowerCase() || ''
+    const noCache = url.searchParams.get('noCache') === '1'
 
     const conn = await getPbsConnectionById(id)
 
-    // Récupérer la liste des datastores
-    const datastores = await pbsFetch<any[]>(conn, "/admin/datastore")
+    // Get all backups (from cache or fresh fetch)
+    let allBackups: CachedBackup[]
+    let warnings: string[]
+    let fromCache: boolean
 
-    // PBS utilise "store" comme nom du datastore
-    const targetDatastores = datastoreFilter
-      ? datastores.filter(ds => (ds.store || ds.name) === datastoreFilter)
-      : datastores
+    if (noCache) {
+      // Force refresh requested
+      const result = await fetchAllPbsBackups(conn)
+      setCachedPbsBackups(id, result.data, result.warnings)
+      allBackups = result.data
+      warnings = result.warnings
+      fromCache = false
+    } else {
+      const result = await getAllBackups(id, conn)
+      allBackups = result.data
+      warnings = result.warnings
+      fromCache = result.fromCache
+    }
 
-    // Récupérer les snapshots de chaque datastore EN PARALLÈLE
-    // L'endpoint /snapshots sans paramètres retourne TOUS les snapshots du datastore
-    const allBackups: any[] = []
-    const warnings: string[] = []
-
-    const datastorePromises = targetDatastores.map(async (ds) => {
-      const storeName = ds.store || ds.name
-
-      if (!storeName) return []
-
-      try {
-        // List all namespaces (empty string = root, plus any sub-namespaces)
-        let namespaces: string[] = ['']
-
-        try {
-          const nsData = await pbsFetch<any[]>(
-            conn,
-            `/admin/datastore/${encodeURIComponent(storeName)}/namespace`
-          )
-
-          if (Array.isArray(nsData)) {
-            const subNs = nsData.map(n => n.ns || '').filter(Boolean)
-            namespaces = ['', ...subNs]
-          }
-        } catch {
-          // Older PBS versions may not support namespace endpoint — use root only
-        }
-
-        // Fetch snapshots for each namespace in parallel
-        const nsPromises = namespaces.map(async (ns) => {
-          const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
-          const snapshots = await pbsFetch<any[]>(
-            conn,
-            `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`
-          )
-
-          return (snapshots || []).map(snap => {
-            const backupTime = snap['backup-time']
-              ? new Date(snap['backup-time'] * 1000)
-              : null
-
-            const vmName = snap.comment || ''
-
-            return {
-              id: `${storeName}/${ns ? ns + '/' : ''}${snap['backup-type']}/${snap['backup-id']}/${snap['backup-time']}`,
-              datastore: storeName,
-              namespace: ns,
-              backupType: snap['backup-type'],
-              backupId: snap['backup-id'],
-              vmName: vmName,
-              backupTime: snap['backup-time'] || 0,
-              backupTimeFormatted: backupTime?.toLocaleString('fr-FR') || '-',
-              backupTimeIso: backupTime?.toISOString() || '',
-
-              // Taille
-              size: snap.size || 0,
-              sizeFormatted: formatBytes(snap.size || 0),
-
-              // Fichiers
-              files: snap.files || [],
-              fileCount: snap.files?.length || 0,
-
-              // Vérification
-              verification: snap.verification || null,
-              verified: snap.verification?.state === 'ok',
-              verifiedAt: snap.verification?.upid
-                ? new Date((snap.verification['last-run'] || 0) * 1000).toLocaleString('fr-FR')
-                : null,
-
-              // Protection
-              protected: snap.protected || false,
-
-              // Owner
-              owner: snap.owner || '',
-              comment: snap.comment || '',
-            }
-          })
-        })
-
-        const nsResults = await Promise.all(nsPromises)
-
-        return nsResults.flat()
-      } catch (e: any) {
-        console.warn(`Failed to get snapshots for datastore ${storeName}:`, e)
-        warnings.push(`Failed to fetch datastore '${storeName}': ${e?.message || String(e)}`)
-
-return []
-      }
+    // Extract available namespaces from all backups (before filtering)
+    const namespaceSet = new Set(allBackups.map(b => b.namespace))
+    const namespaces = Array.from(namespaceSet).sort((a, b) => {
+      // Root namespace first, then alphabetical
+      if (a === '') return -1
+      if (b === '') return 1
+      return a.localeCompare(b)
     })
 
-    const results = await Promise.all(datastorePromises)
+    // Apply filters on cached data (fast, in-memory)
 
-    results.forEach(backups => allBackups.push(...backups))
-
-    // Filtrer par type
-    let filteredBackups = typeFilter
-      ? allBackups.filter(b => b.backupType === typeFilter)
+    // Filter by datastore
+    let filteredBackups = datastoreFilter
+      ? allBackups.filter(b => b.datastore === datastoreFilter)
       : allBackups
 
-    // Filtrer par recherche (ID, nom VM, datastore, commentaire)
+    // Filter by namespace
+    if (namespaceFilter !== null) {
+      filteredBackups = filteredBackups.filter(b => b.namespace === namespaceFilter)
+    }
+
+    // Filter by type
+    if (typeFilter) {
+      filteredBackups = filteredBackups.filter(b => b.backupType === typeFilter)
+    }
+
+    // Filter by search (ID, VM name, datastore, comment)
     if (search) {
       filteredBackups = filteredBackups.filter(b =>
         b.backupId?.toLowerCase().includes(search) ||
@@ -140,10 +248,7 @@ return []
       )
     }
 
-    // Trier par date (plus récent en premier)
-    filteredBackups.sort((a, b) => b.backupTime - a.backupTime)
-
-    // Stats globales (avant pagination)
+    // Stats (before pagination)
     const totalSize = filteredBackups.reduce((sum, b) => sum + (b.size || 0), 0)
 
     const stats = {
@@ -165,8 +270,10 @@ return []
     return NextResponse.json({
       data: {
         backups: paginatedBackups,
+        namespaces,
         stats,
         warnings,
+        fromCache,
         pagination: {
           page,
           pageSize,
@@ -179,7 +286,7 @@ return []
     })
   } catch (e: any) {
     console.error("PBS backups error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

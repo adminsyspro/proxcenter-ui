@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 
@@ -146,9 +146,13 @@ return () => setPageInfo('', '', '')
   const [error, setError] = useState(null)
   const [warnings, setWarnings] = useState([])
 
+  // Available namespaces (from API response)
+  const [availableNamespaces, setAvailableNamespaces] = useState([])
+
   // Filters
   const [search, setSearch] = useState('')
   const [datastoreFilter, setDatastoreFilter] = useState('all')
+  const [namespaceFilter, setNamespaceFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
   // Drawer
@@ -357,9 +361,21 @@ return () => setPageInfo('', '', '')
     loadPbsMetadata()
   }, [selectedPbs])
 
+  // Force refresh — increment to bypass server cache on next fetch only
+  const [refreshToken, setRefreshToken] = useState(0)
+  const noCacheRef = useRef(false)
+
+  const handleRefresh = useCallback(() => {
+    noCacheRef.current = true
+    setRefreshToken(n => n + 1)
+  }, [])
+
   // Charger les backups avec pagination côté serveur
   useEffect(() => {
     if (!selectedPbs) return
+
+    const useNoCache = noCacheRef.current
+    noCacheRef.current = false // Reset immediately so filter/page changes don't bypass cache
 
     const loadBackups = async () => {
       setLoading(true)
@@ -373,8 +389,10 @@ return () => setPageInfo('', '', '')
         })
 
         if (datastoreFilter !== 'all') params.set('datastore', datastoreFilter)
+        if (namespaceFilter !== 'all') params.set('namespace', namespaceFilter)
         if (typeFilter !== 'all') params.set('type', typeFilter)
         if (search.trim()) params.set('search', search.trim())
+        if (useNoCache) params.set('noCache', '1')
 
         const res = await fetch(
           `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups?${params}`
@@ -387,6 +405,7 @@ return () => setPageInfo('', '', '')
           setBackupStats(json?.data?.stats || null)
           setTotalRows(json?.data?.pagination?.totalItems || 0)
           setWarnings(json?.data?.warnings || [])
+          setAvailableNamespaces(json?.data?.namespaces || [])
         } else {
           const errJson = await res.json().catch(() => ({}))
 
@@ -400,7 +419,7 @@ return () => setPageInfo('', '', '')
     }
 
     loadBackups()
-  }, [selectedPbs, paginationModel, datastoreFilter, typeFilter, search])
+  }, [selectedPbs, paginationModel, datastoreFilter, namespaceFilter, typeFilter, search, refreshToken])
 
   // Debounce search pour éviter trop de requêtes
   const [searchInput, setSearchInput] = useState('')
@@ -645,7 +664,11 @@ return () => clearTimeout(timer)
                 <InputLabel>{t('backups.pbsServer')}</InputLabel>
                 <Select
                   value={selectedPbs}
-                  onChange={e => setSelectedPbs(e.target.value)}
+                  onChange={e => {
+                    setSelectedPbs(e.target.value)
+                    setNamespaceFilter('all')
+                    setAvailableNamespaces([])
+                  }}
                   label={t('backups.pbsServer')}
                   disabled={pbsLoading || pbsConnections.length === 0}
                 >
@@ -654,13 +677,35 @@ return () => clearTimeout(timer)
                   ))}
                 </Select>
               </FormControl>
-              <IconButton
-                size='small'
-                onClick={() => setSelectedPbs(prev => prev)}
-                disabled={loading || !selectedPbs}
-              >
-                {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
-              </IconButton>
+              {availableNamespaces.length > 1 && (
+                <FormControl size='small' sx={{ minWidth: 160 }}>
+                  <InputLabel>Namespace</InputLabel>
+                  <Select
+                    value={namespaceFilter}
+                    onChange={e => {
+                      setNamespaceFilter(e.target.value)
+                      setPaginationModel(prev => ({ ...prev, page: 0 }))
+                    }}
+                    label='Namespace'
+                  >
+                    <MenuItem value='all'>{t('backups.allNamespaces')}</MenuItem>
+                    {availableNamespaces.map(ns => (
+                      <MenuItem key={ns} value={ns}>
+                        {ns || t('backups.rootNamespace')}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              <Tooltip title={t('common.refresh')}>
+                <IconButton
+                  size='small'
+                  onClick={handleRefresh}
+                  disabled={loading || !selectedPbs}
+                >
+                  {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
+                </IconButton>
+              </Tooltip>
 
               <Box sx={{ flex: 1 }} />
 
@@ -717,6 +762,7 @@ return () => clearTimeout(timer)
                     setSearchInput('')
                     setSearch('')
                     setDatastoreFilter('all')
+                    setNamespaceFilter('all')
                     setTypeFilter('all')
                     setPaginationModel({ page: 0, pageSize: 25 })
                   }}

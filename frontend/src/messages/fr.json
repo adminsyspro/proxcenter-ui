@@ -1414,6 +1414,8 @@
     "notificationEmail": "Email de notification",
     "backupsCount": "Sauvegardes ({count})",
     "allDatastores": "Tous datastores",
+    "allNamespaces": "Tous namespaces",
+    "rootNamespace": "Racine",
     "allTypesFilter": "Tous types",
     "informations": "Informations",
     "explorer": "Explorer",

@@ -1413,6 +1413,8 @@
     "notificationEmail": "Notification email",
     "backupsCount": "Backups ({count})",
     "allDatastores": "All datastores",
+    "allNamespaces": "All namespaces",
+    "rootNamespace": "Root",
     "allTypesFilter": "All types",
     "informations": "Information",
     "explorer": "Explorer",

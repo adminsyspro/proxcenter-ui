@@ -1409,6 +1409,8 @@
     "notificationEmail": "Notification E-Mail",
     "backupsCount": "Backups ({count})",
     "allDatastores": "Alle Datastores",
+    "allNamespaces": "Alle Namespaces",
+    "rootNamespace": "Root",
     "allTypesFilter": "Alle Typen",
     "informations": "Informationen",
     "explorer": "Explorer",

@@ -7,7 +7,7 @@ import { getDateLocale } from '@/lib/i18n/date'
 
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -271,6 +271,25 @@ return res.json()
 // ============================================
 
 const pct = (v: number) => Math.max(0, Math.min(100, Number(v ?? 0)))
+
+/** Returns a color from green → yellow → red based on a 0-100 usage percentage */
+const usageColor = (v: number): string => {
+  const p = Math.max(0, Math.min(100, v))
+  if (p <= 50) {
+    // green (#4caf50) → yellow (#ff9800)
+    const t = p / 50
+    const r = Math.round(76 + t * (255 - 76))
+    const g = Math.round(175 + t * (152 - 175))
+    const b = Math.round(80 + t * (0 - 80))
+    return `rgb(${r},${g},${b})`
+  }
+  // yellow (#ff9800) → red (#f44336)
+  const t = (p - 50) / 50
+  const r = Math.round(255 + t * (244 - 255))
+  const g = Math.round(152 + t * (67 - 152))
+  const b = Math.round(0 + t * (54 - 0))
+  return `rgb(${r},${g},${b})`
+}
 
 const formatDate = (iso: string, locale?: string) => {
   if (!iso) return '—'
@@ -671,15 +690,24 @@ return 'neutral'
 
                   {/* Nom du nœud */}
                   <Box sx={{ minWidth: 180 }}>
-                    <Typography
-                      sx={{
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        color: isExcluded ? 'text.disabled' : 'text.primary'
-                      }}
-                    >
-                      {node.node}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <img
+                        src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                        alt=""
+                        width={14}
+                        height={14}
+                        style={{ opacity: isExcluded ? 0.4 : 0.8 }}
+                      />
+                      <Typography
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          color: isExcluded ? 'text.disabled' : 'text.primary'
+                        }}
+                      >
+                        {node.node}
+                      </Typography>
+                    </Box>
                     {isExcluded && (
                       <Chip
                         label={t('drsPage.excludedFromDRS')}
@@ -710,8 +738,8 @@ return 'neutral'
                           sx={{
                             height: 14,
                             borderRadius: 0,
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: node.cpu_usage > 90 ? 'error.main' : 'primary.main' }
+                            bgcolor: alpha(usageColor(node.cpu_usage), 0.15),
+                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: usageColor(node.cpu_usage) }
                           }}
                         />
                         <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
@@ -730,8 +758,8 @@ return 'neutral'
                           sx={{
                             height: 14,
                             borderRadius: 0,
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: node.memory_usage > 90 ? 'error.main' : 'primary.main' }
+                            bgcolor: alpha(usageColor(node.memory_usage), 0.15),
+                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: usageColor(node.memory_usage) }
                           }}
                         />
                         <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
@@ -1964,92 +1992,130 @@ return next
       {/* KPI Dashboard */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 2fr 1fr' }, gap: 2, mb: 3 }}>
         {/* Column 1 — Health Overview */}
-        <Tooltip title={globalStats.breakdown ? (
-          <Box sx={{ fontSize: '0.75rem' }}>
-            <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.scoreCalculation')}</Typography>
-            <Box>RAM {Math.round(globalStats.breakdown.avgMem)}% → {globalStats.breakdown.memPenalty === 0 ? 'OK' : globalStats.breakdown.memPenalty} pts</Box>
-            <Box>CPU {Math.round(globalStats.breakdown.avgCpu)}% → {globalStats.breakdown.cpuPenalty === 0 ? 'OK' : globalStats.breakdown.cpuPenalty} pts</Box>
-            <Box>{t('drsPage.imbalanceLabel')} {globalStats.breakdown.imbalance.toFixed(1)}% → {globalStats.breakdown.imbalancePenalty === 0 ? 'OK' : globalStats.breakdown.imbalancePenalty} pts</Box>
-            <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.2)' }} />
-            <Box sx={{ fontWeight: 600 }}>{t('drsPage.scoreFormula')}</Box>
-          </Box>
-        ) : ''} arrow placement="right">
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, borderRadius: 2, cursor: 'help' }} variant="outlined">
-            <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-              <CircularProgress
-                variant="determinate"
-                value={100}
-                size={100}
-                thickness={5}
-                sx={{ color: alpha(
-                  globalStats.healthScore >= 85 ? theme.palette.success.main
-                  : globalStats.healthScore >= 60 ? theme.palette.warning.main
-                  : theme.palette.error.main, 0.15
-                ) }}
-              />
-              <CircularProgress
-                variant="determinate"
-                value={pct(globalStats.healthScore)}
-                size={100}
-                thickness={5}
-                sx={{
-                  color: globalStats.healthScore >= 85 ? 'success.main'
-                    : globalStats.healthScore >= 60 ? 'warning.main'
-                    : 'error.main',
-                  position: 'absolute', left: 0,
-                }}
-              />
-              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
-                  {globalStats.healthScore}
-                </Typography>
-                <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>/ 100</Typography>
-              </Box>
-            </Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 0.5 }}>
-              {t('drsPage.healthScore')}
-            </Typography>
-            <Typography variant="caption" sx={{ opacity: 0.6 }}>
-              {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()} • {globalStats.nodes} {t('drsPage.nodesLabel')}
-            </Typography>
-          </Paper>
-        </Tooltip>
+        {(() => {
+          const scoreColor = globalStats.healthScore >= 85 ? theme.palette.success.main
+            : globalStats.healthScore >= 60 ? theme.palette.warning.main
+            : theme.palette.error.main
+          return (
+            <Paper sx={{
+              p: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1,
+              borderRadius: 2,
+              height: '100%',
+              boxSizing: 'border-box',
+              position: 'relative',
+              overflow: 'hidden',
+              background: `linear-gradient(135deg, ${alpha(scoreColor, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 50%, ${alpha(scoreColor, 0.03)} 100%)`,
+              border: '1px solid',
+              borderColor: alpha(scoreColor, 0.3),
+              transition: 'all 0.3s ease',
+              '&:hover': { borderColor: alpha(scoreColor, 0.5), boxShadow: `0 8px 32px ${alpha(scoreColor, 0.15)}` },
+            }}>
+              <Box sx={{ position: 'absolute', top: -40, right: -40, width: 150, height: 150, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(scoreColor, 0.1)} 0%, transparent 70%)` }} />
+              <Tooltip title={globalStats.breakdown ? (
+                <Box sx={{ fontSize: '0.75rem' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.scoreCalculation')}</Typography>
+                  <Box>RAM {Math.round(globalStats.breakdown.avgMem)}% → {globalStats.breakdown.memPenalty === 0 ? 'OK' : globalStats.breakdown.memPenalty} pts</Box>
+                  <Box>CPU {Math.round(globalStats.breakdown.avgCpu)}% → {globalStats.breakdown.cpuPenalty === 0 ? 'OK' : globalStats.breakdown.cpuPenalty} pts</Box>
+                  <Box>{t('drsPage.imbalanceLabel')} {globalStats.breakdown.imbalance.toFixed(1)}% → {globalStats.breakdown.imbalancePenalty === 0 ? 'OK' : globalStats.breakdown.imbalancePenalty} pts</Box>
+                  <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.2)' }} />
+                  <Box sx={{ fontWeight: 600 }}>{t('drsPage.scoreFormula')}</Box>
+                </Box>
+              ) : ''} arrow placement="right">
+                <Box sx={{ position: 'relative', display: 'inline-flex', cursor: 'help' }}>
+                  <CircularProgress variant="determinate" value={100} size={120} thickness={3} sx={{ color: alpha(scoreColor, 0.15) }} />
+                  <CircularProgress variant="determinate" value={pct(globalStats.healthScore)} size={120} thickness={3} sx={{ color: scoreColor, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(scoreColor, 0.4)})` }} />
+                  <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                    <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1, color: scoreColor }}>
+                      {globalStats.healthScore}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">/ 100</Typography>
+                  </Box>
+                </Box>
+              </Tooltip>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 0.5 }}>
+                {t('drsPage.healthScore')}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()} • {globalStats.nodes} {t('drsPage.nodesLabel')}
+              </Typography>
+              {haWarnings.length > 0 && (
+                <Tooltip
+                  arrow
+                  placement="right"
+                  title={
+                    <Box sx={{ fontSize: '0.75rem' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
+                        {t('drsPage.haConflictTitle')}
+                      </Typography>
+                      {haWarnings.map(w => (
+                        <Box key={w.clusterId}>
+                          <strong>{w.clusterName}</strong> (PVE {w.majorVersion}){' — '}
+                          {w.rules > 0 && t('drsPage.haConflictRules', { rules: w.rules })}
+                          {w.rules > 0 && w.restrictedGroups > 0 && ', '}
+                          {w.restrictedGroups > 0 && t('drsPage.haConflictGroups', { groups: w.restrictedGroups })}
+                        </Box>
+                      ))}
+                      <Box sx={{ mt: 0.5, opacity: 0.85 }}>{t('drsPage.haConflictHint')}</Box>
+                      <Box sx={{ mt: 0.5, fontWeight: 500 }}>{t('drsPage.haConflictRecommendation')}</Box>
+                    </Box>
+                  }
+                >
+                  <i className="ri-error-warning-line" style={{ position: 'absolute', top: 8, right: 8, fontSize: 20, color: theme.palette.warning.main, cursor: 'help' }} />
+                </Tooltip>
+              )}
+            </Paper>
+          )
+        })()}
 
         {/* Column 2 — Resource Distribution Chart */}
         <Paper sx={{ p: 2, borderRadius: 2 }} variant="outlined">
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             {t('drsPage.resourceDistribution')}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'info.main' }} />
-              <Typography variant="caption" sx={{ opacity: 0.7 }}>CPU</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.8 }}>CPU</Typography>
+              <Typography variant="caption" sx={{ opacity: 0.4 }}>|</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.8 }}>RAM</Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'warning.main' }} />
-              <Typography variant="caption" sx={{ opacity: 0.7 }}>RAM</Typography>
+              <Box sx={{ width: 40, height: 6, borderRadius: 1, background: 'linear-gradient(90deg, #4caf50, #ff9800, #f44336)' }} />
+              <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>0→100%</Typography>
             </Box>
           </Box>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={140}>
               <BarChart data={chartData} barCategoryGap="20%">
-                <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.4)} />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} unit="%" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} unit="%" axisLine={false} tickLine={false} />
                 <RechartsTooltip
                   contentStyle={{
                     backgroundColor: theme.palette.background.paper,
                     border: `1px solid ${theme.palette.divider}`,
                     borderRadius: 8,
                     fontSize: 12,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                   }}
                   itemStyle={{ color: theme.palette.text.primary }}
                   labelStyle={{ color: theme.palette.text.secondary }}
                   cursor={false}
-                  formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                  formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
                 />
-                <Bar dataKey="CPU" fill={theme.palette.info.main} radius={[3, 3, 0, 0]} name="CPU" />
-                <Bar dataKey="RAM" fill={theme.palette.warning.main} radius={[3, 3, 0, 0]} name="RAM" />
+                <Bar dataKey="CPU" radius={[5, 5, 0, 0]} name="CPU" animationDuration={800}>
+                  {chartData.map((entry, i) => (
+                    <Cell key={i} fill={usageColor(entry.CPU)} />
+                  ))}
+                </Bar>
+                <Bar dataKey="RAM" radius={[5, 5, 0, 0]} name="RAM" animationDuration={800}>
+                  {chartData.map((entry, i) => (
+                    <Cell key={i} fill={usageColor(entry.RAM)} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -2134,28 +2200,6 @@ return next
       </Box>
 
       {/* Tabs */}
-      {/* HA conflict warnings */}
-      {haWarnings.length > 0 && (
-        <Alert severity="warning" variant="outlined" sx={{ mb: 2, bgcolor: (theme) => alpha(theme.palette.warning.main, 0.08) }} icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-            {t('drsPage.haConflictTitle')}
-          </Typography>
-          {haWarnings.map(w => (
-            <Typography key={w.clusterId} variant="body2">
-              <strong>{w.clusterName}</strong> (PVE {w.majorVersion}){' — '}
-              {w.rules > 0 && t('drsPage.haConflictRules', { rules: w.rules })}
-              {w.rules > 0 && w.restrictedGroups > 0 && ', '}
-              {w.restrictedGroups > 0 && t('drsPage.haConflictGroups', { groups: w.restrictedGroups })}
-            </Typography>
-          ))}
-          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
-            {t('drsPage.haConflictHint')}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 0.5, fontWeight: 500 }}>
-            {t('drsPage.haConflictRecommendation')}
-          </Typography>
-        </Alert>
-      )}
 
       <Tabs
         value={tab}

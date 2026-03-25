@@ -188,54 +188,44 @@ function DonutTotalCard({ title, value, segments }) {
 
 function FieldDiff({ field }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+    <Box sx={{ py: 0.5 }}>
       <Typography
         variant='caption'
-        sx={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, minWidth: 100, opacity: 0.8 }}
+        sx={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, opacity: 0.8, display: 'block', mb: 0.25 }}
       >
         {field.field}
       </Typography>
-      {field.oldValue && (
-        <Chip
-          size='small'
-          label={field.oldValue}
-          sx={{
-            height: 20,
-            fontSize: '0.65rem',
-            fontFamily: 'JetBrains Mono, monospace',
-            bgcolor: 'error.main',
-            color: 'error.contrastText',
-            opacity: 0.8,
-            textDecoration: 'line-through',
-            maxWidth: 200,
-            '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' }
-          }}
-        />
-      )}
-      {field.oldValue && field.newValue && (
-        <i className='ri-arrow-right-line' style={{ fontSize: 12, opacity: 0.5 }} />
-      )}
-      {field.newValue && (
-        <Chip
-          size='small'
-          label={field.newValue}
-          sx={{
-            height: 20,
-            fontSize: '0.65rem',
-            fontFamily: 'JetBrains Mono, monospace',
-            bgcolor: 'success.main',
-            color: 'success.contrastText',
-            maxWidth: 200,
-            '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' }
-          }}
-        />
-      )}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pl: 1 }}>
+        {field.oldValue && (
+          <Box sx={{
+            px: 1, py: 0.25, borderRadius: 0.5,
+            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(244,67,54,0.15)' : 'rgba(244,67,54,0.1)',
+            color: (theme) => theme.palette.mode === 'dark' ? '#ef9a9a' : '#c62828',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: '0.7rem',
+            textDecoration: 'line-through', wordBreak: 'break-all', whiteSpace: 'pre-wrap',
+          }}>
+            {field.oldValue}
+          </Box>
+        )}
+        {field.newValue && (
+          <Box sx={{
+            px: 1, py: 0.25, borderRadius: 0.5,
+            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(76,175,80,0.15)' : 'rgba(76,175,80,0.1)',
+            color: (theme) => theme.palette.mode === 'dark' ? '#a5d6a7' : '#2e7d32',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: '0.7rem',
+            wordBreak: 'break-all', whiteSpace: 'pre-wrap',
+          }}>
+            {field.newValue}
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 }
 
 function TimelineEntry({ change, t }) {
-  const [expanded, setExpanded] = useState(false)
+  const autoExpand = change.fields && change.fields.length > 0 && change.fields.length <= 3
+  const [expanded, setExpanded] = useState(autoExpand)
   const resConfig = resourceTypeConfig[change.resourceType] || resourceTypeConfig.vm
   const actConfig = actionConfig[change.action] || actionConfig.config_changed
   const hasFields = change.fields && change.fields.length > 0

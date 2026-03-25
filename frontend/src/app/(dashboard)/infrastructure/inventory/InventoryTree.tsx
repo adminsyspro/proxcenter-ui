@@ -814,7 +814,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [isHydrated, setIsHydrated] = useState(false)
 
   // Sections collapsed (pour les modes hosts, pools, tags)
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['storage', 'pbs', 'migrate-ext']))
 
   // Storage tree expanded items (persisted)
   const [storageExpandedItems, setStorageExpandedItems] = useState<string[]>([])
@@ -846,7 +846,11 @@ return next
       const savedExpanded = localStorage.getItem('inventoryExpandedItems')
       if (savedExpanded) setManualExpandedItems(JSON.parse(savedExpanded))
 
-      // collapsedSections not restored — default to all collapsed in nodes/pools/tags views
+      const savedCollapsed = localStorage.getItem('inventoryCollapsedSections')
+      if (savedCollapsed) {
+        const parsed = JSON.parse(savedCollapsed)
+        if (parsed.length > 0) setCollapsedSections(new Set(parsed))
+      }
 
       const savedStorageExpanded = localStorage.getItem('inventoryStorageExpandedItems')
       if (savedStorageExpanded) setStorageExpandedItems(JSON.parse(savedStorageExpanded))

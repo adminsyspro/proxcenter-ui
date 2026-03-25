@@ -12,7 +12,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   FormControl,
   List,
   ListItemButton,
@@ -25,6 +24,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
@@ -143,10 +144,9 @@ return
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className="ri-group-line" style={{ fontSize: 20 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-group-line" style={{ fontSize: 20 }} />}>
         {group ? t('drs.editHaGroup') : t('drs.createHaGroup')}
-      </DialogTitle>
+      </AppDialogTitle>
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>

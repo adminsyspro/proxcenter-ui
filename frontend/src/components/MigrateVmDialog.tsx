@@ -29,11 +29,13 @@ import {
   InputAdornment,
   Collapse,
   IconButton,
+  useTheme,
 } from '@mui/material'
 
 import { useLicense, Features } from '@/contexts/LicenseContext'
 
 import { formatBytes } from '@/utils/format'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 // Types
 type NodeInfo = {
@@ -107,6 +109,7 @@ type RemoteConnection = {
   name: string
   host: string
   status?: 'online' | 'offline' | 'unknown'
+  isCluster?: boolean
   nodes?: NodeInfo[]
 }
 
@@ -164,6 +167,8 @@ export function MigrateVmDialog({
   isCluster = true
 }: MigrateVmDialogProps) {
   const t = useTranslations()
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   const { hasFeature, loading: licenseLoading } = useLicense()
 
   // Check if cross-cluster migration feature is available
@@ -477,9 +482,10 @@ export function MigrateVmDialog({
               id: c.id,
               name: c.name || c.baseUrl,
               host: c.baseUrl,
-              status: c.status || 'unknown'
+              status: c.status || 'unknown',
+              isCluster: (c.hosts?.length || 0) > 1
             }))
-          
+
           setRemoteConnections(otherConnections)
         }
       } catch (e) {
@@ -789,18 +795,15 @@ export function MigrateVmDialog({
   const selectedRemoteConnInfo = remoteConnections.find(c => c.id === selectedRemoteConn)
   
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
-        <i className="ri-swap-box-line" style={{ fontSize: 24 }} />
-        <Box>
-          <Typography variant="h6" component="span">
-            {t('hardware.migrateTitle', { vmName, vmid })}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block', opacity: 0.7 }}>
-            {currentNode} • {vmType.toUpperCase()} • {vmStatus}
-          </Typography>
-        </Box>
-      </DialogTitle>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-swap-box-line" style={{ fontSize: 22 }} />}>
+        <Typography variant="h6" component="span" sx={{ fontSize: '1rem' }}>
+          {t('hardware.migrateTitle', { vmName, vmid })}
+        </Typography>
+        <Typography variant="caption" sx={{ display: 'block', opacity: 0.7 }}>
+          {currentNode} • {vmType.toUpperCase()} • {vmStatus}
+        </Typography>
+      </AppDialogTitle>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
         {isCluster ? (
@@ -877,11 +880,14 @@ export function MigrateVmDialog({
         {/* ========== TAB 0: LOCAL MIGRATION ========== */}
         <TabPanel value={activeTab} index={0}>
           <Stack spacing={2}>
-            <Alert severity="info" icon={<i className="ri-server-line" />}>
-              <Typography variant="body2">
-                {t('hardware.currentNode')} <strong>{currentNode}</strong>
-              </Typography>
-            </Alert>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" sx={{ opacity: 0.6 }}>{t('hardware.currentNode')}</Typography>
+              <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+              </Box>
+              <Typography variant="body2" fontWeight={600}>{currentNode}</Typography>
+            </Box>
             
             {/* Warning for local disks */}
             {hasLocalDisks && (
@@ -925,48 +931,44 @@ export function MigrateVmDialog({
                         py: 0.75,
                         border: '1px solid',
                         borderColor: selectedNode === node.node ? 'primary.main' : 'divider',
-                        borderRadius: 1.5,
+                        borderRadius: 1,
                         cursor: 'pointer',
                         bgcolor: selectedNode === node.node ? 'action.selected' : 'transparent',
                         '&:hover': { bgcolor: 'action.hover' },
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 1.5,
+                        gap: 1,
                       }}
                     >
-                      <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 100, flexShrink: 0 }}>
-                        <i className="ri-server-line" style={{ fontSize: 14, opacity: 0.7 }} />
-                        {node.node}
-                        {recommended && (
-                          <Tooltip title={t('hardware.recommended')} arrow>
-                            <Box component="span" sx={{ color: 'warning.main', fontSize: 14, lineHeight: 1, display: 'inline-flex', ml: 0.5 }}>
-                              <i className="ri-star-fill" />
-                            </Box>
-                          </Tooltip>
-                        )}
-                      </Typography>
-
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
-                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 22 }}>CPU</Typography>
-                        <Box sx={{ flex: 1, position: 'relative' }}>
-                          <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
-                            <Box sx={{ height: '100%', width: `${cpuPercent}%`, bgcolor: cpuPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
-                          </Box>
-                          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                            {formatCpu(node.cpu)}
-                          </Typography>
-                        </Box>
+                      <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
+                        <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
+                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
                       </Box>
-
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
-                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.6, minWidth: 26 }}>RAM</Typography>
-                        <Box sx={{ flex: 1, position: 'relative' }}>
-                          <Box sx={{ height: 14, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
-                            <Box sx={{ height: '100%', width: `${memPercent}%`, bgcolor: memPercent > 90 ? 'error.main' : 'primary.main', borderRadius: 0 }} />
+                      <Typography variant="body2" fontWeight={600} sx={{ fontSize: 13, minWidth: 80, flexShrink: 0 }}>
+                        {node.node}
+                      </Typography>
+                      {recommended && (
+                        <Tooltip title={t('hardware.recommended')} arrow>
+                          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', color: '#ffc107' }}>
+                            <i className="ri-star-fill" style={{ fontSize: 12 }} />
                           </Box>
-                          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                            {Math.round(memPercent)}%
-                          </Typography>
+                        </Tooltip>
+                      )}
+
+                      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6 }}>CPU</Typography>
+                          <Box sx={{ width: 48, height: 6, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${cpuPercent}%`, background: cpuPercent > 0 ? 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)' : 'transparent', backgroundSize: cpuPercent > 0 ? `${(100 / cpuPercent) * 100}% 100%` : '100% 100%' }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5, minWidth: 22, textAlign: 'right' }}>{formatCpu(node.cpu)}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6 }}>RAM</Typography>
+                          <Box sx={{ width: 48, height: 6, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${memPercent}%`, background: memPercent > 0 ? 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)' : 'transparent', backgroundSize: memPercent > 0 ? `${(100 / memPercent) * 100}% 100%` : '100% 100%' }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5, minWidth: 22, textAlign: 'right' }}>{Math.round(memPercent)}%</Typography>
                         </Box>
                       </Box>
                     </Box>
@@ -1189,9 +1191,14 @@ export function MigrateVmDialog({
                   >
                     {remoteConnections.map((conn) => (
                       <MenuItem key={conn.id} value={conn.id}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                          <i className={conn.status === 'online' ? 'ri-checkbox-circle-fill' : conn.status === 'offline' ? 'ri-close-circle-fill' : 'ri-server-line'} 
-                             style={{ fontSize: 14, color: conn.status === 'online' ? '#4caf50' : conn.status === 'offline' ? '#f44336' : 'inherit' }} />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                          <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                            {conn.isCluster
+                              ? <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.8 }} />
+                              : <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                            }
+                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: conn.status === 'offline' ? 'error.main' : 'success.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                          </Box>
                           <Typography variant="body2" fontWeight={500}>{conn.name}</Typography>
                           <Typography variant="caption" sx={{ opacity: 0.6, ml: 'auto' }}>{conn.host}</Typography>
                         </Box>
@@ -1206,7 +1213,7 @@ export function MigrateVmDialog({
             {selectedRemoteConn && (
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-server-line" style={{ fontSize: 16 }} />
+                  <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.7 }} />
                   {t('hardware.crossCluster.targetNode')}
                 </Typography>
                 
@@ -1231,24 +1238,37 @@ export function MigrateVmDialog({
                       }}
                       label={t('hardware.crossCluster.selectTargetNode')}
                     >
-                      {remoteNodes.map((node) => (
+                      {remoteNodes.map((node) => {
+                        const cpuPct = (node.cpu || 0) * 100
+                        const memPct = node.maxmem && node.mem ? (node.mem / node.maxmem) * 100 : 0
+                        return (
                         <MenuItem key={node.node} value={node.node}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <Typography variant="body2">{node.node}</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                                CPU {formatCpu(node.cpu)} • RAM {formatMemory(node.mem)}/{formatMemory(node.maxmem)}
-                              </Typography>
-                              <Chip 
-                                label={node.status} 
-                                size="small" 
-                                color={node.status === 'online' ? 'success' : 'default'}
-                                sx={{ height: 18, fontSize: '0.6rem' }}
-                              />
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                            <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                              <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                              <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                            </Box>
+                            <Typography variant="body2" fontWeight={500}>{node.node}</Typography>
+                            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6 }}>CPU</Typography>
+                                <Box sx={{ width: 40, height: 4, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                                  <Box sx={{ height: '100%', width: `${cpuPct}%`, background: cpuPct > 0 ? 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)' : 'transparent', backgroundSize: cpuPct > 0 ? `${(100 / cpuPct) * 100}% 100%` : '100% 100%' }} />
+                                </Box>
+                                <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5 }}>{cpuPct.toFixed(0)}%</Typography>
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6 }}>RAM</Typography>
+                                <Box sx={{ width: 40, height: 4, bgcolor: 'action.hover', borderRadius: 0, overflow: 'hidden' }}>
+                                  <Box sx={{ height: '100%', width: `${memPct}%`, background: memPct > 0 ? 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)' : 'transparent', backgroundSize: memPct > 0 ? `${(100 / memPct) * 100}% 100%` : '100% 100%' }} />
+                                </Box>
+                                <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5 }}>{Math.round(memPct)}%</Typography>
+                              </Box>
                             </Box>
                           </Box>
                         </MenuItem>
-                      ))}
+                        )
+                      })}
                     </Select>
                   </FormControl>
                 )}

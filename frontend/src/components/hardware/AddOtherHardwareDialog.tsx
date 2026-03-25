@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -24,6 +23,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import type { Storage } from './utils'
 
 type HardwareType = 'usb' | 'pci' | 'serial' | 'cloudinit' | 'audio' | 'rng'
@@ -245,10 +245,9 @@ export function AddOtherHardwareDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className="ri-cpu-line" style={{ fontSize: 22 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-cpu-line" style={{ fontSize: 22 }} />}>
         {t('inventory.addHardware')}
-      </DialogTitle>
+      </AppDialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}

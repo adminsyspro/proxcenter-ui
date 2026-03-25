@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -29,6 +28,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { type NodeInfo, calculateNodeScore, formatMemory } from './utils'
 
 // ==================== CLONE VM DIALOG ====================
@@ -253,10 +253,9 @@ return currentScore > bestScore ? current : best
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className="ri-file-copy-line" style={{ fontSize: 24 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-file-copy-line" style={{ fontSize: 24 }} />}>
         {t('hardware.cloneTitle', { vmName, vmid })}
-      </DialogTitle>
+      </AppDialogTitle>
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -282,7 +281,10 @@ return currentScore > bestScore ? current : best
                     <Box sx={{ width: '100%' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                          <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                            <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                          </Box>
                           <Typography variant="body2" fontWeight={500}>{node.node}</Typography>
                           {isRecommended && (
                             <Chip label="★" size="small" color="success" sx={{ height: 16, fontSize: '0.6rem', minWidth: 20, '& .MuiChip-label': { px: 0.5 } }} />

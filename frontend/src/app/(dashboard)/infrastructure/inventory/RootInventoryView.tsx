@@ -1088,8 +1088,18 @@ function RootInventoryView({
           const isClusterCollapsed = !expandedClusters.has(cluster.connId)
           const clusterHosts = hosts.filter(h => h.connId === cluster.connId)
           const runningCount = cluster.vms.filter(vm => vm.status === 'running').length
-          const clusterStats = calculateStats(cluster.vms)
           const isRealCluster = clusterHosts.length > 1 // Vrai cluster si plusieurs nodes
+          // Aggregate node-level CPU/RAM for the cluster
+          const clusterCpu = (() => {
+            const onlineHosts = clusterHosts.filter(h => h.cpu !== undefined)
+            if (onlineHosts.length === 0) return 0
+            return onlineHosts.reduce((sum, h) => sum + (h.cpu || 0), 0) / onlineHosts.length * 100
+          })()
+          const clusterRam = (() => {
+            const totalMem = clusterHosts.reduce((sum, h) => sum + (h.maxmem || 0), 0)
+            const usedMem = clusterHosts.reduce((sum, h) => sum + (h.mem || 0), 0)
+            return totalMem > 0 ? (usedMem / totalMem) * 100 : 0
+          })()
           
           return (
             <Card key={cluster.connId} variant="outlined">
@@ -1113,10 +1123,19 @@ function RootInventoryView({
                   className={isClusterCollapsed ? "ri-arrow-right-s-line" : "ri-arrow-down-s-line"} 
                   style={{ fontSize: 20, opacity: 0.7 }} 
                 />
-                {isRealCluster
-                  ? <i className="ri-server-fill" style={{ fontSize: 18 }} />
-                  : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18 }} />
-                }
+                {(() => {
+                  const allOnline = clusterHosts.length > 0 && clusterHosts.every(h => h.status === 'online')
+                  const dotColor = allOnline ? 'success.main' : 'warning.main'
+                  return (
+                    <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      {isRealCluster
+                        ? <i className="ri-server-fill" style={{ fontSize: 18 }} />
+                        : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18 }} />
+                      }
+                      <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: dotColor, border: '1.5px solid', borderColor: 'background.paper' }} />
+                    </Box>
+                  )
+                })()}
                 <Typography fontWeight={700}>{cluster.connName}</Typography>
                 <Chip 
                   size="small" 
@@ -1138,8 +1157,8 @@ function RootInventoryView({
                 
                 {/* Indicateurs CPU/RAM du cluster */}
                 <Box sx={{ ml: 'auto', display: 'flex', gap: 2 }} onClick={(e) => e.stopPropagation()}>
-                  <MiniProgressBar value={clusterStats.avgCpu} label="CPU" />
-                  <MiniProgressBar value={clusterStats.avgRam} label="RAM" />
+                  <MiniProgressBar value={clusterCpu} label="CPU" />
+                  <MiniProgressBar value={clusterRam} label="RAM" />
                 </Box>
               </Box>
               
@@ -1149,7 +1168,8 @@ function RootInventoryView({
                   {clusterHosts.map(host => {
                     const isHostCollapsed = !expandedHosts.has(host.key)
                     const hostRunning = host.vms.filter(vm => vm.status === 'running').length
-                    const hostStats = calculateStats(host.vms)
+                    const hostCpuPct = host.cpu !== undefined ? host.cpu * 100 : 0
+                    const hostRamPct = host.maxmem && host.maxmem > 0 ? (host.mem || 0) / host.maxmem * 100 : 0
                     
                     return (
                       <Box key={host.key}>
@@ -1173,9 +1193,12 @@ function RootInventoryView({
                             className={isHostCollapsed ? "ri-arrow-right-s-line" : "ri-arrow-down-s-line"} 
                             style={{ fontSize: 18, opacity: 0.7 }} 
                           />
-                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, opacity: 0.7 }} />
-                          <Typography 
-                            variant="body2" 
+                          <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, opacity: 0.7 }} />
+                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: host.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                          </Box>
+                          <Typography
+                            variant="body2"
                             fontWeight={600}
                             sx={{ 
                               cursor: 'pointer',
@@ -1194,8 +1217,8 @@ function RootInventoryView({
                           
                           {/* Indicateurs CPU/RAM du host */}
                           <Box sx={{ ml: 'auto', display: 'flex', gap: 2 }} onClick={(e) => e.stopPropagation()}>
-                            <MiniProgressBar value={hostStats.avgCpu} label="CPU" />
-                            <MiniProgressBar value={hostStats.avgRam} label="RAM" />
+                            <MiniProgressBar value={hostCpuPct} label="CPU" />
+                            <MiniProgressBar value={hostRamPct} label="RAM" />
                           </Box>
                         </Box>
                         
@@ -1274,7 +1297,13 @@ function RootInventoryView({
                       px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5,
                       bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
                     }}>
-                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16 }} />
+                      <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
+                        {cs.isCluster
+                          ? <i className="ri-server-fill" style={{ fontSize: 16, opacity: 0.8 }} />
+                          : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16 }} />
+                        }
+                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: cs.nodes.every(n => n.status === 'online') ? 'success.main' : 'warning.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                      </Box>
                       <Typography fontWeight={700} sx={{ fontSize: 14 }}>{cs.connName}</Typography>
                       <Chip size="small" label={`${allStorages.length} storages`} sx={{ height: 18, fontSize: 10 }} />
                       {totalSize > 0 && (

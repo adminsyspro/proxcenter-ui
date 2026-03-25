@@ -15,7 +15,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   Divider,
   FormControl,
   FormControlLabel,
@@ -37,6 +36,7 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { AllVmItem } from './InventoryTree'
 
 type DiskConfig = {
@@ -780,7 +780,10 @@ return
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                        <i className="ri-server-fill" style={{ fontSize: 16, color: theme.palette.primary.main }} />
+                        <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
+                          <i className="ri-server-fill" style={{ fontSize: 16, color: theme.palette.primary.main }} />
+                          <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: group.nodes.every((nn: any) => nn.status === 'online') ? 'success.main' : 'warning.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                        </Box>
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" fontWeight={600}>
                             {group.connName}
@@ -821,15 +824,14 @@ return
                       sx={{ pl: group.isCluster ? 4 : 2 }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                        {isMaintenance ? (
-                          <i className="ri-tools-line" style={{ fontSize: 14, color: theme.palette.warning.main }} />
-                        ) : (
+                        <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
                           <img
                             src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
                             alt="" width={14} height={14}
                             style={{ opacity: n.status === 'online' ? 0.8 : 0.3 }}
                           />
-                        )}
+                          <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: isMaintenance ? 'warning.main' : n.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                        </Box>
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" sx={{ opacity: isDisabled ? 0.5 : 1 }}>
                             {n.node}
@@ -1746,17 +1748,17 @@ return
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ 
-        bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,150,200,0.15)' : 'primary.light',
-        color: theme.palette.mode === 'dark' ? 'primary.light' : 'primary.contrastText',
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 1,
-        py: 1.5
-      }}>
-        <i className="ri-computer-line" style={{ fontSize: 20 }} />
+      <AppDialogTitle
+        onClose={onClose}
+        icon={<i className="ri-computer-line" style={{ fontSize: 20 }} />}
+        sx={{
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,150,200,0.15)' : 'primary.light',
+          color: theme.palette.mode === 'dark' ? 'primary.light' : 'primary.contrastText',
+          py: 1.5
+        }}
+      >
         Create: Virtual Machine
-      </DialogTitle>
+      </AppDialogTitle>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs 

@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -23,6 +22,8 @@ import {
   CircularProgress,
   Divider,
 } from '@mui/material'
+
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 // ==================== EDIT NETWORK DIALOG ====================
 type EditNetworkDialogProps = {
@@ -155,12 +156,9 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-router-line" style={{ fontSize: 24 }} />
-          {t('common.edit')}: {network.id}
-        </Box>
-      </DialogTitle>
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-router-line" style={{ fontSize: 24 }} />}>
+        {t('common.edit')}: {network.id}
+      </AppDialogTitle>
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

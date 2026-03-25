@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -22,6 +21,8 @@ import {
   CircularProgress,
   Divider,
 } from '@mui/material'
+
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 // ==================== ADD NETWORK DIALOG ====================
 type AddNetworkDialogProps = {
@@ -155,10 +156,9 @@ return match ? parseInt(match[1]) : -1
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className="ri-router-line" style={{ fontSize: 24 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-router-line" style={{ fontSize: 24 }} />}>
         {t('hardware.addNetworkInterface')}
-      </DialogTitle>
+      </AppDialogTitle>
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

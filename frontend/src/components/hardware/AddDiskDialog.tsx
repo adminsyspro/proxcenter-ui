@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -28,6 +27,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import type { Storage } from './utils'
 
 // ==================== ADD DISK DIALOG ====================
@@ -266,10 +266,9 @@ return match ? parseInt(match[1]) : -1
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className={deviceType === 'cdrom' ? "ri-disc-line" : deviceType === 'efi' ? "ri-shield-keyhole-line" : deviceType === 'tpm' ? "ri-key-2-line" : "ri-hard-drive-2-line"} style={{ fontSize: 24 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className={deviceType === 'cdrom' ? "ri-disc-line" : deviceType === 'efi' ? "ri-shield-keyhole-line" : deviceType === 'tpm' ? "ri-key-2-line" : "ri-hard-drive-2-line"} style={{ fontSize: 24 }} />}>
         {deviceType === 'cdrom' ? 'CD/DVD Drive' : deviceType === 'efi' ? 'EFI Disk' : deviceType === 'tpm' ? 'TPM State' : t('inventory.disks')}
-      </DialogTitle>
+      </AppDialogTitle>
 
       {deviceType === 'disk' && (
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>

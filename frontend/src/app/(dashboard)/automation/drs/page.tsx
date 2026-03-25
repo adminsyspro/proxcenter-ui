@@ -691,13 +691,16 @@ return 'neutral'
                   {/* Nom du nœud */}
                   <Box sx={{ minWidth: 180 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <img
-                        src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
-                        alt=""
-                        width={14}
-                        height={14}
-                        style={{ opacity: isExcluded ? 0.4 : 0.8 }}
-                      />
+                      <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                        <img
+                          src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                          alt=""
+                          width={14}
+                          height={14}
+                          style={{ opacity: isExcluded ? 0.4 : 0.8 }}
+                        />
+                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: node.in_maintenance ? 'warning.main' : node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                      </Box>
                       <Typography
                         sx={{
                           fontWeight: 600,

@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -27,6 +26,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { type NodeInfo, type StorageInfo, calculateNodeScore, getRecommendedNode, formatMemory } from './utils'
 
 type LocalDiskInfo = {
@@ -518,10 +518,9 @@ return
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className="ri-swap-box-line" style={{ fontSize: 24 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-swap-box-line" style={{ fontSize: 24 }} />}>
         {t('hardware.migrateTitle', { vmName, vmid })}
-      </DialogTitle>
+      </AppDialogTitle>
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -633,7 +632,7 @@ return
               {t('hardware.noNodeAvailable')}
             </Alert>
           ) : (
-            <Stack spacing={0.75}>
+            <Stack spacing={0.5}>
               {nodes.map((node) => {
                 const cpuPercent = getCpuPercent(node)
                 const memPercent = getMemoryPercent(node)
@@ -646,124 +645,62 @@ return
                     key={node.node}
                     onClick={() => setSelectedNode(node.node)}
                     sx={{
-                      p: 1.25,
+                      px: 1.25,
+                      py: 0.75,
                       border: '1px solid',
                       borderColor: selectedNode === node.node ? 'primary.main' : cpuCompat.warning && !cpuCompat.compatible ? 'error.main' : 'divider',
-                      borderRadius: 1.5,
+                      borderRadius: 1,
                       cursor: 'pointer',
                       bgcolor: selectedNode === node.node ? 'action.selected' : 'transparent',
                       '&:hover': { bgcolor: 'action.hover' },
                     }}
                   >
-                    {/* Header: Nom + Status + Badge Recommandé */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
-                          {node.node}
-                        </Typography>
-                        {recommended && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {/* Node icon + name */}
+                      <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
+                        <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
+                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                      </Box>
+                      <Typography variant="body2" fontWeight={600} sx={{ fontSize: 13 }}>{node.node}</Typography>
+                      {recommended && (
+                        <Chip label="★" size="small" color="success" sx={{ height: 14, fontSize: '0.5rem', minWidth: 16, '& .MuiChip-label': { px: 0.3 } }} />
+                      )}
+                      {/* CPU compat */}
+                      {vmCpuType && nodeCpuInfo && (
+                        <Tooltip title={cpuCompat.message || `CPU: ${nodeCpuInfo.cpuModel}`}>
                           <Chip
-                            label={t('hardware.recommended')}
+                            icon={<i className={cpuCompat.compatible ? "ri-checkbox-circle-fill" : "ri-error-warning-fill"} style={{ fontSize: 10 }} />}
+                            label={nodeCpuInfo.recommendedCpuType}
                             size="small"
-                            color="success"
-                            sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-label': { px: 0.75 } }}
+                            sx={{
+                              height: 16,
+                              fontSize: '0.55rem',
+                              '& .MuiChip-label': { px: 0.4 },
+                              '& .MuiChip-icon': { ml: 0.3, mr: -0.25 },
+                              bgcolor: cpuCompat.compatible ? 'rgba(76, 175, 80, 0.15)' : 'rgba(244, 67, 54, 0.15)',
+                              color: cpuCompat.color,
+                              borderColor: cpuCompat.color,
+                            }}
+                            variant="outlined"
                           />
-                        )}
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        {/* CPU Compatibility indicator */}
-                        {vmCpuType && nodeCpuInfo && (
-                          <Tooltip title={cpuCompat.message || `CPU: ${nodeCpuInfo.cpuModel}`}>
-                            <Chip
-                              icon={<i className={cpuCompat.compatible ? "ri-checkbox-circle-fill" : "ri-error-warning-fill"} style={{ fontSize: 12 }} />}
-                              label={nodeCpuInfo.recommendedCpuType}
-                              size="small"
-                              sx={{
-                                height: 18,
-                                fontSize: '0.6rem',
-                                '& .MuiChip-label': { px: 0.5 },
-                                '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
-                                bgcolor: cpuCompat.compatible ? 'rgba(76, 175, 80, 0.15)' : 'rgba(244, 67, 54, 0.15)',
-                                color: cpuCompat.color,
-                                borderColor: cpuCompat.color,
-                              }}
-                              variant="outlined"
-                            />
-                          </Tooltip>
-                        )}
-                        <Chip
-                          label={node.status}
-                          size="small"
-                          color={node.status === 'online' ? 'success' : 'default'}
-                          variant="outlined"
-                          sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-label': { px: 0.75 } }}
-                        />
-                      </Box>
-                    </Box>
+                        </Tooltip>
+                      )}
 
-                    {/* CPU Model info - affichage en badge */}
-                    {nodeCpuInfo && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
-                        <Chip
-                          icon={<i className="ri-cpu-line" style={{ fontSize: 11 }} />}
-                          label={nodeCpuInfo.cpuModel}
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            height: 20,
-                            fontSize: '0.6rem',
-                            '& .MuiChip-label': { px: 0.5 },
-                            '& .MuiChip-icon': { ml: 0.5, mr: -0.25, fontSize: 11 },
-                            opacity: 0.8,
-                            borderColor: 'divider',
-                          }}
-                        />
-                        <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>
-                          {nodeCpuInfo.sockets}×{nodeCpuInfo.cores} cores
-                        </Typography>
-                      </Box>
-                    )}
-
-                    {/* CPU & RAM sur une ligne */}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                      {/* CPU */}
-                      <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.8 }}>
-                            CPU {formatCpu(node.cpu)}
-                          </Typography>
-                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6 }}>
-                            {node.maxcpu}c
-                          </Typography>
+                      {/* CPU & RAM bars — right side */}
+                      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6, minWidth: 22 }}>CPU</Typography>
+                          <Box sx={{ width: 48, height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${cpuPercent}%`, background: cpuPercent > 0 ? `linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)` : 'transparent', backgroundSize: cpuPercent > 0 ? `${(100 / cpuPercent) * 100}% 100%` : '100% 100%', borderRadius: 0.5 }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5, minWidth: 22, textAlign: 'right' }}>{cpuPercent.toFixed(0)}%</Typography>
                         </Box>
-                        <Box sx={{ height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
-                          <Box sx={{
-                            height: '100%',
-                            width: `${cpuPercent}%`,
-                            bgcolor: cpuPercent > 80 ? 'error.main' : cpuPercent > 60 ? 'warning.main' : 'success.main',
-                            borderRadius: 0.5
-                          }} />
-                        </Box>
-                      </Box>
-
-                      {/* RAM */}
-                      <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.8 }}>
-                            RAM {Math.round(memPercent)}%
-                          </Typography>
-                          <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.6 }}>
-                            {formatMemory(node.maxmem)}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
-                          <Box sx={{
-                            height: '100%',
-                            width: `${memPercent}%`,
-                            bgcolor: memPercent > 80 ? 'error.main' : memPercent > 60 ? 'warning.main' : 'success.main',
-                            borderRadius: 0.5
-                          }} />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.6, minWidth: 24 }}>RAM</Typography>
+                          <Box sx={{ width: 48, height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${memPercent}%`, background: memPercent > 0 ? `linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)` : 'transparent', backgroundSize: memPercent > 0 ? `${(100 / memPercent) * 100}% 100%` : '100% 100%', borderRadius: 0.5 }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5, minWidth: 22, textAlign: 'right' }}>{Math.round(memPercent)}%</Typography>
                         </Box>
                       </Box>
                     </Box>

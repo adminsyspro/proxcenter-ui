@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -29,6 +28,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 // ==================== EDIT DISK DIALOG ====================
 type EditDiskDialogProps = {
@@ -432,12 +432,9 @@ return
   if (disk.isCdrom) {
     return (
       <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className="ri-disc-line" style={{ fontSize: 24 }} />
-            {disk.id} (CD/DVD)
-          </Box>
-        </DialogTitle>
+        <AppDialogTitle onClose={onClose} icon={<i className="ri-disc-line" style={{ fontSize: 24 }} />}>
+          {disk.id} (CD/DVD)
+        </AppDialogTitle>
 
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -523,10 +520,9 @@ return
   if (disk.isUnused) {
     return (
       <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-hard-drive-2-line" style={{ fontSize: 24, color: 'var(--mui-palette-warning-main)' }} />
+        <AppDialogTitle onClose={onClose} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 24, color: 'var(--mui-palette-warning-main)' }} />}>
           {disk.id} — {t('inventory.unused')}
-        </DialogTitle>
+        </AppDialogTitle>
 
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -593,15 +589,14 @@ return
   // ── Regular disk Dialog ───────────────────────────────────
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-hard-drive-2-line" style={{ fontSize: 24 }} />
-          {t('common.edit')}: {disk.id}
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 24 }} />}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{t('common.edit')}: {disk.id}</span>
+          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+            {disk.size} • {disk.storage}
+          </Typography>
         </Box>
-        <Typography variant="caption" sx={{ opacity: 0.7 }}>
-          {disk.size} • {disk.storage}
-        </Typography>
-      </DialogTitle>
+      </AppDialogTitle>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="Options" />

@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -16,6 +15,8 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material'
+
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 // ==================== EDIT SCSI CONTROLLER DIALOG ====================
 type EditScsiControllerDialogProps = {
@@ -53,10 +54,9 @@ export function EditScsiControllerDialog({ open, onClose, onSave, currentControl
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className="ri-settings-3-line" style={{ fontSize: 24 }} />
+      <AppDialogTitle onClose={onClose} icon={<i className="ri-settings-3-line" style={{ fontSize: 24 }} />}>
         {t('inventory.editScsiController')}
-      </DialogTitle>
+      </AppDialogTitle>
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

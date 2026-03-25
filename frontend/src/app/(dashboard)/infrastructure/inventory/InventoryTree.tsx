@@ -156,6 +156,25 @@ function NodeIcon({ status, maintenance, size = 16 }: { status?: string; mainten
   )
 }
 
+function ClusterIcon({ nodes, size = 14 }: { nodes: { status?: string }[]; size?: number }) {
+  const dotSize = Math.round(size * 0.5)
+  const allOnline = nodes.length > 0 && nodes.every(n => n.status === 'online')
+  const dotColor = allOnline ? '#4caf50' : '#ff9800'
+
+  return (
+    <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, flexShrink: 0 }}>
+      <i className="ri-server-fill" style={{ opacity: 0.8, fontSize: size }} />
+      <Box sx={{
+        position: 'absolute', bottom: -2, right: -2,
+        width: dotSize, height: dotSize, borderRadius: '50%',
+        bgcolor: dotColor,
+        border: '1.5px solid', borderColor: 'background.paper',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }} />
+    </Box>
+  )
+}
+
 export type InventorySelection =
   | { type: 'root'; id: 'root' } // Nœud racine de l'inventaire
   | { type: 'cluster'; id: string } // id = connectionId
@@ -206,6 +225,10 @@ export type HostItem = {
   node: string
   connId: string
   connName: string
+  status?: string   // node status: online, offline, etc.
+  cpu?: number      // node-level CPU usage (fraction 0-1)
+  mem?: number      // node-level used memory (bytes)
+  maxmem?: number   // node-level total memory (bytes)
   vms: AllVmItem[]
 }
 
@@ -277,6 +300,9 @@ type TreeCluster = {
     status?: string
     ip?: string
     maintenance?: string
+    cpu?: number      // node-level CPU usage (fraction 0-1)
+    mem?: number      // node-level used memory (bytes)
+    maxmem?: number   // node-level total memory (bytes)
     vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string }[]
   }[]
 }
@@ -1683,6 +1709,9 @@ return next
       status: node.status,
       ip: node.ip,
       maintenance: node.maintenance,
+      cpu: node.cpu,
+      mem: node.mem,
+      maxmem: node.maxmem,
       vms: (node.guests || []).map((guest: any) => ({
         type: String(guest.type || 'qemu'),
         vmid: String(guest.vmid),
@@ -2258,14 +2287,14 @@ return vms
   // Liste des hôtes uniques avec leurs VMs (filtrées, sans templates)
   // Inclut aussi les nœuds sans VM depuis filteredClusters
   const hostsList = useMemo(() => {
-    const hostsMap = new Map<string, { node: string; connName: string; status: string; vms: typeof displayVms }>()
+    const hostsMap = new Map<string, { node: string; connName: string; status: string; cpu?: number; mem?: number; maxmem?: number; vms: typeof displayVms }>()
 
     // D'abord, ajouter tous les nœuds depuis les clusters (y compris ceux sans VM)
     filteredClusters.forEach(clu => {
       clu.nodes.forEach(n => {
         const key = `${clu.connId}:${n.node}`
         if (!hostsMap.has(key)) {
-          hostsMap.set(key, { node: n.node, connName: clu.name, status: n.status || 'online', vms: [] })
+          hostsMap.set(key, { node: n.node, connName: clu.name, status: n.status || 'online', cpu: n.cpu, mem: n.mem, maxmem: n.maxmem, vms: [] })
         }
       })
     })
@@ -2287,6 +2316,9 @@ return vms
         node: h.node,
         connName: h.connName,
         status: h.status,
+        cpu: h.cpu,
+        mem: h.mem,
+        maxmem: h.maxmem,
         vms: h.vms
       }))
       .sort((a, b) => a.node.localeCompare(b.node))
@@ -2496,6 +2528,10 @@ return favorites.has(vmKey)
       node: h.node,
       connId: h.vms[0]?.connId || h.key.split(':')[0],
       connName: h.connName,
+      status: h.status,
+      cpu: h.cpu,
+      mem: h.mem,
+      maxmem: h.maxmem,
       vms: h.vms.map(vm => ({
         ...vm,
         type: vm.type as 'qemu' | 'lxc',
@@ -3318,7 +3354,7 @@ return (
               itemId={`cluster:${clu.connId}`}
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-server-fill' style={{ opacity: 0.8, fontSize: 14 }} />
+                  <ClusterIcon nodes={clu.nodes} />
                   <span style={{ fontSize: 14 }}>{clu.name}</span>
                   {/* Warning Ceph */}
                   {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
@@ -3515,7 +3551,7 @@ return (
                 itemId={`storage-cluster:${cs.connId}`}
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <i className="ri-server-fill" style={{ opacity: 0.8, fontSize: 14 }} />
+                    <ClusterIcon nodes={cs.nodes} />
                     <span style={{ fontSize: 14 }}>{cs.connName}</span>
                   </Box>
                 }
@@ -3615,19 +3651,21 @@ return (
                   itemId={`net-conn:${cId}`}
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.8 }} />
+                      <ClusterIcon nodes={clusters.find(c => c.connId === cId)?.nodes || []} />
                       <span style={{ fontSize: 14 }}>{connName}</span>
                       <span style={{ opacity: 0.4, fontSize: 11 }}>({nodes.length} nodes)</span>
                     </Box>
                   }
                 >
-                  {nodes.map(({ node, vlans, totalVlans, totalVms }) => (
+                  {nodes.map(({ node, vlans, totalVlans, totalVms }) => {
+                    const nodeStatus = clusters.find(c => c.connId === cId)?.nodes.find(n => n.node === node)?.status
+                    return (
                     <TreeItem
                       key={`net-node:${cId}:${node}`}
                       itemId={`net-node:${cId}:${node}`}
                       label={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <NodeIcon status="online" size={16} />
+                          <NodeIcon status={nodeStatus || 'online'} size={16} />
                           <span style={{ fontSize: 13 }}>{node}</span>
                           <span style={{ opacity: 0.4, fontSize: 11 }}>
                             ({totalVlans > 0 ? `${totalVlans} VLAN${totalVlans > 1 ? 's' : ''}, ` : ''}{totalVms} VM{totalVms > 1 ? 's' : ''})
@@ -3676,7 +3714,7 @@ return (
                         </TreeItem>
                       ))}
                     </TreeItem>
-                  ))}
+                  )})}
                 </TreeItem>
               ))}
               </SimpleTreeView>
@@ -4126,11 +4164,12 @@ return (
       >
         <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <img
-              src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
-              alt=""
-              style={{ width: 16, height: 16, opacity: 0.8 }}
-            />
+            <NodeIcon status={(() => {
+              if (!nodeContextMenu) return 'online'
+              const clu = clusters.find(c => c.connId === nodeContextMenu.connId)
+              const n = clu?.nodes.find(n => n.node === nodeContextMenu.node)
+              return n?.status || 'online'
+            })()} maintenance={nodeContextMenu?.maintenance} size={16} />
             <Typography variant="subtitle2" fontWeight={900}>
               {nodeContextMenu?.node}
             </Typography>
@@ -4334,7 +4373,7 @@ return (
                     {mOtherNodes.map(n => (
                       <MenuItem key={n.node} value={n.node}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.8 }} />
+                          <NodeIcon status={n.status} size={14} />
                           {n.node}
                         </Box>
                       </MenuItem>
@@ -4450,7 +4489,7 @@ return (
                 {getOtherNodes(bulkActionDialog.connId, bulkActionDialog.node).map(n => (
                   <MenuItem key={n} value={n}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.8 }} />
+                      <NodeIcon status="online" size={14} />
                       {n}
                     </Box>
                   </MenuItem>

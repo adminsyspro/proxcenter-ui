@@ -889,9 +889,9 @@ export default function NodeTabs(props: any) {
                     {data.vmsData.length > 0 ? (
                       <Box sx={{
                         resize: 'vertical',
-                        overflow: 'hidden',
+                        overflow: 'auto',
                         minHeight: 200,
-                        height: expandedVmsTable ? 500 : 400,
+                        height: expandedVmsTable ? 600 : 450,
                         pb: '6px',
                         position: 'relative',
                         '&::after': {
@@ -911,7 +911,7 @@ export default function NodeTabs(props: any) {
                           vms={data.vmsData as VmRow[]}
                           compact={!expandedVmsTable}
                           expanded={expandedVmsTable}
-                          maxHeight="auto"
+                          maxHeight={expandedVmsTable ? 560 : 410}
                           showTrends={expandedVmsTable}
                           showActions={true}
                           onLoadTrendsBatch={loadVmTrendsBatch}

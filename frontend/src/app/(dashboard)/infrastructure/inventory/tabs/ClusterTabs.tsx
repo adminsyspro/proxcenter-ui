@@ -991,19 +991,6 @@ export default function ClusterTabs(props: any) {
                                     {t('inventory.drsPendingRecs', { count: clusterRecs.length })}
                                   </Typography>
                                 </Box>
-                                {recsExpanded && (
-                                  <Button
-                                    size="small"
-                                    variant="contained"
-                                    color="primary"
-                                    disabled={executingAll || executingRecId !== null}
-                                    startIcon={executingAll ? <CircularProgress size={14} /> : <i className="ri-play-circle-line" style={{ fontSize: 14 }} />}
-                                    onClick={(e) => { e.stopPropagation(); handleExecuteAll() }}
-                                    sx={{ textTransform: 'none', fontSize: '0.7rem', height: 26, px: 1.5 }}
-                                  >
-                                    {t('inventory.drsExecAll')}
-                                  </Button>
-                                )}
                               </Box>
                               <Collapse in={recsExpanded} timeout="auto">
                                 <Stack spacing={0.75} sx={{ mt: 1 }}>

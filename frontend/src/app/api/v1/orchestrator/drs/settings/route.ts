@@ -8,7 +8,7 @@ import { getCurrentTenantId } from '@/lib/tenant'
 export const runtime = "nodejs"
 
 // Frontend-only settings not supported by orchestrator — stored in local settings table
-const FRONTEND_ONLY_KEYS = ['max_pending_recommendations'] as const
+const FRONTEND_ONLY_KEYS = ['max_pending_recommendations', 'migration_cooldown', 'max_concurrent_migrations'] as const
 
 function getFrontendSettings(): Record<string, any> {
   try {
@@ -22,12 +22,10 @@ function getFrontendSettings(): Record<string, any> {
 function saveFrontendSettings(data: Record<string, any>) {
   try {
     const db = getDb()
-    const tenantId = 'default'
     const json = JSON.stringify(data)
     db.prepare(
-      `INSERT INTO settings (key, value, tenant_id) VALUES (?, ?, ?)
-       ON CONFLICT(key, tenant_id) DO UPDATE SET value = excluded.value`
-    ).run('drs_frontend_settings', json, tenantId)
+      `INSERT OR REPLACE INTO settings (key, value, tenant_id, updated_at) VALUES (?, ?, 'default', datetime('now'))`
+    ).run('drs_frontend_settings', json)
   } catch (e) { console.error('[drs/settings] Failed to save frontend settings:', e) }
 }
 

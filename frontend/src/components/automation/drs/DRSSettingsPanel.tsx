@@ -749,12 +749,15 @@ export default function DRSSettingsPanel({
             <Slider
               value={(() => {
                 const s = settings.migration_cooldown || '5m'
-                const match = s.match(/^(\d+)(s|m|h)$/)
-                if (!match) return 5
-                const [, num, unit] = match
-                if (unit === 'h') return parseInt(num) * 60
-                if (unit === 's') return Math.max(1, Math.round(parseInt(num) / 60))
-                return parseInt(num)
+                // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
+                let totalMinutes = 0
+                const hMatch = s.match(/(\d+)h/)
+                const mMatch = s.match(/(\d+)m/)
+                const sMatch = s.match(/^(\d+)s$/)
+                if (hMatch) totalMinutes += parseInt(hMatch[1]) * 60
+                if (mMatch) totalMinutes += parseInt(mMatch[1])
+                if (sMatch) totalMinutes = Math.max(1, Math.round(parseInt(sMatch[1]) / 60))
+                return totalMinutes || 5
               })()}
               onChange={(_, val) => handleChange('migration_cooldown', `${val as number}m`)}
               min={1}

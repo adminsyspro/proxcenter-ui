@@ -1038,7 +1038,11 @@ export default function VmDetailTabs(props: any) {
                                 size="small"
                                 type="number"
                                 value={(memory / 1024).toFixed(0)}
-                                onChange={(e) => setMemory(Math.max(512, Number(e.target.value) * 1024))}
+                                onChange={(e) => {
+                                  const newMem = Math.max(512, Number(e.target.value) * 1024)
+                                  setMemory(newMem)
+                                  if (balloonEnabled && balloon > newMem) setBalloon(newMem)
+                                }}
                                 InputProps={{
                                   endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                 }}
@@ -1059,7 +1063,11 @@ export default function VmDetailTabs(props: any) {
                               return (
                                 <Slider
                                   value={Math.min(memory / 1024, sliderMax)}
-                                  onChange={(_, val) => setMemory((val as number) * 1024)}
+                                  onChange={(_, val) => {
+                                    const newMem = (val as number) * 1024
+                                    setMemory(newMem)
+                                    if (balloonEnabled && balloon > newMem) setBalloon(newMem)
+                                  }}
                                   min={1}
                                   max={sliderMax}
                                   step={step}
@@ -1090,7 +1098,7 @@ export default function VmDetailTabs(props: any) {
                                     size="small"
                                     type="number"
                                     value={(balloon / 1024).toFixed(0)}
-                                    onChange={(e) => setBalloon(Number(e.target.value) * 1024)}
+                                    onChange={(e) => setBalloon(Math.min(Number(e.target.value) * 1024, memory))}
                                     InputProps={{
                                       endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                     }}

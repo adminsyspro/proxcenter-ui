@@ -2361,7 +2361,23 @@ export default function NodeTabs(props: any) {
                                           <TableCell align="right">{osd.crush_weight?.toFixed(2) || '1.00'}</TableCell>
                                           <TableCell align="right">{osd.reweight?.toFixed(2) || '1.00'}</TableCell>
                                           <TableCell align="right">
-                                            {osd.percent_used?.toFixed(2) || ((osd.kb_used / osd.kb) * 100).toFixed(2) || '0'}%
+                                            {(() => {
+                                              const pct = osd.percent_used ?? (osd.kb && osd.kb_used ? (osd.kb_used / osd.kb) * 100 : 0)
+                                              const color = pct > 90 ? 'error' : pct > 80 ? 'warning' : 'primary'
+                                              return (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
+                                                  <LinearProgress
+                                                    variant="determinate"
+                                                    value={Math.min(pct, 100)}
+                                                    color={color}
+                                                    sx={{ width: 60, height: 6, borderRadius: 3, flexShrink: 0 }}
+                                                  />
+                                                  <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, minWidth: 42, textAlign: 'right' }}>
+                                                    {pct.toFixed(1)}%
+                                                  </Typography>
+                                                </Box>
+                                              )
+                                            })()}
                                           </TableCell>
                                           <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                             {osd.kb ? `${(osd.kb / 1024 / 1024 / 1024).toFixed(2)} TiB` : osd.total_space || '—'}

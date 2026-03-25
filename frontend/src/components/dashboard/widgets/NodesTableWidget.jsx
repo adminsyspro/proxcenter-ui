@@ -26,11 +26,11 @@ function NodesTableWidget({ data, loading }) {
       <Table size='small' stickyHeader>
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: 800, bgcolor: 'transparent', fontSize: 12, py: 1 }}>{t('dashboard.widgets.nodes')}</TableCell>
-            <TableCell sx={{ fontWeight: 800, bgcolor: 'transparent', fontSize: 12, py: 1 }}>{t('inventory.clusters')}</TableCell>
-            <TableCell align='center' sx={{ fontWeight: 800, bgcolor: 'transparent', fontSize: 12, py: 1 }}>{t('common.status')}</TableCell>
-            <TableCell sx={{ fontWeight: 800, bgcolor: 'transparent', minWidth: 100, fontSize: 12, py: 1 }}>{t('monitoring.cpu')}</TableCell>
-            <TableCell sx={{ fontWeight: 800, bgcolor: 'transparent', minWidth: 100, fontSize: 12, py: 1 }}>{t('monitoring.memory')}</TableCell>
+            <TableCell sx={{ fontWeight: 800, bgcolor: 'background.paper', fontSize: 12, py: 1 }}>{t('dashboard.widgets.nodes')}</TableCell>
+            <TableCell sx={{ fontWeight: 800, bgcolor: 'background.paper', fontSize: 12, py: 1 }}>{t('inventory.clusters')}</TableCell>
+            <TableCell align='center' sx={{ fontWeight: 800, bgcolor: 'background.paper', fontSize: 12, py: 1 }}>{t('common.status')}</TableCell>
+            <TableCell sx={{ fontWeight: 800, bgcolor: 'background.paper', minWidth: 100, fontSize: 12, py: 1 }}>{t('monitoring.cpu')}</TableCell>
+            <TableCell sx={{ fontWeight: 800, bgcolor: 'background.paper', minWidth: 100, fontSize: 12, py: 1 }}>{t('monitoring.memory')}</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>

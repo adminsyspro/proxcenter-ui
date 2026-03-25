@@ -666,20 +666,20 @@ export default function ClusterTabs(props: any) {
                               {/* Ceph */}
                               <Grid size={4} sx={{ textAlign: 'center' }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.cephLabel')}</Typography>
-                                <Box sx={{ 
-                                  width: 48, 
-                                  height: 48, 
-                                  borderRadius: '50%', 
-                                  bgcolor: data.cephHealth === 'HEALTH_OK' ? 'success.main' : 
-                                           data.cephHealth === 'HEALTH_WARN' ? 'warning.main' : 
+                                <Box sx={{
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: '50%',
+                                  bgcolor: data.cephHealth === 'HEALTH_OK' ? 'success.main' :
+                                           data.cephHealth === 'HEALTH_WARN' ? 'warning.dark' :
                                            data.cephHealth ? 'error.main' : 'action.disabledBackground',
-                                  display: 'flex', 
-                                  alignItems: 'center', 
+                                  display: 'flex',
+                                  alignItems: 'center',
                                   justifyContent: 'center',
                                   mx: 'auto',
                                   mb: 1
                                 }}>
-                                  <i className={data.cephHealth ? "ri-check-line" : "ri-question-line"} style={{ fontSize: 24, color: '#fff' }} />
+                                  <i className={data.cephHealth === 'HEALTH_OK' ? "ri-check-line" : data.cephHealth === 'HEALTH_WARN' ? "ri-alert-line" : data.cephHealth ? "ri-close-line" : "ri-question-line"} style={{ fontSize: 24, color: '#fff' }} />
                                 </Box>
                                 <Typography variant="caption">
                                   {data.cephHealth === 'HEALTH_OK' ? t('inventory.healthy') :

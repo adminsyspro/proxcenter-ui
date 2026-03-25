@@ -2254,14 +2254,14 @@ return vms
   // Liste des hôtes uniques avec leurs VMs (filtrées, sans templates)
   // Inclut aussi les nœuds sans VM depuis filteredClusters
   const hostsList = useMemo(() => {
-    const hostsMap = new Map<string, { node: string; connName: string; vms: typeof displayVms }>()
+    const hostsMap = new Map<string, { node: string; connName: string; status: string; vms: typeof displayVms }>()
 
     // D'abord, ajouter tous les nœuds depuis les clusters (y compris ceux sans VM)
     filteredClusters.forEach(clu => {
       clu.nodes.forEach(n => {
         const key = `${clu.connId}:${n.node}`
         if (!hostsMap.has(key)) {
-          hostsMap.set(key, { node: n.node, connName: clu.name, vms: [] })
+          hostsMap.set(key, { node: n.node, connName: clu.name, status: n.status || 'online', vms: [] })
         }
       })
     })
@@ -2271,7 +2271,7 @@ return vms
       const key = `${vm.connId}:${vm.node}`
 
       if (!hostsMap.has(key)) {
-        hostsMap.set(key, { node: vm.node, connName: vm.connName, vms: [] })
+        hostsMap.set(key, { node: vm.node, connName: vm.connName, status: 'online', vms: [] })
       }
 
       hostsMap.get(key)!.vms.push(vm)
@@ -2282,6 +2282,7 @@ return vms
         key,
         node: h.node,
         connName: h.connName,
+        status: h.status,
         vms: h.vms
       }))
       .sort((a, b) => a.node.localeCompare(b.node))

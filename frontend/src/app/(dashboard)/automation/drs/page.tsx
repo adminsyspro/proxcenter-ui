@@ -1499,6 +1499,32 @@ return allVMsData.data.vms.map(vm => ({
     return () => clearTimeout(timer)
   }, [allPendingRecs.length, maxPending])
 
+  // Auto-reject stale recommendations where the source node is no longer above cluster average
+  // This ensures recommendations stay in sync with live cluster state
+  useEffect(() => {
+    if (!metricsData || allPendingRecs.length === 0) return
+    const staleRecs: DRSRecommendation[] = []
+    for (const rec of allPendingRecs) {
+      const clusterMetrics = (metricsData as any)[rec.connection_id]
+      if (!clusterMetrics?.nodes || clusterMetrics.nodes.length < 2) continue
+      const nodes = clusterMetrics.nodes as { node: string; memory_usage: number }[]
+      const avgMem = nodes.reduce((sum, n) => sum + n.memory_usage, 0) / nodes.length
+      const sourceNode = nodes.find(n => n.node === rec.source_node)
+      if (!sourceNode) continue
+      // If source node is now at or below average (+2% tolerance), the recommendation is stale
+      if (sourceNode.memory_usage <= avgMem + 2) {
+        staleRecs.push(rec)
+      }
+    }
+    if (staleRecs.length === 0) return
+    console.log(`[DRS] Auto-rejecting ${staleRecs.length} stale recommendation(s) — source node(s) no longer above cluster average`)
+    staleRecs.forEach(rec => {
+      fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
+    })
+    const timer = setTimeout(() => mutateRecs(), 1000)
+    return () => clearTimeout(timer)
+  }, [allPendingRecs, metricsData])
+
   const pendingRecs = useMemo(() =>
     allPendingRecs.slice(0, maxPending),
     [allPendingRecs, maxPending]
@@ -1721,13 +1747,13 @@ return next
       setActionLoading('evaluate')
       await apiAction('/api/v1/orchestrator/drs/evaluate', 'POST')
       await new Promise(r => setTimeout(r, 2000))
-      await mutateRecs()
+      await Promise.all([mutateRecs(), mutateMetrics()])
     } catch (e) {
       console.error(e)
     } finally {
       setActionLoading(null)
     }
-  }, [mutateRecs])
+  }, [mutateRecs, mutateMetrics])
 
   const handleEnforceRule = useCallback(async (ruleId: string) => {
     try {

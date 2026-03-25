@@ -101,7 +101,21 @@ function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance }:
     return null // Use NodeIcon instead for nodes
   }
 
-  return null
+  // Pour les VMs
+  if (status === 'running') {
+    return (
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
+        <PlayArrowIcon sx={{ fontSize: 14, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))' }} />
+      </Box>
+    )
+  }
+
+  // VM stopped ou autre état
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
+      <StopIcon sx={{ fontSize: 14, color: 'text.disabled', opacity: 0.5 }} />
+    </Box>
+  )
 }
 
 function NodeIcon({ status, maintenance, size = 16 }: { status?: string; maintenance?: string; size?: number }) {
@@ -832,8 +846,7 @@ return next
       const savedExpanded = localStorage.getItem('inventoryExpandedItems')
       if (savedExpanded) setManualExpandedItems(JSON.parse(savedExpanded))
 
-      const savedCollapsed = localStorage.getItem('inventoryCollapsedSections')
-      if (savedCollapsed) setCollapsedSections(new Set(JSON.parse(savedCollapsed)))
+      // collapsedSections not restored — default to all collapsed in nodes/pools/tags views
 
       const savedStorageExpanded = localStorage.getItem('inventoryStorageExpandedItems')
       if (savedStorageExpanded) setStorageExpandedItems(JSON.parse(savedStorageExpanded))
@@ -2595,9 +2608,9 @@ return favorites.has(vmKey)
             <Tooltip title={isSectionsAllExpanded ? t('inventory.collapseAll') : t('inventory.expandAll')}>
               <IconButton size='small' onClick={() => {
                 if (isSectionsAllExpanded) {
-                  const keys = viewMode === 'hosts' ? hostsList.map(h => h.key)
-                    : viewMode === 'pools' ? poolsList.map(p => p.pool)
-                    : tagsList.map(t => t.tag)
+                  const keys = viewMode === 'hosts' ? hostsList.map(h => `host:${h.key}`)
+                    : viewMode === 'pools' ? poolsList.map(p => `pool:${p.pool}`)
+                    : tagsList.map(t => `tag:${t.tag}`)
                   collapseAllSections(keys)
                 } else {
                   expandAllSections()
@@ -2885,7 +2898,7 @@ return (
                     '&:hover': { bgcolor: 'action.hover' }
                   }}>
                   <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
-                  <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.7 }} />
+                  <NodeIcon status={host.status || 'online'} size={16} />
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>{host.node}</Typography>
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>({host.vms.length})</Typography>
                   <Typography variant="caption" sx={{ opacity: 0.4, ml: 'auto' }}>{host.connName}</Typography>

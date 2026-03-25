@@ -2111,14 +2111,14 @@ export default function ClusterTabs(props: any) {
                                     width: 56, 
                                     height: 56, 
                                     borderRadius: '50%', 
-                                    bgcolor: clusterCephData.health?.status === 'HEALTH_OK' ? 'success.main' : 
-                                             clusterCephData.health?.status === 'HEALTH_WARN' ? 'warning.main' : 'error.main',
+                                    bgcolor: clusterCephData.health?.status === 'HEALTH_OK' ? 'success.main' :
+                                             clusterCephData.health?.status === 'HEALTH_WARN' ? 'warning.dark' : 'error.main',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     mb: 1
                                   }}>
-                                    <i className={clusterCephData.health?.status === 'HEALTH_OK' ? 'ri-checkbox-circle-fill' : 'ri-alert-fill'} style={{ fontSize: 28, color: 'white' }} />
+                                    <i className={clusterCephData.health?.status === 'HEALTH_OK' ? 'ri-checkbox-circle-fill' : clusterCephData.health?.status === 'HEALTH_WARN' ? 'ri-alert-fill' : 'ri-close-circle-fill'} style={{ fontSize: 28, color: 'white' }} />
                                   </Box>
                                   <Typography variant="body2" fontWeight={700}>
                                     {clusterCephData.health?.status || t('common.unknown')}

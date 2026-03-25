@@ -458,17 +458,22 @@ return null
       }
     }
 
-    // Alertes Ceph
-    if (cephGlobal?.health && cephGlobal.health !== 'HEALTH_OK') {
-      alerts.push({ 
-        severity: cephGlobal.health === 'HEALTH_WARN' ? 'warn' : 'crit', 
-        message: `Ceph : ${cephGlobal.health}`, 
-        source: 'Ceph Cluster',
-        sourceType: 'ceph',
-        entityType: 'cluster',
-        metric: 'health',
-        time: new Date().toISOString() 
-      })
+    // Alertes Ceph — par cluster
+    for (const cluster of clusterInfos) {
+      if (cluster.cephHealth && cluster.cephHealth !== 'HEALTH_OK') {
+        alerts.push({
+          severity: cluster.cephHealth === 'HEALTH_WARN' ? 'warn' : 'crit',
+          message: `Ceph ${cluster.name} : ${cluster.cephHealth}`,
+          source: cluster.name,
+          sourceType: 'ceph',
+          entityType: 'cluster',
+          entityId: cluster.id,
+          entityName: cluster.name,
+          connId: cluster.id,
+          metric: 'health',
+          time: new Date().toISOString()
+        })
+      }
     }
 
     // Alertes Quorum

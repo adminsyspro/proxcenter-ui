@@ -8,7 +8,7 @@ import {
   Divider, IconButton, List, ListItemButton, ListItemText, Typography
 } from '@mui/material'
 
-function AlertDetailDialog({ alert, open, onClose, onNavigate, t }) {
+function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
   if (!alert) return null
 
   const severityConfig = {
@@ -19,9 +19,32 @@ function AlertDetailDialog({ alert, open, onClose, onNavigate, t }) {
 
   const cfg = severityConfig[alert.severity] || severityConfig.info
 
+  function getEntityLink(a) {
+    if (a.entityType === 'node' && a.connId && a.entityId) {
+      return `/infrastructure/inventory?selectType=node&selectId=${a.connId}:${a.entityId}`
+    }
+    if (a.entityType === 'cluster' && a.connId) {
+      return `/infrastructure/inventory?selectType=cluster&selectId=${a.connId}`
+    }
+    return null
+  }
+
+  const entityLink = getEntityLink(alert)
+
+  const sourceValue = entityLink ? (
+    <Typography
+      variant='body2'
+      component='span'
+      sx={{ fontSize: 13, color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+      onClick={() => { router.push(entityLink); onClose() }}
+    >
+      {alert.source} <i className='ri-external-link-line' style={{ fontSize: 11 }} />
+    </Typography>
+  ) : alert.source
+
   const details = [
     { label: t('alerts.detail.message'), value: alert.message },
-    { label: t('alerts.detail.source'), value: alert.source },
+    { label: t('alerts.detail.source'), value: sourceValue },
     { label: t('alerts.detail.sourceType'), value: (alert.sourceType || 'pve').toUpperCase() },
     alert.entityName && { label: t('alerts.detail.entity'), value: alert.entityName },
     alert.entityType && { label: t('alerts.detail.entityType'), value: alert.entityType },
@@ -166,6 +189,7 @@ function AlertsListDialog({ alerts, open, onClose, t, router }) {
         open={!!selectedAlert}
         onClose={() => setSelectedAlert(null)}
         onNavigate={selectedAlert && getAlertLink(selectedAlert) ? () => router.push(getAlertLink(selectedAlert)) : null}
+        router={router}
         t={t}
       />
     </>
@@ -233,7 +257,12 @@ function KpiAlertsWidget({ data, loading }) {
             {value}
           </Typography>
           <Typography variant='caption' sx={{ opacity: 0.5 }}>
-            {hasCrit || hasWarn ? `${alertsSummary.crit || 0} ${t('alerts.critical')} • ${alertsSummary.warn || 0} ${t('alerts.warning')}` : t('alerts.noActiveAlerts')}
+            {hasCrit || hasWarn ? (() => {
+              const parts = [`${alertsSummary.crit || 0} ${t('alerts.critical')}`, `${alertsSummary.warn || 0} ${t('alerts.warning')}`]
+              const snapCount = alerts.filter(a => a.metric === 'snapshot_stale').length
+              if (snapCount > 0) parts.push(`${snapCount} snap`)
+              return parts.join(' • ')
+            })() : t('alerts.noActiveAlerts')}
           </Typography>
         </Box>
       </ButtonBase>

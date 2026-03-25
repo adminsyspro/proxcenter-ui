@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Chip, LinearProgress,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
+  useTheme
 } from '@mui/material'
 
 function NodesTableWidget({ data, loading }) {
   const t = useTranslations()
   const router = useRouter()
+  const theme = useTheme()
   const nodes = data?.nodes || []
 
   if (nodes.length === 0) {
@@ -38,7 +40,10 @@ function NodesTableWidget({ data, loading }) {
             <TableRow key={idx} hover onClick={() => node.connId && router.push(`/infrastructure/inventory?selectType=node&selectId=${node.connId}:${node.name}`)} sx={{ cursor: node.connId ? 'pointer' : 'default' }}>
               <TableCell sx={{ py: 0.75 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? '#4caf50' : '#f44336' }} />
+                  <Box sx={{ position: 'relative', display: 'inline-flex', width: 18, height: 18, flexShrink: 0 }}>
+                    <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18, opacity: node.status === 'online' ? 0.8 : 0.4 }} />
+                    <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
+                  </Box>
                   <Typography variant='body2' sx={{ fontWeight: 700, fontSize: 12 }}>{node.name}</Typography>
                 </Box>
               </TableCell>

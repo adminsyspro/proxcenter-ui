@@ -65,6 +65,7 @@ function InventorySummary({
   ioSeries,
   isTemplate,
   vmNotes,
+  disksInfo,
 }: {
   kindLabel: string
   status: Status
@@ -93,6 +94,7 @@ function InventorySummary({
   ioSeries?: SeriesPoint[]
   isTemplate?: boolean
   vmNotes?: string | null
+  disksInfo?: { id: string; storage: string; size: string; format?: string; isCdrom?: boolean; isUnused?: boolean; isEfi?: boolean; isTpm?: boolean }[]
 }) {
   const t = useTranslations()
   const { branding } = useBranding()
@@ -258,7 +260,26 @@ return `${mins}m`
                   <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
                   <UsageBar themeColor={primaryColor} label={t('inventory.memoryLabel')} used={memUsed} capacity={memCap} mode="bytes" />
                   {guestInfo?.diskUsage && guestInfo.diskUsage.total > 0 && (
-                    <UsageBar themeColor={primaryColor} label={t('inventory.storageLabel')} used={guestInfo.diskUsage.used} capacity={guestInfo.diskUsage.total} mode="bytes" />
+                    <UsageBar
+                      themeColor={primaryColor}
+                      label={t('inventory.storageLabel')}
+                      used={guestInfo.diskUsage.used}
+                      capacity={guestInfo.diskUsage.total}
+                      mode="bytes"
+                      extra={disksInfo && disksInfo.filter(d => !d.isUnused && !d.isCdrom).length > 0 ? (
+                        <>
+                          {disksInfo.filter(d => !d.isUnused && !d.isCdrom).map(disk => (
+                            <Chip
+                              key={disk.id}
+                              size="small"
+                              label={`${disk.id}: ${disk.storage} (${disk.size})`}
+                              variant="outlined"
+                              sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-label': { px: 0.75 } }}
+                            />
+                          ))}
+                        </>
+                      ) : undefined}
+                    />
                   )}
                 </>
               )}

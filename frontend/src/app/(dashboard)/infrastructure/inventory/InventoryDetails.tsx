@@ -3146,6 +3146,7 @@ return vm?.isCluster ?? false
             ioSeries={selection?.type === 'vm' ? series : undefined}
             isTemplate={data.isTemplate}
             vmNotes={selection?.type === 'vm' ? vmNotes : undefined}
+            disksInfo={selection?.type === 'vm' ? data.disksInfo : undefined}
           />
           </Box>
           </>)}

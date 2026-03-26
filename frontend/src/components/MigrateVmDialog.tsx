@@ -197,6 +197,7 @@ export function MigrateVmDialog({
   const [cpuInfoLoading, setCpuInfoLoading] = useState(false)
   
   // ========== CROSS-CLUSTER MIGRATION STATES ==========
+  const [sourceSSHEnabled, setSourceSSHEnabled] = useState<boolean | null>(null)
   const [remoteConnections, setRemoteConnections] = useState<RemoteConnection[]>([])
   const [remoteConnectionsLoading, setRemoteConnectionsLoading] = useState(false)
   const [selectedRemoteConn, setSelectedRemoteConn] = useState<string>('')
@@ -475,6 +476,10 @@ export function MigrateVmDialog({
         const json = await res.json()
         
         if (json.data && Array.isArray(json.data)) {
+          // Check if source connection has SSH enabled
+          const sourceConn = json.data.find((c: any) => c.id === connId)
+          if (sourceConn) setSourceSSHEnabled(!!sourceConn.sshEnabled)
+
           // Filter out current connection and ensure only PVE type
           const otherConnections = json.data
             .filter((c: any) => c.id !== connId && c.type === 'pve')
@@ -1070,6 +1075,21 @@ export function MigrateVmDialog({
                 </Typography>
                 <Typography variant="caption">
                   {t('hardware.crossCluster.lxcNotSupportedDesc')}
+                </Typography>
+              </Alert>
+            )}
+
+            {/* Warning: SSH not enabled on source — VM will stay locked */}
+            {sourceSSHEnabled === false && (
+              <Alert severity="info" icon={<i className="ri-information-line" />}>
+                <Typography variant="body2" fontWeight={500} sx={{ mb: 0.5 }}>
+                  SSH non activé sur la connexion source
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block' }}>
+                  La VM source restera verrouillée (<code>lock: migrate</code>) après la migration. Vous devrez la déverrouiller manuellement :
+                </Typography>
+                <Typography variant="caption" component="code" sx={{ display: 'block', mt: 0.5, fontFamily: '"JetBrains Mono", monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 0.5 }}>
+                  qm unlock {vmid}
                 </Typography>
               </Alert>
             )}

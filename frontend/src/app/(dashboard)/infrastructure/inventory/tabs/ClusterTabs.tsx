@@ -1476,8 +1476,10 @@ export default function ClusterTabs(props: any) {
                                   <VmsTable
                                     vms={nodeVms as VmRow[]}
                                     compact
+                                    showTrends
                                     maxHeight="auto"
                                     showActions={true}
+                                    onLoadTrendsBatch={props.loadVmTrendsBatch}
                                     onVmClick={(vm) => {
                                       if (vm.template) return
                                       onSelect?.({ type: 'vm', id: vm.id })

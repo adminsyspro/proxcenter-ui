@@ -113,7 +113,7 @@ function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance }:
   // VM stopped ou autre état
   return (
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
-      <StopIcon sx={{ fontSize: 14, color: 'text.disabled', opacity: 0.5 }} />
+      <StopIcon sx={{ fontSize: 14, color: '#f44336' }} />
     </Box>
   )
 }
@@ -533,7 +533,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </Box>
         <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} />
         <i className={getVmIcon(vmType, template)} style={{ opacity: 0.8, fontSize: 14 }} />
-        <Typography variant="body2" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <Typography variant="body2" sx={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {name}
         </Typography>
         {template && (
@@ -594,7 +594,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </IconButton>
         <i className="ri-file-copy-fill" style={{ opacity: 0.8, fontSize: 14, color: '#0288d1' }} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {name}
           </Typography>
           <Chip label={vmType === 'lxc' ? 'LXC' : 'VM'} size="small" sx={{ height: 16, fontSize: 10 }} />
@@ -642,7 +642,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} />
         <i className={getVmIcon(vmType, template)} style={{ opacity: 0.8, fontSize: 14 }} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {name}
           </Typography>
           {template && (
@@ -698,7 +698,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
       <i className={getVmIcon(vmType, template)} style={{ opacity: 0.8, fontSize: 14 }} />
       {isGrouped ? (
         <>
-          <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {name}
           </Typography>
           {template && (
@@ -717,7 +717,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {name}
           </Typography>
           {template && (
@@ -3278,8 +3278,8 @@ return (
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <NodeIcon status={n.status} maintenance={n.maintenance} size={16} />
-                    <span style={{ fontSize: 14 }}>{clu.name}</span>
-                    <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
+                    <span style={{ fontSize: 13 }}>{clu.name}</span>
+                    <span style={{ opacity: 0.5, fontSize: 11 }}>({n.vms.length})</span>
                     {/* Warning Ceph */}
                     {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
                       <Tooltip title={`Ceph: ${clu.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
@@ -3355,7 +3355,7 @@ return (
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <ClusterIcon nodes={clu.nodes} />
-                  <span style={{ fontSize: 14 }}>{clu.name}</span>
+                  <span style={{ fontSize: 13 }}>{clu.name}</span>
                   {/* Warning Ceph */}
                   {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
                     <Tooltip title={`Ceph: ${clu.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
@@ -3381,8 +3381,8 @@ return (
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <NodeIcon status={n.status} maintenance={n.maintenance} size={16} />
-                      <span style={{ fontSize: 14 }}>{n.node}</span>
-                      <span style={{ opacity: 0.5, fontSize: 12 }}>({n.vms.length})</span>
+                      <span style={{ fontSize: 13 }}>{n.node}</span>
+                      <span style={{ opacity: 0.5, fontSize: 11 }}>({n.vms.length})</span>
                     </Box>
                   }
                 >
@@ -3528,7 +3528,7 @@ return (
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <NodeIcon status={nodeStatus} size={16} />
-                      <span style={{ fontSize: 14 }}>{cs.connName}</span>
+                      <span style={{ fontSize: 13 }}>{cs.connName}</span>
                       <span style={{ opacity: 0.4, fontSize: 11 }}>({allStorages.length})</span>
                     </Box>
                   }
@@ -3552,7 +3552,7 @@ return (
                 label={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <ClusterIcon nodes={cs.nodes} />
-                    <span style={{ fontSize: 14 }}>{cs.connName}</span>
+                    <span style={{ fontSize: 13 }}>{cs.connName}</span>
                   </Box>
                 }
               >
@@ -3652,7 +3652,7 @@ return (
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <ClusterIcon nodes={clusters.find(c => c.connId === cId)?.nodes || []} />
-                      <span style={{ fontSize: 14 }}>{connName}</span>
+                      <span style={{ fontSize: 13 }}>{connName}</span>
                       <span style={{ opacity: 0.4, fontSize: 11 }}>({nodes.length} nodes)</span>
                     </Box>
                   }
@@ -3769,8 +3769,8 @@ return (
                     <i className='ri-hard-drive-2-fill' style={{ opacity: 0.8, fontSize: 16 }} />
                     <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: pbs.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
                   </Box>
-                  <span style={{ fontSize: 14 }}>{pbs.name}</span>
-                  <span style={{ opacity: 0.5, fontSize: 12 }}>
+                  <span style={{ fontSize: 13 }}>{pbs.name}</span>
+                  <span style={{ opacity: 0.5, fontSize: 11 }}>
                     ({pbs.stats.backupCount} backups)
                   </span>
                 </Box>
@@ -3887,7 +3887,7 @@ return (
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         {cfg.svgIcon ? <img src={cfg.svgIcon} alt="" width={14} height={14} style={{ opacity: 0.8 }} /> : <i className={cfg.icon} style={{ fontSize: 14, color: cfg.color, opacity: 0.8 }} />}
-                        <span style={{ fontSize: 14 }}>{cfg.label}</span>
+                        <span style={{ fontSize: 13 }}>{cfg.label}</span>
                         <span style={{ fontSize: 11, opacity: 0.5 }}>
                           ({conns.length}{totalVms > 0 ? `, ${totalVms} VMs` : ''})
                         </span>
@@ -3916,7 +3916,7 @@ return (
                                   {vm.status === 'running' ? (
                                     <PlayArrowIcon sx={{ fontSize: 14, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))' }} />
                                   ) : (
-                                    <StopIcon sx={{ fontSize: 14, color: 'text.disabled', opacity: 0.5 }} />
+                                    <StopIcon sx={{ fontSize: 14, color: '#f44336' }} />
                                   )}
                                 </Box>
                                 {cfg.vmIcon ? <img src={cfg.vmIcon} alt="" width={14} height={14} style={{ opacity: 0.6 }} /> : <i className="ri-computer-line" style={{ fontSize: 14, opacity: 0.6 }} />}

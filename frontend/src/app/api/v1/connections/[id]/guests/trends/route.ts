@@ -72,12 +72,17 @@ function toTrendPoints(rrd: any[]) {
 
     const netin = Number(p.netin ?? 0)
     const netout = Number(p.netout ?? 0)
+    const diskread = Number(p.diskread ?? 0)
+    const diskwrite = Number(p.diskwrite ?? 0)
 
     return {
       t: formatHHMM(Number(p.time)),
       cpu: cpuPct,
       ram: ramPct,
-      ...(netin > 0 || netout > 0 ? { netin, netout } : {}),
+      netin,
+      netout,
+      diskread,
+      diskwrite,
     }
   })
 }

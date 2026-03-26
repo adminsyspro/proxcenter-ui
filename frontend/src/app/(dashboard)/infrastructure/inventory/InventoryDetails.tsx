@@ -2379,7 +2379,7 @@ return vm?.isCluster ?? false
   }, [selection, allVms])
 
   return (
-    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', ...(viewMode === 'vms' || viewMode === 'hosts' || viewMode === 'pools' || viewMode === 'tags' || viewMode === 'favorites' ? { height: '100%', display: 'flex', flexDirection: 'column' } : {}) }}>
+    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', fontSize: 13, '& .MuiTypography-body2': { fontSize: '13px !important', fontWeight: '400 !important' }, '& .MuiTypography-body1': { fontSize: '13px !important' }, '& .MuiTypography-caption': { fontSize: '11px !important' }, ...(viewMode === 'vms' || viewMode === 'hosts' || viewMode === 'pools' || viewMode === 'tags' || viewMode === 'favorites' ? { height: '100%', display: 'flex', flexDirection: 'column' } : {}) }}>
       {progress}
 
       {error ? (
@@ -3197,7 +3197,7 @@ return vm?.isCluster ?? false
                 clusterConfigLoaded, clusterConfigLoading, clusterHaGroups, clusterHaLoaded, clusterHaLoading, clusterHaResources, clusterHaRules,
                 clusterNotesContent, clusterNotesEditMode, clusterNotesLoading, clusterNotesSaving, clusterPveMajorVersion,
                 clusterStorageData, clusterStorageLoading, clusterTab, createClusterDialogOpen, data,
-                error, expandedClusterNodes, favorites, handleCreateCluster, handleJoinCluster, handleNodeBulkAction,
+                error, expandedClusterNodes, favorites, handleCreateCluster, handleJoinCluster, handleNodeBulkAction, loadVmTrendsBatch,
                 handleSaveClusterNotes, handleTableMigrate, handleTableVmAction, joinClusterDialogOpen, joinClusterInfo,
                 joinClusterPassword, joinInfoDialogOpen, loading, localVmsDialogNode, localVmsDialogOpen,
                 migratingVmIds, newClusterLinks, newClusterName, nodeLocalVms, nodeUpdates,

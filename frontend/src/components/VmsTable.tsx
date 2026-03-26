@@ -113,19 +113,19 @@ return TAG_PALETTE[idx]
 ------------------------------ */
 
 const VmIcon = ({ type, template }: { type: string; template?: boolean }) => {
-  let iconClass = 'ri-computer-line'
+  let iconClass = 'ri-computer-fill'
 
   if (template) {
-    iconClass = 'ri-file-copy-line'
+    iconClass = 'ri-file-copy-fill'
   } else if (type === 'lxc') {
-    iconClass = 'ri-instance-line'
+    iconClass = 'ri-instance-fill'
   }
 
-  
+
 return (
-    <i 
-      className={iconClass} 
-      style={{ fontSize: 14, opacity: 0.8 }} 
+    <i
+      className={iconClass}
+      style={{ fontSize: 16, opacity: 0.7 }}
     />
   )
 }
@@ -233,6 +233,75 @@ const TagsCell = ({ tags }: { tags: string[] }) => {
   Trend Tooltip Component
 ------------------------------ */
 
+function formatRate(bytes: number) {
+  if (bytes <= 0) return '0 B/s'
+  if (bytes < 1024) return `${bytes.toFixed(0)} B/s`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB/s`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB/s`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB/s`
+}
+
+function IoNetTooltip({ active, payload, label }: any) {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY })
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
+
+  if (!active || !payload || payload.length === 0) return null
+  if (typeof window === 'undefined') return null
+
+  const diskread = payload.find((p: any) => p.dataKey === 'diskread')?.value
+  const diskwrite = payload.find((p: any) => p.dataKey === 'diskwrite')?.value
+  const netin = payload.find((p: any) => p.dataKey === 'netin')?.value
+  const netout = payload.find((p: any) => p.dataKey === 'netout')?.value
+
+  const tooltipContent = (
+    <div
+      style={{
+        position: 'fixed',
+        left: mousePos.x + 15,
+        top: mousePos.y - 90,
+        background: '#1a1a2e',
+        border: '1px solid #444',
+        color: 'white',
+        padding: '8px 12px',
+        borderRadius: 6,
+        fontSize: 11,
+        lineHeight: 1.5,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+        zIndex: 99999,
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap'
+      }}
+    >
+      <div style={{ opacity: 0.7, marginBottom: 4, fontWeight: 600, borderBottom: '1px solid #444', paddingBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+        <span style={{ width: 10, height: 3, borderRadius: 2, backgroundColor: '#2196f3', display: 'inline-block' }}></span>
+        <span>Disk R: <b>{typeof diskread === 'number' ? formatRate(diskread) : '—'}</b></span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+        <span style={{ width: 10, height: 3, borderRadius: 2, backgroundColor: '#1565c0', display: 'inline-block' }}></span>
+        <span>Disk W: <b>{typeof diskwrite === 'number' ? formatRate(diskwrite) : '—'}</b></span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+        <span style={{ width: 10, height: 3, borderRadius: 2, backgroundColor: '#4caf50', display: 'inline-block' }}></span>
+        <span>Net In: <b>{typeof netin === 'number' ? formatRate(netin) : '—'}</b></span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 10, height: 3, borderRadius: 2, backgroundColor: '#2e7d32', display: 'inline-block' }}></span>
+        <span>Net Out: <b>{typeof netout === 'number' ? formatRate(netout) : '—'}</b></span>
+      </div>
+    </div>
+  )
+
+  return createPortal(tooltipContent, document.body)
+}
+
 function TrendTooltip({ active, payload, label }: any) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
@@ -297,6 +366,10 @@ export type TrendPoint = {
   t: string
   cpu: number
   ram: number
+  netin?: number
+  netout?: number
+  diskread?: number
+  diskwrite?: number
 }
 
 export type OsInfo = {
@@ -717,9 +790,7 @@ return (
         renderHeader: isMobile ? headerIconOnly('ri-computer-line') : headerWithIcon('ri-computer-line', t('common.name')),
         renderCell: (params) => (
           <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center', overflow: 'hidden', width: '100%' }}>
-            <Avatar sx={{ width: 22, height: 22, bgcolor: 'action.hover', flexShrink: 0 }}>
-              <VmIcon type={params.row.type} template={params.row.template} />
-            </Avatar>
+            <VmIcon type={params.row.type} template={params.row.template} />
             <Box sx={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
               <Typography variant='body2' sx={{ 
                 fontWeight: 600, 
@@ -739,6 +810,40 @@ return (
             </Box>
           </Stack>
         )
+      },
+
+      // Status (icône comme dans le tree)
+      {
+        field: 'status',
+        headerName: t('common.status'),
+        width: 50,
+        renderHeader: headerIconOnly('ri-pulse-line'),
+        renderCell: (params) => {
+          const vm = params.row as VmRow
+          const isMigrating = isVmMigrating(vm.connId, vm.vmid)
+
+          if (isMigrating) {
+            return (
+              <Tooltip title={t('common.loading')}>
+                <Box sx={{
+                  display: 'inline-flex', alignItems: 'center',
+                  '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}>
+                  <i className="ri-swap-box-line" style={{ fontSize: 16, color: '#ed6c02' }} />
+                </Box>
+              </Tooltip>
+            )
+          }
+
+          if (vm.status === 'running') {
+            return <i className="ri-play-fill" style={{ fontSize: 16, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76,175,80,0.5))' }} />
+          }
+          if (vm.status === 'paused') {
+            return <i className="ri-pause-fill" style={{ fontSize: 16, color: '#ed6c02' }} />
+          }
+          return <i className="ri-stop-fill" style={{ fontSize: 16, color: '#f44336' }} />
+        }
       },
 
       // Type
@@ -849,8 +954,8 @@ return (
       }
     }
 
-    // Colonnes expanded - filtrage responsive géré à la fin
-    if (expanded) {
+    // Colonne mémoire allouée
+    {
       cols.push({
         field: 'maxmem',
         headerName: t('common.memShort'),
@@ -870,8 +975,8 @@ return (
       })
     }
 
-    // Colonnes disk/tags - filtrage responsive géré à la fin
-    if (!isCompact || expanded) {
+    // Colonnes disk/tags
+    {
       cols.push({
         field: 'disk',
         headerName: 'Disk',
@@ -901,8 +1006,8 @@ return (
       })
     }
 
-    // Colonnes IP et Snapshots (si activé) - filtrage responsive géré à la fin
-    if (showIpSnap && expanded) {
+    // Colonnes IP et Snapshots (si activé)
+    if (showIpSnap) {
       cols.push(
         {
           field: 'ip',
@@ -1000,15 +1105,15 @@ return (
       )
     }
     
-    // Colonne Trend (si activé) - filtrage responsive géré à la fin
-    if (showTrends && expanded) {
+    // Colonne Trend (si activé)
+    if (showTrends) {
       cols.push({
         field: 'trend',
-        headerName: 'Trend',
+        headerName: 'Trend (CPU/RAM)',
         flex: 0.8,
         minWidth: 120,
         sortable: false,
-        renderHeader: headerWithIcon('ri-line-chart-line', 'Trend'),
+        renderHeader: headerWithIcon('ri-line-chart-line', 'Trend (CPU/RAM)'),
         renderCell: (params) => {
           const vm = params.row as VmRow
 
@@ -1094,10 +1199,84 @@ return (
           )
         }
       })
+
+      // Colonne Trend IO/Net
+      cols.push({
+        field: 'trendIoNet',
+        headerName: 'Trend (IO/Net)',
+        flex: 0.8,
+        minWidth: 120,
+        sortable: false,
+        renderHeader: headerWithIcon('ri-exchange-line', 'Trend (IO/Net)'),
+        renderCell: (params) => {
+          const vm = params.row as VmRow
+
+          if (vm.status !== 'running') {
+            return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
+          }
+
+          const data = trendsData[vm.id] || vm.trend || []
+          const isLoading = trendsLoading[vm.id]
+
+          if (isLoading) {
+            return (
+              <Box sx={{ height: 32, width: '100%', display: 'flex', alignItems: 'center' }}>
+                <Skeleton variant='rounded' width='100%' height={20} />
+              </Box>
+            )
+          }
+
+          if (!data || data.length === 0) {
+            return (
+              <Box sx={{ height: 32, width: '100%', display: 'flex', alignItems: 'center' }}>
+                <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
+              </Box>
+            )
+          }
+
+          const hasIoData = data.some((d: any) => (d.diskread || 0) > 0 || (d.diskwrite || 0) > 0 || (d.netin || 0) > 0 || (d.netout || 0) > 0)
+          if (!hasIoData) {
+            return (
+              <Box sx={{ height: 32, width: '100%', display: 'flex', alignItems: 'center' }}>
+                <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
+              </Box>
+            )
+          }
+
+          const chartKey = `ionet-${vm.id}-${data.length}`
+          const diskColor = '#2196f3'
+          const netColor = '#4caf50'
+
+          return (
+            <Box sx={{ height: 32, width: '100%', position: 'relative' }} key={chartKey}>
+              <ResponsiveContainer width='100%' height='100%'>
+                <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id={`diskGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>
+                      <stop offset='0%' stopColor={diskColor} stopOpacity={0.2} />
+                      <stop offset='100%' stopColor={diskColor} stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey='t' hide />
+                  <YAxis hide />
+                  <RTooltip
+                    content={<IoNetTooltip />}
+                    cursor={{ stroke: diskColor, strokeWidth: 1, strokeDasharray: '3 3' }}
+                  />
+                  <Area type='monotone' dataKey='diskread' stroke={diskColor} strokeWidth={1.5} fill={`url(#diskGradient-${vm.id})`} dot={false} isAnimationActive={false} />
+                  <Area type='monotone' dataKey='diskwrite' stroke='#1565c0' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                  <Area type='monotone' dataKey='netin' stroke={netColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                  <Area type='monotone' dataKey='netout' stroke='#2e7d32' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Box>
+          )
+        }
+      })
     }
-    
-    // Uptime - filtrage responsive géré à la fin
-    if (showIpSnap && expanded) {
+
+    // Uptime
+    {
       cols.push({
         field: 'uptime',
         headerName: 'Uptime',
@@ -1118,38 +1297,8 @@ return (
       })
     }
 
-    // Status, CPU et RAM - poussés en fin pour être à droite
+    // CPU et RAM
     cols.push(
-      {
-        field: 'status',
-        headerName: t('common.status'),
-        width: isMobile ? 60 : 75,
-        renderHeader: isMobile ? headerIconOnly('ri-pulse-line') : headerWithIcon('ri-pulse-line', t('common.status')),
-        renderCell: (params) => {
-          const vm = params.row as VmRow
-          const isMigrating = isVmMigrating(vm.connId, vm.vmid)
-
-          if (isMigrating) {
-            return (
-              <Tooltip title={t('common.loading')}>
-                <Box sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  '@keyframes pulse': {
-                    '0%, 100%': { opacity: 1 },
-                    '50%': { opacity: 0.4 },
-                  },
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }}>
-                  <i className="ri-swap-box-line" style={{ fontSize: 18, color: '#ed6c02' }} />
-                </Box>
-              </Tooltip>
-            )
-          }
-
-          return <StatusChip status={params.row.status} compact={true} />
-        }
-      },
       {
         field: 'cpu',
         headerName: 'CPU',
@@ -1430,6 +1579,7 @@ return (
       osInfo: isSmallDesktop, // OS masqué sur petits desktops
       uptime: isTablet,    // Uptime masqué sur tablette
       trend: !isLargeDesktop, // Trend seulement sur grands écrans
+      trendIoNet: !isLargeDesktop, // IO/Net trend seulement sur grands écrans
       node: isMobile,      // Node masqué sur mobile
     }
     
@@ -1572,7 +1722,8 @@ return true
                 { field: 'snapshots', label: t('vms.snapshots') },
                 { field: 'osInfo', label: 'OS' },
                 { field: 'uptime', label: t('vms.uptime') },
-                { field: 'trend', label: t('vms.trend') },
+                { field: 'trend', label: t('vms.trend') + ' (CPU/RAM)' },
+                { field: 'trendIoNet', label: 'Trend (IO/Net)' },
                 { field: 'actions', label: t('common.actions') },
               ].map(({ field, label }) => (
                 <MenuItem 

@@ -912,7 +912,7 @@ export default function NodeTabs(props: any) {
                           compact={!expandedVmsTable}
                           expanded={expandedVmsTable}
                           maxHeight={expandedVmsTable ? 560 : 410}
-                          showTrends={expandedVmsTable}
+                          showTrends
                           showActions={true}
                           onLoadTrendsBatch={loadVmTrendsBatch}
                           onVmClick={(vm) => {

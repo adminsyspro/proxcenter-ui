@@ -409,6 +409,7 @@ function RootInventoryView({
           if (point.ramPct != null) entry[`ram_${nodeName}`] = point.ramPct
           if (point.netInBps != null) entry[`netIn_${nodeName}`] = point.netInBps
           if (point.netOutBps != null) entry[`netOut_${nodeName}`] = point.netOutBps
+          if (point.loadAvg != null) entry[`load_${nodeName}`] = point.loadAvg
         }
       }
 
@@ -417,7 +418,7 @@ function RootInventoryView({
       // Fill gaps: PVE 8 vs 9 return different point counts for the same timeframe,
       // causing gaps where some nodes have no data at certain time slots.
       // Forward-fill then backward-fill to cover both trailing and leading gaps.
-      const keys = nodeNames.flatMap(name => ['cpu_', 'ram_', 'netIn_', 'netOut_'].map(p => `${p}${name}`))
+      const keys = nodeNames.flatMap(name => ['cpu_', 'ram_', 'netIn_', 'netOut_', 'load_'].map(p => `${p}${name}`))
       // Forward-fill: propagate last known value
       const lastKnown: Record<string, number> = {}
       for (const slot of merged) {
@@ -563,7 +564,7 @@ function RootInventoryView({
                         style={{ transition: 'stroke-dasharray 0.6s ease' }} />
                     </svg>
                     <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Typography sx={{ fontWeight: 900, fontSize: 16, color: scoreColor }}>{healthScore ?? '—'}</Typography>
+                      <Typography sx={{ fontWeight: 700, fontSize: 16, color: scoreColor }}>{healthScore ?? '—'}</Typography>
                     </Box>
                   </Box>
                 </MuiTooltip>
@@ -571,7 +572,7 @@ function RootInventoryView({
 
               <Box sx={{ minWidth: 0 }}>
                 <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
-                  <Typography variant="h6" fontWeight={800} noWrap>Infrastructure Health</Typography>
+                  <Typography variant="h6" fontWeight={600} noWrap>Infrastructure Health</Typography>
                   {/* Alert status badge */}
                   {(() => {
                     const criticals = predictiveAlerts.filter(a => a.severity === 'critical').length
@@ -598,7 +599,7 @@ function RootInventoryView({
                     )
                   })()}
                 </Stack>
-                <Typography variant="body2" sx={{ color: scoreColor, fontWeight: 700, mb: 0.5 }}>{scoreLabel}</Typography>
+                <Typography variant="body2" sx={{ color: scoreColor, fontWeight: 600, mb: 0.5 }}>{scoreLabel}</Typography>
                 <Stack direction="row" flexWrap="wrap" gap={1.5} sx={{ mt: 0.5 }}>
                   <Typography variant="caption" sx={{ opacity: 0.7 }}>
                     <i className="ri-cloud-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
@@ -677,6 +678,34 @@ function RootInventoryView({
                       </Stack>
                     </MuiTooltip>
                   ))}
+                  {/* DRS score inline */}
+                  {isEnterprise && drsHealthScore !== null && (() => {
+                    const drsColor = drsHealthScore >= 80 ? theme.palette.success.main : drsHealthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main
+                    return (
+                      <MuiTooltip title={`DRS: ${drsHealthScore}/100 — Mode: ${(drsStatus?.mode || 'manual')}`} placement="left" arrow>
+                        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ cursor: 'default' }}>
+                          <Typography variant="caption" fontWeight={600} sx={{ minWidth: 28, fontSize: 10 }}>DRS</Typography>
+                          <LinearProgress
+                            variant="determinate"
+                            value={Math.min(100, drsHealthScore)}
+                            sx={{
+                              flex: 1,
+                              height: 6,
+                              borderRadius: 0,
+                              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                              '& .MuiLinearProgress-bar': {
+                                bgcolor: drsColor,
+                                borderRadius: 0,
+                              },
+                            }}
+                          />
+                          <Typography variant="caption" fontWeight={700} sx={{ minWidth: 28, textAlign: 'right', fontSize: 10 }}>
+                            {drsHealthScore}
+                          </Typography>
+                        </Stack>
+                      </MuiTooltip>
+                    )
+                  })()}
                 </>
               ) : null}
             </Stack>
@@ -684,186 +713,12 @@ function RootInventoryView({
 
         </CardContent>
       </Card>
-      
-      {/* Health Overview Cards */}
-      <Box sx={{
-        display: 'grid',
-        gridTemplateColumns: isEnterprise
-          ? { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }
-          : { xs: '1fr', sm: 'repeat(2, 1fr)' },
-        gap: 2,
-        mb: 2
-      }}>
-        {/* Card: VM Type Split - Donut chart */}
-        <Card variant="outlined" sx={{ p: 0 }}>
-          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Box sx={{
-                width: 32, height: 32, borderRadius: 1.5,
-                bgcolor: alpha(theme.palette.info.main, 0.12),
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <i className="ri-instance-line" style={{ fontSize: 18, color: theme.palette.info.main }} />
-              </Box>
-              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.vmTypeSplit')}</Typography>
-            </Stack>
-            <Stack direction="row" alignItems="center" justifyContent="center" spacing={2}>
-              <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        ...(vmTypeSplit.qemu > 0 ? [{ name: 'QEMU', value: vmTypeSplit.qemu }] : []),
-                        ...(vmTypeSplit.lxc > 0 ? [{ name: 'LXC', value: vmTypeSplit.lxc }] : []),
-                        ...(vmTypeSplit.total === 0 ? [{ name: 'empty', value: 1 }] : []),
-                      ]}
-                      cx="50%" cy="50%" innerRadius={28} outerRadius={40}
-                      dataKey="value" stroke="none" paddingAngle={vmTypeSplit.total > 0 ? 3 : 0}
-                    >
-                      {vmTypeSplit.qemu > 0 && <Cell fill={theme.palette.info.main} />}
-                      {vmTypeSplit.lxc > 0 && <Cell fill="#a855f7" />}
-                      {vmTypeSplit.total === 0 && <Cell fill={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} />}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                  <Typography variant="caption" fontWeight={800} sx={{ fontSize: 15, lineHeight: 1 }}>{vmTypeSplit.total}</Typography>
-                </Box>
-              </Box>
-              <Stack spacing={0.5}>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
-                  <Typography variant="caption" sx={{ opacity: 0.8 }}>QEMU</Typography>
-                  <Typography variant="caption" fontWeight={700}>{vmTypeSplit.qemu}</Typography>
-                </Stack>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#a855f7' }} />
-                  <Typography variant="caption" sx={{ opacity: 0.8 }}>LXC</Typography>
-                  <Typography variant="caption" fontWeight={700}>{vmTypeSplit.lxc}</Typography>
-                </Stack>
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-
-        {/* Card 4: Top Consumers - Donut chart */}
-        <Card variant="outlined" sx={{ p: 0 }}>
-          <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Box sx={{
-                width: 32, height: 32, borderRadius: 1.5,
-                bgcolor: alpha(theme.palette.error.main, 0.12),
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <i className="ri-fire-line" style={{ fontSize: 18, color: theme.palette.error.main }} />
-              </Box>
-              <Typography variant="subtitle2" fontWeight={700}>{t('inventory.health.topConsumers')}</Typography>
-            </Stack>
-            {topConsumers.length > 0 ? (
-              <Stack direction="row" alignItems="center" justifyContent="center" spacing={2}>
-                <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={topConsumers.map(vm => ({ name: vm.name, value: Math.round(Math.max(vm.cpu, vm.ram)) }))}
-                        cx="50%" cy="50%" innerRadius={28} outerRadius={40}
-                        dataKey="value" stroke="none" paddingAngle={3}
-                      >
-                        {topConsumers.map((_, i) => (
-                          <Cell key={i} fill={[theme.palette.error.main, theme.palette.warning.main, theme.palette.info.main][i] || theme.palette.grey[500]} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                    <Typography variant="caption" fontWeight={800} sx={{ fontSize: 13, lineHeight: 1 }}>TOP</Typography>
-                  </Box>
-                </Box>
-                <Stack spacing={0.5}>
-                  {topConsumers.map((vm, i) => (
-                    <Stack key={`${vm.node}-${vm.vmid}`} direction="row" alignItems="center" spacing={0.5}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: [theme.palette.error.main, theme.palette.warning.main, theme.palette.info.main][i] }} />
-                      <Typography variant="caption" sx={{ opacity: 0.8, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vm.name}</Typography>
-                      <Typography variant="caption" fontWeight={700}>{Math.round(Math.max(vm.cpu, vm.ram))}%</Typography>
-                    </Stack>
-                  ))}
-                </Stack>
-              </Stack>
-            ) : (
-              <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Card 5: DRS (Enterprise only) */}
-        {isEnterprise && (
-          <Card variant="outlined" sx={{ p: 0 }}>
-            <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Box sx={{
-                  width: 32, height: 32, borderRadius: 1.5,
-                  bgcolor: alpha(theme.palette.success.main, 0.12),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                }}>
-                  <i className="ri-refresh-line" style={{ fontSize: 18, color: theme.palette.success.main }} />
-                </Box>
-                <Typography variant="subtitle2" fontWeight={700}>Distributed Resource Scheduler (DRS)</Typography>
-                <Chip
-                  size="small"
-                  label={`Mode: ${(drsStatus?.mode || 'manual').charAt(0).toUpperCase() + (drsStatus?.mode || 'manual').slice(1)}`}
-                  color={drsStatus?.mode === 'automatic' ? 'success' : drsStatus?.mode === 'partial' ? 'warning' : 'info'}
-                  variant="outlined"
-                  sx={{ ml: 'auto', flexShrink: 0, height: 22, fontSize: 11, fontWeight: 600 }}
-                />
-              </Box>
-
-              {(drsStatusLoading || drsMetricsLoading) ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3 }}>
-                  <CircularProgress size={24} />
-                </Box>
-              ) : !drsStatus?.enabled ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 2, opacity: 0.5 }}>
-                  <i className="ri-pause-circle-line" style={{ fontSize: 28, marginBottom: 4 }} />
-                  <Typography variant="caption">Disabled</Typography>
-                </Box>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 1 }}>
-                  {drsHealthScore !== null && (() => {
-                    const scoreColor = drsHealthScore >= 80 ? theme.palette.success.main : drsHealthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main
-                    const scoreLabel = drsHealthScore >= 80 ? 'Healthy' : drsHealthScore >= 50 ? 'Attention' : 'Critical'
-                    const circumference = 2 * Math.PI * 14
-                    const dashLen = (drsHealthScore / 100) * circumference
-
-                    return (
-                      <Stack alignItems="center" spacing={0.5}>
-                        {/* ScoreRing — larger */}
-                        <Box sx={{ position: 'relative', width: 72, height: 72, flexShrink: 0 }}>
-                          <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                            <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="2.5" opacity={0.3} />
-                            <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="2.5"
-                              strokeDasharray={`${dashLen} ${circumference}`} strokeLinecap="round"
-                              style={{ transition: 'stroke-dasharray 0.6s ease' }} />
-                          </svg>
-                          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 800, color: scoreColor }}>{drsHealthScore}</Typography>
-                          </Box>
-                        </Box>
-                        <Typography variant="body2" fontWeight={700} sx={{ color: scoreColor }}>{scoreLabel}</Typography>
-                      </Stack>
-                    )
-                  })()}
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </Box>
 
       {/* Aggregated Infrastructure Graphs */}
       {infraRrdSeries.length > 0 && (
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-            <Typography fontWeight={700} fontSize={14}>{t('inventory.performances')}</Typography>
+            <Typography fontWeight={600} fontSize={13}>{t('inventory.performances')}</Typography>
             <Box sx={{ display: 'flex', gap: 0.5 }}>
               {([
                 { label: '1h', value: 'hour' as const },
@@ -888,7 +743,7 @@ function RootInventoryView({
               ))}
             </Box>
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             {/* CPU per node */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
               <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>CPU</Typography>
@@ -941,6 +796,45 @@ function RootInventoryView({
                 </Box>
               )}
             </Box>
+            {/* Server Load per node */}
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>Server Load</Typography>
+              <Box sx={{ height: 120 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <linearGradient key={`gload_${name}`} id={`infraGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.25} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => { const d = new Date(Number(v)); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }} minTickGap={40} tick={{ fontSize: 8 }} />
+                    <YAxis tick={{ fontSize: 8 }} width={30} domain={[0, 'auto']} />
+                    <RechartsTooltip
+                      contentStyle={{ background: '#1a1a2e', border: '1px solid #444', borderRadius: 8, fontSize: 11, padding: '8px 12px' }}
+                      labelFormatter={v => new Date(Number(v)).toLocaleTimeString()}
+                      formatter={(v: any, name: string) => [Number(v).toFixed(2), String(name).replace('load_', '')]}
+                    />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={`load_${name}`} type="monotone" dataKey={`load_${name}`} name={`load_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradLoad_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+              {infraRrdNodeNames.length > 1 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                  {infraRrdNodeNames.map(name => (
+                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
+                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+
             {/* RAM per node */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
               <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>RAM</Typography>
@@ -1054,6 +948,7 @@ function RootInventoryView({
                 </Box>
               )}
             </Box>
+
           </Box>
         </Box>
       )}
@@ -1071,7 +966,7 @@ function RootInventoryView({
         borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
       }}>
         <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18 }} />
-        <Typography variant="body2" fontWeight={700}>PROXMOX VE</Typography>
+        <Typography variant="body2" fontWeight={600}>PROXMOX VE</Typography>
         <Box sx={{ flex: 1 }} />
         {clusters.length > 0 && (
           <MuiTooltip title={isAllExpanded ? t('inventory.collapseAll') : t('inventory.expandAll')}>
@@ -1136,7 +1031,7 @@ function RootInventoryView({
                     </Box>
                   )
                 })()}
-                <Typography fontWeight={700}>{cluster.connName}</Typography>
+                <Typography fontWeight={600}>{cluster.connName}</Typography>
                 <Chip 
                   size="small" 
                   label={`${clusterHosts.length} ${t('inventory.nodes')}`} 
@@ -1247,7 +1142,9 @@ function RootInventoryView({
                                 osInfo: vm.osInfo,
                               }))}
                               compact
+                              showTrends
                               showActions
+                              onLoadTrendsBatch={onLoadTrendsBatch}
                               onVmClick={onVmClick}
                               onVmAction={onVmAction}
                               onMigrate={onMigrate}
@@ -1277,7 +1174,7 @@ function RootInventoryView({
               borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
             }}>
               <i className="ri-database-2-fill" style={{ fontSize: 16, opacity: 0.7 }} />
-              <Typography variant="body2" fontWeight={700}>STORAGE</Typography>
+              <Typography variant="body2" fontWeight={600}>STORAGE</Typography>
               <Chip size="small" label={clusterStorages.reduce((acc, cs) => acc + cs.sharedStorages.length + cs.nodes.reduce((a, n) => a + n.storages.length, 0), 0)} sx={{ height: 18, fontSize: 10 }} />
             </Box>
             <Stack spacing={2}>
@@ -1304,7 +1201,7 @@ function RootInventoryView({
                         }
                         <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: cs.nodes.every(n => n.status === 'online') ? 'success.main' : 'warning.main', border: '1.5px solid', borderColor: 'background.paper' }} />
                       </Box>
-                      <Typography fontWeight={700} sx={{ fontSize: 14 }}>{cs.connName}</Typography>
+                      <Typography fontWeight={600} sx={{ fontSize: 13 }}>{cs.connName}</Typography>
                       <Chip size="small" label={`${allStorages.length} storages`} sx={{ height: 18, fontSize: 10 }} />
                       {totalSize > 0 && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 'auto' }}>
@@ -1335,7 +1232,7 @@ function RootInventoryView({
           }}
         >
           <i className="ri-router-fill" style={{ fontSize: 16, opacity: 0.7 }} />
-          <Typography variant="body2" fontWeight={700}>NETWORK</Typography>
+          <Typography variant="body2" fontWeight={600}>NETWORK</Typography>
           <Typography variant="caption" sx={{ opacity: 0.4, ml: 0.5 }}>
             {t('inventory.expandInTree')}
           </Typography>
@@ -1350,7 +1247,7 @@ function RootInventoryView({
               borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
             }}>
               <i className="ri-hard-drive-2-fill" style={{ fontSize: 16, opacity: 0.7 }} />
-              <Typography variant="body2" fontWeight={700}>BACKUP</Typography>
+              <Typography variant="body2" fontWeight={600}>BACKUP</Typography>
               <Chip size="small" label={t('inventory.nBackups', { count: pbsServers.reduce((acc, pbs) => acc + pbs.backupCount, 0) })} sx={{ height: 18, fontSize: 10 }} />
             </Box>
 
@@ -1376,7 +1273,7 @@ function RootInventoryView({
                     }}
                   >
                     <i className="ri-hard-drive-2-fill" style={{ fontSize: 18, color: '#2196f3' }} />
-                    <Typography fontWeight={700}>{pbs.name}</Typography>
+                    <Typography fontWeight={600}>{pbs.name}</Typography>
                     <Typography variant="caption" sx={{ opacity: 0.6, ml: 'auto' }}>
                       {t('inventory.nBackups', { count: pbs.backupCount })}
                     </Typography>
@@ -1409,7 +1306,7 @@ function RootInventoryView({
                 borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
               }}>
                 <img src="/images/esxi-logo.svg" alt="" width={16} height={16} style={{ opacity: 0.7 }} />
-                <Typography variant="body2" fontWeight={700}>MIGRATIONS</Typography>
+                <Typography variant="body2" fontWeight={600}>MIGRATIONS</Typography>
                 <Chip size="small" label={`${externalHypervisors.length} hosts${totalExtVms > 0 ? `, ${totalExtVms} VMs` : ''}`} sx={{ height: 18, fontSize: 10 }} />
               </Box>
               <Stack spacing={2}>
@@ -1426,7 +1323,7 @@ function RootInventoryView({
                           ? <img src={cfg.svgIcon} alt="" width={18} height={18} style={{ opacity: 0.8 }} />
                           : <i className={cfg.icon} style={{ fontSize: 18, color: cfg.color }} />
                         }
-                        <Typography fontWeight={700}>{cfg.label}</Typography>
+                        <Typography fontWeight={600}>{cfg.label}</Typography>
                         <Chip size="small" label={`${conns.length} hosts`} sx={{ height: 18, fontSize: 10 }} />
                         {typeVms > 0 && (
                           <Typography variant="caption" sx={{ opacity: 0.6, ml: 'auto' }}>

@@ -173,7 +173,7 @@ return `${mins}m`
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.5 }}>
       <i className={icon} style={{ opacity: 0.6, fontSize: 14, width: 16 }} />
       <Typography variant="body2" sx={{ opacity: 0.7, minWidth: 120 }}>{label}</Typography>
-      <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'right', flex: 1 }}>{value}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right', flex: 1 }}>{value}</Typography>
     </Box>
   )
 
@@ -184,7 +184,7 @@ return `${mins}m`
         {!showConsole && !hostInfo ? (
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1, gap: 1, flexWrap: 'wrap' }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-              {kindLabel !== 'DATASTORE' && <Typography fontWeight={900}>{t('inventory.summary')}</Typography>}
+              {kindLabel !== 'DATASTORE' && <Typography fontWeight={500}>{t('inventory.summary')}</Typography>}
               <Chip size="small" label={kindLabel} variant="outlined" />
               {kindLabel !== 'DATASTORE' && (vmState ? (
                 <Chip
@@ -195,7 +195,7 @@ return `${mins}m`
                     borderColor: stateColor ? stateColor : 'divider',
                     color: stateColor ? stateColor : 'text.secondary',
                     bgcolor: stateColor ? `${stateColor}14` : 'transparent',
-                    fontWeight: 800,
+                    fontWeight: 500,
                   }}
                 />
               ) : (
@@ -209,7 +209,7 @@ return `${mins}m`
                     size="small"
                     label={`${kpi.label}: ${kpi.value}`}
                     variant="outlined"
-                    sx={{ fontWeight: 600 }}
+                    sx={{ fontWeight: 500 }}
                   />
                 ))
               ) : null}
@@ -221,7 +221,7 @@ return `${mins}m`
                   label={`PVE ${clusterPveVersion.split('.')[0]}.x`}
                   variant="outlined"
                   color="primary"
-                  sx={{ fontWeight: 600 }}
+                  sx={{ fontWeight: 500 }}
                 />
               )}
             </Stack>
@@ -268,18 +268,18 @@ return `${mins}m`
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-hard-drive-3-line" style={{ fontSize: 14, color: primaryColor }} />
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>Disk I/O</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>Disk I/O</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1.5 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <i className="ri-arrow-up-line" style={{ fontSize: 12, color: theme.palette.success.main }} />
-                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
                           {formatBps(diskReadBps)}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <i className="ri-arrow-down-line" style={{ fontSize: 12, color: theme.palette.warning.main }} />
-                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
                           {formatBps(diskWriteBps)}
                         </Typography>
                       </Box>
@@ -289,18 +289,18 @@ return `${mins}m`
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-wifi-line" style={{ fontSize: 14, color: primaryColor }} />
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>Network I/O</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>Network I/O</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1.5 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <i className="ri-arrow-down-line" style={{ fontSize: 12, color: theme.palette.success.main }} />
-                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
                           {formatBps(netInBps)}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <i className="ri-arrow-up-line" style={{ fontSize: 12, color: theme.palette.warning.main }} />
-                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
                           {formatBps(netOutBps)}
                         </Typography>
                       </Box>
@@ -344,7 +344,7 @@ return `${mins}m`
                     {guestInfoLoading ? (
                       <CircularProgress size={12} />
                     ) : formatUptime(guestInfo?.uptime) ? (
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
                         {formatUptime(guestInfo?.uptime)}
                       </Typography>
                     ) : (
@@ -421,11 +421,11 @@ return `${mins}m`
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <i className="ri-dashboard-3-line" style={{ fontSize: 14, color: primaryColor }} />
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
                       Load average
                     </Typography>
                   </Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.loadAvg}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.loadAvg}</Typography>
                 </Box>
               ) : null}
               <UsageBar themeColor={primaryColor} label="RAM usage" used={memUsed} capacity={memCap} mode="bytes" />
@@ -443,7 +443,7 @@ return `${mins}m`
                         <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ioDelay')}</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
                         </Box>
                       </Box>
                     )}
@@ -452,7 +452,7 @@ return `${mins}m`
                         <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ksmSharing')}</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
                         </Box>
                       </Box>
                     )}
@@ -480,7 +480,7 @@ return `${mins}m`
                     <i className="ri-cpu-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>CPU(s)</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.cpuModel}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.cpuModel}</Typography>
                     </Box>
                   </Box>
                 ) : null}
@@ -489,7 +489,7 @@ return `${mins}m`
                     <i className="ri-terminal-box-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.kernelVersion')}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.kernelVersion}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.kernelVersion}</Typography>
                     </Box>
                   </Box>
                 ) : null}
@@ -498,7 +498,7 @@ return `${mins}m`
                     <i className="ri-restart-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.bootMode')}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{hostInfo.bootMode}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.bootMode}</Typography>
                     </Box>
                   </Box>
                 ) : null}
@@ -507,7 +507,7 @@ return `${mins}m`
                     <i className="ri-server-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.managerVersion')}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.pveVersion}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', wordBreak: 'break-word' }}>{hostInfo.pveVersion}</Typography>
                     </Box>
                   </Box>
                 ) : null}
@@ -563,7 +563,7 @@ return `${mins}m`
                       size="small"
                       label={hostInfo.updates.length}
                       color="warning"
-                      sx={{ height: 18, fontSize: 11, fontWeight: 700, mt: 1 }}
+                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: 1 }}
                     />
                     <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
                   </Box>
@@ -584,14 +584,14 @@ return `${mins}m`
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-download-cloud-line" style={{ fontSize: 16, color: '#ff9800' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.main' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.main' }}>
                           {t('updates.availableUpdates')}
                         </Typography>
                         <Chip
                           size="small"
                           label={hostInfo.updates.length}
                           color="warning"
-                          sx={{ height: 18, fontSize: 11, fontWeight: 700 }}
+                          sx={{ height: 18, fontSize: 11, fontWeight: 500 }}
                         />
                       </Box>
                       <i className="ri-arrow-left-s-line" style={{ fontSize: 18, opacity: 0.5 }} />
@@ -617,7 +617,7 @@ return `${mins}m`
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
                               <Typography variant="caption" sx={{ opacity: 0.5 }}>{update.currentVersion}</Typography>
                               <i className="ri-arrow-right-line" style={{ fontSize: 10, opacity: 0.5 }} />
-                              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>{update.newVersion}</Typography>
+                              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 500 }}>{update.newVersion}</Typography>
                             </Box>
                           </Box>
                         ))}
@@ -705,7 +705,7 @@ return `${mins}m`
                       size="small"
                       label={isExpired ? '✗' : isExpiringSoon ? '!' : '✓'}
                       color={chipColor}
-                      sx={{ height: 18, fontSize: 11, fontWeight: 700, mt: 1 }}
+                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: 1 }}
                     />
                     <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
                   </Box>
@@ -726,14 +726,14 @@ return `${mins}m`
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-vip-crown-line" style={{ fontSize: 16, color: statusColor }} />
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: statusColor }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: statusColor }}>
                           Subscription
                         </Typography>
                         <Chip
                           size="small"
                           label={isExpired ? t('subscription.inactive') : isExpiringSoon ? t('subscription.expiringSoon') : t('subscription.active')}
                           color={chipColor}
-                          sx={{ height: 18, fontSize: 11, fontWeight: 700 }}
+                          sx={{ height: 18, fontSize: 11, fontWeight: 500 }}
                         />
                       </Box>
                       <i className="ri-arrow-left-s-line" style={{ fontSize: 18, opacity: 0.5 }} />
@@ -743,7 +743,7 @@ return `${mins}m`
                       <Stack spacing={1}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.type')}</Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 600, textAlign: 'right', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hostInfo.subscription.type}</Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 500, textAlign: 'right', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hostInfo.subscription.type}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.key')}</Typography>
@@ -755,7 +755,7 @@ return `${mins}m`
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.sockets')}</Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 600 }}>{hostInfo.subscription.sockets}</Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 500 }}>{hostInfo.subscription.sockets}</Typography>
                         </Box>
                         <Divider sx={{ my: 0.5 }} />
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -766,7 +766,7 @@ return `${mins}m`
                           <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.nextDueDate')}</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             {isExpiringSoon && <i className="ri-error-warning-line" style={{ fontSize: 12, color: '#ff9800' }} />}
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: statusColor }}>
+                            <Typography variant="caption" sx={{ fontWeight: 500, color: statusColor }}>
                               {hostInfo.subscription.nextDueDate}
                               {isExpiringSoon && daysUntilDue !== null && ` (${daysUntilDue}j)`}
                             </Typography>
@@ -889,7 +889,7 @@ return `${mins}m`
                   sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 0 } }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                    <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+                    <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
                       {update.package}
                     </Typography>
                     <Chip

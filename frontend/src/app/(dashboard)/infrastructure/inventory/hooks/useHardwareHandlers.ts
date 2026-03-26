@@ -490,7 +490,7 @@ export function useHardwareHandlers({
   const [rollingUpdateWizardOpen, setRollingUpdateWizardOpen] = useState(false)
 
   // États pour les infos guest (IP, uptime, OS)
-  const [guestInfo, setGuestInfo] = useState<{ ip?: string; uptime?: number; pid?: number; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null } | null>(null)
+  const [guestInfo, setGuestInfo] = useState<{ ip?: string; uptime?: number; pid?: number; diskUsage?: { used: number; total: number }; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null } | null>(null)
   const [guestInfoLoading, setGuestInfoLoading] = useState(false)
 
   // États pour l'explorateur de fichiers

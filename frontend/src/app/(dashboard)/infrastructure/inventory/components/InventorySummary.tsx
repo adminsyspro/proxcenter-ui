@@ -66,6 +66,7 @@ function InventorySummary({
   isTemplate,
   vmNotes,
   disksInfo,
+  cpuInfo,
 }: {
   kindLabel: string
   status: Status
@@ -95,6 +96,7 @@ function InventorySummary({
   isTemplate?: boolean
   vmNotes?: string | null
   disksInfo?: { id: string; storage: string; size: string; format?: string; isCdrom?: boolean; isUnused?: boolean; isEfi?: boolean; isTpm?: boolean }[]
+  cpuInfo?: { sockets?: number; cores?: number }
 }) {
   const t = useTranslations()
   const { branding } = useBranding()
@@ -257,7 +259,21 @@ return `${mins}m`
             >
               {!isTemplate && (
                 <>
-                  <UsageBar themeColor={primaryColor} label="CPU" used={cpuNowPct} capacity={100} mode="pct" />
+                  <UsageBar
+                    themeColor={primaryColor}
+                    label="CPU"
+                    used={cpuNowPct}
+                    capacity={100}
+                    mode="pct"
+                    extra={cpuInfo ? (
+                      <Chip
+                        size="small"
+                        label={`${(cpuInfo.sockets || 1) * (cpuInfo.cores || 1)} vCPU${(cpuInfo.sockets || 1) * (cpuInfo.cores || 1) > 1 ? 's' : ''} (${cpuInfo.sockets || 1}s × ${cpuInfo.cores || 1}c)`}
+                        variant="outlined"
+                        sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-label': { px: 0.75 } }}
+                      />
+                    ) : undefined}
+                  />
                   <UsageBar themeColor={primaryColor} label={t('inventory.memoryLabel')} used={memUsed} capacity={memCap} mode="bytes" />
                   {guestInfo?.diskUsage && guestInfo.diskUsage.total > 0 && (
                     <UsageBar

@@ -42,11 +42,12 @@ function UsageBar({
     return (
       <Box sx={{ mb: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
             <i className={iconClass} style={{ fontSize: 14, color: themeColor }} />
             <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
               {label}
             </Typography>
+            {extra}
           </Box>
           <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
             Free: {Math.round(free)}%

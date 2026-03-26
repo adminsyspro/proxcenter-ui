@@ -45,6 +45,7 @@ import {
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
 import { formatBytes } from '@/utils/format'
+import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
@@ -1149,224 +1150,171 @@ export default function ClusterTabs(props: any) {
                       </Box>
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.cpuUsage')}
-                          </Typography>
-                          <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={clusterRrdSeries}>
-                                <defs>
-                                  {clusterRrdNodeNames.map(name => (
-                                    <linearGradient key={name} id={`cGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
-                                      <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
-                                    </linearGradient>
-                                  ))}
-                                </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                                <Tooltip
-                                  wrapperStyle={{ zIndex: 10 }}
-                                  content={({ active, payload, label }) => {
-                                    if (!active || !payload?.length) return null
-                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                    return (
-                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
-                                        {sorted.map(entry => (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
-                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
-                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
-                                          </Box>
-                                        ))}
-                                      </Box>
-                                    )
-                                  }}
-                                />
+                        <ExpandableChart title={t('inventory.cpuUsage')} height={180}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={clusterRrdSeries}>
+                              <defs>
                                 {clusterRrdNodeNames.map(name => (
-                                  <Area key={name} type="monotone" dataKey={`cpu_${name}`} stroke={nodeColors[name]} fill={`url(#cGradCpu_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                  <linearGradient key={name} id={`cGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
+                                    <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
+                                  </linearGradient>
                                 ))}
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
-                            {clusterRrdNodeNames.map(name => (
-                              <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: nodeColors[name] }} />
-                                <Typography variant="caption" sx={{ fontSize: 10 }}>{name}</Typography>
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                              <Tooltip
+                                wrapperStyle={{ zIndex: 10 }}
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                      <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                      {sorted.map(entry => (
+                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  )
+                                }}
+                              />
+                              {clusterRrdNodeNames.map(name => (
+                                <Area key={name} type="monotone" dataKey={`cpu_${name}`} stroke={nodeColors[name]} fill={`url(#cGradCpu_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                              ))}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
 
                         {/* Memory Usage */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.memoryUsage')}
-                          </Typography>
-                          <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={clusterRrdSeries}>
-                                <defs>
-                                  {clusterRrdNodeNames.map(name => (
-                                    <linearGradient key={name} id={`cGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
-                                      <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
-                                    </linearGradient>
-                                  ))}
-                                </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                                <Tooltip
-                                  wrapperStyle={{ zIndex: 10 }}
-                                  content={({ active, payload, label }) => {
-                                    if (!active || !payload?.length) return null
-                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                    return (
-                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
-                                        {sorted.map(entry => (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
-                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
-                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
-                                          </Box>
-                                        ))}
-                                      </Box>
-                                    )
-                                  }}
-                                />
+                        <ExpandableChart title={t('inventory.memoryUsage')} height={180}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={clusterRrdSeries}>
+                              <defs>
                                 {clusterRrdNodeNames.map(name => (
-                                  <Area key={name} type="monotone" dataKey={`ram_${name}`} stroke={nodeColors[name]} fill={`url(#cGradRam_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                  <linearGradient key={name} id={`cGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
+                                    <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
+                                  </linearGradient>
                                 ))}
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
-                            {clusterRrdNodeNames.map(name => (
-                              <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: nodeColors[name] }} />
-                                <Typography variant="caption" sx={{ fontSize: 10 }}>{name}</Typography>
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                              <Tooltip
+                                wrapperStyle={{ zIndex: 10 }}
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                      <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                      {sorted.map(entry => (
+                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  )
+                                }}
+                              />
+                              {clusterRrdNodeNames.map(name => (
+                                <Area key={name} type="monotone" dataKey={`ram_${name}`} stroke={nodeColors[name]} fill={`url(#cGradRam_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                              ))}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
 
                         {/* Network Traffic */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.networkTrafficChart')}
-                          </Typography>
-                          <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={clusterRrdSeries}>
-                                <defs>
-                                  {clusterRrdNodeNames.map(name => (
-                                    <linearGradient key={name} id={`cGradNet_${name}`} x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
-                                      <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
-                                    </linearGradient>
-                                  ))}
-                                </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
-                                <Tooltip
-                                  wrapperStyle={{ zIndex: 10 }}
-                                  content={({ active, payload, label }) => {
-                                    if (!active || !payload?.length) return null
-                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                    return (
-                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
-                                        {sorted.map(entry => {
-                                          const isOut = String(entry.name).startsWith('netOut_')
-                                          const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
-                                          return (
-                                            <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
-                                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                              <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
-                                              <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
-                                            </Box>
-                                          )
-                                        })}
-                                      </Box>
-                                    )
-                                  }}
-                                />
+                        <ExpandableChart title={t('inventory.networkTrafficChart')} height={180}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={clusterRrdSeries}>
+                              <defs>
                                 {clusterRrdNodeNames.map(name => (
-                                  <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} stroke={nodeColors[name]} fill={`url(#cGradNet_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                  <linearGradient key={name} id={`cGradNet_${name}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
+                                    <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
+                                  </linearGradient>
                                 ))}
-                                {clusterRrdNodeNames.map(name => (
-                                  <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} stroke={nodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
-                                ))}
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
-                            {clusterRrdNodeNames.map(name => (
-                              <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: nodeColors[name] }} />
-                                <Typography variant="caption" sx={{ fontSize: 10 }}>{name}</Typography>
-                                <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.5 }}>(— in, ⋯ out)</Typography>
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
-
-                        {/* Server Load */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.serverLoad')}
-                          </Typography>
-                          <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={clusterRrdSeries}>
-                                <defs>
-                                  {clusterRrdNodeNames.map(name => (
-                                    <linearGradient key={name} id={`cGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
-                                      <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
-                                    </linearGradient>
-                                  ))}
-                                </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
-                                <Tooltip
-                                  wrapperStyle={{ zIndex: 10 }}
-                                  content={({ active, payload, label }) => {
-                                    if (!active || !payload?.length) return null
-                                    const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                    return (
-                                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
-                                        {sorted.map(entry => (
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
+                              <Tooltip
+                                wrapperStyle={{ zIndex: 10 }}
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                      <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                      {sorted.map(entry => {
+                                        const isOut = String(entry.name).startsWith('netOut_')
+                                        const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
+                                        return (
                                           <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
-                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
                                           </Box>
-                                        ))}
-                                      </Box>
-                                    )
-                                  }}
-                                />
+                                        )
+                                      })}
+                                    </Box>
+                                  )
+                                }}
+                              />
+                              {clusterRrdNodeNames.map(name => (
+                                <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} stroke={nodeColors[name]} fill={`url(#cGradNet_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                              ))}
+                              {clusterRrdNodeNames.map(name => (
+                                <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} stroke={nodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
+                              ))}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
+
+                        {/* Server Load */}
+                        <ExpandableChart title={t('inventory.serverLoad')} height={180}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={clusterRrdSeries}>
+                              <defs>
                                 {clusterRrdNodeNames.map(name => (
-                                  <Area key={name} type="monotone" dataKey={`load_${name}`} stroke={nodeColors[name]} fill={`url(#cGradLoad_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                  <linearGradient key={name} id={`cGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={nodeColors[name]} stopOpacity={0.25} />
+                                    <stop offset="100%" stopColor={nodeColors[name]} stopOpacity={0} />
+                                  </linearGradient>
                                 ))}
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5, flexWrap: 'wrap' }}>
-                            {clusterRrdNodeNames.map(name => (
-                              <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: nodeColors[name] }} />
-                                <Typography variant="caption" sx={{ fontSize: 10 }}>{name}</Typography>
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
+                              <Tooltip
+                                wrapperStyle={{ zIndex: 10 }}
+                                content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
+                                      <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
+                                      {sorted.map(entry => (
+                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  )
+                                }}
+                              />
+                              {clusterRrdNodeNames.map(name => (
+                                <Area key={name} type="monotone" dataKey={`load_${name}`} stroke={nodeColors[name]} fill={`url(#cGradLoad_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                              ))}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
                       </Box>
                     </>)}
                     {clusterNodeRrdLoading && (
@@ -2418,160 +2366,176 @@ export default function ClusterTabs(props: any) {
                             </Box>
                             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                               {/* Reads Graph */}
-                              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    {t('cluster.reads')}:
-                                    <TrendIcon trend={cephTrends.read_bytes} />
-                                  </Typography>
-                                  <Typography variant="caption" fontWeight={700}>
-                                    {clusterCephPerf?.read_bytes_sec ? formatBps(clusterCephPerf.read_bytes_sec) : '0 B/s'}
-                                  </Typography>
-                                </Box>
-                                <Box sx={{ height: 100 }}>
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={clusterCephPerfFiltered}>
-                                      <YAxis hide domain={[0, 'auto']} />
-                                      <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                        labelFormatter={(_, payload) => {
-                                          if (payload && payload[0]?.payload?.time) {
-                                            return new Date(payload[0].payload.time).toLocaleTimeString()
-                                          }
-                                          return ''
-                                        }}
-                                        formatter={(value: number) => [formatBps(value), 'Reads']}
-                                      />
-                                      <Area 
-                                        type="monotone" 
-                                        dataKey="read_bytes_sec" 
-                                        stroke={primaryColor} 
-                                        fill={primaryColor} 
-                                        fillOpacity={0.4} 
-                                        strokeWidth={1.5} 
-                                        isAnimationActive={false} 
-                                      />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </Box>
-                              </Box>
+                              <ExpandableChart
+                                title={t('cluster.reads')}
+                                height={100}
+                                header={
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                    <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      {t('cluster.reads')}:
+                                      <TrendIcon trend={cephTrends.read_bytes} />
+                                    </Typography>
+                                    <Typography variant="caption" fontWeight={700}>
+                                      {clusterCephPerf?.read_bytes_sec ? formatBps(clusterCephPerf.read_bytes_sec) : '0 B/s'}
+                                    </Typography>
+                                  </Box>
+                                }
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={clusterCephPerfFiltered}>
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
+                                    <Tooltip
+                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                                      labelFormatter={(_, payload) => {
+                                        if (payload && payload[0]?.payload?.time) {
+                                          return new Date(payload[0].payload.time).toLocaleTimeString()
+                                        }
+                                        return ''
+                                      }}
+                                      formatter={(value: number) => [formatBps(value), 'Reads']}
+                                    />
+                                    <Area
+                                      type="monotone"
+                                      dataKey="read_bytes_sec"
+                                      stroke={primaryColor}
+                                      fill={primaryColor}
+                                      fillOpacity={0.4}
+                                      strokeWidth={1.5}
+                                      isAnimationActive={false}
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              </ExpandableChart>
 
                               {/* Writes Graph */}
-                              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    {t('cluster.writes')}:
-                                    <TrendIcon trend={cephTrends.write_bytes} />
-                                  </Typography>
-                                  <Typography variant="caption" fontWeight={700}>
-                                    {clusterCephPerf?.write_bytes_sec ? formatBps(clusterCephPerf.write_bytes_sec) : '0 B/s'}
-                                  </Typography>
-                                </Box>
-                                <Box sx={{ height: 100 }}>
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={clusterCephPerfFiltered}>
-                                      <YAxis hide domain={[0, 'auto']} />
-                                      <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                        labelFormatter={(_, payload) => {
-                                          if (payload && payload[0]?.payload?.time) {
-                                            return new Date(payload[0].payload.time).toLocaleTimeString()
-                                          }
-                                          return ''
-                                        }}
-                                        formatter={(value: number) => [formatBps(value), 'Writes']}
-                                      />
-                                      <Area 
-                                        type="monotone" 
-                                        dataKey="write_bytes_sec" 
-                                        stroke={primaryColor} 
-                                        fill={primaryColor} 
-                                        fillOpacity={0.4} 
-                                        strokeWidth={1.5} 
-                                        isAnimationActive={false} 
-                                      />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </Box>
-                              </Box>
+                              <ExpandableChart
+                                title={t('cluster.writes')}
+                                height={100}
+                                header={
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                    <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      {t('cluster.writes')}:
+                                      <TrendIcon trend={cephTrends.write_bytes} />
+                                    </Typography>
+                                    <Typography variant="caption" fontWeight={700}>
+                                      {clusterCephPerf?.write_bytes_sec ? formatBps(clusterCephPerf.write_bytes_sec) : '0 B/s'}
+                                    </Typography>
+                                  </Box>
+                                }
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={clusterCephPerfFiltered}>
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
+                                    <Tooltip
+                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                                      labelFormatter={(_, payload) => {
+                                        if (payload && payload[0]?.payload?.time) {
+                                          return new Date(payload[0].payload.time).toLocaleTimeString()
+                                        }
+                                        return ''
+                                      }}
+                                      formatter={(value: number) => [formatBps(value), 'Writes']}
+                                    />
+                                    <Area
+                                      type="monotone"
+                                      dataKey="write_bytes_sec"
+                                      stroke={primaryColor}
+                                      fill={primaryColor}
+                                      fillOpacity={0.4}
+                                      strokeWidth={1.5}
+                                      isAnimationActive={false}
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              </ExpandableChart>
 
                               {/* IOPS Reads Graph */}
-                              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    {t('cluster.iopsReads')}:
-                                    <TrendIcon trend={cephTrends.read_iops} />
-                                  </Typography>
-                                  <Typography variant="caption" fontWeight={700}>
-                                    {clusterCephPerf?.read_op_per_sec?.toLocaleString() || 0}
-                                  </Typography>
-                                </Box>
-                                <Box sx={{ height: 100 }}>
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={clusterCephPerfFiltered}>
-                                      <YAxis hide domain={[0, 'auto']} />
-                                      <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                        labelFormatter={(_, payload) => {
-                                          if (payload && payload[0]?.payload?.time) {
-                                            return new Date(payload[0].payload.time).toLocaleTimeString()
-                                          }
-                                          return ''
-                                        }}
-                                        formatter={(value: number) => [value?.toLocaleString() + ' IOPS', 'Reads']}
-                                      />
-                                      <Area 
-                                        type="monotone" 
-                                        dataKey="read_op_per_sec" 
-                                        stroke={primaryColor} 
-                                        fill={primaryColor} 
-                                        fillOpacity={0.4} 
-                                        strokeWidth={1.5} 
-                                        isAnimationActive={false} 
-                                      />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </Box>
-                              </Box>
+                              <ExpandableChart
+                                title={t('cluster.iopsReads')}
+                                height={100}
+                                header={
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                    <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      {t('cluster.iopsReads')}:
+                                      <TrendIcon trend={cephTrends.read_iops} />
+                                    </Typography>
+                                    <Typography variant="caption" fontWeight={700}>
+                                      {clusterCephPerf?.read_op_per_sec?.toLocaleString() || 0}
+                                    </Typography>
+                                  </Box>
+                                }
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={clusterCephPerfFiltered}>
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
+                                    <Tooltip
+                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                                      labelFormatter={(_, payload) => {
+                                        if (payload && payload[0]?.payload?.time) {
+                                          return new Date(payload[0].payload.time).toLocaleTimeString()
+                                        }
+                                        return ''
+                                      }}
+                                      formatter={(value: number) => [value?.toLocaleString() + ' IOPS', 'Reads']}
+                                    />
+                                    <Area
+                                      type="monotone"
+                                      dataKey="read_op_per_sec"
+                                      stroke={primaryColor}
+                                      fill={primaryColor}
+                                      fillOpacity={0.4}
+                                      strokeWidth={1.5}
+                                      isAnimationActive={false}
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              </ExpandableChart>
 
                               {/* IOPS Writes Graph */}
-                              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                  <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    {t('cluster.iopsWrites')}:
-                                    <TrendIcon trend={cephTrends.write_iops} />
-                                  </Typography>
-                                  <Typography variant="caption" fontWeight={700}>
-                                    {clusterCephPerf?.write_op_per_sec?.toLocaleString() || 0}
-                                  </Typography>
-                                </Box>
-                                <Box sx={{ height: 100 }}>
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={clusterCephPerfFiltered}>
-                                      <YAxis hide domain={[0, 'auto']} />
-                                      <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                        labelFormatter={(_, payload) => {
-                                          if (payload && payload[0]?.payload?.time) {
-                                            return new Date(payload[0].payload.time).toLocaleTimeString()
-                                          }
-                                          return ''
-                                        }}
-                                        formatter={(value: number) => [value?.toLocaleString() + ' IOPS', 'Writes']}
-                                      />
-                                      <Area 
-                                        type="monotone" 
-                                        dataKey="write_op_per_sec" 
-                                        stroke={primaryColor} 
-                                        fill={primaryColor} 
-                                        fillOpacity={0.4} 
-                                        strokeWidth={1.5} 
-                                        isAnimationActive={false} 
-                                      />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                </Box>
-                              </Box>
+                              <ExpandableChart
+                                title={t('cluster.iopsWrites')}
+                                height={100}
+                                header={
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                    <Typography variant="caption" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      {t('cluster.iopsWrites')}:
+                                      <TrendIcon trend={cephTrends.write_iops} />
+                                    </Typography>
+                                    <Typography variant="caption" fontWeight={700}>
+                                      {clusterCephPerf?.write_op_per_sec?.toLocaleString() || 0}
+                                    </Typography>
+                                  </Box>
+                                }
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={clusterCephPerfFiltered}>
+                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
+                                    <Tooltip
+                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                                      labelFormatter={(_, payload) => {
+                                        if (payload && payload[0]?.payload?.time) {
+                                          return new Date(payload[0].payload.time).toLocaleTimeString()
+                                        }
+                                        return ''
+                                      }}
+                                      formatter={(value: number) => [value?.toLocaleString() + ' IOPS', 'Writes']}
+                                    />
+                                    <Area
+                                      type="monotone"
+                                      dataKey="write_op_per_sec"
+                                      stroke={primaryColor}
+                                      fill={primaryColor}
+                                      fillOpacity={0.4}
+                                      strokeWidth={1.5}
+                                      isAnimationActive={false}
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              </ExpandableChart>
                             </Box>
                           </CardContent>
                         </Card>

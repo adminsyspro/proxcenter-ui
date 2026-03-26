@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
+import ExpandableChart from '../components/ExpandableChart'
 
 import {
   Alert,
@@ -538,71 +539,100 @@ export default function NodeTabs(props: any) {
                     ) : (
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.cpuUsage')}
-                          </Typography>
-                          <Box sx={{ height: 160 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={series}>
-                                <defs>
-                                  <linearGradient id="nGradCpu" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                    <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
-                                  </linearGradient>
-                                </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                                <Tooltip contentStyle={chartTooltipStyle}
-                                  labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                  formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'CPU']}
-                                />
-                                <Area type="monotone" dataKey="cpuPct" stroke={primaryColor} fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                        </Box>
+                        <ExpandableChart title={t('inventory.cpuUsage')} height={160}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={series}>
+                              <defs>
+                                <linearGradient id="nGradCpu" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                              <Tooltip contentStyle={chartTooltipStyle}
+                                labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                                formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'CPU']}
+                              />
+                              <Area type="monotone" dataKey="cpuPct" stroke={primaryColor} fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
 
                         {/* Memory Usage */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.memoryUsage')}
-                          </Typography>
-                          <Box sx={{ height: 160 }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                        <ExpandableChart title={t('inventory.memoryUsage')} height={160}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={series}>
+                              <defs>
+                                <linearGradient id="nGradRam" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                              <Tooltip contentStyle={chartTooltipStyle}
+                                labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                                formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'Memory']}
+                              />
+                              <Area type="monotone" dataKey="ramPct" stroke={primaryColor} fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
+
+                        {/* Network Traffic */}
+                        <ExpandableChart title={t('inventory.networkTrafficChart')} height={160}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={series}>
+                              <defs>
+                                <linearGradient id="nGradNetIn" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="nGradNetOut" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={primaryColorLight} stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor={primaryColorLight} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
+                              <Tooltip contentStyle={chartTooltipStyle}
+                                labelFormatter={v => new Date(Number(v)).toLocaleString()}
+                                formatter={(v: any, name: string) => [formatBps(Number(v)), name === 'netInBps' ? 'In' : 'Out']}
+                              />
+                              <Area type="monotone" dataKey="netInBps" stroke={primaryColor} fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
+                              <Area type="monotone" dataKey="netOutBps" stroke={primaryColorLight} fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </ExpandableChart>
+
+                        {/* Server Load (nodes) ou Disk I/O (VMs) */}
+                        <ExpandableChart title={selection?.type === 'node' ? t('inventory.serverLoad') : t('inventory.diskIo')} height={160}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            {selection?.type === 'node' ? (
                               <AreaChart data={series}>
                                 <defs>
-                                  <linearGradient id="nGradRam" x1="0" y1="0" x2="0" y2="1">
+                                  <linearGradient id="nGradLoad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
                                     <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                                <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
                                 <Tooltip contentStyle={chartTooltipStyle}
                                   labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                  formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'Memory']}
+                                  formatter={(v: any) => [Number(v).toFixed(2), 'Load']}
                                 />
-                                <Area type="monotone" dataKey="ramPct" stroke={primaryColor} fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
+                                <Area type="monotone" dataKey="loadAvg" stroke={primaryColor} fill="url(#nGradLoad)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                        </Box>
-
-                        {/* Network Traffic */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {t('inventory.networkTrafficChart')}
-                          </Typography>
-                          <Box sx={{ height: 160 }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            ) : (
                               <AreaChart data={series}>
                                 <defs>
-                                  <linearGradient id="nGradNetIn" x1="0" y1="0" x2="0" y2="1">
+                                  <linearGradient id="nGradDiskRead" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
                                     <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
                                   </linearGradient>
-                                  <linearGradient id="nGradNetOut" x1="0" y1="0" x2="0" y2="1">
+                                  <linearGradient id="nGradDiskWrite" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={primaryColorLight} stopOpacity={0.35} />
                                     <stop offset="100%" stopColor={primaryColorLight} stopOpacity={0} />
                                   </linearGradient>
@@ -611,63 +641,14 @@ export default function NodeTabs(props: any) {
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                 <Tooltip contentStyle={chartTooltipStyle}
                                   labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                  formatter={(v: any, name: string) => [formatBps(Number(v)), name === 'netInBps' ? 'In' : 'Out']}
+                                  formatter={(v: any, name: string) => [formatBps(Number(v)), name === 'diskReadBps' ? 'Read' : 'Write']}
                                 />
-                                <Area type="monotone" dataKey="netInBps" stroke={primaryColor} fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
-                                <Area type="monotone" dataKey="netOutBps" stroke={primaryColorLight} fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
+                                <Area type="monotone" dataKey="diskReadBps" stroke={primaryColor} fill="url(#nGradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
+                                <Area type="monotone" dataKey="diskWriteBps" stroke={primaryColorLight} fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
-                          </Box>
-                        </Box>
-
-                        {/* Server Load (nodes) ou Disk I/O (VMs) */}
-                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                            {selection?.type === 'node' ? t('inventory.serverLoad') : t('inventory.diskIo')}
-                          </Typography>
-                          <Box sx={{ height: 160 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              {selection?.type === 'node' ? (
-                                <AreaChart data={series}>
-                                  <defs>
-                                    <linearGradient id="nGradLoad" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                      <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
-                                    </linearGradient>
-                                  </defs>
-                                  <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                  <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
-                                  <Tooltip contentStyle={chartTooltipStyle}
-                                    labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                    formatter={(v: any) => [Number(v).toFixed(2), 'Load']}
-                                  />
-                                  <Area type="monotone" dataKey="loadAvg" stroke={primaryColor} fill="url(#nGradLoad)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
-                                </AreaChart>
-                              ) : (
-                                <AreaChart data={series}>
-                                  <defs>
-                                    <linearGradient id="nGradDiskRead" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                      <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
-                                    </linearGradient>
-                                    <linearGradient id="nGradDiskWrite" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={primaryColorLight} stopOpacity={0.35} />
-                                      <stop offset="100%" stopColor={primaryColorLight} stopOpacity={0} />
-                                    </linearGradient>
-                                  </defs>
-                                  <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                  <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
-                                  <Tooltip contentStyle={chartTooltipStyle}
-                                    labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                    formatter={(v: any, name: string) => [formatBps(Number(v)), name === 'diskReadBps' ? 'Read' : 'Write']}
-                                  />
-                                  <Area type="monotone" dataKey="diskReadBps" stroke={primaryColor} fill="url(#nGradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
-                                  <Area type="monotone" dataKey="diskWriteBps" stroke={primaryColorLight} fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
-                                </AreaChart>
-                              )}
-                            </ResponsiveContainer>
-                          </Box>
-                        </Box>
+                            )}
+                          </ResponsiveContainer>
+                        </ExpandableChart>
                       </Box>
                     )}
                   </Box>

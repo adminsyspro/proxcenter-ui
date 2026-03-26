@@ -21,6 +21,7 @@ import { alpha } from '@mui/material/styles'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
 import type { InventorySelection } from '../types'
+import ExpandableChart from './ExpandableChart'
 import { pickNumber, fetchRrd } from '../helpers'
 import type { TreeClusterStorage } from '../InventoryTree'
 
@@ -122,18 +123,23 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
       return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
     }
     return (
-      <Box key={storageName} sx={{ flex: 1, minWidth: 250, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-          <Typography variant="caption" fontWeight={700}>{storageName}</Typography>
-          <Typography variant="caption" sx={{ opacity: 0.5, fontSize: 10 }}>
-            {points.length > 0 ? `${points[points.length - 1].usedPct}%` : ''}
-          </Typography>
-        </Box>
-        <Box sx={{ height: 80 }}>
+      <Box key={storageName} sx={{ flex: 1, minWidth: 250 }}>
+        <ExpandableChart
+          title={storageName}
+          height={80}
+          header={
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+              <Typography variant="caption" fontWeight={700}>{storageName}</Typography>
+              <Typography variant="caption" sx={{ opacity: 0.5, fontSize: 10 }}>
+                {points.length > 0 ? `${points[points.length - 1].usedPct}%` : ''}
+              </Typography>
+            </Box>
+          }
+        >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={points}>
-              <XAxis dataKey="time" hide type="number" domain={['dataMin', 'dataMax']} />
-              <YAxis hide domain={[0, 100]} />
+              <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
+              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 11 }}
                 labelFormatter={(v) => new Date(v).toLocaleString()}
@@ -145,7 +151,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
               <Area type="monotone" dataKey="usedPct" stroke={primaryColor} fill={primaryColor} fillOpacity={0.3} strokeWidth={1.5} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
-        </Box>
+        </ExpandableChart>
       </Box>
     )
   }
@@ -314,7 +320,10 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
                       >
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />
+                            <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                              <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                              <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: n.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                            </Box>
                             <Typography variant="body2" fontWeight={600}>{n.node}</Typography>
                           </Box>
                         </TableCell>
@@ -363,7 +372,10 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
           </Typography>
           <i className="ri-arrow-right-s-line" style={{ opacity: 0.3 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />
+            <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
+              <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
+              <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: nodeData?.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+            </Box>
             <Typography variant="h6" fontWeight={900}>{nodeName}</Typography>
           </Box>
           {nodeData && (

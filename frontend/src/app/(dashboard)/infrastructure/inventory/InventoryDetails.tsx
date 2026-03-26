@@ -115,6 +115,7 @@ import { AreaPctChart, AreaBpsChart2 } from './components/RrdCharts'
 import GroupedVmsView from './components/GroupedVmsView'
 import InventorySummary from './components/InventorySummary'
 import StorageIntermediatePanel from './components/StorageIntermediatePanel'
+import ExpandableChart from './components/ExpandableChart'
 import StorageContentGroup from './components/StorageContentGroup'
 import PbsServerPanel, { type PbsServerPanelHandle } from './components/PbsServerPanel'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon, AddIcon, CloseIcon, SaveIcon } from './components/IconWrappers'
@@ -3390,46 +3391,44 @@ return vm?.isCluster ?? false
 
                         {/* Storage usage evolution graph (all storage types) */}
                         {storageRrdHistory.length > 1 && (
-                          <Box sx={{ flex: 1, minWidth: 180, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                              <Typography variant="caption" fontWeight={600}>
-                                {t('inventory.storageUsage')}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                                {([
-                                  { value: 'hour', label: '1h' },
-                                  { value: 'day', label: '24h' },
-                                  { value: 'week', label: '7d' },
-                                  { value: 'month', label: '30d' },
-                                  { value: 'year', label: '1y' },
-                                ] as const).map(opt => (
-                                  <Box
-                                    key={opt.value}
-                                    onClick={() => setStorageRrdTimeframe(opt.value)}
-                                    sx={{
-                                      px: 0.6, py: 0.1, borderRadius: 0.5, cursor: 'pointer',
-                                      fontSize: '0.6rem', fontWeight: 700, lineHeight: 1.4,
-                                      bgcolor: storageRrdTimeframe === opt.value ? 'primary.main' : 'transparent',
-                                      color: storageRrdTimeframe === opt.value ? 'primary.contrastText' : 'text.secondary',
-                                      opacity: storageRrdTimeframe === opt.value ? 1 : 0.5,
-                                      '&:hover': { opacity: 1 },
-                                    }}
-                                  >
-                                    {opt.label}
+                          <Box sx={{ flex: 1, minWidth: 180 }}>
+                            <ExpandableChart
+                              title={t('inventory.storageUsage')}
+                              height={90}
+                              header={
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                  <Typography variant="caption" fontWeight={600}>{t('inventory.storageUsage')}</Typography>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                                    {([
+                                      { value: 'hour', label: '1h' },
+                                      { value: 'day', label: '24h' },
+                                      { value: 'week', label: '7d' },
+                                      { value: 'month', label: '30d' },
+                                      { value: 'year', label: '1y' },
+                                    ] as const).map(opt => (
+                                      <Box
+                                        key={opt.value}
+                                        onClick={() => setStorageRrdTimeframe(opt.value)}
+                                        sx={{
+                                          px: 0.6, py: 0.1, borderRadius: 0.5, cursor: 'pointer',
+                                          fontSize: '0.6rem', fontWeight: 700, lineHeight: 1.4,
+                                          bgcolor: storageRrdTimeframe === opt.value ? 'primary.main' : 'transparent',
+                                          color: storageRrdTimeframe === opt.value ? 'primary.contrastText' : 'text.secondary',
+                                          opacity: storageRrdTimeframe === opt.value ? 1 : 0.5,
+                                          '&:hover': { opacity: 1 },
+                                        }}
+                                      >
+                                        {opt.label}
+                                      </Box>
+                                    ))}
                                   </Box>
-                                ))}
-                              </Box>
-                            </Box>
-                            <Box sx={{ height: 90 }}>
+                                </Box>
+                              }
+                            >
                               <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={storageRrdHistory}>
-                                  <XAxis
-                                    dataKey="time"
-                                    hide
-                                    type="number"
-                                    domain={['dataMin', 'dataMax']}
-                                  />
-                                  <YAxis hide domain={[0, 100]} />
+                                  <XAxis dataKey="time" tickFormatter={(v: any) => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
+                                  <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                                   <Tooltip
                                     contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
                                     labelFormatter={(value) => {
@@ -3455,7 +3454,7 @@ return vm?.isCluster ?? false
                                   />
                                 </AreaChart>
                               </ResponsiveContainer>
-                            </Box>
+                            </ExpandableChart>
                           </Box>
                         )}
 
@@ -3463,19 +3462,23 @@ return vm?.isCluster ?? false
                         {isCeph && storageCephPerfHistory.length > 1 && (
                           <>
                             {/* Read/Write throughput */}
-                            <Box sx={{ flex: 1, minWidth: 180, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                                <Typography variant="caption" fontWeight={600}>
-                                  {t('inventory.pbsTransferRate')}
-                                </Typography>
-                                <Typography variant="caption" fontWeight={700} sx={{ opacity: 0.7, fontSize: 10 }}>
-                                  {storageCephPerf ? `R: ${formatBps(storageCephPerf.read_bytes_sec)} / W: ${formatBps(storageCephPerf.write_bytes_sec)}` : '—'}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ height: 90 }}>
+                            <Box sx={{ flex: 1, minWidth: 180 }}>
+                              <ExpandableChart
+                                title={t('inventory.pbsTransferRate')}
+                                height={90}
+                                header={
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                    <Typography variant="caption" fontWeight={600}>{t('inventory.pbsTransferRate')}</Typography>
+                                    <Typography variant="caption" fontWeight={700} sx={{ opacity: 0.7, fontSize: 10 }}>
+                                      {storageCephPerf ? `R: ${formatBps(storageCephPerf.read_bytes_sec)} / W: ${formatBps(storageCephPerf.write_bytes_sec)}` : '—'}
+                                    </Typography>
+                                  </Box>
+                                }
+                              >
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={storageCephPerfHistory}>
-                                    <YAxis hide domain={[0, 'auto']} />
+                                    <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <YAxis tickFormatter={(v: any) => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                     <Tooltip
                                       contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
                                       labelFormatter={(_, payload) => {
@@ -3488,23 +3491,27 @@ return vm?.isCluster ?? false
                                     <Area type="monotone" dataKey="write_bytes_sec" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write_bytes_sec" />
                                   </AreaChart>
                                 </ResponsiveContainer>
-                              </Box>
+                              </ExpandableChart>
                             </Box>
 
                             {/* IOPS */}
-                            <Box sx={{ flex: 1, minWidth: 180, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                                <Typography variant="caption" fontWeight={600}>
-                                  IOPS
-                                </Typography>
-                                <Typography variant="caption" fontWeight={700} sx={{ opacity: 0.7, fontSize: 10 }}>
-                                  {storageCephPerf ? `R: ${storageCephPerf.read_op_per_sec?.toLocaleString() || 0} / W: ${storageCephPerf.write_op_per_sec?.toLocaleString() || 0}` : '—'}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ height: 90 }}>
+                            <Box sx={{ flex: 1, minWidth: 180 }}>
+                              <ExpandableChart
+                                title="IOPS"
+                                height={90}
+                                header={
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                                    <Typography variant="caption" fontWeight={600}>IOPS</Typography>
+                                    <Typography variant="caption" fontWeight={700} sx={{ opacity: 0.7, fontSize: 10 }}>
+                                      {storageCephPerf ? `R: ${storageCephPerf.read_op_per_sec?.toLocaleString() || 0} / W: ${storageCephPerf.write_op_per_sec?.toLocaleString() || 0}` : '—'}
+                                    </Typography>
+                                  </Box>
+                                }
+                              >
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={storageCephPerfHistory}>
-                                    <YAxis hide domain={[0, 'auto']} />
+                                    <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                     <Tooltip
                                       contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
                                       labelFormatter={(_, payload) => {
@@ -3517,7 +3524,7 @@ return vm?.isCluster ?? false
                                     <Area type="monotone" dataKey="write_op_per_sec" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write_op_per_sec" />
                                   </AreaChart>
                                 </ResponsiveContainer>
-                              </Box>
+                              </ExpandableChart>
                             </Box>
                           </>
                         )}

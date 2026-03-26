@@ -321,6 +321,20 @@ function RootInventoryView({
   const [infraRrdNodeNames, setInfraRrdNodeNames] = useState<string[]>([])
   const [infraRrdSeries, setInfraRrdSeries] = useState<any[]>([])
   const [infraRrdLoading, setInfraRrdLoading] = useState(false)
+  const [infraRrdHiddenNodes, setInfraRrdHiddenNodes] = useState<Set<string>>(new Set())
+  const [expandedGraph, setExpandedGraph] = useState<string | null>(null)
+
+  const toggleNodeVisibility = (name: string) => {
+    setInfraRrdHiddenNodes(prev => {
+      // If this node is already isolated (all others hidden), show all
+      const allOthersHidden = infraRrdNodeNames.every(n => n === name || prev.has(n))
+      if (allOthersHidden) {
+        return new Set()
+      }
+      // Isolate: hide all others, show only this one
+      return new Set(infraRrdNodeNames.filter(n => n !== name))
+    })
+  }
 
   const infraNodeColors = useMemo(() => {
     const palette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1']
@@ -746,7 +760,12 @@ function RootInventoryView({
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             {/* CPU per node */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>CPU</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" fontWeight={600}>CPU</Typography>
+                <IconButton size="small" onClick={() => setExpandedGraph('cpu')} sx={{ opacity: 0.4, p: 0.25, '&:hover': { opacity: 1 } }}>
+                  <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
               <Box sx={{ height: 120 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={infraRrdSeries}>
@@ -790,7 +809,7 @@ function RootInventoryView({
                       }}
                     />
                     {infraRrdNodeNames.map(name => (
-                      <Area key={name} type="monotone" dataKey={`cpu_${name}`} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                      <Area key={name} type="monotone" dataKey={`cpu_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
@@ -798,9 +817,13 @@ function RootInventoryView({
               {infraRrdNodeNames.length > 1 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
                   {infraRrdNodeNames.map(name => (
-                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box
+                      key={name}
+                      onClick={() => toggleNodeVisibility(name)}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', opacity: infraRrdHiddenNodes.has(name) ? 0.3 : 1, '&:hover': { opacity: infraRrdHiddenNodes.has(name) ? 0.5 : 0.8 } }}
+                    >
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
-                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 9, textDecoration: infraRrdHiddenNodes.has(name) ? 'line-through' : 'none' }}>{name}</Typography>
                     </Box>
                   ))}
                 </Box>
@@ -808,7 +831,12 @@ function RootInventoryView({
             </Box>
             {/* Server Load per node */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>Server Load</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" fontWeight={600}>Server Load</Typography>
+                <IconButton size="small" onClick={() => setExpandedGraph('load')} sx={{ opacity: 0.4, p: 0.25, '&:hover': { opacity: 1 } }}>
+                  <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
               <Box sx={{ height: 120 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={infraRrdSeries}>
@@ -848,7 +876,7 @@ function RootInventoryView({
                       }}
                     />
                     {infraRrdNodeNames.map(name => (
-                      <Area key={`load_${name}`} type="monotone" dataKey={`load_${name}`} name={`load_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradLoad_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                      <Area key={`load_${name}`} type="monotone" dataKey={`load_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`load_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradLoad_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
@@ -856,9 +884,13 @@ function RootInventoryView({
               {infraRrdNodeNames.length > 1 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
                   {infraRrdNodeNames.map(name => (
-                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box
+                      key={name}
+                      onClick={() => toggleNodeVisibility(name)}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', opacity: infraRrdHiddenNodes.has(name) ? 0.3 : 1, '&:hover': { opacity: infraRrdHiddenNodes.has(name) ? 0.5 : 0.8 } }}
+                    >
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
-                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 9, textDecoration: infraRrdHiddenNodes.has(name) ? 'line-through' : 'none' }}>{name}</Typography>
                     </Box>
                   ))}
                 </Box>
@@ -867,7 +899,12 @@ function RootInventoryView({
 
             {/* RAM per node */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>RAM</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" fontWeight={600}>RAM</Typography>
+                <IconButton size="small" onClick={() => setExpandedGraph('ram')} sx={{ opacity: 0.4, p: 0.25, '&:hover': { opacity: 1 } }}>
+                  <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
               <Box sx={{ height: 120 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={infraRrdSeries}>
@@ -911,7 +948,7 @@ function RootInventoryView({
                       }}
                     />
                     {infraRrdNodeNames.map(name => (
-                      <Area key={name} type="monotone" dataKey={`ram_${name}`} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                      <Area key={name} type="monotone" dataKey={`ram_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
@@ -919,9 +956,13 @@ function RootInventoryView({
               {infraRrdNodeNames.length > 1 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
                   {infraRrdNodeNames.map(name => (
-                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box
+                      key={name}
+                      onClick={() => toggleNodeVisibility(name)}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', opacity: infraRrdHiddenNodes.has(name) ? 0.3 : 1, '&:hover': { opacity: infraRrdHiddenNodes.has(name) ? 0.5 : 0.8 } }}
+                    >
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
-                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 9, textDecoration: infraRrdHiddenNodes.has(name) ? 'line-through' : 'none' }}>{name}</Typography>
                     </Box>
                   ))}
                 </Box>
@@ -929,7 +970,12 @@ function RootInventoryView({
             </Box>
             {/* Network per node (In + Out stacked) */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-              <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>Network</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" fontWeight={600}>Network</Typography>
+                <IconButton size="small" onClick={() => setExpandedGraph('net')} sx={{ opacity: 0.4, p: 0.25, '&:hover': { opacity: 1 } }}>
+                  <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
+                </IconButton>
+              </Box>
               <Box sx={{ height: 120 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={infraRrdSeries}>
@@ -975,10 +1021,10 @@ function RootInventoryView({
                       }}
                     />
                     {infraRrdNodeNames.map(name => (
-                      <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} name={`netIn_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradNetIn_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                      <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`netIn_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradNetIn_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
                     ))}
                     {infraRrdNodeNames.map(name => (
-                      <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} name={`netOut_${name}`} stroke={infraNodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} connectNulls />
+                      <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`netOut_${name}`} stroke={infraNodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} connectNulls />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
@@ -986,9 +1032,13 @@ function RootInventoryView({
               {infraRrdNodeNames.length > 1 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
                   {infraRrdNodeNames.map(name => (
-                    <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Box
+                      key={name}
+                      onClick={() => toggleNodeVisibility(name)}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', opacity: infraRrdHiddenNodes.has(name) ? 0.3 : 1, '&:hover': { opacity: infraRrdHiddenNodes.has(name) ? 0.5 : 0.8 } }}
+                    >
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
-                      <Typography variant="caption" sx={{ fontSize: 9, opacity: 0.7 }}>{name}</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 9, textDecoration: infraRrdHiddenNodes.has(name) ? 'line-through' : 'none' }}>{name}</Typography>
                     </Box>
                   ))}
                 </Box>
@@ -998,6 +1048,227 @@ function RootInventoryView({
           </Box>
         </Box>
       )}
+      {/* Graph overlay */}
+      {expandedGraph && (
+        <Box
+          onClick={() => setExpandedGraph(null)}
+          sx={{
+            position: 'fixed', inset: 0, zIndex: 1300,
+            bgcolor: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            p: 4,
+          }}
+        >
+          <Box
+            onClick={(e) => e.stopPropagation()}
+            sx={{
+              bgcolor: 'background.paper',
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              width: '90%',
+              maxWidth: 1200,
+              p: 3,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography fontWeight={600}>
+                {expandedGraph === 'cpu' ? 'CPU' : expandedGraph === 'load' ? 'Server Load' : expandedGraph === 'ram' ? 'RAM' : 'Network'}
+              </Typography>
+              <IconButton size="small" onClick={() => setExpandedGraph(null)}>
+                <i className="ri-close-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+            <Box sx={{ height: 500 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                {expandedGraph === 'cpu' ? (
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <linearGradient key={`gcpu_ex_${name}`} id={`exGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                    <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replace('cpu_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      return (
+                        <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
+                          <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(33,150,243,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>CPU</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                          </Box>
+                          <Box sx={{ px: 1.5, py: 0.75 }}>
+                            {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: valColor }}>{v.toFixed(1)}%</Typography>
+                              </Box>
+                            )})}
+                          </Box>
+                        </Box>
+                      )
+                    }} />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={name} type="monotone" dataKey={`cpu_${name}`} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#exGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls hide={infraRrdHiddenNodes.has(name)} />
+                    ))}
+                  </AreaChart>
+                ) : expandedGraph === 'load' ? (
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <linearGradient key={`gload_ex_${name}`} id={`exGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} width={35} domain={[0, 'auto']} />
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                    <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replace('load_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      return (
+                        <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
+                          <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(156,39,176,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#9c27b0' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#9c27b0' }}>Server Load</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                          </Box>
+                          <Box sx={{ px: 1.5, py: 0.75 }}>
+                            {sorted.map(entry => (
+                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
+                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
+                              </Box>
+                            ))}
+                          </Box>
+                        </Box>
+                      )
+                    }} />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={`load_${name}`} type="monotone" dataKey={`load_${name}`} name={`load_${name}`} stroke={infraNodeColors[name]} fill={`url(#exGradLoad_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls hide={infraRrdHiddenNodes.has(name)} />
+                    ))}
+                  </AreaChart>
+                ) : expandedGraph === 'ram' ? (
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <linearGradient key={`gram_ex_${name}`} id={`exGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                    <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replace('ram_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      return (
+                        <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
+                          <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(76,175,80,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-ram-line" style={{ fontSize: 13, color: '#4caf50' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#4caf50' }}>RAM</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                          </Box>
+                          <Box sx={{ px: 1.5, py: 0.75 }}>
+                            {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: valColor }}>{v.toFixed(1)}%</Typography>
+                              </Box>
+                            )})}
+                          </Box>
+                        </Box>
+                      )
+                    }} />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={name} type="monotone" dataKey={`ram_${name}`} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#exGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls hide={infraRrdHiddenNodes.has(name)} />
+                    ))}
+                  </AreaChart>
+                ) : (
+                  <AreaChart data={infraRrdSeries}>
+                    <defs>
+                      {infraRrdNodeNames.map(name => (
+                        <React.Fragment key={`gnet_ex_${name}`}>
+                          <linearGradient id={`exGradNetIn_${name}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                            <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                          </linearGradient>
+                        </React.Fragment>
+                      ))}
+                    </defs>
+                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 10 }} width={50} />
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                    <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      return (
+                        <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
+                          <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(255,152,0,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-wifi-line" style={{ fontSize: 13, color: '#ff9800' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#ff9800' }}>Network</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                          </Box>
+                          <Box sx={{ px: 1.5, py: 0.75 }}>
+                            {sorted.map(entry => {
+                              const isOut = String(entry.name).startsWith('netOut_')
+                              const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
+                              return (
+                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
+                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                  <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
+                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                </Box>
+                              )
+                            })}
+                          </Box>
+                        </Box>
+                      )
+                    }} />
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} name={`netIn_${name}`} stroke={infraNodeColors[name]} fill={`url(#exGradNetIn_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls hide={infraRrdHiddenNodes.has(name)} />
+                    ))}
+                    {infraRrdNodeNames.map(name => (
+                      <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} name={`netOut_${name}`} stroke={infraNodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} connectNulls hide={infraRrdHiddenNodes.has(name)} />
+                    ))}
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            </Box>
+            {/* Legend */}
+            {infraRrdNodeNames.length > 1 && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2, justifyContent: 'center' }}>
+                {infraRrdNodeNames.map(name => (
+                  <Box
+                    key={name}
+                    onClick={() => toggleNodeVisibility(name)}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', opacity: infraRrdHiddenNodes.has(name) ? 0.3 : 1, '&:hover': { opacity: infraRrdHiddenNodes.has(name) ? 0.5 : 0.8 } }}
+                  >
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: infraNodeColors[name] }} />
+                    <Typography variant="caption" sx={{ fontSize: 11, textDecoration: infraRrdHiddenNodes.has(name) ? 'line-through' : 'none' }}>{name}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      )}
+
       {infraRrdLoading && infraRrdSeries.length === 0 && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, opacity: 0.6 }}>
           <CircularProgress size={16} />

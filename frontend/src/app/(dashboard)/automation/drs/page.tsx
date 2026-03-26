@@ -1541,10 +1541,17 @@ return allVMsData.data.vms.map(vm => ({
     return () => clearTimeout(timer)
   }, [allPendingRecs, metricsData])
 
-  const pendingRecs = useMemo(() =>
-    allPendingRecs.slice(0, maxPending),
-    [allPendingRecs, maxPending]
-  )
+  const pendingRecs = useMemo(() => {
+    // Limit per cluster
+    const byCluster = new Map()
+    for (const rec of allPendingRecs) {
+      const cid = rec.connection_id
+      if (!byCluster.has(cid)) byCluster.set(cid, [])
+      const arr = byCluster.get(cid)
+      if (arr.length < maxPending) arr.push(rec)
+    }
+    return Array.from(byCluster.values()).flat()
+  }, [allPendingRecs, maxPending])
 
   const clusters = useMemo(() => {
     if (!metricsData) return []
@@ -2361,15 +2368,37 @@ return next
                       {t('drsPage.clearRecommendations')}
                     </Button>
                   </Box>
-                  <Stack spacing={1}>
-                    {pendingRecs.slice(0, visibleRecCount).map(rec => (
-                      <RecommendationRow
-                        key={rec.id}
-                        rec={rec}
-                        onClick={() => openRecommendation(rec)}
-                        haConflict={getHAConflictStatus(rec.vmid, rec.target_node, rec.connection_id, haDataMap) === 'conflict'}
-                      />
-                    ))}
+                  <Stack spacing={2}>
+                    {(() => {
+                      // Group by cluster
+                      const grouped = new Map()
+                      for (const rec of pendingRecs) {
+                        const cid = rec.connection_id
+                        if (!grouped.has(cid)) grouped.set(cid, [])
+                        grouped.get(cid).push(rec)
+                      }
+                      return Array.from(grouped.entries()).map(([clusterId, clusterRecsGroup]) => (
+                        <Box key={clusterId}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.6 }} />
+                            <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
+                              {connectionNames[clusterId] || clusterId.slice(0, 12)}
+                            </Typography>
+                            <Chip size="small" label={clusterRecsGroup.length} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+                          </Box>
+                          <Stack spacing={1}>
+                            {clusterRecsGroup.map(rec => (
+                              <RecommendationRow
+                                key={rec.id}
+                                rec={rec}
+                                onClick={() => openRecommendation(rec)}
+                                haConflict={getHAConflictStatus(rec.vmid, rec.target_node, rec.connection_id, haDataMap) === 'conflict'}
+                              />
+                            ))}
+                          </Stack>
+                        </Box>
+                      ))
+                    })()}
                   </Stack>
                   {pendingRecs.length > 8 && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>

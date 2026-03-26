@@ -1,13 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, Legend as RechartsLegend } from 'recharts'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -904,7 +904,7 @@ const ActiveMigrationRow = ({
 }
 
 // Recommendation Row - Ligne compacte pour une recommandation
-const RecommendationRow = ({
+const RecommendationRow = React.memo(({
   rec,
   onClick,
   haConflict = false
@@ -1025,7 +1025,7 @@ const RecommendationRow = ({
       </Stack>
     </Box>
   )
-}
+})
 
 // ============================================
 // Storage Warning Component pour le Drawer
@@ -1552,6 +1552,17 @@ return allVMsData.data.vms.map(vm => ({
     }
     return Array.from(byCluster.values()).flat()
   }, [allPendingRecs, maxPending])
+
+  // Group recommendations by cluster for display
+  const pendingRecsByCluster = useMemo(() => {
+    const grouped = new Map()
+    for (const rec of pendingRecs) {
+      const cid = rec.connection_id
+      if (!grouped.has(cid)) grouped.set(cid, [])
+      grouped.get(cid).push(rec)
+    }
+    return Array.from(grouped.entries()) as [string, DRSRecommendation[]][]
+  }, [pendingRecs])
 
   const clusters = useMemo(() => {
     if (!metricsData) return []
@@ -2369,36 +2380,27 @@ return next
                     </Button>
                   </Box>
                   <Stack spacing={2}>
-                    {(() => {
-                      // Group by cluster
-                      const grouped = new Map()
-                      for (const rec of pendingRecs) {
-                        const cid = rec.connection_id
-                        if (!grouped.has(cid)) grouped.set(cid, [])
-                        grouped.get(cid).push(rec)
-                      }
-                      return Array.from(grouped.entries()).map(([clusterId, clusterRecsGroup]) => (
-                        <Box key={clusterId}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.6 }} />
-                            <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
-                              {connectionNames[clusterId] || clusterId.slice(0, 12)}
-                            </Typography>
-                            <Chip size="small" label={clusterRecsGroup.length} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
-                          </Box>
-                          <Stack spacing={1}>
-                            {clusterRecsGroup.map(rec => (
-                              <RecommendationRow
-                                key={rec.id}
-                                rec={rec}
-                                onClick={() => openRecommendation(rec)}
-                                haConflict={getHAConflictStatus(rec.vmid, rec.target_node, rec.connection_id, haDataMap) === 'conflict'}
-                              />
-                            ))}
-                          </Stack>
+                    {pendingRecsByCluster.map(([clusterId, clusterRecsGroup]) => (
+                      <Box key={clusterId}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.6 }} />
+                          <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
+                            {connectionNames[clusterId] || clusterId.slice(0, 12)}
+                          </Typography>
+                          <Chip size="small" label={clusterRecsGroup.length} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
                         </Box>
-                      ))
-                    })()}
+                        <Stack spacing={1}>
+                          {clusterRecsGroup.map(rec => (
+                            <RecommendationRow
+                              key={rec.id}
+                              rec={rec}
+                              onClick={() => openRecommendation(rec)}
+                              haConflict={getHAConflictStatus(rec.vmid, rec.target_node, rec.connection_id, haDataMap) === 'conflict'}
+                            />
+                          ))}
+                        </Stack>
+                      </Box>
+                    ))}
                   </Stack>
                   {pendingRecs.length > 8 && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
@@ -2550,6 +2552,63 @@ return next
                 </Box>
               </Box>
             </Paper>
+
+            {/* Cluster memory balance — all nodes, highlighting source/target */}
+            {(() => {
+              const clusterMetrics = (metricsData as any)?.[selectedRec.connection_id]
+              if (!clusterMetrics?.nodes || clusterMetrics.nodes.length < 2) return null
+              const nodes = (clusterMetrics.nodes as NodeMetrics[]).slice().sort((a, b) => b.memory_usage - a.memory_usage)
+              const avgMem = nodes.reduce((s, n) => s + n.memory_usage, 0) / nodes.length
+
+              const chartNodes = nodes.map(n => ({
+                name: n.node.length > 10 ? n.node.slice(0, 10) + '…' : n.node,
+                fullName: n.node,
+                RAM: Math.round(n.memory_usage * 10) / 10,
+                isSource: n.node === selectedRec.source_node,
+                isTarget: n.node === selectedRec.target_node,
+              }))
+
+              return (
+                <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }} variant="outlined">
+                  <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+                    {t('drsPage.clusterBalance')}
+                  </Typography>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={chartNodes} barCategoryGap="20%">
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                      {/* Average line */}
+                      <Bar dataKey="RAM" radius={[4, 4, 0, 0]} animationDuration={600}>
+                        {chartNodes.map((entry, i) => (
+                          <Cell
+                            key={i}
+                            fill={entry.isSource ? theme.palette.error.main : entry.isTarget ? theme.palette.success.main : theme.palette.primary.main}
+                            fillOpacity={entry.isSource || entry.isTarget ? 0.9 : 0.3}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: 1, bgcolor: theme.palette.error.main }} />
+                      <Typography variant="caption" sx={{ fontSize: 10 }}>{t('drsPage.source')}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: 1, bgcolor: theme.palette.success.main }} />
+                      <Typography variant="caption" sx={{ fontSize: 10 }}>{t('drsPage.target')}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: 1, bgcolor: theme.palette.primary.main, opacity: 0.3 }} />
+                      <Typography variant="caption" sx={{ fontSize: 10 }}>{t('drsPage.otherNodes')}</Typography>
+                    </Box>
+                    <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.5 }}>
+                      Avg: {avgMem.toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Paper>
+              )
+            })()}
 
             {/* Details */}
             <Stack spacing={1.5}>

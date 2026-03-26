@@ -189,11 +189,16 @@ export default function ClusterTabs(props: any) {
     return computeDrsHealthScore(clusterMetrics.summary, clusterMetrics.nodes)
   }, [isEnterprise, drsStatus, drsSettings, metricsData, selection])
 
+  const maxPendingRecs = drsSettings?.max_pending_recommendations || 10
+
   const clusterRecs = useMemo(() => {
     if (!drsRecommendations || !Array.isArray(drsRecommendations)) return []
     const connId = selection?.type === 'cluster' ? selection.id : ''
-    return drsRecommendations.filter((r: any) => r.connection_id === connId && r.status === 'pending' && !executedRecIds.has(r.id))
-  }, [drsRecommendations, selection, executedRecIds])
+    return drsRecommendations
+      .filter((r: any) => r.connection_id === connId && r.status === 'pending' && !executedRecIds.has(r.id))
+      .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
+      .slice(0, maxPendingRecs)
+  }, [drsRecommendations, selection, executedRecIds, maxPendingRecs])
 
   const handleEvaluate = useCallback(async () => {
     setEvaluating(true)

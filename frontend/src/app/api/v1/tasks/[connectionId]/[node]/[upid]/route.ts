@@ -451,8 +451,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
         const migrationActuallyCompleted = logText.includes('migration status: completed') || logText.includes('migration completed')
         if (migrationActuallyCompleted) {
           message = 'Migration completed (with cleanup warnings)'
-          // Auto-unlock the source VM since Proxmox didn't clean up properly
-          // This runs on every poll but the unlock is idempotent
+          // Auto-unlock the source VM via SSH since Proxmox didn't clean up properly
           const taskType = status?.type || ''
           const vmid = status?.id || ''
           if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
@@ -460,15 +459,19 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
               // Check if VM still has a lock before attempting unlock
               const vmConfig = await pveFetch<any>(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`)
               if (vmConfig?.lock) {
-                await pveFetch(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`, {
-                  method: 'PUT',
-                  body: new URLSearchParams({ delete: 'lock' }).toString(),
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                })
-                console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} after successful cross-cluster migration (was locked: ${vmConfig.lock})`)
+                // Use SSH to unlock (same as the unlock route — API PUT doesn't work on locked VMs)
+                const { executeSSH } = await import('@/lib/ssh/exec')
+                const { getNodeIp } = await import('@/lib/ssh/node-ip')
+                const nodeIp = await getNodeIp(connection, node)
+                const result = await executeSSH(connectionId, nodeIp, `qm unlock ${vmid}`)
+                if (result.success) {
+                  console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} via SSH after successful cross-cluster migration (was locked: ${vmConfig.lock})`)
+                } else {
+                  console.warn(`[task-api] SSH unlock failed for VM ${vmid}:`, result.error)
+                }
               }
             } catch (unlockErr: any) {
-              // VM might not exist on source anymore (deleted after migration) — that's fine
+              // VM might not exist on source anymore, or SSH not configured — non-blocking
               console.warn(`[task-api] Could not auto-unlock VM ${vmid}:`, unlockErr?.message)
             }
           }

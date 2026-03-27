@@ -7,7 +7,7 @@ import { getDateLocale } from '@/lib/i18n/date'
 
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, Legend as RechartsLegend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -410,7 +410,8 @@ const ClusterCard = ({
   expanded,
   onToggle,
   excludedNodeNames = [],
-  isClusterExcluded = false
+  isClusterExcluded = false,
+  drsMode = 'manual'
 }: {
   clusterId: string
   clusterName: string
@@ -420,6 +421,7 @@ const ClusterCard = ({
   onToggle: () => void
   excludedNodeNames?: string[]
   isClusterExcluded?: boolean
+  drsMode?: string
 }) => {
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
@@ -506,6 +508,12 @@ return 'neutral'
                   sx={{ height: 20, fontSize: '0.65rem' }}
                 />
               )}
+              <Chip
+                size="small"
+                label={drsMode.toUpperCase()}
+                color={drsMode === 'automatic' ? 'success' : drsMode === 'partial' ? 'warning' : 'info'}
+                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+              />
               {isClusterExcluded && (
                 <Chip
                   icon={<i className="ri-filter-off-line" style={{ fontSize: 14 }} />}
@@ -2013,251 +2021,200 @@ return next
     }
   }, [clusters, pendingRecs, migrations])
 
-  // Chart data for resource distribution
-  const chartData = useMemo(() => {
-    if (clusters.length === 1 && clusters[0].metrics.nodes?.length > 1) {
-      // Single cluster: show bars per node
-      return (clusters[0].metrics.nodes || []).map((n: NodeMetrics) => ({
-        name: n.node.length > 10 ? n.node.slice(0, 10) + '…' : n.node,
-        CPU: Math.round(n.cpu_usage * 10) / 10,
+  const lineColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6']
+
+  // Bar chart data: per-node RAM from live metrics, grouped by cluster
+  const nodeBarData = useMemo(() => {
+    return clusters.flatMap((c, ci) =>
+      (c.metrics?.nodes || []).map((n: NodeMetrics) => ({
+        name: n.node,
         RAM: Math.round(n.memory_usage * 10) / 10,
+        CPU: Math.round(n.cpu_usage * 10) / 10,
+        clusterName: c.name,
+        clusterIdx: ci,
       }))
-    }
-    return clusters.map(c => ({
-      name: (connectionNames[c.id] || c.name || c.id).slice(0, 12),
-      CPU: Math.round((c.metrics.summary?.avg_cpu_usage ?? 0) * 10) / 10,
-      RAM: Math.round((c.metrics.summary?.avg_memory_usage ?? 0) * 10) / 10,
-    }))
-  }, [clusters, connectionNames])
+    )
+  }, [clusters])
 
   return (
     <EnterpriseGuard requiredFeature={Features.DRS} featureName={`${t('drs.title')} (${t('drs.subtitle')})`}>
       <Box sx={{ p: 3 }}>
-        {/* Header Actions */}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 3 }}>
-          <IconButton onClick={handleRefresh} size="small">
-            <RefreshIcon />
-          </IconButton>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={actionLoading === 'evaluate' ? <CircularProgress size={16} /> : <SpeedIcon />}
-          onClick={handleTriggerEvaluation}
-          disabled={!!actionLoading}
-        >
-          {t('drsPage.evaluate')}
-        </Button>
-      </Box>
-
-      {/* KPI Dashboard */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 2fr 1fr' }, gap: 2, mb: 3 }}>
-        {/* Column 1 — Health Overview */}
-        {(() => {
-          const scoreColor = globalStats.healthScore >= 85 ? theme.palette.success.main
-            : globalStats.healthScore >= 60 ? theme.palette.warning.main
-            : theme.palette.error.main
-          return (
-            <Paper sx={{
-              p: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 1,
-              borderRadius: 2,
-              height: '100%',
-              boxSizing: 'border-box',
-              position: 'relative',
-              overflow: 'hidden',
-              background: `linear-gradient(135deg, ${alpha(scoreColor, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 50%, ${alpha(scoreColor, 0.03)} 100%)`,
-              border: '1px solid',
-              borderColor: alpha(scoreColor, 0.3),
-              transition: 'all 0.3s ease',
-              '&:hover': { borderColor: alpha(scoreColor, 0.5), boxShadow: `0 8px 32px ${alpha(scoreColor, 0.15)}` },
-            }}>
-              <Box sx={{ position: 'absolute', top: -40, right: -40, width: 150, height: 150, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(scoreColor, 0.1)} 0%, transparent 70%)` }} />
-              <Tooltip title={globalStats.breakdown ? (
-                <Box sx={{ fontSize: '0.75rem' }}>
-                  <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.scoreCalculation')}</Typography>
-                  <Box>RAM {Math.round(globalStats.breakdown.avgMem)}% → {globalStats.breakdown.memPenalty === 0 ? 'OK' : globalStats.breakdown.memPenalty} pts</Box>
-                  <Box>CPU {Math.round(globalStats.breakdown.avgCpu)}% → {globalStats.breakdown.cpuPenalty === 0 ? 'OK' : globalStats.breakdown.cpuPenalty} pts</Box>
-                  <Box>{t('drsPage.imbalanceLabel')} {globalStats.breakdown.imbalance.toFixed(1)}% → {globalStats.breakdown.imbalancePenalty === 0 ? 'OK' : globalStats.breakdown.imbalancePenalty} pts</Box>
-                  <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.2)' }} />
-                  <Box sx={{ fontWeight: 600 }}>{t('drsPage.scoreFormula')}</Box>
-                </Box>
-              ) : ''} arrow placement="right">
-                <Box sx={{ position: 'relative', display: 'inline-flex', cursor: 'help' }}>
-                  <CircularProgress variant="determinate" value={100} size={120} thickness={3} sx={{ color: alpha(scoreColor, 0.15) }} />
-                  <CircularProgress variant="determinate" value={pct(globalStats.healthScore)} size={120} thickness={3} sx={{ color: scoreColor, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(scoreColor, 0.4)})` }} />
-                  <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                    <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1, color: scoreColor }}>
-                      {globalStats.healthScore}
+      {/* DRS Health Banner */}
+      <Card variant="outlined" sx={{ mb: 2 }}>
+        <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
+          {/* Top: Title + badges + stats */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+                <Typography variant="h6" fontWeight={600} noWrap>DRS Health</Typography>
+                {globalStats.recommendations > 0 && (
+                  <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(theme.palette.warning.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
+                    <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: theme.palette.warning.main }} />
+                    <Typography variant="caption" fontWeight={600} sx={{ color: 'warning.main', fontSize: 11 }}>
+                      {globalStats.recommendations} rec.
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">/ 100</Typography>
-                  </Box>
-                </Box>
-              </Tooltip>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 0.5 }}>
-                {t('drsPage.healthScore')}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()} • {globalStats.nodes} {t('drsPage.nodesLabel')}
-              </Typography>
-              {haWarnings.length > 0 && (
-                <Tooltip
-                  arrow
-                  placement="right"
-                  title={
-                    <Box sx={{ fontSize: '0.75rem' }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>
-                        {t('drsPage.haConflictTitle')}
-                      </Typography>
-                      {haWarnings.map(w => (
-                        <Box key={w.clusterId}>
-                          <strong>{w.clusterName}</strong> (PVE {w.majorVersion}){' — '}
-                          {w.rules > 0 && t('drsPage.haConflictRules', { rules: w.rules })}
-                          {w.rules > 0 && w.restrictedGroups > 0 && ', '}
-                          {w.restrictedGroups > 0 && t('drsPage.haConflictGroups', { groups: w.restrictedGroups })}
-                        </Box>
-                      ))}
-                      <Box sx={{ mt: 0.5, opacity: 0.85 }}>{t('drsPage.haConflictHint')}</Box>
-                      <Box sx={{ mt: 0.5, fontWeight: 500 }}>{t('drsPage.haConflictRecommendation')}</Box>
-                    </Box>
-                  }
-                >
-                  <i className="ri-error-warning-line" style={{ position: 'absolute', top: 8, right: 8, fontSize: 20, color: theme.palette.warning.main, cursor: 'help' }} />
-                </Tooltip>
-              )}
-            </Paper>
-          )
-        })()}
-
-        {/* Column 2 — Resource Distribution Chart */}
-        <Paper sx={{ p: 2, borderRadius: 2 }} variant="outlined">
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-            {t('drsPage.resourceDistribution')}
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.8 }}>CPU</Typography>
-              <Typography variant="caption" sx={{ opacity: 0.4 }}>|</Typography>
-              <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.8 }}>RAM</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 40, height: 6, borderRadius: 1, background: 'linear-gradient(90deg, #4caf50, #ff9800, #f44336)' }} />
-              <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem' }}>0→100%</Typography>
-            </Box>
-          </Box>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={chartData} barCategoryGap="20%">
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke={theme.palette.text.secondary} unit="%" axisLine={false} tickLine={false} />
-                <RechartsTooltip
-                  contentStyle={{
-                    backgroundColor: theme.palette.background.paper,
-                    border: `1px solid ${theme.palette.divider}`,
-                    borderRadius: 8,
-                    fontSize: 12,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  }}
-                  itemStyle={{ color: theme.palette.text.primary }}
-                  labelStyle={{ color: theme.palette.text.secondary }}
-                  cursor={false}
-                  formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
-                />
-                <Bar dataKey="CPU" radius={[5, 5, 0, 0]} name="CPU" animationDuration={800}>
-                  {chartData.map((entry, i) => (
-                    <Cell key={i} fill={usageColor(entry.CPU)} />
-                  ))}
-                </Bar>
-                <Bar dataKey="RAM" radius={[5, 5, 0, 0]} name="RAM" animationDuration={800}>
-                  {chartData.map((entry, i) => (
-                    <Cell key={i} fill={usageColor(entry.RAM)} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <Box sx={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.noClusterConnected')}</Typography>
-            </Box>
-          )}
-          <Typography variant="caption" sx={{ opacity: 0.6, mt: 0.5, display: 'block', textAlign: 'center' }}>
-            {globalStats.vms} VMs {t('drsPage.activeVms').toLowerCase()}
-          </Typography>
-        </Paper>
-
-        {/* Column 3 — Activity Panel */}
-        <Paper sx={{ p: 2, borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }} variant="outlined">
-          {/* Recommendations */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {globalStats.recommendations > 0
-                ? <WarningAmberIcon style={{ fontSize: 18, color: theme.palette.warning.main }} />
-                : <CheckCircleIcon style={{ fontSize: 18, color: theme.palette.success.main }} />}
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.recommendations')}</Typography>
-            </Box>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>{globalStats.recommendations}</Typography>
-          </Box>
-
-          {/* Active migrations */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{
-                width: 8, height: 8, borderRadius: '50%',
-                bgcolor: globalStats.migrations > 0 ? 'info.main' : 'text.disabled',
-                ...(globalStats.migrations > 0 && {
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                  '@keyframes pulse': {
-                    '0%, 100%': { opacity: 1 },
-                    '50%': { opacity: 0.4 },
-                  },
-                }),
-              }} />
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.migrationsLabel')}</Typography>
-            </Box>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>{globalStats.migrations}</Typography>
-          </Box>
-
-          <Divider />
-
-          {/* DRS Mode */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('drsPage.modeLabel')}</Typography>
-            <Chip
-              size="small"
-              label={(status?.mode || 'manual').toUpperCase()}
-              color={status?.mode === 'automatic' ? 'success' : status?.mode === 'partial' ? 'warning' : 'info'}
-            />
-          </Box>
-
-          {/* Recent Migrations */}
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>{t('drsPage.recentMigrations')}</Typography>
-            {recentMigrations.length === 0 ? (
-              <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.noRecentMigrations')}</Typography>
-            ) : (
-              <Stack spacing={0.5}>
-                {recentMigrations.map(m => (
-                  <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <i
-                      className={m.status === 'completed' ? 'ri-checkbox-circle-fill' : 'ri-close-circle-fill'}
-                      style={{ fontSize: 14, color: m.status === 'completed' ? theme.palette.success.main : theme.palette.error.main, flexShrink: 0 }}
-                    />
-                    <Typography variant="caption" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {m.vm_name || `VM ${m.vmid}`}
+                  </Stack>
+                )}
+                {globalStats.migrations > 0 && (
+                  <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(theme.palette.info.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
+                    <i className="ri-swap-box-line" style={{ fontSize: 13, color: theme.palette.info.main }} />
+                    <Typography variant="caption" fontWeight={600} sx={{ color: 'info.main', fontSize: 11 }}>
+                      {globalStats.migrations} mig.
                     </Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.5, flexShrink: 0, fontSize: '0.65rem' }}>
-                      {m.source_node.split('.')[0]} → {m.target_node.split('.')[0]}
-                    </Typography>
-                  </Box>
-                ))}
+                  </Stack>
+                )}
               </Stack>
-            )}
+              <Stack direction="row" flexWrap="wrap" gap={1.5} sx={{ mt: 0.5 }}>
+                <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                  <i className="ri-server-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                  {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()}
+                </Typography>
+                <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                  <i className="ri-computer-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                  {globalStats.nodes} {t('drsPage.nodesLabel')}
+                </Typography>
+                <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                  <i className="ri-play-fill" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle', color: theme.palette.success.main }} />
+                  {globalStats.vms} VMs
+                </Typography>
+              </Stack>
+            </Box>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Stack spacing={0.75} sx={{ width: 160 }}>
+                {clusters.slice(0, 4).map((c, i) => {
+                  const avgRam = c.metrics?.summary?.avg_memory_usage ?? 0
+                  return (
+                    <Tooltip key={c.id} title={`${c.name} — RAM avg: ${avgRam.toFixed(1)}%`} arrow placement="left">
+                      <Stack direction="row" alignItems="center" spacing={0.75}>
+                        <Typography variant="caption" sx={{ minWidth: 70, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</Typography>
+                        <Box sx={{ flex: 1, height: 6, borderRadius: 0, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                          <Box sx={{ width: `${Math.min(100, avgRam)}%`, height: '100%', bgcolor: lineColors[i % lineColors.length], borderRadius: 0 }} />
+                        </Box>
+                        <Typography variant="caption" fontWeight={600} sx={{ minWidth: 28, textAlign: 'right', fontSize: 10 }}>{avgRam.toFixed(0)}%</Typography>
+                      </Stack>
+                    </Tooltip>
+                  )
+                })}
+              </Stack>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={actionLoading === 'evaluate' ? <CircularProgress size={16} /> : <SpeedIcon />}
+                onClick={handleTriggerEvaluation}
+                disabled={!!actionLoading}
+              >
+                {t('drsPage.evaluate')}
+              </Button>
+            </Stack>
           </Box>
-        </Paper>
-      </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Bottom: Score donut + Bar chart side by side */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'auto 1fr' }, gap: 3, alignItems: 'center' }}>
+            {/* Score Ring */}
+            {(() => {
+              const scoreColor = globalStats.healthScore >= 85 ? theme.palette.success.main
+                : globalStats.healthScore >= 60 ? theme.palette.warning.main
+                : theme.palette.error.main
+              const circumference = 2 * Math.PI * 14
+              const dashLen = (globalStats.healthScore / 100) * circumference
+              return (
+                <Tooltip title={globalStats.breakdown ? (
+                  <Box sx={{ fontSize: '0.75rem' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.scoreCalculation')}</Typography>
+                    <Box>RAM {Math.round(globalStats.breakdown.avgMem)}% → {globalStats.breakdown.memPenalty === 0 ? 'OK' : globalStats.breakdown.memPenalty} pts</Box>
+                    <Box>CPU {Math.round(globalStats.breakdown.avgCpu)}% → {globalStats.breakdown.cpuPenalty === 0 ? 'OK' : globalStats.breakdown.cpuPenalty} pts</Box>
+                    <Box>{t('drsPage.imbalanceLabel')} {globalStats.breakdown.imbalance.toFixed(1)}% → {globalStats.breakdown.imbalancePenalty === 0 ? 'OK' : globalStats.breakdown.imbalancePenalty} pts</Box>
+                    <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.2)' }} />
+                    <Box sx={{ fontWeight: 600 }}>{t('drsPage.scoreFormula')}</Box>
+                  </Box>
+                ) : ''} arrow placement="right">
+                  <Stack alignItems="center" spacing={0.5} sx={{ cursor: 'help' }}>
+                    <Box sx={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+                      <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                        <circle cx="18" cy="18" r="14" fill="none" stroke={theme.palette.divider} strokeWidth="2.5" opacity={0.3} />
+                        <circle cx="18" cy="18" r="14" fill="none" stroke={scoreColor} strokeWidth="2.5"
+                          strokeDasharray={`${dashLen} ${circumference}`} strokeLinecap="round"
+                          style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+                      </svg>
+                      <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: 20, color: scoreColor }}>{globalStats.healthScore}</Typography>
+                      </Box>
+                    </Box>
+                    <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.5 }}>Score</Typography>
+                  </Stack>
+                </Tooltip>
+              )
+            })()}
+
+            {/* Bar chart */}
+            <Box>
+              <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.7, mb: 1, display: 'block' }}>
+                RAM / node
+              </Typography>
+              {nodeBarData.length > 0 ? (
+                <>
+                  <Box sx={{ height: 180 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={nodeBarData} barCategoryGap="20%">
+                        <defs>
+                          {lineColors.map((color, i) => (
+                            <linearGradient key={i} id={`drsBarGrad_${i}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={color} stopOpacity={1} />
+                              <stop offset="100%" stopColor={color} stopOpacity={0.3} />
+                            </linearGradient>
+                          ))}
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} opacity={0.3} vertical={false} />
+                        <XAxis dataKey="name" hide />
+                        <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={{ stroke: theme.palette.divider }} tickLine={false} width={35} />
+                        <RechartsTooltip
+                          cursor={false}
+                          wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                          content={({ active, payload }) => {
+                            if (!active || !payload?.[0]) return null
+                            const d = payload[0].payload
+                            return (
+                              <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, px: 1.5, py: 1, fontSize: 11, color: 'text.primary' }}>
+                                <Typography sx={{ fontSize: 10, fontWeight: 600, opacity: 0.5, mb: 0.5 }}>RAM</Typography>
+                                <Stack direction="row" alignItems="center" spacing={0.5}>
+                                  <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                                  <span>{d.name}</span>
+                                  <span style={{ fontWeight: 600, paddingLeft: 12 }}>{d.RAM.toFixed(1)}%</span>
+                                </Stack>
+                              </Box>
+                            )
+                          }}
+                        />
+                        <Bar dataKey="RAM" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                          {nodeBarData.map((entry, idx) => (
+                            <Cell key={idx} fill={`url(#drsBarGrad_${entry.clusterIdx % lineColors.length})`} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </Box>
+                  {clusters.length > 1 && (
+                    <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" sx={{ mt: 1 }}>
+                      {clusters.map((c, i) => (
+                        <Stack key={c.id} direction="row" alignItems="center" spacing={0.5}>
+                          <Box sx={{ width: 10, height: 10, bgcolor: lineColors[i % lineColors.length], borderRadius: 0.5 }} />
+                          <Typography variant="caption" sx={{ fontSize: 10 }}>{c.name}</Typography>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  )}
+                </>
+              ) : (
+                <Box sx={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.noClusterConnected')}</Typography>
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
 
@@ -2310,6 +2267,7 @@ return next
                 onToggle={() => toggleCluster(cluster.id)}
                 excludedNodeNames={drsSettings?.excluded_nodes?.[cluster.id] || []}
                 isClusterExcluded={drsSettings?.excluded_clusters?.includes(cluster.id) || false}
+                drsMode={drsSettings?.cluster_modes?.[cluster.id] || status?.mode || 'manual'}
               />
             ))
           )}

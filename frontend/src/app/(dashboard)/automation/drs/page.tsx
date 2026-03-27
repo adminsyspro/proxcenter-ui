@@ -2221,12 +2221,12 @@ return next
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}
-        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
-        variant="scrollable"
-        scrollButtons="auto"
+        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider', minHeight: 48, '& .MuiTab-root': { minHeight: 48 } }}
+        variant="standard"
       >
-        <Tab icon={<DnsIcon />} iconPosition="start" label={t('drsPage.clustersTab')} />
+        <Tab disableRipple icon={<DnsIcon />} iconPosition="start" label={t('drsPage.clustersTab')} />
         <Tab
+          disableRipple
           icon={<SwapHorizIcon />}
           iconPosition="start"
           label={
@@ -2241,8 +2241,8 @@ return next
             </Box>
           }
         />
-        <Tab icon={<LocalOfferIcon />} iconPosition="start" label={t('drsPage.affinity')} />
-        <Tab icon={<SettingsIcon />} iconPosition="start" label={t('drsPage.configuration')} />
+        <Tab disableRipple icon={<LocalOfferIcon />} iconPosition="start" label={t('drsPage.affinity')} />
+        <Tab disableRipple icon={<SettingsIcon />} iconPosition="start" label={t('drsPage.configuration')} />
       </Tabs>
 
       {/* Tab: Clusters */}

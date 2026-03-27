@@ -5,7 +5,9 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import { Transform } from "node:stream"
+import { Transform, Readable } from "node:stream"
+import { pipeline } from "node:stream/promises"
+import Busboy from "busboy"
 import FormData from "form-data"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -39,34 +41,80 @@ export async function POST(
       return NextResponse.json({ error: "No request body" }, { status: 400 })
     }
 
-    // Parse the incoming multipart form
-    const formData = await req.formData()
-    const contentField = formData.get("content") as string | null
-    const fileField = formData.get("filename") as File | null
+    // Parse incoming multipart with busboy, streaming file directly to disk
+    const contentType = req.headers.get("content-type") || ""
+    const parsed = await new Promise<{ content: string; tmpFile: string; fileName: string; fileSize: number; mimeType: string }>((resolve, reject) => {
+      const bb = Busboy({ headers: { "content-type": contentType } })
+      let content = ""
+      let fileName = ""
+      let mimeType = ""
+      let fileSize = 0
+      let fileDone = false
+      let fieldDone = false
+      const tmpDir = os.tmpdir()
+      const safeName = `proxcenter-upload-${randomUUID()}`
+      const tmpPath = path.join(tmpDir, safeName)
+      let writeStream: fs.WriteStream | null = null
 
-    if (!contentField || !fileField) {
-      return NextResponse.json(
-        { error: "Missing 'content' or 'filename' field" },
-        { status: 400 }
-      )
+      const tryResolve = () => {
+        if (fileDone && fieldDone && content && fileName) {
+          resolve({ content, tmpFile: tmpPath, fileName, fileSize, mimeType })
+        }
+      }
+
+      bb.on("field", (name, val) => {
+        if (name === "content") content = val
+        fieldDone = true
+        tryResolve()
+      })
+
+      bb.on("file", (name, stream, info) => {
+        if (name === "filename") {
+          fileName = info.filename
+          mimeType = info.mimeType || "application/octet-stream"
+          writeStream = fs.createWriteStream(tmpPath, { mode: 0o600 })
+          stream.on("data", (chunk: Buffer) => {
+            fileSize += chunk.length
+          })
+          stream.pipe(writeStream)
+          writeStream.on("finish", () => {
+            fileDone = true
+            tryResolve()
+          })
+          writeStream.on("error", reject)
+        } else {
+          stream.resume() // discard unexpected file fields
+        }
+      })
+
+      bb.on("error", reject)
+      bb.on("finish", () => {
+        // If no file was received
+        if (!fileName) reject(new Error("Missing 'filename' file field"))
+        // fieldDone might not be set if content comes after file
+        fieldDone = true
+        tryResolve()
+      })
+
+      // Pipe the request body into busboy
+      Readable.fromWeb(req.body as any).pipe(bb)
+    })
+
+    tmpFile = parsed.tmpFile
+
+    console.log(`[upload] Saved "${parsed.fileName.replace(/[\r\n]/g, '')}" (${parsed.fileSize} bytes) to disk via streaming, uploadId=${uploadId}`)
+
+    if (!parsed.content) {
+      return NextResponse.json({ error: "Missing 'content' field" }, { status: 400 })
     }
 
-    // Save file to temp dir
-    const tmpDir = os.tmpdir()
-    const safeName = fileField.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    tmpFile = path.join(tmpDir, `proxcenter-upload-${randomUUID()}-${safeName}`)
-    const arrayBuf = await fileField.arrayBuffer()
-    fs.writeFileSync(tmpFile, Buffer.from(arrayBuf), { mode: 0o600 })
-
-    console.log(`[upload] Saved "${String(fileField.name).replace(/[\r\n]/g, '')}" (${fileField.size} bytes), uploadId=${uploadId}`)
-
-    // Build a clean multipart form streaming from disk
+    // Build a clean multipart form streaming from disk to Proxmox
     const form = new FormData()
-    form.append("content", contentField)
+    form.append("content", parsed.content)
     form.append("filename", fs.createReadStream(tmpFile), {
-      filename: fileField.name,
-      contentType: fileField.type || "application/octet-stream",
-      knownLength: fileField.size,
+      filename: parsed.fileName,
+      contentType: parsed.mimeType,
+      knownLength: parsed.fileSize,
     })
 
     const formLength = await new Promise<number>((res, rej) =>

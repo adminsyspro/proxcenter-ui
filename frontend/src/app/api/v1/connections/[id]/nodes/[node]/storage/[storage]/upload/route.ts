@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server"
 import https from "node:https"
 import http from "node:http"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
 import { randomUUID } from "node:crypto"
-import { Transform, Readable } from "node:stream"
-import { pipeline } from "node:stream/promises"
-import Busboy from "busboy"
-import FormData from "form-data"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -17,132 +10,106 @@ import { setProgress, clearProgress } from "@/lib/upload-progress"
 export const runtime = "nodejs"
 export const maxDuration = 600
 
+// Active streaming sessions: uploadId -> open connection to Proxmox
+const streamingSessions = new Map<string, {
+  proxyReq: http.ClientRequest
+  boundary: string
+  bytesSent: number
+  totalFormLength: number
+  resolve: (value: { statusCode: number; body: string }) => void
+  reject: (reason: any) => void
+  resultPromise: Promise<{ statusCode: number; body: string }>
+}>()
+
+// Build multipart form parts (without file data)
+function buildMultipartParts(boundary: string, contentType: string, fileName: string, mimeType: string) {
+  const contentField =
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="content"\r\n\r\n` +
+    `${contentType}\r\n`
+
+  const fileHeader =
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="filename"; filename="${fileName}"\r\n` +
+    `Content-Type: ${mimeType}\r\n\r\n`
+
+  const closing = `\r\n--${boundary}--\r\n`
+
+  return { contentField, fileHeader, closing }
+}
+
 // POST /api/v1/connections/{id}/nodes/{node}/storage/{storage}/upload
+// Modes (via headers):
+//   X-Chunk-Index: stream a chunk directly to Proxmox
+//   X-Finalize: close the multipart form and get the Proxmox response
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string; storage: string }> }
 ) {
-  let tmpFile: string | null = null
   const uploadId = req.headers.get("x-upload-id") || randomUUID()
+  const isChunk = req.headers.has("x-chunk-index")
+  const isFinalize = req.headers.has("x-finalize")
 
+  if (isChunk) return handleChunk(req, ctx, uploadId)
+  if (isFinalize) return handleFinalize(req, ctx, uploadId)
+  return NextResponse.json({ error: "Missing X-Chunk-Index or X-Finalize header" }, { status: 400 })
+}
+
+// ── Chunk handler: open connection on first chunk, stream data directly ──
+async function handleChunk(
+  req: Request,
+  ctx: { params: Promise<{ id: string; node: string; storage: string }> },
+  uploadId: string
+) {
   try {
     const { id, node, storage } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
 
-    const conn = await getConnectionById(id)
-    const baseUrl = conn.baseUrl.replace(/\/+$/, "")
-    const targetUrl = new URL(
-      `${baseUrl}/api2/json/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
-    )
+    const chunkIndex = parseInt(req.headers.get("x-chunk-index") || "0", 10)
+    const totalSize = parseInt(req.headers.get("x-total-size") || "0", 10)
+    const fileName = req.headers.get("x-file-name") || "upload"
+    const contentType = req.headers.get("x-content-type") || "iso"
+    const mimeType = req.headers.get("x-mime-type") || "application/octet-stream"
 
     if (!req.body) {
-      return NextResponse.json({ error: "No request body" }, { status: 400 })
+      return NextResponse.json({ error: "Missing body" }, { status: 400 })
     }
 
-    // Parse incoming multipart with busboy, streaming file directly to disk
-    const contentType = req.headers.get("content-type") || ""
-    const parsed = await new Promise<{ content: string; tmpFile: string; fileName: string; fileSize: number; mimeType: string }>((resolve, reject) => {
-      const bb = Busboy({ headers: { "content-type": contentType } })
-      let content = ""
-      let fileName = ""
-      let mimeType = ""
-      let fileSize = 0
-      let fileDone = false
-      let fieldDone = false
-      const tmpDir = os.tmpdir()
-      const safeName = `proxcenter-upload-${randomUUID()}`
-      const tmpPath = path.join(tmpDir, safeName)
-      let writeStream: fs.WriteStream | null = null
+    let session = streamingSessions.get(uploadId)
 
-      const tryResolve = () => {
-        if (fileDone && fieldDone && content && fileName) {
-          resolve({ content, tmpFile: tmpPath, fileName, fileSize, mimeType })
-        }
-      }
+    // First chunk: open connection to Proxmox
+    if (!session) {
+      const conn = await getConnectionById(id)
+      const baseUrl = conn.baseUrl.replace(/\/+$/, "")
+      const targetUrl = new URL(
+        `${baseUrl}/api2/json/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
+      )
 
-      bb.on("field", (name, val) => {
-        if (name === "content") content = val
-        fieldDone = true
-        tryResolve()
+      const boundary = `----ProxCenterUpload${randomUUID().replace(/-/g, "")}`
+      const parts = buildMultipartParts(boundary, contentType, fileName, mimeType)
+
+      // Calculate total Content-Length: preamble + file data + closing
+      const preambleLength = Buffer.byteLength(parts.contentField + parts.fileHeader, "utf-8")
+      const closingLength = Buffer.byteLength(parts.closing, "utf-8")
+      const totalFormLength = preambleLength + totalSize + closingLength
+
+      const isHttps = targetUrl.protocol === "https:"
+      const transport = isHttps ? https : http
+      const agent = isHttps && conn.insecureDev
+        ? new https.Agent({ rejectUnauthorized: false })
+        : undefined
+
+      setProgress(uploadId, { bytesSent: 0, totalBytes: totalSize, status: "transferring" })
+
+      let resolveResult: any
+      let rejectResult: any
+      const resultPromise = new Promise<{ statusCode: number; body: string }>((res, rej) => {
+        resolveResult = res
+        rejectResult = rej
       })
 
-      bb.on("file", (name, stream, info) => {
-        if (name === "filename") {
-          fileName = info.filename
-          mimeType = info.mimeType || "application/octet-stream"
-          writeStream = fs.createWriteStream(tmpPath, { mode: 0o600 })
-          stream.on("data", (chunk: Buffer) => {
-            fileSize += chunk.length
-          })
-          stream.pipe(writeStream)
-          writeStream.on("finish", () => {
-            fileDone = true
-            tryResolve()
-          })
-          writeStream.on("error", reject)
-        } else {
-          stream.resume() // discard unexpected file fields
-        }
-      })
-
-      bb.on("error", reject)
-      bb.on("finish", () => {
-        // If no file was received
-        if (!fileName) reject(new Error("Missing 'filename' file field"))
-        // fieldDone might not be set if content comes after file
-        fieldDone = true
-        tryResolve()
-      })
-
-      // Pipe the request body into busboy
-      Readable.fromWeb(req.body as any).pipe(bb)
-    })
-
-    tmpFile = parsed.tmpFile
-
-    console.log(`[upload] Saved "${parsed.fileName.replace(/[\r\n]/g, '')}" (${parsed.fileSize} bytes) to disk via streaming, uploadId=${uploadId}`)
-
-    if (!parsed.content) {
-      return NextResponse.json({ error: "Missing 'content' field" }, { status: 400 })
-    }
-
-    // Build a clean multipart form streaming from disk to Proxmox
-    const form = new FormData()
-    form.append("content", parsed.content)
-    form.append("filename", fs.createReadStream(tmpFile), {
-      filename: parsed.fileName,
-      contentType: parsed.mimeType,
-      knownLength: parsed.fileSize,
-    })
-
-    const formLength = await new Promise<number>((res, rej) =>
-      form.getLength((err, len) => (err ? rej(err) : res(len)))
-    )
-
-    // Init progress tracking
-    setProgress(uploadId, { bytesSent: 0, totalBytes: formLength, status: "transferring" })
-
-    // Transform stream to count bytes sent
-    let bytesSent = 0
-    const progressTracker = new Transform({
-      transform(chunk, _encoding, callback) {
-        bytesSent += chunk.length
-        setProgress(uploadId, { bytesSent, totalBytes: formLength, status: "transferring" })
-        callback(null, chunk)
-      },
-    })
-
-    const isHttps = targetUrl.protocol === "https:"
-    const transport = isHttps ? https : http
-    // Intentionally allow self-signed certs for Proxmox VE connections (common in private clusters)
-    // codeql[js/disabling-certificate-validation]
-    const agent = isHttps && conn.insecureDev
-      ? new https.Agent({ rejectUnauthorized: false })
-      : undefined
-
-    const result = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
       const proxyReq = transport.request(
         {
           hostname: targetUrl.hostname,
@@ -152,8 +119,8 @@ export async function POST(
           agent,
           headers: {
             "Authorization": `PVEAPIToken=${conn.apiToken}`,
-            ...form.getHeaders(),
-            "Content-Length": formLength,
+            "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            "Content-Length": totalFormLength,
           },
           timeout: 600_000,
         },
@@ -161,18 +128,91 @@ export async function POST(
           const chunks: Buffer[] = []
           res.on("data", (chunk) => chunks.push(chunk))
           res.on("end", () => {
-            resolve({
+            resolveResult({
               statusCode: res.statusCode || 500,
               body: Buffer.concat(chunks).toString("utf-8"),
             })
           })
-          res.on("error", reject)
+          res.on("error", rejectResult)
         }
       )
 
-      proxyReq.on("error", reject)
-      form.pipe(progressTracker).pipe(proxyReq)
+      proxyReq.on("error", rejectResult)
+
+      // Write the multipart preamble (content field + file headers)
+      proxyReq.write(parts.contentField + parts.fileHeader)
+
+      session = {
+        proxyReq,
+        boundary,
+        bytesSent: 0,
+        totalFormLength,
+        resolve: resolveResult,
+        reject: rejectResult,
+        resultPromise,
+      }
+      streamingSessions.set(uploadId, session)
+
+      console.log(`[upload] Streaming "${fileName.replace(/[\r\n]/g, '')}" (${totalSize} bytes) directly to Proxmox, uploadId=${uploadId}`)
+    }
+
+    // Stream chunk data directly to the open Proxmox connection
+    const reader = req.body.getReader()
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        await new Promise<void>((resolve, reject) => {
+          session!.proxyReq.write(value, (err: any) => (err ? reject(err) : resolve()))
+        })
+        session.bytesSent += value.byteLength
+        setProgress(uploadId, { bytesSent: session.bytesSent, totalBytes: totalSize || session.totalFormLength, status: "transferring" })
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      chunkIndex,
+      bytesSent: session.bytesSent,
     })
+  } catch (e: any) {
+    console.error("Error streaming chunk:", e)
+    // Clean up on error
+    const session = streamingSessions.get(uploadId)
+    if (session) {
+      session.proxyReq.destroy()
+      streamingSessions.delete(uploadId)
+    }
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}
+
+// ── Finalize handler: close multipart boundary, wait for Proxmox response ──
+async function handleFinalize(
+  req: Request,
+  ctx: { params: Promise<{ id: string; node: string; storage: string }> },
+  uploadId: string
+) {
+  try {
+    const { id, node, storage } = await ctx.params
+
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+    if (denied) return denied
+
+    const session = streamingSessions.get(uploadId)
+    if (!session) {
+      return NextResponse.json({ error: "No streaming session found. Send chunks first." }, { status: 400 })
+    }
+
+    // Write closing boundary
+    const closing = `\r\n--${session.boundary}--\r\n`
+    await new Promise<void>((resolve, reject) => {
+      session.proxyReq.write(closing, (err: any) => (err ? reject(err) : resolve()))
+    })
+    session.proxyReq.end()
+
+    // Wait for Proxmox response
+    const result = await session.resultPromise
 
     console.log(`[upload] Proxmox responded ${result.statusCode}:`, result.body.substring(0, 500))
 
@@ -182,11 +222,11 @@ export async function POST(
         const json = JSON.parse(result.body)
         errMsg = json.errors ? JSON.stringify(json.errors) : json.message || errMsg
       } catch { /* use default */ }
-      setProgress(uploadId, { bytesSent, totalBytes: formLength, status: "error", error: errMsg })
+      setProgress(uploadId, { bytesSent: session.bytesSent, totalBytes: session.totalFormLength, status: "error", error: errMsg })
       return NextResponse.json({ error: errMsg, uploadId }, { status: result.statusCode })
     }
 
-    setProgress(uploadId, { bytesSent: formLength, totalBytes: formLength, status: "done" })
+    setProgress(uploadId, { bytesSent: session.bytesSent, totalBytes: session.bytesSent, status: "done" })
 
     let data = null
     try {
@@ -205,14 +245,11 @@ export async function POST(
 
     return NextResponse.json({ success: true, data, uploadId })
   } catch (e: any) {
-    console.error("Error uploading to storage:", e)
+    console.error("Error finalizing upload:", e)
     setProgress(uploadId, { bytesSent: 0, totalBytes: 0, status: "error", error: e?.message || String(e) })
     return NextResponse.json({ error: e?.message || String(e), uploadId }, { status: 500 })
   } finally {
-    if (tmpFile) {
-      try { fs.unlinkSync(tmpFile) } catch { /* ignore */ }
-    }
-    // Clean up progress after 30s
+    streamingSessions.delete(uploadId)
     setTimeout(() => clearProgress(uploadId), 30_000)
   }
 }

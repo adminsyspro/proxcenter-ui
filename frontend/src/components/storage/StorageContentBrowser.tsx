@@ -372,65 +372,66 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
     try {
-      const formData = new FormData()
-      formData.append('content', contentType)
-      formData.append('filename', file)
+      const CHUNK_SIZE = 50 * 1024 * 1024 // 50 MB
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+      const uploadUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
 
-      const xhr = new XMLHttpRequest()
-      let pollingStarted = false
+      // Phase 1: Send file in chunks (PUT requests)
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const chunk = file.slice(start, end)
 
-      const startPolling = () => {
-        if (pollingStarted) return
-        pollingStarted = true
-        setPhase('transferring')
-        pollInterval = setInterval(async () => {
-          try {
-            const res = await fetch(`/api/v1/upload-progress/${uploadId}`)
-            if (res.ok) {
-              const data = await res.json()
-              if (data.totalBytes > 0) {
-                const pct = Math.round((data.bytesSent / data.totalBytes) * 100)
-                setTransferProgress(pct)
-                updateTask(uploadId, { progress: pct })
-              }
-            }
-          } catch { /* ignore polling errors */ }
-        }, 1500)
+        const res = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            'X-Upload-Id': uploadId,
+            'X-Chunk-Index': String(i),
+            'X-Total-Chunks': String(totalChunks),
+            'X-Total-Size': String(file.size),
+            'X-File-Name': file.name,
+            'X-Content-Type': contentType,
+            'X-Mime-Type': file.type || 'application/octet-stream',
+          },
+          body: chunk,
+        })
+
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}))
+          throw new Error(json.error || `Chunk ${i} failed: HTTP ${res.status}`)
+        }
+
+        const pct = Math.round(((i + 1) / totalChunks) * 100)
+        setProgress(pct)
+        updateTask(uploadId, { progress: Math.round(pct / 2) })
       }
 
-      await new Promise<void>((resolve, reject) => {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100)
-            setProgress(pct)
-            // During phase 1, show upload progress in taskbar (scaled 0-50%)
-            updateTask(uploadId, { progress: Math.round(pct / 2) })
-            if (pct >= 100) startPolling()
-          }
-        })
+      // Phase 2: Finalize - server sends assembled file to Proxmox
+      setPhase('transferring')
 
-        xhr.upload.addEventListener('load', () => startPolling())
-
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve()
-          } else {
-            try {
-              const json = JSON.parse(xhr.responseText)
-              reject(new Error(json.error || `HTTP ${xhr.status}`))
-            } catch {
-              reject(new Error(`HTTP ${xhr.status}`))
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/v1/upload-progress/${uploadId}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.totalBytes > 0) {
+              const pct = Math.round((data.bytesSent / data.totalBytes) * 100)
+              setTransferProgress(pct)
+              updateTask(uploadId, { progress: 50 + Math.round(pct / 2) })
             }
           }
-        })
+        } catch { /* ignore polling errors */ }
+      }, 1500)
 
-        xhr.addEventListener('error', () => reject(new Error('Upload failed')))
-        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')))
-
-        xhr.open('POST', `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`)
-        xhr.setRequestHeader('X-Upload-Id', uploadId)
-        xhr.send(formData)
+      const finalRes = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'X-Upload-Id': uploadId, 'X-Finalize': '1' },
       })
+
+      if (!finalRes.ok) {
+        const json = await finalRes.json().catch(() => ({}))
+        throw new Error(json.error || `Finalize failed: HTTP ${finalRes.status}`)
+      }
 
       updateTask(uploadId, { progress: 100, status: 'done' })
       setSuccess(true)

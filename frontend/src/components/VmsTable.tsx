@@ -532,7 +532,24 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       localStorage.setItem('proxcenter_vmtable_columns', JSON.stringify(visibleColumns))
     } catch {}
   }, [visibleColumns])
-  
+
+  // Persist column widths to localStorage
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('proxcenter_vmtable_colwidths')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return {}
+  })
+
+  const handleColumnWidthChange = useCallback((params: any) => {
+    setColumnWidths(prev => {
+      const next = { ...prev, [params.colDef.field]: params.width }
+      try { localStorage.setItem('proxcenter_vmtable_colwidths', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }, [])
+
   // État pour le menu contextuel (clic droit)
   const [contextMenu, setContextMenu] = useState<VmContextMenu>(null)
   
@@ -1592,10 +1609,10 @@ return (
 
       // Si la contrainte responsive masque la colonne
       if (responsiveHidden[col.field]) return false
-      
+
 return true
-    })
-  }, [isCompact, expanded, showNode, showTrends, showActions, showIpSnap, onVmAction, onMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns])
+    }).map(col => columnWidths[col.field] ? { ...col, width: columnWidths[col.field] } : col)
+  }, [isCompact, expanded, showNode, showTrends, showActions, showIpSnap, onVmAction, onMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths])
 
   return (
     <Box sx={{
@@ -1791,6 +1808,7 @@ return true
         }}
         autoPageSize={autoPageSize}
         autoHeight={maxHeight === 'auto'}
+        onColumnWidthChange={handleColumnWidthChange}
         disableColumnMenu
         getRowClassName={(params) => {
           const vm = params.row as VmRow

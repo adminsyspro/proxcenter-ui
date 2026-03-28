@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db/sqlite'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'

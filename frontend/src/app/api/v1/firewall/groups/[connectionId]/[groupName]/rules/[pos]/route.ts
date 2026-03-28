@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 // src/app/api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 // src/app/api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'

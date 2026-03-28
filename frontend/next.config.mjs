@@ -6,6 +6,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 const nextConfig = {
     output: 'standalone',
     basePath: process.env.BASEPATH,
+    poweredByHeader: false,
     serverExternalPackages: ['ssh2'],
     experimental: {
         serverActions: {
@@ -16,6 +17,17 @@ const nextConfig = {
     turbopack: {
         root: '.',
     },
+    headers: async () => [
+        {
+            source: '/(.*)',
+            headers: [
+                { key: 'X-Content-Type-Options', value: 'nosniff' },
+                { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+                { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+                { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+            ],
+        },
+    ],
     redirects: async () => {
         return [
             {

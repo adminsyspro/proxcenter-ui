@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server"
 
 import { getToken } from "next-auth/jwt"
 
-const AUTH_SECRET = process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production"
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
 // i18n configuration
 const locales = ['fr', 'en', 'zh-CN']

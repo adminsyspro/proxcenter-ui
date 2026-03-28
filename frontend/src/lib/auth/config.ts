@@ -455,11 +455,10 @@ export const authOptions: NextAuthOptions = {
   secret: (() => {
     const secret = process.env.NEXTAUTH_SECRET
     if (!secret) {
-      console.warn("[AUTH] ⚠ NEXTAUTH_SECRET is not set. Using an insecure default. Sessions will be vulnerable to tampering. Set NEXTAUTH_SECRET to a random 32+ character string.")
-      return "your-secret-key-change-in-production"
+      throw new Error("[AUTH] NEXTAUTH_SECRET is not set. Refusing to start. Set NEXTAUTH_SECRET to a random 32+ character string.")
     }
     if (secret.length < 16) {
-      console.warn("[AUTH] ⚠ NEXTAUTH_SECRET is too short (< 16 chars). Use a random 32+ character string for production.")
+      console.warn("[AUTH] NEXTAUTH_SECRET is too short (< 16 chars). Use a random 32+ character string for production.")
     }
     return secret
   })(),

@@ -245,7 +245,7 @@ const ThemeDropdown = () => {
                                     justifyContent: 'center',
                                   }}
                                 >
-                                  <ThemeIcon icon={themeInfo.icon} size={24} color={color.main} />
+                                  <ThemeIcon icon={themeInfo.icon} size={24} color={color.main} chevronColor={settings.mode === 'dark' || (settings.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) ? '#e0e0e0' : '#333'} />
                                 </Box>
                               ) : (
 

@@ -3425,7 +3425,7 @@ return vm?.isCluster ?? false
                                 </Box>
                               }
                             >
-                              <ResponsiveContainer width="100%" height="100%">
+                              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                 <AreaChart data={storageRrdHistory}>
                                   <XAxis dataKey="time" tickFormatter={(v: any) => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
                                   <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={30} />
@@ -3491,7 +3491,7 @@ return vm?.isCluster ?? false
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                   <AreaChart data={storageCephPerfHistory}>
                                     <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={(v: any) => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -3541,7 +3541,7 @@ return vm?.isCluster ?? false
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                   <AreaChart data={storageCephPerfHistory}>
                                     <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
@@ -3996,7 +3996,7 @@ return vm?.isCluster ?? false
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Box sx={{ width: 100, height: 100, flexShrink: 0 }}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                           <PieChart>
                             <Pie data={vmStatusData} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={45} paddingAngle={2} strokeWidth={0}>
                               {vmStatusData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -4039,7 +4039,7 @@ return vm?.isCluster ?? false
                     ) : (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Box sx={{ width: 100, height: 100, flexShrink: 0 }}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <PieChart>
                               <Pie data={migStatusData} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={45} paddingAngle={2} strokeWidth={0}>
                                 {migStatusData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -4090,7 +4090,7 @@ return vm?.isCluster ?? false
                       {t('inventoryPage.extDashboard.resourcesPerHost')}
                     </Typography>
                     <Box sx={{ height: 180 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <BarChart data={hostBarData} margin={{ top: 5, right: 5, bottom: 5, left: -15 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.5)} />
                           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
@@ -4665,7 +4665,7 @@ return vm?.isCluster ?? false
                             return (
                               <Box sx={{ mt: 2 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mb: 0.5, display: 'block' }}>{t('inventoryPage.esxiMigration.progressOverTime')}</Typography>
-                                <ResponsiveContainer width="100%" height={70}>
+                                <ResponsiveContainer minWidth={0} width="100%" height={70}>
                                   <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                                     <defs>
                                       <linearGradient id="migGradChart" x1="0" y1="0" x2="0" y2="1">

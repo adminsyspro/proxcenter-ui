@@ -156,7 +156,7 @@ export default function BackupTrendsChart({ pbsId }) {
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' } }}>
             {/* Main chart */}
             <Box sx={{ flex: 1, height: 280 }}>
-              <ResponsiveContainer width='100%' height='100%'>
+              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                 {mode === 'count' ? (
                   <BarChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray='3 3' stroke={alpha(theme.palette.divider, 0.4)} />
@@ -223,7 +223,7 @@ export default function BackupTrendsChart({ pbsId }) {
                 <Typography variant='caption' fontWeight={700} sx={{ opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1 }}>
                   {t('backups.trendsDistribution')}
                 </Typography>
-                <ResponsiveContainer width='100%' height={200}>
+                <ResponsiveContainer minWidth={0} width='100%' height={200}>
                   <PieChart>
                     <Pie
                       data={pieData}

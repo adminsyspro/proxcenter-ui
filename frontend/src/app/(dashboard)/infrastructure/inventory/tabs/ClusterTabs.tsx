@@ -1151,7 +1151,7 @@ export default function ClusterTabs(props: any) {
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
                         <ExpandableChart title={t('inventory.cpuUsage')} height={180}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <AreaChart data={clusterRrdSeries}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1191,7 +1191,7 @@ export default function ClusterTabs(props: any) {
 
                         {/* Memory Usage */}
                         <ExpandableChart title={t('inventory.memoryUsage')} height={180}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <AreaChart data={clusterRrdSeries}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1231,7 +1231,7 @@ export default function ClusterTabs(props: any) {
 
                         {/* Network Traffic */}
                         <ExpandableChart title={t('inventory.networkTrafficChart')} height={180}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <AreaChart data={clusterRrdSeries}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1278,7 +1278,7 @@ export default function ClusterTabs(props: any) {
 
                         {/* Server Load */}
                         <ExpandableChart title={t('inventory.serverLoad')} height={180}>
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <AreaChart data={clusterRrdSeries}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -2381,7 +2381,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                   <AreaChart data={clusterCephPerfFiltered}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -2439,7 +2439,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                   <AreaChart data={clusterCephPerfFiltered}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -2497,7 +2497,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                   <AreaChart data={clusterCephPerfFiltered}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
@@ -2555,7 +2555,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                   <AreaChart data={clusterCephPerfFiltered}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />

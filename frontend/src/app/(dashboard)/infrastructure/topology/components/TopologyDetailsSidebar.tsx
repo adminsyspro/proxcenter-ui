@@ -222,7 +222,7 @@ function HostRrdCharts({ connectionId, nodeName }: {
           {t('serverLoad')}
         </Typography>
         <Box sx={{ width: '100%', height: 130 }}>
-          <ResponsiveContainer width='100%' height='100%'>
+          <ResponsiveContainer width='100%' height='100%' minWidth={0}>
             <AreaChart data={series}>
               <XAxis dataKey='t' tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} width={35} />

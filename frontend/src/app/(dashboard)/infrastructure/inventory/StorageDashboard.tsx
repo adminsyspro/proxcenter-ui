@@ -166,7 +166,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                 Usage
               </Typography>
             </Stack>
-            <ResponsiveContainer width="100%" height={120}>
+            <ResponsiveContainer minWidth={0} width="100%" height={120}>
               <PieChart>
                 <Pie
                   data={[
@@ -247,7 +247,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                   By Type
                 </Typography>
               </Stack>
-              <ResponsiveContainer width="100%" height={120}>
+              <ResponsiveContainer minWidth={0} width="100%" height={120}>
                 <PieChart>
                   <Pie
                     data={chartData}

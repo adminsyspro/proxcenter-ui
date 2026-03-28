@@ -1179,7 +1179,7 @@ return (
               sx={{ height: 32, width: '100%', position: 'relative' }} 
               key={chartKey}
             >
-              <ResponsiveContainer width='100%' height='100%'>
+              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                 <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                   <defs>
                     <linearGradient id={`cpuGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>
@@ -1269,7 +1269,7 @@ return (
 
           return (
             <Box sx={{ height: 32, width: '100%', position: 'relative' }} key={chartKey}>
-              <ResponsiveContainer width='100%' height='100%'>
+              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                 <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                   <defs>
                     <linearGradient id={`diskGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>

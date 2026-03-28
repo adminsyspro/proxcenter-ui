@@ -25,7 +25,7 @@ function GaugeChart({ value, provisionedValue, label, subtitle, provisionedSubti
   return (
     <Box sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <Box sx={{ position: 'relative', width: size, height: size, mx: 'auto' }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <PieChart>
             {/* Outer ring — provisioned */}
             <Pie

@@ -190,7 +190,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
             <Stack direction="row" alignItems="center" spacing={3}>
               {/* Donut */}
               <Box sx={{ width: 120, height: 120, flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <PieChart>
                     <Pie
                       data={donutData}

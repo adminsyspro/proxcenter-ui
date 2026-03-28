@@ -329,7 +329,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
               <i className="ri-bar-chart-2-line" style={{ opacity: 0.6 }} />
               VLAN Distribution (top {chartData.length})
             </Typography>
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer minWidth={0} width="100%" height={220}>
               <BarChart data={chartData} margin={{ top: 4, right: 8, left: -8, bottom: 4 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: axisColor }} axisLine={false} tickLine={false} allowDecimals={false} />

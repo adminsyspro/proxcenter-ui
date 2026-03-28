@@ -975,7 +975,7 @@ return updated.slice(-30)
 
                       // Mode LIVE : afficher le graphique IOPS temps réel
                       iopsHistory.length > 1 ? (
-                        <ResponsiveContainer width='100%' height='100%'>
+                        <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                           <AreaChart data={iopsHistory} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                             <defs>
                               <linearGradient id='readIopsGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -1072,7 +1072,7 @@ return updated.slice(-30)
 
                       // Mode LIVE : afficher le throughput Ceph temps réel
                       throughputHistory.length > 1 ? (
-                        <ResponsiveContainer width='100%' height='100%'>
+                        <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                           <AreaChart data={throughputHistory} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                             <defs>
                               <linearGradient id='readBytesGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -1105,7 +1105,7 @@ return updated.slice(-30)
 
                       // Mode historique : afficher le réseau du node depuis les RRD
                       rrdData?.rrd?.length > 0 ? (
-                        <ResponsiveContainer width='100%' height='100%'>
+                        <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                           <AreaChart data={rrdData.rrd} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                             <defs>
                               <linearGradient id='ioInGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -1149,7 +1149,7 @@ return updated.slice(-30)
                   </Typography>
                   <Box sx={{ height: 200 }}>
                     {rrdData?.rrd?.length > 0 ? (
-                      <ResponsiveContainer width='100%' height='100%'>
+                      <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                         <LineChart data={rrdData.rrd} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                           <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                           <XAxis dataKey='timeFormatted' tick={{ fontSize: 10 }} interval='preserveStartEnd' />
@@ -1184,7 +1184,7 @@ return updated.slice(-30)
                     {t('ceph.osdLatency')}
                   </Typography>
                   <Box sx={{ height: 180 }}>
-                    <ResponsiveContainer width='100%' height='100%'>
+                    <ResponsiveContainer width='100%' height='100%' minWidth={0}>
                       <BarChart 
                         data={(rrdData?.osds?.length > 0 ? rrdData.osds : cephData?.osds?.list || []).slice(0, 24)} 
                         margin={{ top: 5, right: 5, left: 0, bottom: 5 }}

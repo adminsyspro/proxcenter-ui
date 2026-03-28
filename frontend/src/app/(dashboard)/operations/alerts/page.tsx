@@ -206,7 +206,7 @@ function DonutStatCard({ title, value, total, color }: { title: string; value: n
     <Card variant="outlined">
       <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <PieChart>
               <Pie
                 data={[{ value: value || 0 }, { value: remainder || 1 }]}
@@ -239,7 +239,7 @@ function DonutTotalCard({ title, value, segments }: { title: string; value: numb
     <Card variant="outlined">
       <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <PieChart>
               <Pie
                 data={data}

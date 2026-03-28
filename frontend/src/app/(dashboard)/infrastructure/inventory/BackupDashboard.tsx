@@ -143,7 +143,7 @@ function MetricGraph({
         )}
       </Box>
       <Box sx={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <AreaChart data={series}>
             <defs>
               {serverNames.map(name => (
@@ -247,7 +247,7 @@ function NetworkGraph({
         )}
       </Box>
       <Box sx={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <AreaChart data={series}>
             <defs>
               {serverNames.map(name => (

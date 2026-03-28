@@ -414,7 +414,7 @@ const BandwidthChart = ({ jobs, connections, t }: {
           </Box>
         ) : (
           <Box sx={{ width: '100%', height: 260 }}>
-            <ResponsiveContainer width='100%' height='100%'>
+            <ResponsiveContainer width='100%' height='100%' minWidth={0}>
               <AreaChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <defs>
                   {seriesKeys.map((key, i) => (

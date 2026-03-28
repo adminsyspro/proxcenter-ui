@@ -767,7 +767,7 @@ function RootInventoryView({
                 </IconButton>
               </Box>
               <Box sx={{ height: 120 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={infraRrdSeries}>
                     <defs>
                       {infraRrdNodeNames.map(name => (
@@ -838,7 +838,7 @@ function RootInventoryView({
                 </IconButton>
               </Box>
               <Box sx={{ height: 120 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={infraRrdSeries}>
                     <defs>
                       {infraRrdNodeNames.map(name => (
@@ -906,7 +906,7 @@ function RootInventoryView({
                 </IconButton>
               </Box>
               <Box sx={{ height: 120 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={infraRrdSeries}>
                     <defs>
                       {infraRrdNodeNames.map(name => (
@@ -977,7 +977,7 @@ function RootInventoryView({
                 </IconButton>
               </Box>
               <Box sx={{ height: 120 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={infraRrdSeries}>
                     <defs>
                       {infraRrdNodeNames.map(name => (
@@ -1081,7 +1081,7 @@ function RootInventoryView({
               </IconButton>
             </Box>
             <Box sx={{ height: 500 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 {expandedGraph === 'cpu' ? (
                   <AreaChart data={infraRrdSeries}>
                     <defs>

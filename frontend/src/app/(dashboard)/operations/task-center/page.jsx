@@ -614,7 +614,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie
                     data={[
@@ -648,7 +648,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie
                     data={[
@@ -678,7 +678,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie
                     data={[
@@ -708,7 +708,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie
                     data={[

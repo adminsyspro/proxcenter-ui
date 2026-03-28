@@ -2156,7 +2156,7 @@ return next
               {nodeBarData.length > 0 ? (
                 <>
                   <Box sx={{ height: 180 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                       <BarChart data={nodeBarData} barCategoryGap="20%">
                         <defs>
                           {lineColors.map((color, i) => (
@@ -2525,7 +2525,7 @@ return next
                   <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
                     {t('drsPage.clusterBalance')}
                   </Typography>
-                  <ResponsiveContainer width="100%" height={140}>
+                  <ResponsiveContainer minWidth={0} width="100%" height={140}>
                     <BarChart data={chartNodes} barCategoryGap="20%">
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />

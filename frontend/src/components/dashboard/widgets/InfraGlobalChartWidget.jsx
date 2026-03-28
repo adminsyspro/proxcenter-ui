@@ -250,7 +250,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
 
       {/* Chart */}
       <Box sx={{ flex: 1, minHeight: 0 }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <AreaChart data={trendsData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
             <defs>
               {nodeNames.map((name, i) => {
@@ -348,7 +348,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading }) {
               </IconButton>
             </Box>
             <Box sx={{ height: 500 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <AreaChart data={trendsData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                   <defs>
                     {nodeNames.map((name, i) => {

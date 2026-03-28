@@ -461,7 +461,7 @@ export default function VmDetailTabs(props: any) {
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                           {/* CPU Usage */}
                           <ExpandableChart title={t('inventory.cpuUsage')} height={160}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={series}>
                                 <defs>
                                   <linearGradient id="gradCpu" x1="0" y1="0" x2="0" y2="1">
@@ -499,7 +499,7 @@ export default function VmDetailTabs(props: any) {
 
                           {/* Memory Usage */}
                           <ExpandableChart title={t('inventory.memoryUsage')} height={160}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={series}>
                                 <defs>
                                   <linearGradient id="gradRam" x1="0" y1="0" x2="0" y2="1">
@@ -537,7 +537,7 @@ export default function VmDetailTabs(props: any) {
 
                           {/* Network Traffic */}
                           <ExpandableChart title={t('inventoryPage.networkTraffic')} height={160}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={series}>
                                 <defs>
                                   <linearGradient id="gradNetIn" x1="0" y1="0" x2="0" y2="1">
@@ -580,7 +580,7 @@ export default function VmDetailTabs(props: any) {
 
                           {/* Disk I/O (VMs) */}
                           <ExpandableChart title={t('inventory.diskIo')} height={160}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={series}>
                                 <defs>
                                   <linearGradient id="gradDiskRead" x1="0" y1="0" x2="0" y2="1">

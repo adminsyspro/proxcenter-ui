@@ -579,7 +579,7 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                 {t('siteRecovery.simulation.perNodeRam')}
               </Typography>
-              <ResponsiveContainer width="100%" height={160}>
+              <ResponsiveContainer minWidth={0} width="100%" height={160}>
                 <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                   <XAxis
                     dataKey="name"

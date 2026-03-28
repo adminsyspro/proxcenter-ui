@@ -544,7 +544,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       CPU Usage
                     </Typography>
                     <Box sx={{ height: 160 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={rrdDataToUse}>
                           <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
@@ -585,7 +585,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       Server Load
                     </Typography>
                     <Box sx={{ height: 160 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={rrdDataToUse}>
                           <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tick={{ fontSize: 9 }} width={30} />
@@ -625,7 +625,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       Memory Usage
                     </Typography>
                     <Box sx={{ height: 160 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={rrdDataToUse}>
                           <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
@@ -666,7 +666,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       Swap Usage
                     </Typography>
                     <Box sx={{ height: 160 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={rrdDataToUse}>
                           <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
@@ -707,7 +707,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       Network Traffic
                     </Typography>
                     <Box sx={{ height: 160 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={rrdDataToUse}>
                           <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tickFormatter={v => formatBytes(v) + '/s'} tick={{ fontSize: 9 }} width={55} />
@@ -748,7 +748,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       Root Disk Usage
                     </Typography>
                     <Box sx={{ height: 160 }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={rrdDataToUse}>
                           <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
@@ -960,7 +960,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                             {t('inventory.pbsStorageUsageBytes')}
                           </Typography>
                           <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={dsRrdData}>
                                 <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={50} />
@@ -1001,7 +1001,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                             {t('inventory.pbsTransferRate')}
                           </Typography>
                           <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={dsRrdData}>
                                 <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBytes(v) + '/s'} tick={{ fontSize: 9 }} width={55} />
@@ -1042,7 +1042,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                             {t('inventory.pbsIops')}
                           </Typography>
                           <Box sx={{ height: 180 }}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                               <AreaChart data={dsRrdData}>
                                 <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tick={{ fontSize: 9 }} width={40} />

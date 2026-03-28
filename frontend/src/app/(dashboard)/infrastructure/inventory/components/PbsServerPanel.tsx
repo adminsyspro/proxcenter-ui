@@ -561,7 +561,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ px: 1.5, py: 0.75 }}>
                                     {payload.map(entry => (
-                                      <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                         <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'cpu' ? 'CPU' : 'IO Wait'}</Typography>
                                         <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
@@ -602,7 +602,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ px: 1.5, py: 0.75 }}>
                                     {payload.map(entry => (
-                                      <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                         <Typography variant="caption" sx={{ flex: 1 }}>Load Average</Typography>
                                         <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
@@ -642,7 +642,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ px: 1.5, py: 0.75 }}>
                                     {payload.map(entry => (
-                                      <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                         <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'memused' ? 'Usage' : 'Total'}</Typography>
                                         <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
@@ -683,7 +683,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ px: 1.5, py: 0.75 }}>
                                     {payload.map(entry => (
-                                      <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                         <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'swapused' ? 'Usage' : 'Total'}</Typography>
                                         <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
@@ -724,7 +724,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ px: 1.5, py: 0.75 }}>
                                     {payload.map(entry => (
-                                      <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                         <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'netin' ? 'In' : 'Out'}</Typography>
                                         <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}/s</Typography>
@@ -765,7 +765,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ px: 1.5, py: 0.75 }}>
                                     {payload.map(entry => (
-                                      <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                         <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'rootused' ? 'Usage' : 'Total'}</Typography>
                                         <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
@@ -977,7 +977,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                         </Box>
                                         <Box sx={{ px: 1.5, py: 0.75 }}>
                                           {payload.map(entry => (
-                                            <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                               <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'used' ? t('inventory.pbsStorageUsageLabel') : t('common.total')}</Typography>
                                               <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
@@ -1018,7 +1018,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                         </Box>
                                         <Box sx={{ px: 1.5, py: 0.75 }}>
                                           {payload.map(entry => (
-                                            <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                               <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'read' ? t('inventory.pbsRead') : t('inventory.pbsWrite')}</Typography>
                                               <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}/s</Typography>
@@ -1059,7 +1059,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                         </Box>
                                         <Box sx={{ px: 1.5, py: 0.75 }}>
                                           {payload.map(entry => (
-                                            <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                               <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'readIops' ? t('inventory.pbsRead') : t('inventory.pbsWrite')}</Typography>
                                               <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(0)}</Typography>

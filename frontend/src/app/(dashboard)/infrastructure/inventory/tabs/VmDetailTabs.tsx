@@ -482,7 +482,7 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>CPU</Typography>
                                             <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v.toFixed(1)}%</Typography>
@@ -520,7 +520,7 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>Memory</Typography>
                                             <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v.toFixed(1)}%</Typography>
@@ -562,7 +562,7 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name) === 'netInBps' ? 'In' : 'Out'}</Typography>
                                             <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
@@ -605,7 +605,7 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name) === 'diskReadBps' ? 'Read' : 'Write'}</Typography>
                                             <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>

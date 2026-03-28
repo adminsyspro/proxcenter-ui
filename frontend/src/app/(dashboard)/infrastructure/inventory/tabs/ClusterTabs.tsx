@@ -1172,7 +1172,7 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => (
-                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                        <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                           <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
@@ -1212,7 +1212,7 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => (
-                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                        <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                           <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
@@ -1255,7 +1255,7 @@ export default function ClusterTabs(props: any) {
                                         const isOut = String(entry.name).startsWith('netOut_')
                                         const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
                                         return (
-                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
                                             <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
@@ -1299,7 +1299,7 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => (
-                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
+                                        <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                           <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
@@ -2399,7 +2399,7 @@ export default function ClusterTabs(props: any) {
                                             </Box>
                                             <Box sx={{ px: 1.5, py: 0.75 }}>
                                               {payload.map(entry => (
-                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                   <Typography variant="caption" sx={{ flex: 1 }}>Reads</Typography>
                                                   <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
@@ -2457,7 +2457,7 @@ export default function ClusterTabs(props: any) {
                                             </Box>
                                             <Box sx={{ px: 1.5, py: 0.75 }}>
                                               {payload.map(entry => (
-                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                   <Typography variant="caption" sx={{ flex: 1 }}>Writes</Typography>
                                                   <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
@@ -2515,7 +2515,7 @@ export default function ClusterTabs(props: any) {
                                             </Box>
                                             <Box sx={{ px: 1.5, py: 0.75 }}>
                                               {payload.map(entry => (
-                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                   <Typography variant="caption" sx={{ flex: 1 }}>Reads</Typography>
                                                   <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toLocaleString()} IOPS</Typography>
@@ -2573,7 +2573,7 @@ export default function ClusterTabs(props: any) {
                                             </Box>
                                             <Box sx={{ px: 1.5, py: 0.75 }}>
                                               {payload.map(entry => (
-                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                   <Typography variant="caption" sx={{ flex: 1 }}>Writes</Typography>
                                                   <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toLocaleString()} IOPS</Typography>

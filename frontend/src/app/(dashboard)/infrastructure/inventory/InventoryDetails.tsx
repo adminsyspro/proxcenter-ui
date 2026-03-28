@@ -3447,7 +3447,7 @@ return vm?.isCluster ?? false
                                           </Box>
                                           <Box sx={{ px: 1.5, py: 0.75 }}>
                                             {payload.map(entry => (
-                                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                              <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                 <Typography variant="caption" sx={{ flex: 1 }}>Usage</Typography>
                                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
@@ -3509,7 +3509,7 @@ return vm?.isCluster ?? false
                                             </Box>
                                             <Box sx={{ px: 1.5, py: 0.75 }}>
                                               {payload.map(entry => (
-                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                   <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'read_bytes_sec' ? 'Read' : 'Write'}</Typography>
                                                   <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
@@ -3559,7 +3559,7 @@ return vm?.isCluster ?? false
                                             </Box>
                                             <Box sx={{ px: 1.5, py: 0.75 }}>
                                               {payload.map(entry => (
-                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                                   <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'read_op_per_sec' ? 'Read' : 'Write'}</Typography>
                                                   <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toLocaleString()} IOPS</Typography>

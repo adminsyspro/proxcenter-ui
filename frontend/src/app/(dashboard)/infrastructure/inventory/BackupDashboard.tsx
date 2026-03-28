@@ -169,7 +169,7 @@ function MetricGraph({
                     </Box>
                     <Box sx={{ px: 1.5, py: 0.75 }}>
                       {sorted.map(entry => (
-                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
+                        <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                           <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace(`${dataKeyPrefix}_`, '')}</Typography>
                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>
@@ -276,7 +276,7 @@ function NetworkGraph({
                         const isIn = name.startsWith('netIn_')
                         const serverName = name.replace(/^net(In|Out)_/, '')
                         return (
-                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
+                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                             <Typography variant="caption" sx={{ flex: 1 }}>{serverName} {isIn ? 'IN' : 'OUT'}</Typography>
                             <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>

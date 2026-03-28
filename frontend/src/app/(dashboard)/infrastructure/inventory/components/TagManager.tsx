@@ -46,8 +46,8 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
     setLoadingTags(true)
 
     try {
-      // Récupérer tous les guests pour extraire les tags uniques
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests`, { cache: 'no-store' })
+      // Récupérer toutes les resources (VMs/CTs) pour extraire les tags uniques
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
 
       if (res.ok) {
         const json = await res.json()

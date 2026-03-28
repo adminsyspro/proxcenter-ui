@@ -3110,7 +3110,7 @@ return vm?.isCluster ?? false
           )}
 
 
-          {!(selection?.type === 'node' && data.status === 'crit') && selection?.type !== 'ext' && selection?.type !== 'ext-type' && selection?.type !== 'extvm' && selection?.type !== 'storage' && !data.isTemplate && (<>
+          {!(selection?.type === 'node' && data.status === 'crit') && selection?.type !== 'ext' && selection?.type !== 'ext-type' && selection?.type !== 'extvm' && selection?.type !== 'storage' && selection?.type !== 'datastore' && selection?.type !== 'pbs-datastore' && selection?.type !== 'pbs' && !data.isTemplate && (<>
           <Divider sx={{ flexShrink: 0 }} />
 
           <Box sx={{ flexShrink: 0 }}>
@@ -3430,16 +3430,32 @@ return vm?.isCluster ?? false
                                   <XAxis dataKey="time" tickFormatter={(v: any) => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
                                   <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                                   <Tooltip
-                                    contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                    labelFormatter={(value) => {
-                                      const d = new Date(value)
-                                      return storageRrdTimeframe === 'hour' || storageRrdTimeframe === 'day'
-                                        ? d.toLocaleTimeString()
-                                        : d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-                                    }}
-                                    formatter={(value: number, name: string) => {
-                                      if (name === 'usedPct') return [`${value}%`, 'Usage']
-                                      return [formatBytes(value), name === 'used' ? 'Used' : 'Total']
+                                    wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                    content={({ active, payload, label }) => {
+                                      if (!active || !payload?.length) return null
+                                      const strokeColor = si.usedPct > 90 ? theme.palette.error.main : si.usedPct > 70 ? theme.palette.warning.main : theme.palette.success.main
+                                      const ts = new Date(Number(label))
+                                      const timeStr = storageRrdTimeframe === 'hour' || storageRrdTimeframe === 'day'
+                                        ? ts.toLocaleTimeString()
+                                        : ts.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' }) + ' ' + ts.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+                                      return (
+                                        <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                          <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(strokeColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                            <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: strokeColor }} />
+                                            <Typography variant="caption" sx={{ fontWeight: 700, color: strokeColor }}>Storage Usage</Typography>
+                                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{timeStr}</Typography>
+                                          </Box>
+                                          <Box sx={{ px: 1.5, py: 0.75 }}>
+                                            {payload.map(entry => (
+                                              <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                <Typography variant="caption" sx={{ flex: 1 }}>Usage</Typography>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                                              </Box>
+                                            ))}
+                                          </Box>
+                                        </Box>
+                                      )
                                     }}
                                   />
                                   <Area
@@ -3480,12 +3496,29 @@ return vm?.isCluster ?? false
                                     <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={(v: any) => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                     <Tooltip
-                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                      labelFormatter={(_, payload) => {
-                                        if (payload?.[0]?.payload?.time) return new Date(payload[0].payload.time).toLocaleTimeString()
-                                        return ''
+                                      wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        return (
+                                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
+                                            <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#3b82f6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                              <i className="ri-speed-line" style={{ fontSize: 13, color: '#3b82f6' }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#3b82f6' }}>Throughput</Typography>
+                                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{ts}</Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.75 }}>
+                                              {payload.map(entry => (
+                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                  <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'read_bytes_sec' ? 'Read' : 'Write'}</Typography>
+                                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          </Box>
+                                        )
                                       }}
-                                      formatter={(value: number, name: string) => [formatBps(value), name === 'read_bytes_sec' ? 'Read' : 'Write']}
                                     />
                                     <Area type="monotone" dataKey="read_bytes_sec" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="read_bytes_sec" />
                                     <Area type="monotone" dataKey="write_bytes_sec" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write_bytes_sec" />
@@ -3513,12 +3546,29 @@ return vm?.isCluster ?? false
                                     <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                     <Tooltip
-                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                      labelFormatter={(_, payload) => {
-                                        if (payload?.[0]?.payload?.time) return new Date(payload[0].payload.time).toLocaleTimeString()
-                                        return ''
+                                      wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        return (
+                                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
+                                            <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                              <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#f59e0b' }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b' }}>IOPS</Typography>
+                                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{ts}</Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.75 }}>
+                                              {payload.map(entry => (
+                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                  <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'read_op_per_sec' ? 'Read' : 'Write'}</Typography>
+                                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toLocaleString()} IOPS</Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          </Box>
+                                        )
                                       }}
-                                      formatter={(value: number, name: string) => [value?.toLocaleString() + ' IOPS', name === 'read_op_per_sec' ? 'Read' : 'Write']}
                                     />
                                     <Area type="monotone" dataKey="read_op_per_sec" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="read_op_per_sec" />
                                     <Area type="monotone" dataKey="write_op_per_sec" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write_op_per_sec" />

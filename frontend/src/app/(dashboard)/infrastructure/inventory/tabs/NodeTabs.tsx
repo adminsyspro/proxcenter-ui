@@ -43,6 +43,7 @@ import {
   Tooltip as MuiTooltip,
   Switch,
   Typography,
+  alpha,
   useTheme,
 } from '@mui/material'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
@@ -550,10 +551,27 @@ export default function NodeTabs(props: any) {
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                              <Tooltip contentStyle={chartTooltipStyle}
-                                labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'CPU']}
-                              />
+                              <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null
+                                return (
+                                  <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                    <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#2196f3', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
+                                      <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>CPU</Typography>
+                                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                    </Box>
+                                    <Box sx={{ px: 1.5, py: 0.75 }}>
+                                      {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>CPU</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v.toFixed(1)}%</Typography>
+                                        </Box>
+                                      )})}
+                                    </Box>
+                                  </Box>
+                                )
+                              }} />
                               <Area type="monotone" dataKey="cpuPct" stroke={primaryColor} fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
                             </AreaChart>
                           </ResponsiveContainer>
@@ -571,10 +589,27 @@ export default function NodeTabs(props: any) {
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                              <Tooltip contentStyle={chartTooltipStyle}
-                                labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'Memory']}
-                              />
+                              <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null
+                                return (
+                                  <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                    <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
+                                      <Typography variant="caption" sx={{ fontWeight: 700, color: '#10b981' }}>Memory</Typography>
+                                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                    </Box>
+                                    <Box sx={{ px: 1.5, py: 0.75 }}>
+                                      {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>Memory</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v.toFixed(1)}%</Typography>
+                                        </Box>
+                                      )})}
+                                    </Box>
+                                  </Box>
+                                )
+                              }} />
                               <Area type="monotone" dataKey="ramPct" stroke={primaryColor} fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
                             </AreaChart>
                           </ResponsiveContainer>
@@ -596,10 +631,27 @@ export default function NodeTabs(props: any) {
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
-                              <Tooltip contentStyle={chartTooltipStyle}
-                                labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                formatter={(v: any, name: string) => [formatBps(Number(v)), name === 'netInBps' ? 'In' : 'Out']}
-                              />
+                              <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                if (!active || !payload?.length) return null
+                                return (
+                                  <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                    <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
+                                      <Typography variant="caption" sx={{ fontWeight: 700, color: '#06b6d4' }}>Network</Typography>
+                                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                    </Box>
+                                    <Box sx={{ px: 1.5, py: 0.75 }}>
+                                      {payload.map(entry => (
+                                        <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name) === 'netInBps' ? 'In' : 'Out'}</Typography>
+                                          <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  </Box>
+                                )
+                              }} />
                               <Area type="monotone" dataKey="netInBps" stroke={primaryColor} fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
                               <Area type="monotone" dataKey="netOutBps" stroke={primaryColorLight} fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
                             </AreaChart>
@@ -619,10 +671,27 @@ export default function NodeTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
-                                <Tooltip contentStyle={chartTooltipStyle}
-                                  labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                  formatter={(v: any) => [Number(v).toFixed(2), 'Load']}
-                                />
+                                <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                        <i className="ri-bar-chart-line" style={{ fontSize: 13, color: '#f59e0b' }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b' }}>Server Load</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                      </Box>
+                                      <Box sx={{ px: 1.5, py: 0.75 }}>
+                                        {payload.map(entry => (
+                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>Load</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    </Box>
+                                  )
+                                }} />
                                 <Area type="monotone" dataKey="loadAvg" stroke={primaryColor} fill="url(#nGradLoad)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               </AreaChart>
                             ) : (
@@ -639,10 +708,27 @@ export default function NodeTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
-                                <Tooltip contentStyle={chartTooltipStyle}
-                                  labelFormatter={v => new Date(Number(v)).toLocaleString()}
-                                  formatter={(v: any, name: string) => [formatBps(Number(v)), name === 'diskReadBps' ? 'Read' : 'Write']}
-                                />
+                                <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                        <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: '#ef4444' }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#ef4444' }}>Disk I/O</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                      </Box>
+                                      <Box sx={{ px: 1.5, py: 0.75 }}>
+                                        {payload.map(entry => (
+                                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name) === 'diskReadBps' ? 'Read' : 'Write'}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    </Box>
+                                  )
+                                }} />
                                 <Area type="monotone" dataKey="diskReadBps" stroke={primaryColor} fill="url(#nGradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
                                 <Area type="monotone" dataKey="diskWriteBps" stroke={primaryColorLight} fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
                               </AreaChart>

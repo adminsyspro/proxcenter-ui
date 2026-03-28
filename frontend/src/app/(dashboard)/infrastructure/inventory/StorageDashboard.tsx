@@ -184,10 +184,27 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                   <Cell fill={alpha(theme.palette.success.main, 0.5)} strokeWidth={0} />
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => formatBytes(value)}
-                  contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${borderColor}`, borderRadius: 8, fontSize: 12, color: theme.palette.text.primary }}
-                  itemStyle={{ color: theme.palette.text.primary }}
-                  labelStyle={{ color: theme.palette.text.primary }}
+                  wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    return (
+                      <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                        <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(theme.palette.primary.main, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <i className="ri-pie-chart-line" style={{ fontSize: 13, color: theme.palette.primary.main }} />
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>Storage Usage</Typography>
+                        </Box>
+                        <Box sx={{ px: 1.5, py: 0.75 }}>
+                          {payload.map(entry => (
+                            <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.payload?.color || entry.color, flexShrink: 0 }} />
+                              <Typography variant="caption" sx={{ flex: 1 }}>{entry.name}</Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )
+                  }}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -246,8 +263,27 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => formatBytes(value)}
-                    contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${borderColor}`, borderRadius: 8, fontSize: 12, color: theme.palette.text.primary }}
+                    wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      return (
+                        <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                          <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(theme.palette.info.main, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-donut-chart-line" style={{ fontSize: 13, color: theme.palette.info.main }} />
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'info.main' }}>By Type</Typography>
+                          </Box>
+                          <Box sx={{ px: 1.5, py: 0.75 }}>
+                            {payload.map(entry => (
+                              <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.payload?.color || entry.color, flexShrink: 0 }} />
+                                <Typography variant="caption" sx={{ flex: 1 }}>{entry.name}</Typography>
+                                <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
+                              </Box>
+                            ))}
+                          </Box>
+                        </Box>
+                      )
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>

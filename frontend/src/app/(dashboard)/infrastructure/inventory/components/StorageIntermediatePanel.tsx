@@ -141,11 +141,27 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
               <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
               <Tooltip
-                contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 11 }}
-                labelFormatter={(v) => new Date(v).toLocaleString()}
-                formatter={(value: number, name: string) => {
-                  if (name === 'usedPct') return [`${value}%`, 'Usage']
-                  return [value, name]
+                wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  return (
+                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(primaryColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: primaryColor }} />
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: primaryColor }}>Storage Usage</Typography>
+                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                      </Box>
+                      <Box sx={{ px: 1.5, py: 0.75 }}>
+                        {payload.map(entry => (
+                          <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                            <Typography variant="caption" sx={{ flex: 1 }}>Usage</Typography>
+                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )
                 }}
               />
               <Area type="monotone" dataKey="usedPct" stroke={primaryColor} fill={primaryColor} fillOpacity={0.3} strokeWidth={1.5} isAnimationActive={false} />

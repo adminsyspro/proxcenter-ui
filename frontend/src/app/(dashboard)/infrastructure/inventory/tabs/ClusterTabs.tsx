@@ -2386,14 +2386,29 @@ export default function ClusterTabs(props: any) {
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                     <Tooltip
-                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                      labelFormatter={(_, payload) => {
-                                        if (payload && payload[0]?.payload?.time) {
-                                          return new Date(payload[0].payload.time).toLocaleTimeString()
-                                        }
-                                        return ''
+                                      wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        return (
+                                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                            <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#3b82f6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                              <i className="ri-speed-line" style={{ fontSize: 13, color: '#3b82f6' }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#3b82f6' }}>Reads</Typography>
+                                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{ts}</Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.75 }}>
+                                              {payload.map(entry => (
+                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                  <Typography variant="caption" sx={{ flex: 1 }}>Reads</Typography>
+                                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          </Box>
+                                        )
                                       }}
-                                      formatter={(value: number) => [formatBps(value), 'Reads']}
                                     />
                                     <Area
                                       type="monotone"
@@ -2429,14 +2444,29 @@ export default function ClusterTabs(props: any) {
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                     <Tooltip
-                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                      labelFormatter={(_, payload) => {
-                                        if (payload && payload[0]?.payload?.time) {
-                                          return new Date(payload[0].payload.time).toLocaleTimeString()
-                                        }
-                                        return ''
+                                      wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        return (
+                                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                            <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                              <i className="ri-speed-line" style={{ fontSize: 13, color: '#10b981' }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#10b981' }}>Writes</Typography>
+                                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{ts}</Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.75 }}>
+                                              {payload.map(entry => (
+                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                  <Typography variant="caption" sx={{ flex: 1 }}>Writes</Typography>
+                                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          </Box>
+                                        )
                                       }}
-                                      formatter={(value: number) => [formatBps(value), 'Writes']}
                                     />
                                     <Area
                                       type="monotone"
@@ -2472,14 +2502,29 @@ export default function ClusterTabs(props: any) {
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                     <Tooltip
-                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                      labelFormatter={(_, payload) => {
-                                        if (payload && payload[0]?.payload?.time) {
-                                          return new Date(payload[0].payload.time).toLocaleTimeString()
-                                        }
-                                        return ''
+                                      wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        return (
+                                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                            <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                              <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#f59e0b' }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b' }}>IOPS Reads</Typography>
+                                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{ts}</Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.75 }}>
+                                              {payload.map(entry => (
+                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                  <Typography variant="caption" sx={{ flex: 1 }}>Reads</Typography>
+                                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toLocaleString()} IOPS</Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          </Box>
+                                        )
                                       }}
-                                      formatter={(value: number) => [value?.toLocaleString() + ' IOPS', 'Reads']}
                                     />
                                     <Area
                                       type="monotone"
@@ -2515,14 +2560,29 @@ export default function ClusterTabs(props: any) {
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                     <Tooltip
-                                      contentStyle={{ backgroundColor: '#1e1e2f', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
-                                      labelFormatter={(_, payload) => {
-                                        if (payload && payload[0]?.payload?.time) {
-                                          return new Date(payload[0].payload.time).toLocaleTimeString()
-                                        }
-                                        return ''
+                                      wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
+                                      content={({ active, payload }) => {
+                                        if (!active || !payload?.length) return null
+                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        return (
+                                          <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                            <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                              <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#ef4444' }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#ef4444' }}>IOPS Writes</Typography>
+                                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{ts}</Typography>
+                                            </Box>
+                                            <Box sx={{ px: 1.5, py: 0.75 }}>
+                                              {payload.map(entry => (
+                                                <Box key={entry.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                                  <Typography variant="caption" sx={{ flex: 1 }}>Writes</Typography>
+                                                  <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toLocaleString()} IOPS</Typography>
+                                                </Box>
+                                              ))}
+                                            </Box>
+                                          </Box>
+                                        )
                                       }}
-                                      formatter={(value: number) => [value?.toLocaleString() + ' IOPS', 'Writes']}
                                     />
                                     <Area
                                       type="monotone"

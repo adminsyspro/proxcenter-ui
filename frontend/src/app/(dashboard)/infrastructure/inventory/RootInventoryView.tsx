@@ -353,9 +353,9 @@ function RootInventoryView({
   const [infraRrdNodesKey, setInfraRrdNodesKey] = useState(rawInfraRrdNodesKey)
   useEffect(() => {
     if (rawInfraRrdNodesKey === infraRrdNodesKey) return
-    console.log(`[infra-rrd] Debounce: hosts changed (${hosts.length} hosts), waiting 1s...`)
+    // console.log(`[infra-rrd] Debounce: hosts changed (${hosts.length} hosts), waiting 1s...`)
     const timer = setTimeout(() => {
-      console.log(`[infra-rrd] Debounce: committed (${hosts.length} hosts)`)
+      // console.log(`[infra-rrd] Debounce: committed (${hosts.length} hosts)`)
       setInfraRrdNodesKey(rawInfraRrdNodesKey)
     }, 1000)
     return () => clearTimeout(timer)
@@ -367,9 +367,9 @@ function RootInventoryView({
     const abortController = new AbortController()
     setInfraRrdLoading(true)
 
-    console.log(`[infra-rrd] Starting RRD fetch for ${currentHosts.length} hosts, timeframe=${infraRrdTf}`)
-    console.log(`[infra-rrd] Hosts:`, currentHosts.map(h => `${h.node} (connId=${h.connId})`))
-    console.log(`[infra-rrd] Debounced key: ${infraRrdNodesKey.length > 80 ? infraRrdNodesKey.substring(0, 80) + '...' : infraRrdNodesKey}`)
+    // console.log(`[infra-rrd] Starting RRD fetch for ${currentHosts.length} hosts, timeframe=${infraRrdTf}`)
+    // console.log(`[infra-rrd] Hosts:`, currentHosts.map(h => `${h.node} (connId=${h.connId})`))
+    // console.log(`[infra-rrd] Debounced key: ${infraRrdNodesKey.length > 80 ? infraRrdNodesKey.substring(0, 80) + '...' : infraRrdNodesKey}`)
 
     ;(async () => {
       const perNode: Record<string, any[]> = {}
@@ -382,25 +382,25 @@ function RootInventoryView({
           if (!abortController.signal.aborted) {
             const series = buildSeriesFromRrd(raw)
             perNode[host.node] = series
-            console.log(`[infra-rrd] ✓ ${host.node}: ${duration}ms, ${raw.length} raw → ${series.length} pts`)
+            // console.log(`[infra-rrd] ✓ ${host.node}: ${duration}ms, ${raw.length} raw → ${series.length} pts`)
           }
           return { node: host.node, ok: true, duration, points: raw.length }
         } catch (e) {
           const duration = Math.round(performance.now() - t0)
           if (!abortController.signal.aborted) {
-            console.warn(`[infra-rrd] ✗ ${host.node}: FAILED ${duration}ms:`, e)
+            // console.warn(`[infra-rrd] ✗ ${host.node}: FAILED ${duration}ms:`, e)
           }
           return { node: host.node, ok: false, duration, error: String(e) }
         }
       }))
       if (abortController.signal.aborted) {
-        console.log(`[infra-rrd] Aborted (stale effect)`)
+        // console.log(`[infra-rrd] Aborted (stale effect)`)
         return
       }
 
       const nodeNames = Object.keys(perNode).sort()
       const failed = currentHosts.filter(h => !perNode[h.node]).map(h => h.node)
-      console.log(`[infra-rrd] Done: ${nodeNames.length}/${currentHosts.length} OK, failed=[${failed.join(', ')}]`)
+      // console.log(`[infra-rrd] Done: ${nodeNames.length}/${currentHosts.length} OK, failed=[${failed.join(', ')}]`)
 
       setInfraRrdPerNode(perNode)
       setInfraRrdNodeNames(nodeNames)
@@ -457,7 +457,7 @@ function RootInventoryView({
         }
       }
 
-      console.log(`[infra-rrd] Merged: ${merged.length} time slots, ${nodeNames.length} nodes (gap-filled)`)
+      // console.log(`[infra-rrd] Merged: ${merged.length} time slots, ${nodeNames.length} nodes (gap-filled)`)
 
       setInfraRrdSeries(merged)
       setInfraRrdLoading(false)

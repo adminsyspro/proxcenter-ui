@@ -47,11 +47,11 @@ function parseNetString(id: string, raw: string): NetIface {
     } else if (key === "bridge") {
       iface.bridge = val
     } else if (key === "tag") {
-      iface.tag = parseInt(val, 10)
+      iface.tag = Number.parseInt(val, 10)
     } else if (key === "firewall") {
       iface.firewall = val === "1"
     } else if (key === "rate") {
-      iface.rate = parseFloat(val)
+      iface.rate = Number.parseFloat(val)
     } else if (key === "macaddr") {
       iface.macaddr = val
     } else if (!iface.macaddr && val && /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(val)) {

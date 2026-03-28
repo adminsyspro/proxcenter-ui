@@ -121,8 +121,8 @@ return []
 
     // Trier par vmid
     allVms.sort((a, b) => {
-      const aId = parseInt(a.vmid, 10) || 0
-      const bId = parseInt(b.vmid, 10) || 0
+      const aId = Number.parseInt(a.vmid, 10) || 0
+      const bId = Number.parseInt(b.vmid, 10) || 0
 
       
 return aId - bId

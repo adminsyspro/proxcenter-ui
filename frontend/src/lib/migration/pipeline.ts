@@ -362,12 +362,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       for (const val of Object.values(vmConf || {})) {
         if (typeof val === 'string') {
           const m = (val as string).match(/vm-\d+-disk-(\d+)/)
-          if (m) maxDiskNum = Math.max(maxDiskNum, parseInt(m[1]))
+          if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
         }
       }
       for (const av of allocatedVolumes) {
         const m = av.volumeId.match(/disk-(\d+)/)
-        if (m) maxDiskNum = Math.max(maxDiskNum, parseInt(m[1]))
+        if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
       }
       const diskNum = maxDiskNum + 1
       const sizeKB = Math.ceil(sizeBytes / 1024)
@@ -482,7 +482,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Parse dd progress output: "123456789 bytes (123 MB, ...) copied, ..."
         const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
           `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
-        transferredBytes = parseInt(progressResult.output?.trim() || "0", 10) || 0
+        transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
 
         const elapsed = (Date.now() - startTime) / 1000
         const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
@@ -498,7 +498,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         if (!isRunning) {
-          const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}"`)
           if (exitCode !== 0) {
             throw new Error(`Streaming failed: curl/dd exit code ${exitCode}`)
@@ -573,7 +573,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             try {
               const sizeCheck = await executeSSH(config.targetConnectionId, nodeIp,
                 `${clSetup} && ${clSshPrefix} -p ${clPort} ${clUser}@${clHost} "stat -c %s '${cloneFlatPath}' 2>/dev/null || echo 0" 2>/dev/null`)
-              const clonedBytes = parseInt(sizeCheck.output?.trim() || "0", 10) || 0
+              const clonedBytes = Number.parseInt(sizeCheck.output?.trim() || "0", 10) || 0
               if (clonedBytes > 0) {
                 const cloneProgress = Math.min(Math.round((clonedBytes / disk.capacityBytes) * 100), 99)
                 const elapsed = (Date.now() - cloneStartTime) / 1000
@@ -592,7 +592,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneExitFile}" 2>/dev/null || echo RUNNING`)
             if (exitCheck.output?.trim() === "RUNNING") continue
 
-            const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
             if (exitCode !== 0) {
               const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneErrFile}" 2>/dev/null | head -c 500`)
               const errMsg = stderrContent.output?.trim() || "(no output)"
@@ -662,7 +662,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // Parse dd progress output
           const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
             `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
-          transferredBytes = parseInt(progressResult.output?.trim() || "0", 10) || 0
+          transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
 
           const elapsed = (Date.now() - startTime) / 1000
           const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
@@ -678,7 +678,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           })
 
           if (!isRunning) {
-            const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
             const elapsed = (Date.now() - startTime) / 1000
 
             if (exitCode !== 0) {
@@ -772,7 +772,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const isRunning = exitCheck.output?.trim() === "RUNNING"
 
         const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
-        const currentSize = parseInt(sizeResult.output?.trim() || "0", 10) || 0
+        const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
         downloadedBytes = currentSize
 
         const elapsed = (Date.now() - startTime) / 1000
@@ -789,7 +789,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         if (!isRunning) {
-          const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
             throw new Error(`Download failed: curl exit code ${exitCode}`)
@@ -821,7 +821,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           // Validate downloaded file size (must be at least 1 MB for any real disk)
           const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
-          const actualSize = parseInt(fileSizeCheck.output?.trim() || "0", 10)
+          const actualSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10)
           if (actualSize < 1048576) {
             const errorPreview = await executeSSH(config.targetConnectionId, nodeIp, `head -c 500 "${tmpFile}.vmdk" 2>/dev/null | tr '\\n' ' '`)
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
@@ -910,7 +910,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
         if (exitCheck.output?.trim() === "RUNNING") continue
 
-        const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+        const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
         const outputContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${outFile}" 2>/dev/null`)
         const output = outputContent.output?.trim() || ""
 
@@ -993,7 +993,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               const sizeCheck = await executeSSH(config.targetConnectionId, nodeIp,
                 `${clSetup} && ${clSshPrefix} -p ${clPort} ${clUser}@${clHost} "stat -c %s '${cloneFlatPath}' 2>/dev/null || echo 0" 2>/dev/null`
               )
-              const clonedBytes = parseInt(sizeCheck.output?.trim() || "0", 10) || 0
+              const clonedBytes = Number.parseInt(sizeCheck.output?.trim() || "0", 10) || 0
               if (clonedBytes > 0) {
                 const cloneProgress = Math.min(Math.round((clonedBytes / disk.capacityBytes) * 100), 99)
                 const elapsed = (Date.now() - cloneStartTime) / 1000
@@ -1014,7 +1014,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneExitFile}" 2>/dev/null || echo RUNNING`)
             if (exitCheck.output?.trim() === "RUNNING") continue
 
-            const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
             if (exitCode !== 0) {
               const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneErrFile}" 2>/dev/null | head -c 500`)
               const errMsg = stderrContent.output?.trim() || "(no output)"
@@ -1085,7 +1085,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           const isRunning = exitCheck.output?.trim() === "RUNNING"
 
           const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
-          const currentSize = parseInt(sizeResult.output?.trim() || "0", 10) || 0
+          const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
           downloadedBytes = currentSize
 
           const elapsed = (Date.now() - startTime) / 1000
@@ -1102,13 +1102,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           })
 
           if (!isRunning) {
-            const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
             downloadTime = elapsed
 
             if (exitCode !== 0) {
               // Check if the file was actually downloaded despite non-zero exit (SSH warnings can cause exit 1)
               const fileSizeOnError = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
-              const actualSizeOnError = parseInt(fileSizeOnError.output?.trim() || "0", 10)
+              const actualSizeOnError = Number.parseInt(fileSizeOnError.output?.trim() || "0", 10)
               const expectedMin = Math.floor(disk.capacityBytes * 0.9) // Allow 10% tolerance for thin disks
 
               if (actualSizeOnError >= expectedMin) {
@@ -1123,7 +1123,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             }
 
             const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
-            const actualSize = parseInt(fileSizeCheck.output?.trim() || "0", 10)
+            const actualSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10)
             if (actualSize < 1048576) {
               await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key"`)
               throw new Error(`SSH dd produced a ${actualSize}-byte file (expected ~${diskSizeGB} GB)`)

@@ -765,9 +765,9 @@ export default function DRSSettingsPanel({
                 const hMatch = s.match(/(\d+)h/)
                 const mMatch = s.match(/(\d+)m/)
                 const sMatch = s.match(/^(\d+)s$/)
-                if (hMatch) totalMinutes += parseInt(hMatch[1]) * 60
-                if (mMatch) totalMinutes += parseInt(mMatch[1])
-                if (sMatch) totalMinutes = Math.max(1, Math.round(parseInt(sMatch[1]) / 60))
+                if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
+                if (mMatch) totalMinutes += Number.parseInt(mMatch[1])
+                if (sMatch) totalMinutes = Math.max(1, Math.round(Number.parseInt(sMatch[1]) / 60))
                 return totalMinutes || 5
               })()}
               onChange={(_, val) => handleChange('migration_cooldown', `${val as number}m`)}

@@ -806,7 +806,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                         type="number"
                         size="small"
                         value={thresholds.snapshot_max_age_days}
-                        onChange={(e) => setThresholds(th => ({ ...th, snapshot_max_age_days: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        onChange={(e) => setThresholds(th => ({ ...th, snapshot_max_age_days: Math.max(1, Number.parseInt(e.target.value) || 1) }))}
                         slotProps={{ htmlInput: { min: 1, max: 365 } }}
                         sx={{ width: 80 }}
                       />

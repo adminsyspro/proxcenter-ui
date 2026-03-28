@@ -177,7 +177,7 @@ export async function pveFetch<T>(
 
         if (dbIps.length > 0) {
           const port = extractPortFromUrl(opts.baseUrl)
-          const protocol = new URL(opts.baseUrl).protocol.replace(":", "")
+          const protocol = new URL(opts.baseUrl).protocol.replaceAll(":", "")
           setNodeIps(connId, dbIps, port, protocol)
           cached = { ips: dbIps, port, protocol }
         }

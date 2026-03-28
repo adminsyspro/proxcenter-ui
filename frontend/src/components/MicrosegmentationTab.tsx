@@ -759,7 +759,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                           size="small"
                           type="number"
                           value={config.customOffset}
-                          onChange={(e) => setConfig({ ...config, customOffset: parseInt(e.target.value) || 1 })}
+                          onChange={(e) => setConfig({ ...config, customOffset: Number.parseInt(e.target.value) || 1 })}
                           disabled={config.gatewayMode !== 'custom'}
                           sx={{ width: 80 }}
                           inputProps={{ min: 1, max: 254 }}

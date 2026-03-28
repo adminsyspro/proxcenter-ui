@@ -868,11 +868,11 @@ export function useHardwareHandlers({
     if (job.all === 1 || job.all === true) {
       selMode = 'all'
       if (job.exclude) {
-        excludedVmids = String(job.exclude).split(',').map((v: string) => parseInt(v.trim())).filter((v: number) => !isNaN(v))
+        excludedVmids = String(job.exclude).split(',').map((v: string) => Number.parseInt(v.trim())).filter((v: number) => !isNaN(v))
       }
     } else if (job.vmid) {
       selMode = 'include'
-      vmids = String(job.vmid).split(',').map((v: string) => parseInt(v.trim())).filter((v: number) => !isNaN(v))
+      vmids = String(job.vmid).split(',').map((v: string) => Number.parseInt(v.trim())).filter((v: number) => !isNaN(v))
     }
 
     setBackupJobFormData({

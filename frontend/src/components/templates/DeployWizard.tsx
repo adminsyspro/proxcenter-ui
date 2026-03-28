@@ -436,7 +436,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
           label={t('templates.deploy.target.vmid')}
           type="number"
           value={vmid}
-          onChange={e => setVmid(parseInt(e.target.value) || 100)}
+          onChange={e => setVmid(Number.parseInt(e.target.value) || 100)}
           required
           slotProps={{ htmlInput: { min: 100 } }}
         />
@@ -458,7 +458,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
         label={t('templates.deploy.hardware.cores')}
         type="number"
         value={cores}
-        onChange={e => setCores(parseInt(e.target.value) || 1)}
+        onChange={e => setCores(Number.parseInt(e.target.value) || 1)}
         slotProps={{ htmlInput: { min: 1, max: 128 } }}
       />
       <TextField
@@ -466,7 +466,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
         label={t('templates.deploy.hardware.sockets')}
         type="number"
         value={sockets}
-        onChange={e => setSockets(parseInt(e.target.value) || 1)}
+        onChange={e => setSockets(Number.parseInt(e.target.value) || 1)}
         slotProps={{ htmlInput: { min: 1, max: 4 } }}
       />
       <TextField
@@ -474,7 +474,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
         label={t('templates.deploy.hardware.memory')}
         type="number"
         value={memory}
-        onChange={e => setMemory(parseInt(e.target.value) || 512)}
+        onChange={e => setMemory(Number.parseInt(e.target.value) || 512)}
         helperText="MB"
         slotProps={{ htmlInput: { min: 128, step: 256 } }}
       />
@@ -530,7 +530,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint }:
         label={t('templates.deploy.hardware.vlan')}
         type="number"
         value={vlanTag}
-        onChange={e => setVlanTag(e.target.value ? parseInt(e.target.value) : '')}
+        onChange={e => setVlanTag(e.target.value ? Number.parseInt(e.target.value) : '')}
         placeholder={t('templates.deploy.hardware.vlanPlaceholder')}
         slotProps={{ htmlInput: { min: 1, max: 4094 } }}
       />

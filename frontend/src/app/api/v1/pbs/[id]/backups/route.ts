@@ -189,8 +189,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const datastoreFilter = url.searchParams.get('datastore')
     const namespaceFilter = url.searchParams.get('namespace') // exact namespace string, '' for root
     const typeFilter = url.searchParams.get('type') // 'vm' | 'ct' | 'host'
-    const page = parseInt(url.searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(url.searchParams.get('pageSize') || '50', 10)
+    const page = Number.parseInt(url.searchParams.get('page') || '1', 10)
+    const pageSize = Number.parseInt(url.searchParams.get('pageSize') || '50', 10)
     const search = url.searchParams.get('search')?.toLowerCase() || ''
     const noCache = url.searchParams.get('noCache') === '1'
 

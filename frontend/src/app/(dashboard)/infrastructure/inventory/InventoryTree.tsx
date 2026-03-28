@@ -1976,7 +1976,7 @@ return next
                   pool: null,
                   tags: null,
                   template: false,
-                }].sort((a, b) => parseInt(a.vmid, 10) - parseInt(b.vmid, 10))
+                }].sort((a, b) => Number.parseInt(a.vmid, 10) - Number.parseInt(b.vmid, 10))
               }
             })
             return { ...clu, nodes }

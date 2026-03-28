@@ -190,7 +190,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
               label={t('templates.deploy.hardware.cores')}
               type="number"
               value={hardware.cores}
-              onChange={e => setHardware(h => ({ ...h, cores: parseInt(e.target.value) || 1 }))}
+              onChange={e => setHardware(h => ({ ...h, cores: Number.parseInt(e.target.value) || 1 }))}
               size="small"
               slotProps={{ htmlInput: { min: 1, max: 128 } }}
             />
@@ -198,7 +198,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
               label={t('templates.deploy.hardware.memory')}
               type="number"
               value={hardware.memory}
-              onChange={e => setHardware(h => ({ ...h, memory: parseInt(e.target.value) || 512 }))}
+              onChange={e => setHardware(h => ({ ...h, memory: Number.parseInt(e.target.value) || 512 }))}
               size="small"
               helperText="MB"
               slotProps={{ htmlInput: { min: 128, step: 256 } }}

@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = Number.parseInt(searchParams.get('limit') || '50')
+    const offset = Number.parseInt(searchParams.get('offset') || '0')
     const type = searchParams.get('type') || ''
     const status = searchParams.get('status') || ''
 

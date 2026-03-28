@@ -327,7 +327,7 @@ export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string
         const d = match[1]
         const url = d.match(/<url>([^<]*)<\/url>/)?.[1] || ""
         const key = d.match(/<key>([^<]*)<\/key>/)?.[1] || ""
-        const fileSize = parseInt(d.match(/<fileSize>([^<]*)<\/fileSize>/)?.[1] || "0", 10)
+        const fileSize = Number.parseInt(d.match(/<fileSize>([^<]*)<\/fileSize>/)?.[1] || "0", 10)
         const disk = d.includes("<disk>true</disk>")
         const targetId = d.match(/<targetId>([^<]*)<\/targetId>/)?.[1] || ""
 
@@ -431,9 +431,9 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   const name = extractProp(xml, "name")
   const guestOS = extractProp(xml, "config.guestFullName")
   const guestId = extractProp(xml, "config.guestId")
-  const numCPU = parseInt(extractProp(xml, "config.hardware.numCPU"), 10) || 1
-  const numCoresPerSocket = parseInt(extractProp(xml, "config.hardware.numCoresPerSocket"), 10) || 1
-  const memoryMB = parseInt(extractProp(xml, "config.hardware.memoryMB"), 10) || 512
+  const numCPU = Number.parseInt(extractProp(xml, "config.hardware.numCPU"), 10) || 1
+  const numCoresPerSocket = Number.parseInt(extractProp(xml, "config.hardware.numCoresPerSocket"), 10) || 1
+  const memoryMB = Number.parseInt(extractProp(xml, "config.hardware.memoryMB"), 10) || 512
   const firmware = extractProp(xml, "config.firmware") || "bios"
   const uuid = extractProp(xml, "config.uuid")
   const vmxVersion = extractProp(xml, "config.version")
@@ -442,7 +442,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   // Storage
   const storageXml = extractProp(xml, "storage.perDatastoreUsage")
   const committedMatch = storageXml.match(/<committed>(\d+)<\/committed>/)
-  const committed = committedMatch ? parseInt(committedMatch[1], 10) : 0
+  const committed = committedMatch ? Number.parseInt(committedMatch[1], 10) : 0
 
   // Disks
   const devicesXml = extractProp(xml, "config.hardware.device")
@@ -452,8 +452,8 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   while ((diskMatch = diskRegex.exec(devicesXml)) !== null) {
     const d = diskMatch[1]
     const label = d.match(/<label>([^<]*)<\/label>/)?.[1] || ""
-    const capacityBytes = parseInt(d.match(/<capacityInBytes>(\d+)<\/capacityInBytes>/)?.[1] || "0", 10) ||
-      (parseInt(d.match(/<capacityInKB>(\d+)<\/capacityInKB>/)?.[1] || "0", 10) * 1024)
+    const capacityBytes = Number.parseInt(d.match(/<capacityInBytes>(\d+)<\/capacityInBytes>/)?.[1] || "0", 10) ||
+      (Number.parseInt(d.match(/<capacityInKB>(\d+)<\/capacityInKB>/)?.[1] || "0", 10) * 1024)
     const fileName = d.match(/<fileName>([^<]*)<\/fileName>/)?.[1] || ""
     const thinProvisioned = d.includes("<thinProvisioned>true</thinProvisioned>")
 

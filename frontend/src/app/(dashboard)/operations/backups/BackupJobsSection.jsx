@@ -703,7 +703,7 @@ export default function BackupJobsSection({ pveConnections = [] }) {
                 label={t('backups.retentionBackupCount')}
                 type="number"
                 value={formData.maxfiles}
-                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: parseInt(e.target.value) || 1 }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: Number.parseInt(e.target.value) || 1 }))}
                 inputProps={{ min: 1 }}
               />
             </Box>

@@ -1041,7 +1041,7 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.minLength')}
                   value={form.password_min_length}
-                  onChange={(e) => handleChange('password_min_length', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleChange('password_min_length', Number.parseInt(e.target.value) || 0)}
                   size="small"
                   inputProps={{ min: 1, max: 128 }}
                 />
@@ -1080,7 +1080,7 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.sessionTimeout')}
                   value={form.session_timeout_minutes}
-                  onChange={(e) => handleChange('session_timeout_minutes', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleChange('session_timeout_minutes', Number.parseInt(e.target.value) || 0)}
                   size="small"
                   helperText={t('compliance.sessionTimeoutHelper')}
                   inputProps={{ min: 0 }}
@@ -1089,7 +1089,7 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.maxConcurrentSessions')}
                   value={form.session_max_concurrent}
-                  onChange={(e) => handleChange('session_max_concurrent', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleChange('session_max_concurrent', Number.parseInt(e.target.value) || 0)}
                   size="small"
                   helperText={t('compliance.maxConcurrentHelper')}
                   inputProps={{ min: 0 }}
@@ -1113,7 +1113,7 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.maxFailedAttempts')}
                   value={form.login_max_failed_attempts}
-                  onChange={(e) => handleChange('login_max_failed_attempts', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleChange('login_max_failed_attempts', Number.parseInt(e.target.value) || 0)}
                   size="small"
                   helperText={t('compliance.maxFailedHelper')}
                   inputProps={{ min: 0 }}
@@ -1122,7 +1122,7 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.lockoutDuration')}
                   value={form.login_lockout_duration_minutes}
-                  onChange={(e) => handleChange('login_lockout_duration_minutes', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleChange('login_lockout_duration_minutes', Number.parseInt(e.target.value) || 0)}
                   size="small"
                   helperText={t('compliance.lockoutHelper')}
                   inputProps={{ min: 0 }}
@@ -1146,7 +1146,7 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.retentionDays')}
                   value={form.audit_retention_days}
-                  onChange={(e) => handleChange('audit_retention_days', parseInt(e.target.value) || 0)}
+                  onChange={(e) => handleChange('audit_retention_days', Number.parseInt(e.target.value) || 0)}
                   size="small"
                   helperText={t('compliance.retentionHelper')}
                   inputProps={{ min: 1 }}

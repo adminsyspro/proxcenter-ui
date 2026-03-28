@@ -89,7 +89,7 @@ export async function POST(
       targetFingerprint = await new Promise<string>((resolve, reject) => {
         const socket = tls.connect({
           host: targetHost,
-          port: parseInt(targetPort),
+          port: Number.parseInt(targetPort),
           rejectUnauthorized: false, // On accepte les certificats auto-signés
           timeout: 10000,
         }, () => {

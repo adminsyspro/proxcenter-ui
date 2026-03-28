@@ -339,7 +339,7 @@ export function MigrateVmDialog({
               const sizeMatch = diskStr.match(/size=(\d+(?:\.\d+)?)(G|T|M)?/)
               let sizeGB = 0
               if (sizeMatch) {
-                sizeGB = parseFloat(sizeMatch[1])
+                sizeGB = Number.parseFloat(sizeMatch[1])
                 if (sizeMatch[2] === 'T') sizeGB *= 1024
                 else if (sizeMatch[2] === 'M') sizeGB /= 1024
               }
@@ -1420,7 +1420,7 @@ export function MigrateVmDialog({
                       type="number"
                       size="small"
                       value={targetVmid}
-                      onChange={(e) => setTargetVmid(e.target.value ? parseInt(e.target.value) : '')}
+                      onChange={(e) => setTargetVmid(e.target.value ? Number.parseInt(e.target.value) : '')}
                       helperText={t('hardware.crossCluster.targetVmIdHelp')}
                       inputProps={{ min: 100, max: 999999999 }}
                     />
@@ -1430,7 +1430,7 @@ export function MigrateVmDialog({
                       type="number"
                       size="small"
                       value={bwLimit}
-                      onChange={(e) => setBwLimit(e.target.value ? parseInt(e.target.value) : '')}
+                      onChange={(e) => setBwLimit(e.target.value ? Number.parseInt(e.target.value) : '')}
                       helperText={t('hardware.crossCluster.bandwidthLimitHelp')}
                       InputProps={{
                         endAdornment: <InputAdornment position="end">KiB/s</InputAdornment>

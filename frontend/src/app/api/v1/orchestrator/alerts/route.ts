@@ -19,8 +19,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const connectionId = searchParams.get('connection_id') || undefined
     const status = searchParams.get('status') as 'active' | 'acknowledged' | 'resolved' | undefined
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 100
-    const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0
+    const limit = searchParams.get('limit') ? Number.parseInt(searchParams.get('limit')!) : 100
+    const offset = searchParams.get('offset') ? Number.parseInt(searchParams.get('offset')!) : 0
 
     // Get tenant's connection IDs for filtering
     const prisma = await getSessionPrisma()

@@ -90,7 +90,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     return Array.from(map.entries()).sort((a, b) => {
       if (a[0] === '__untagged__') return 1
       if (b[0] === '__untagged__') return -1
-      return parseInt(a[0]) - parseInt(b[0])
+      return Number.parseInt(a[0]) - Number.parseInt(b[0])
     })
   }, [filteredVMData])
 

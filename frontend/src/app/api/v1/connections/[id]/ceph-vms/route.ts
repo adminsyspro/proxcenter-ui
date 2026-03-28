@@ -59,7 +59,7 @@ export async function GET(
 
             const sizeMatch = diskStr.match(/size=(\d+)([GMT])?/i)
             if (sizeMatch) {
-              const num = parseInt(sizeMatch[1], 10)
+              const num = Number.parseInt(sizeMatch[1], 10)
               const unit = (sizeMatch[2] || "G").toUpperCase()
               if (unit === "T") cephDiskSize += num * 1024
               else if (unit === "M") cephDiskSize += num / 1024

@@ -7,7 +7,7 @@ export function formatBytes(bytes: number, decimals = 1): string {
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`
+  return `${Number.parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`
 }
 
 export function formatBytesPerSec(bytesPerSec: number): string {
@@ -15,7 +15,7 @@ export function formatBytesPerSec(bytesPerSec: number): string {
   const k = 1024
   const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
   const i = Math.floor(Math.log(bytesPerSec) / Math.log(k))
-  return `${parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+  return `${Number.parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
 export function parseResourceVmId(id: string): { connId: string; type: string; node: string; vmid: string } {

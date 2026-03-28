@@ -23,7 +23,7 @@ export function replaceHostInUrl(url: string, newHost: string): string {
 export function extractPortFromUrl(url: string, defaultPort = 8006): number {
   try {
     const parsed = new URL(url)
-    return parsed.port ? parseInt(parsed.port, 10) : defaultPort
+    return parsed.port ? Number.parseInt(parsed.port, 10) : defaultPort
   } catch {
     return defaultPort
   }

@@ -379,7 +379,7 @@ return currentScore > bestScore ? current : best
             label="VM ID"
             type="number"
             value={newVmid}
-            onChange={(e) => setNewVmid(e.target.value === '' ? '' : (parseInt(e.target.value) || 0))}
+            onChange={(e) => setNewVmid(e.target.value === '' ? '' : (Number.parseInt(e.target.value) || 0))}
             inputProps={{ min: 100, max: 999999999 }}
             placeholder={t('hardware.vmIdPlaceholder')}
             required

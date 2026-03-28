@@ -31,7 +31,7 @@ function extractVLANs(config: Record<string, any>): number[] {
     const netConfig = config[`net${i}`]
     if (netConfig && typeof netConfig === 'string') {
       const match = netConfig.match(/tag=(\d+)/)
-      if (match) vlans.add(parseInt(match[1], 10))
+      if (match) vlans.add(Number.parseInt(match[1], 10))
     }
   }
   return Array.from(vlans).sort((a, b) => a - b)
@@ -79,7 +79,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
           const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 
           vmData.push({
-            vmid: parseInt(guest.vmid, 10),
+            vmid: Number.parseInt(guest.vmid, 10),
             name: guest.name || `VM ${guest.vmid}`,
             node: guest.node,
             type: guest.type,
@@ -91,7 +91,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
           })
         } catch {
           vmData.push({
-            vmid: parseInt(guest.vmid, 10),
+            vmid: Number.parseInt(guest.vmid, 10),
             name: guest.name || `VM ${guest.vmid}`,
             node: guest.node,
             type: guest.type,

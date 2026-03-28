@@ -451,7 +451,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
 
     try {
       // Handle enable being undefined, string, or number
-      const currentEnable = rule.enable === undefined ? 1 : (typeof rule.enable === 'string' ? parseInt(rule.enable, 10) : rule.enable)
+      const currentEnable = rule.enable === undefined ? 1 : (typeof rule.enable === 'string' ? Number.parseInt(rule.enable, 10) : rule.enable)
       const newEnable = currentEnable === 1 ? 0 : 1
 
       await firewallAPI.updateVMRule(connectionId, node, vmType, vmid, rule.pos, { enable: newEnable })

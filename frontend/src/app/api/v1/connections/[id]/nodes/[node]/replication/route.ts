@@ -135,7 +135,7 @@ export async function POST(
       if (guestJobs.length > 0) {
         const usedNums = guestJobs.map((j: any) => {
           const parts = String(j.id).split('-')
-          return parseInt(parts[1] || '0')
+          return Number.parseInt(parts[1] || '0')
         })
         jobNum = Math.max(...usedNums) + 1
       }

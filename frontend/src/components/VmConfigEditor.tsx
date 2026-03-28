@@ -247,7 +247,7 @@ function parseDiskSize(sizeStr: string): number {
   const match = sizeStr.match(/^(\d+(?:\.\d+)?)(G|M|T)?$/i)
 
   if (!match) return 0
-  const num = parseFloat(match[1])
+  const num = Number.parseFloat(match[1])
   const unit = (match[2] || 'G').toUpperCase()
 
   if (unit === 'T') return num * 1024

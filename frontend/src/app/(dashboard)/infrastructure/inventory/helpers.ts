@@ -761,7 +761,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         const cpuFlagsMap: Record<string, '+' | '-'> = {}
         const flagsPart = cpuParts.find((p: string) => p.startsWith('flags='))
         if (flagsPart) {
-          flagsPart.replace('flags=', '').split(';').forEach((f: string) => {
+          flagsPart.replaceAll('flags=', '').split(';').forEach((f: string) => {
             if (f.startsWith('+') || f.startsWith('-')) {
               cpuFlagsMap[f.slice(1)] = f[0] as '+' | '-'
             }

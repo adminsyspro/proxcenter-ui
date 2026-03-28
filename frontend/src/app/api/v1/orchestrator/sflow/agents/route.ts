@@ -123,7 +123,7 @@ export async function GET() {
               }
               const samplingMatch = sflowResult.output.match(/sampling\s*:\s*(\d+)/)
               if (samplingMatch) {
-                nodeStatus.sflowSampling = parseInt(samplingMatch[1], 10)
+                nodeStatus.sflowSampling = Number.parseInt(samplingMatch[1], 10)
               }
             }
           }

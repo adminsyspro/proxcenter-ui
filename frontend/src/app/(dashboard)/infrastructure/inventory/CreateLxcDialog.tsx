@@ -126,7 +126,7 @@ function CreateLxcDialog({
   // Calculer le prochain CTID disponible (global sur toutes les VMs)
   useEffect(() => {
     if (allVms.length > 0) {
-      const usedIds = allVms.map(vm => parseInt(String(vm.vmid), 10))
+      const usedIds = allVms.map(vm => Number.parseInt(String(vm.vmid), 10))
 
       let nextId = 100
 
@@ -151,7 +151,7 @@ function CreateLxcDialog({
 return
     }
 
-    const ctidNum = parseInt(numericValue, 10)
+    const ctidNum = Number.parseInt(numericValue, 10)
 
     if (ctidNum < 100) {
       setCtidError(t('inventory.createLxc.ctIdMin'))
@@ -165,7 +165,7 @@ return
 return
     }
 
-    const isUsed = allVms.some(vm => parseInt(String(vm.vmid), 10) === ctidNum)
+    const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === ctidNum)
 
     if (isUsed) {
       setCtidError(t('inventory.createLxc.ctIdInUse', { id: ctidNum }))
@@ -181,7 +181,7 @@ return
     const scopedVms = selectedConnection
       ? allVms.filter(vm => vm.connId === selectedConnection)
       : allVms
-    const usedIds = new Set(scopedVms.map(vm => parseInt(String(vm.vmid), 10)))
+    const usedIds = new Set(scopedVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
 
     let nextId = 100
     while (usedIds.has(nextId)) {
@@ -383,7 +383,7 @@ return
   const handleNodeChange = (value: string) => {
     setSelectedNodeValue(value)
     if (value.startsWith('cluster:')) {
-      const connId = value.replace('cluster:', '')
+      const connId = value.replaceAll('cluster:', '')
       const bestNode = findBestNode(connId)
       if (bestNode) {
         setResolvedNode(bestNode)
@@ -433,7 +433,7 @@ return
       }
 
       const payload: any = {
-        vmid: parseInt(ctid, 10),
+        vmid: Number.parseInt(ctid, 10),
         hostname: hostname,
         cores: cpuCores,
         memory: memorySize,
@@ -819,7 +819,7 @@ return
                 <TextField
                   label={t('inventory.createLxc.diskSizeGib')}
                   value={rootSize}
-                  onChange={(e) => setRootSize(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setRootSize(Number.parseInt(e.target.value) || 1)}
                   size="small"
                   type="number"
                   inputProps={{ min: 1, max: 1000 }}
@@ -855,7 +855,7 @@ return
               <TextField
                 label={t('inventory.createLxc.cores')}
                 value={cpuCores}
-                onChange={(e) => setCpuCores(parseInt(e.target.value) || 1)}
+                onChange={(e) => setCpuCores(Number.parseInt(e.target.value) || 1)}
                 size="small"
                 type="number"
                 inputProps={{ min: 1, max: 128 }}
@@ -876,7 +876,7 @@ return
                     <TextField
                       label={t('inventory.createLxc.cpuLimit')}
                       value={cpuLimit === 0 ? '' : cpuLimit}
-                      onChange={(e) => setCpuLimit(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setCpuLimit(Number.parseFloat(e.target.value) || 0)}
                       size="small"
                       type="number"
                       placeholder={t('inventory.createLxc.unlimited')}
@@ -885,7 +885,7 @@ return
                     <TextField
                       label={t('inventory.createLxc.cpuUnits')}
                       value={cpuUnits}
-                      onChange={(e) => setCpuUnits(parseInt(e.target.value) || 1024)}
+                      onChange={(e) => setCpuUnits(Number.parseInt(e.target.value) || 1024)}
                       size="small"
                       type="number"
                     />
@@ -953,7 +953,7 @@ return
               <TextField
                 label={t('inventory.createLxc.memoryMib')}
                 value={memorySize}
-                onChange={(e) => setMemorySize(parseInt(e.target.value) || 128)}
+                onChange={(e) => setMemorySize(Number.parseInt(e.target.value) || 128)}
                 size="small"
                 type="number"
                 inputProps={{ min: 16, step: 32 }}
@@ -985,7 +985,7 @@ return
               <TextField
                 label={t('inventory.createLxc.swapMib')}
                 value={swapSize}
-                onChange={(e) => setSwapSize(parseInt(e.target.value) || 0)}
+                onChange={(e) => setSwapSize(Number.parseInt(e.target.value) || 0)}
                 size="small"
                 type="number"
                 inputProps={{ min: 0, step: 32 }}

@@ -25,7 +25,7 @@ function buildVmNode(
   guest: InventoryGuest,
   idSuffix?: string
 ): { node: Node; data: VmNodeData } {
-  const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
+  const vmid = typeof guest.vmid === 'string' ? Number.parseInt(guest.vmid, 10) : guest.vmid
   const vmCpu = guest.cpu || 0
   const vmMaxCpu = guest.maxcpu || 0
   const vmMem = guest.mem || 0
@@ -114,7 +114,7 @@ function buildNetworkView(
       grandTotalVms += guests.length
 
       for (const guest of guests) {
-        const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
+        const vmid = typeof guest.vmid === 'string' ? Number.parseInt(guest.vmid, 10) : guest.vmid
         const type = guest.type || 'qemu'
         const netKey = `${conn.id}:${type}:${node.node}:${typeof guest.vmid === 'string' ? guest.vmid : String(guest.vmid)}`
         const nics = networkMap?.get(netKey) || []

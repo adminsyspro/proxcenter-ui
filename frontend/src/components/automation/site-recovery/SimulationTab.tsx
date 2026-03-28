@@ -877,7 +877,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
         vms: (n.guests || [])
           .filter(g => g.status === 'running')
           .map(g => ({
-            vmid: typeof g.vmid === 'string' ? parseInt(g.vmid, 10) : g.vmid,
+            vmid: typeof g.vmid === 'string' ? Number.parseInt(g.vmid, 10) : g.vmid,
             name: g.name || `VM ${g.vmid}`,
             status: g.status,
             type: g.type,

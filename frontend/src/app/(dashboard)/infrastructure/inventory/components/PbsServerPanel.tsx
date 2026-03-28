@@ -201,20 +201,20 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     setPbsRestoring(true)
     try {
       const body: Record<string, any> = {
-        vmid: parseInt(pbsRestoreVmId) || backup.vmid,
+        vmid: Number.parseInt(pbsRestoreVmId) || backup.vmid,
         archive: backup.volid,
         type: pbsRestoreDialog.storageType,
       }
       if (pbsRestoreStorage) body.storage = pbsRestoreStorage
-      if (pbsRestoreBwLimit) body.bwlimit = parseInt(pbsRestoreBwLimit)
+      if (pbsRestoreBwLimit) body.bwlimit = Number.parseInt(pbsRestoreBwLimit)
       if (pbsRestoreUnique) body.unique = true
       if (pbsRestoreStart) body.start = true
       if (pbsRestoreLive) body.live = true
       if (pbsRestoreOverride) {
         if (pbsRestoreName) body.name = pbsRestoreName
-        if (pbsRestoreMemory) body.memory = parseInt(pbsRestoreMemory)
-        if (pbsRestoreCores) body.cores = parseInt(pbsRestoreCores)
-        if (pbsRestoreSockets) body.sockets = parseInt(pbsRestoreSockets)
+        if (pbsRestoreMemory) body.memory = Number.parseInt(pbsRestoreMemory)
+        if (pbsRestoreCores) body.cores = Number.parseInt(pbsRestoreCores)
+        if (pbsRestoreSockets) body.sockets = Number.parseInt(pbsRestoreSockets)
       }
 
       const res = await fetch(

@@ -375,12 +375,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       for (const val of Object.values(vmConf || {})) {
         if (typeof val === 'string') {
           const m = (val as string).match(/vm-\d+-disk-(\d+)/)
-          if (m) maxDiskNum = Math.max(maxDiskNum, parseInt(m[1]))
+          if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
         }
       }
       for (const av of allocatedVolumes) {
         const m = av.volumeId.match(/disk-(\d+)/)
-        if (m) maxDiskNum = Math.max(maxDiskNum, parseInt(m[1]))
+        if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
       }
       const diskNum = maxDiskNum + 1
       const sizeKB = Math.ceil(sizeBytes / 1024)
@@ -518,7 +518,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         const isRunning = exitCheck.output?.trim() === "RUNNING"
 
         const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
-        const currentSize = parseInt(sizeResult.output?.trim() || "0", 10) || 0
+        const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
         downloadedBytes = currentSize
 
         const elapsed = (Date.now() - startTime) / 1000
@@ -535,7 +535,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         })
 
         if (!isRunning) {
-          const exitCode = parseInt(exitCheck.output?.trim() || "1", 10)
+          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
             throw new Error(`Download failed with exit code ${exitCode}`)

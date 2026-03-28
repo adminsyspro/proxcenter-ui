@@ -2526,7 +2526,7 @@ return (
                                     sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
                                     onClick={backToArchives}
                                   >
-                                    {explorerArchive.replace('.pxar.didx', '')}
+                                    {explorerArchive.replaceAll('.pxar.didx', '')}
                                   </Typography>
                                   {explorerPath !== '/' && explorerPath.split('/').filter(Boolean).map((part, idx) => (
                                     <Typography
@@ -3510,8 +3510,8 @@ return (
                               {/* IP Configurations */}
                               {data.cloudInitConfig.ipconfigs && Object.entries(data.cloudInitConfig.ipconfigs)
                                 .sort(([a], [b]) => {
-                                  const na = parseInt(a.replace('ipconfig', ''))
-                                  const nb = parseInt(b.replace('ipconfig', ''))
+                                  const na = Number.parseInt(a.replaceAll('ipconfig', ''))
+                                  const nb = Number.parseInt(b.replaceAll('ipconfig', ''))
                                   return na - nb
                                 })
                                 .map(([key, val]: [string, any]) => (
@@ -3519,7 +3519,7 @@ return (
                                   <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', fontWeight: 500 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                       <i className="ri-global-line" style={{ fontSize: 16, opacity: 0.6 }} />
-                                      {t('inventory.cloudInit.ipConfig')} ({key.replace('ipconfig', '')})
+                                      {t('inventory.cloudInit.ipConfig')} ({key.replaceAll('ipconfig', '')})
                                     </Box>
                                   </td>
                                   <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)' }}>
@@ -3528,7 +3528,7 @@ return (
                                   </td>
                                   <td style={{ padding: '6px 16px', borderBottom: '1px solid var(--mui-palette-divider)', textAlign: 'center' }}>
                                     <MuiTooltip title={t('common.edit')}>
-                                      <IconButton size="small" onClick={() => setEditOptionDialog({ key, label: `${t('inventory.cloudInit.ipConfig')} (${key.replace('ipconfig', '')})`, value: String(val), type: 'text' })}>
+                                      <IconButton size="small" onClick={() => setEditOptionDialog({ key, label: `${t('inventory.cloudInit.ipConfig')} (${key.replaceAll('ipconfig', '')})`, value: String(val), type: 'text' })}>
                                         <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                       </IconButton>
                                     </MuiTooltip>
@@ -3697,7 +3697,7 @@ return (
                                   type="number"
                                   size="small"
                                   value={haMaxRestart}
-                                  onChange={(e) => setHaMaxRestart(parseInt(e.target.value) || 0)}
+                                  onChange={(e) => setHaMaxRestart(Number.parseInt(e.target.value) || 0)}
                                   inputProps={{ min: 0, max: 10 }}
                                 />
                                 <FormControl fullWidth size="small">
@@ -3720,7 +3720,7 @@ return (
                                   type="number"
                                   size="small"
                                   value={haMaxRelocate}
-                                  onChange={(e) => setHaMaxRelocate(parseInt(e.target.value) || 0)}
+                                  onChange={(e) => setHaMaxRelocate(Number.parseInt(e.target.value) || 0)}
                                   inputProps={{ min: 0, max: 10 }}
                                 />
                                 <Box />
@@ -3834,7 +3834,7 @@ return (
                   connectionId={parseVmId(selection.id).connId}
                   node={parseVmId(selection.id).node}
                   vmType={data.vmType as 'qemu' | 'lxc'}
-                  vmid={parseInt(parseVmId(selection.id).vmid)}
+                  vmid={Number.parseInt(parseVmId(selection.id).vmid)}
                   vmName={data.name}
                 />
               )}

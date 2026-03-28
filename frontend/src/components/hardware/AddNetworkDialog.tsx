@@ -114,7 +114,7 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, ex
         const match = n.match(/net(\d+)/)
 
 
-return match ? parseInt(match[1]) : -1
+return match ? Number.parseInt(match[1]) : -1
       })
       .filter(i => i >= 0)
 

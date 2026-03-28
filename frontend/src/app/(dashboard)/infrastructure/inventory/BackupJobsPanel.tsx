@@ -122,11 +122,11 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
           if (job.all === 1 || job.all === true) {
             selectionMode = 'all'
             if (job.exclude) {
-              excludedVmids = String(job.exclude).split(',').map((v: string) => parseInt(v.trim())).filter((v: number) => !isNaN(v))
+              excludedVmids = String(job.exclude).split(',').map((v: string) => Number.parseInt(v.trim())).filter((v: number) => !isNaN(v))
             }
           } else if (job.vmid) {
             selectionMode = 'include'
-            vmids = String(job.vmid).split(',').map((v: string) => parseInt(v.trim())).filter((v: number) => !isNaN(v))
+            vmids = String(job.vmid).split(',').map((v: string) => Number.parseInt(v.trim())).filter((v: number) => !isNaN(v))
           }
 
           return {
@@ -671,7 +671,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                 type="number"
                 label={t('inventory.maxBackupsToKeep')}
                 value={formData.maxfiles}
-                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: parseInt(e.target.value) || 1 }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: Number.parseInt(e.target.value) || 1 }))}
                 inputProps={{ min: 1 }}
                 helperText={t('inventory.backupsPerVmHelper')}
               />

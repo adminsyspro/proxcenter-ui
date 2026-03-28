@@ -133,7 +133,7 @@ export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promi
         vdiUuid: vdi.uuid,
         label: vdi.name_label || `disk-${vbd.position}`,
         sizeBytes: vdi.size || 0,
-        position: typeof vbd.position === "number" ? vbd.position : parseInt(vbd.position, 10) || 0,
+        position: typeof vbd.position === "number" ? vbd.position : Number.parseInt(vbd.position, 10) || 0,
         srUuid: vdi.$SR || "",
       })
     } catch (e: any) {
@@ -333,7 +333,7 @@ export async function xoGetSnapshotDisks(
     const vdiUuid = vbd.VDI
     if (!vdiUuid) continue
 
-    const position = typeof vbd.position === "number" ? vbd.position : parseInt(vbd.position, 10) || 0
+    const position = typeof vbd.position === "number" ? vbd.position : Number.parseInt(vbd.position, 10) || 0
 
     // Match with original VM disk by position to get label/size metadata
     const originalDisk = originalDisks.find(d => d.position === position)

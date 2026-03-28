@@ -167,7 +167,7 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
         const match = d.match(/(\d+)$/)
 
 
-return match ? parseInt(match[1]) : -1
+return match ? Number.parseInt(match[1]) : -1
       })
       .filter(i => i >= 0)
 
@@ -380,7 +380,7 @@ return match ? parseInt(match[1]) : -1
                 size="small"
                 type="number"
                 value={busIndex}
-                onChange={(e) => setBusIndex(parseInt(e.target.value) || 0)}
+                onChange={(e) => setBusIndex(Number.parseInt(e.target.value) || 0)}
                 sx={{ width: 80 }}
                 inputProps={{ min: 0, max: 30 }}
               />
@@ -471,7 +471,7 @@ return match ? parseInt(match[1]) : -1
                 label="Disk size (GiB)"
                 type="number"
                 value={diskSize}
-                onChange={(e) => setDiskSize(parseInt(e.target.value) || 1)}
+                onChange={(e) => setDiskSize(Number.parseInt(e.target.value) || 1)}
                 inputProps={{ min: 1 }}
               />
               <FormControl fullWidth size="small">

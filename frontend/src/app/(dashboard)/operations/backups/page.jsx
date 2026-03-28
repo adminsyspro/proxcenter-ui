@@ -1013,7 +1013,7 @@ return () => clearTimeout(timer)
                               sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
                               onClick={backToArchives}
                             >
-                              {explorerArchive.replace('.pxar.didx', '')}
+                              {explorerArchive.replaceAll('.pxar.didx', '')}
                             </Typography>
                             {explorerPath !== '/' && explorerPath.split('/').filter(Boolean).map((part, idx) => (
                               <Typography

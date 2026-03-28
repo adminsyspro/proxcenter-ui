@@ -52,7 +52,7 @@ function severityFg(sev: string): [number, number, number] {
   }
 }
 function healthLabel(s: number) { return s >= 85 ? 'Excellent' : s >= 70 ? 'Good' : s >= 50 ? 'Needs attention' : 'Critical' }
-function hex(h: string): [number, number, number] { const v = parseInt(h.replace('#', ''), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255] }
+function hex(h: string): [number, number, number] { const v = Number.parseInt(h.replaceAll('#', ''), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255] }
 function n(v: number, d = 1) { return v.toFixed(d) }
 function pueGrade(pue: number) { if (pue <= 1.2) return 'A'; if (pue <= 1.4) return 'B'; if (pue <= 1.6) return 'C'; if (pue <= 2.0) return 'D'; return 'E' }
 function pueLabel(pue: number) { if (pue <= 1.2) return 'Best-in-class (hyperscaler level)'; if (pue <= 1.4) return 'Very efficient'; if (pue <= 1.6) return 'Average datacenter'; if (pue <= 2.0) return 'Below average — optimization recommended'; return 'Inefficient — immediate action required' }
@@ -479,12 +479,12 @@ export async function exportResourcesPdf(data: ExportData): Promise<void> {
         columnStyles: { 0: { fontStyle: 'bold' } },
         didParseCell: (d: any) => {
           if (d.section === 'body' && d.column.index === 1) {
-            const val = parseFloat(d.cell.raw as string)
+            const val = Number.parseFloat(d.cell.raw as string)
             if (val > 4) { d.cell.styles.fillColor = severityBg('critical'); d.cell.styles.textColor = severityFg('critical') }
             else if (val > 2) { d.cell.styles.fillColor = severityBg('warning'); d.cell.styles.textColor = severityFg('warning') }
           }
           if (d.section === 'body' && d.column.index === 2) {
-            const val = parseFloat(d.cell.raw as string)
+            const val = Number.parseFloat(d.cell.raw as string)
             if (val > 3) { d.cell.styles.fillColor = severityBg('critical'); d.cell.styles.textColor = severityFg('critical') }
             else if (val > 1.5) { d.cell.styles.fillColor = severityBg('warning'); d.cell.styles.textColor = severityFg('warning') }
           }

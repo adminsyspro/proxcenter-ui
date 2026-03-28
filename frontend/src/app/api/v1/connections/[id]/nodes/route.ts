@@ -110,7 +110,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (nodeIps.length > 0) {
     try {
       const port = extractPortFromUrl(conn.baseUrl)
-      const protocol = new URL(conn.baseUrl).protocol.replace(":", "")
+      const protocol = new URL(conn.baseUrl).protocol.replaceAll(":", "")
       setNodeIps(id, nodeIps, port, protocol)
     } catch {
       // Invalid baseUrl — skip cache population

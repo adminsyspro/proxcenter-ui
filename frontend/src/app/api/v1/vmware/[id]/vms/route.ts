@@ -183,14 +183,14 @@ function parseVMProperties(xml: string): EsxiVm[] {
       switch (propName) {
         case 'name': name = propVal; break
         case 'runtime.powerState': powerState = propVal; break
-        case 'config.hardware.numCPU': numCPU = parseInt(propVal, 10) || 0; break
-        case 'config.hardware.memoryMB': memoryMB = parseInt(propVal, 10) || 0; break
+        case 'config.hardware.numCPU': numCPU = Number.parseInt(propVal, 10) || 0; break
+        case 'config.hardware.memoryMB': memoryMB = Number.parseInt(propVal, 10) || 0; break
         case 'config.guestFullName': guestOS = propVal; break
         case 'storage.perDatastoreUsage': {
           const c = propVal.match(/<committed>(\d+)<\/committed>/)
           const u = propVal.match(/<uncommitted>(\d+)<\/uncommitted>/)
-          if (c) committed += parseInt(c[1], 10) || 0
-          if (u) uncommitted += parseInt(u[1], 10) || 0
+          if (c) committed += Number.parseInt(c[1], 10) || 0
+          if (u) uncommitted += Number.parseInt(u[1], 10) || 0
           break
         }
       }

@@ -90,7 +90,7 @@ function formatBytesUtil(bytes: number): string {
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 function generateBackupEntries(count: number, prefix: string, datastore: string): any[] {
@@ -1129,8 +1129,8 @@ const EXTRA_MOCKS: MockDataMap = {
         nodes: nodes.map((n, i) => ({
           node: n,
           status: 'online',
-          cpu_usage: parseFloat((2 + Math.random() * 6).toFixed(1)),
-          memory_usage: parseFloat((55 + Math.random() * 25).toFixed(1)),
+          cpu_usage: Number.parseFloat((2 + Math.random() * 6).toFixed(1)),
+          memory_usage: Number.parseFloat((55 + Math.random() * 25).toFixed(1)),
           vm_count: vmCounts[i],
           ct_count: Math.floor(Math.random() * 3),
           running_vms: vmCounts[i] - Math.floor(Math.random() * 2),

@@ -225,12 +225,12 @@ async function buildSystemPrompt(lang: string = 'en') {
 
   const topCpuVMs = [...infraData.vms]
     .filter((vm: any) => vm.status === 'running')
-    .sort((a: any, b: any) => parseFloat(b.cpu) - parseFloat(a.cpu))
+    .sort((a: any, b: any) => Number.parseFloat(b.cpu) - Number.parseFloat(a.cpu))
     .slice(0, 10)
 
   const topMemVMs = [...infraData.vms]
     .filter((vm: any) => vm.status === 'running')
-    .sort((a: any, b: any) => parseFloat(b.mem) - parseFloat(a.mem))
+    .sort((a: any, b: any) => Number.parseFloat(b.mem) - Number.parseFloat(a.mem))
     .slice(0, 10)
 
   const stoppedVMs = infraData.vms.filter((vm: any) => vm.status !== 'running')

@@ -19,8 +19,8 @@ export async function GET(req: Request) {
 
     const options = {
       tenantId,
-      limit: parseInt(searchParams.get("limit") || "100"),
-      offset: parseInt(searchParams.get("offset") || "0"),
+      limit: Number.parseInt(searchParams.get("limit") || "100"),
+      offset: Number.parseInt(searchParams.get("offset") || "0"),
       category: searchParams.get("category") as AuditCategory | undefined,
       action: searchParams.get("action") as AuditAction | undefined,
       userId: searchParams.get("userId") || undefined,

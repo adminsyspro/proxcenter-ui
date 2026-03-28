@@ -103,7 +103,7 @@ export async function POST(
           vmNetworks.push({
             id: key,
             bridge: bridgeMatch[1],
-            mtu: mtuMatch ? parseInt(mtuMatch[1]) : undefined
+            mtu: mtuMatch ? Number.parseInt(mtuMatch[1]) : undefined
           })
         }
       }
@@ -251,7 +251,7 @@ export async function POST(
     // 9. Vérifier si le VMID est déjà utilisé sur la cible
     try {
       const targetVms = await pveFetch<any[]>(targetConn, '/cluster/resources?type=vm')
-      const existingVm = targetVms?.find((v: any) => v.vmid === parseInt(vmid))
+      const existingVm = targetVms?.find((v: any) => v.vmid === Number.parseInt(vmid))
       if (existingVm) {
         issues.push({
           type: 'warning',

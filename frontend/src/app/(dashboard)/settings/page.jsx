@@ -341,8 +341,8 @@ function ConnectionsTab() {
       behindProxy: isExtHypervisor ? false : !!formData.behindProxy,
       insecureTLS: !!formData.insecureTLS,
       // Location fields
-      latitude: formData.latitude !== '' && !isNaN(parseFloat(formData.latitude)) ? parseFloat(formData.latitude) : null,
-      longitude: formData.longitude !== '' && !isNaN(parseFloat(formData.longitude)) ? parseFloat(formData.longitude) : null,
+      latitude: formData.latitude !== '' && !isNaN(Number.parseFloat(formData.latitude)) ? Number.parseFloat(formData.latitude) : null,
+      longitude: formData.longitude !== '' && !isNaN(Number.parseFloat(formData.longitude)) ? Number.parseFloat(formData.longitude) : null,
       locationLabel: formData.locationLabel?.trim() || null,
       // PVE/PBS: API token
       ...(!isExtHypervisor && formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),
@@ -2009,7 +2009,7 @@ function GreenTab() {
                 type='number'
                 label={t('settings.pueLabel')}
                 value={settings.pue}
-                onChange={e => setSettings(s => ({ ...s, pue: parseFloat(e.target.value) || 1.0 }))}
+                onChange={e => setSettings(s => ({ ...s, pue: Number.parseFloat(e.target.value) || 1.0 }))}
                 inputProps={{ step: 0.1, min: 1.0, max: 3.0 }}
                 helperText={t('settings.pueHelperTextFull')}
                 sx={{ mb: 2 }}
@@ -2026,7 +2026,7 @@ function GreenTab() {
                 type='number'
                 label={t('settings.electricityPriceLabel')}
                 value={settings.electricityPrice}
-                onChange={e => setSettings(s => ({ ...s, electricityPrice: parseFloat(e.target.value) || 0 }))}
+                onChange={e => setSettings(s => ({ ...s, electricityPrice: Number.parseFloat(e.target.value) || 0 }))}
                 inputProps={{ step: 0.01, min: 0 }}
                 InputProps={{
                   endAdornment: <InputAdornment position='end'>{currencySymbol}/kWh</InputAdornment>
@@ -2082,7 +2082,7 @@ function GreenTab() {
                 type='number'
                 label={t('settings.customCo2FactorLabel')}
                 value={settings.co2Factor}
-                onChange={e => setSettings(s => ({ ...s, co2Factor: parseFloat(e.target.value) || 0 }))}
+                onChange={e => setSettings(s => ({ ...s, co2Factor: Number.parseFloat(e.target.value) || 0 }))}
                 inputProps={{ step: 0.001, min: 0 }}
                 InputProps={{
                   endAdornment: <InputAdornment position='end'>kg CO₂/kWh</InputAdornment>
@@ -2117,7 +2117,7 @@ function GreenTab() {
               value={settings.serverSpecs?.tdpPerCore || 10}
               onChange={e => setSettings(s => ({
                 ...s,
-                serverSpecs: { ...s.serverSpecs, tdpPerCore: parseFloat(e.target.value) || 10 }
+                serverSpecs: { ...s.serverSpecs, tdpPerCore: Number.parseFloat(e.target.value) || 10 }
               }))}
               inputProps={{ step: 1, min: 1 }}
               InputProps={{
@@ -2133,7 +2133,7 @@ function GreenTab() {
               value={settings.serverSpecs?.wattsPerGbRam || 0.375}
               onChange={e => setSettings(s => ({
                 ...s,
-                serverSpecs: { ...s.serverSpecs, wattsPerGbRam: parseFloat(e.target.value) || 0.375 }
+                serverSpecs: { ...s.serverSpecs, wattsPerGbRam: Number.parseFloat(e.target.value) || 0.375 }
               }))}
               inputProps={{ step: 0.1, min: 0 }}
               InputProps={{
@@ -2149,7 +2149,7 @@ function GreenTab() {
               value={settings.serverSpecs?.overheadPerServer || 50}
               onChange={e => setSettings(s => ({
                 ...s,
-                serverSpecs: { ...s.serverSpecs, overheadPerServer: parseFloat(e.target.value) || 50 }
+                serverSpecs: { ...s.serverSpecs, overheadPerServer: Number.parseFloat(e.target.value) || 50 }
               }))}
               inputProps={{ step: 10, min: 0 }}
               InputProps={{
@@ -2169,7 +2169,7 @@ function GreenTab() {
               value={settings.serverSpecs?.avgCoresPerServer || 64}
               onChange={e => setSettings(s => ({
                 ...s,
-                serverSpecs: { ...s.serverSpecs, avgCoresPerServer: parseInt(e.target.value) || 64 }
+                serverSpecs: { ...s.serverSpecs, avgCoresPerServer: Number.parseInt(e.target.value) || 64 }
               }))}
               inputProps={{ step: 1, min: 1 }}
               helperText={t('settings.avgCoresHelper')}

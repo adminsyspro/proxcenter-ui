@@ -25,7 +25,7 @@ function CephStatusWidget({ data, loading }) {
         <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, fontSize: 10 }}>HEALTH</Typography>
         <Chip 
           size='small' 
-          label={ceph.health?.replace('HEALTH_', '') || 'UNKNOWN'} 
+          label={ceph.health?.replaceAll('HEALTH_', '') || 'UNKNOWN'} 
           sx={{ 
             height: 20, fontSize: 10, fontWeight: 700,
             bgcolor: `${healthColor}22`, color: healthColor
@@ -94,7 +94,7 @@ function formatBps(bps) {
   const i = Math.floor(Math.log(bps) / Math.log(k))
 
   
-return parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+return Number.parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 export default React.memo(CephStatusWidget)

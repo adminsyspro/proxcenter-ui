@@ -288,7 +288,7 @@ export async function POST(req: Request) {
         }
 
         // Step 4: Resize disk if needed
-        const diskSizeNum = parseInt(hw.diskSize)
+        const diskSizeNum = Number.parseInt(hw.diskSize)
         if (diskSizeNum > 0) {
           await pveFetch<any>(
             conn,

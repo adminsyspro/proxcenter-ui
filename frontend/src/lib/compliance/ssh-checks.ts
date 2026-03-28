@@ -492,7 +492,7 @@ function checkSSHMaxAuthTries(data: SSHHardeningData): HardeningCheck {
   const problems: string[] = []
   for (const n of nodes) {
     const val = getSSHConfigValue(n.sections.sshd_config, 'maxauthtries')
-    const num = val ? parseInt(val, 10) : 6 // SSH default is 6
+    const num = val ? Number.parseInt(val, 10) : 6 // SSH default is 6
     if (num > 4) problems.push(`${n.node}: MaxAuthTries=${num}`)
   }
 
@@ -528,8 +528,8 @@ function checkSSHIdleTimeout(data: SSHHardeningData): HardeningCheck {
   for (const n of nodes) {
     const interval = getSSHConfigValue(n.sections.sshd_config, 'clientaliveinterval')
     const countMax = getSSHConfigValue(n.sections.sshd_config, 'clientalivecountmax')
-    const intervalNum = interval ? parseInt(interval, 10) : 0
-    const countMaxNum = countMax ? parseInt(countMax, 10) : 3
+    const intervalNum = interval ? Number.parseInt(interval, 10) : 0
+    const countMaxNum = countMax ? Number.parseInt(countMax, 10) : 3
     if (intervalNum === 0) {
       problems.push(`${n.node}: ClientAliveInterval not set`)
     } else if (intervalNum * countMaxNum > 900) {
@@ -783,7 +783,7 @@ function checkFilePermissions(data: SSHHardeningData): HardeningCheck {
     for (let i = 0; i < expected.length && i < lines.length; i++) {
       if (lines[i] === 'UNKNOWN') continue
       const parts = lines[i].split(' ')
-      const perm = parseInt(parts[0], 8)
+      const perm = Number.parseInt(parts[0], 8)
       const owner = parts[1]
       if (perm > expected[i].maxPerm) {
         problems.push(`${n.node}: ${expected[i].file} perm ${parts[0]} (expected <= ${expected[i].maxPerm.toString(8)})`)
@@ -808,7 +808,7 @@ function checkSuidFiles(data: SSHHardeningData): HardeningCheck {
   let totalCount = 0
   for (const n of nodes) {
     const parts = n.sections.suid_files.split('---')
-    const count = parseInt(parts[0]?.trim() || '0', 10)
+    const count = Number.parseInt(parts[0]?.trim() || '0', 10)
     totalCount += count
     details.push(`${n.node}: ${count} SUID/SGID files`)
   }
@@ -831,7 +831,7 @@ function checkWorldWritable(data: SSHHardeningData): HardeningCheck {
   let totalCount = 0
   for (const n of nodes) {
     const parts = n.sections.world_writable.split('---')
-    const count = parseInt(parts[0]?.trim() || '0', 10)
+    const count = Number.parseInt(parts[0]?.trim() || '0', 10)
     totalCount += count
     if (count > 0) details.push(`${n.node}: ${count} world-writable files`)
   }
@@ -906,8 +906,8 @@ function checkLogPermissions(data: SSHHardeningData): HardeningCheck {
   const problems: string[] = []
   for (const n of nodes) {
     const lines = n.sections.log_perms.split('\n').map(l => l.trim())
-    const dirPerm = parseInt(lines[0], 8)
-    const worldReadable = parseInt(lines[1] || '0', 10)
+    const dirPerm = Number.parseInt(lines[0], 8)
+    const worldReadable = Number.parseInt(lines[1] || '0', 10)
     if (dirPerm > 0o755) problems.push(`${n.node}: /var/log perm ${lines[0]}`)
     if (worldReadable > 5) problems.push(`${n.node}: ${worldReadable} world-readable log files`)
   }
@@ -946,7 +946,7 @@ function checkPasswordAging(data: SSHHardeningData): HardeningCheck {
   for (const n of nodes) {
     const out = n.sections.password_aging
     const maxDaysMatch = out.match(/PASS_MAX_DAYS\s+(\d+)/)
-    const maxDays = maxDaysMatch ? parseInt(maxDaysMatch[1], 10) : 99999
+    const maxDays = maxDaysMatch ? Number.parseInt(maxDaysMatch[1], 10) : 99999
     if (maxDays > 365) problems.push(`${n.node}: PASS_MAX_DAYS=${maxDays}`)
   }
 
@@ -1016,14 +1016,14 @@ function checkSSHFilePerms(data: SSHHardeningData): HardeningCheck {
   const problems: string[] = []
   for (const n of nodes) {
     const lines = n.sections.ssh_perms.split('\n').map(l => l.trim())
-    const configPerm = parseInt(lines[0], 8)
+    const configPerm = Number.parseInt(lines[0], 8)
     if (!isNaN(configPerm) && configPerm > 0o600) {
       problems.push(`${n.node}: sshd_config perm ${lines[0]} (expected 600)`)
     }
     for (let i = 1; i < lines.length; i++) {
       if (lines[i] === 'NO_KEYS' || !lines[i]) continue
       const parts = lines[i].split(' ')
-      const perm = parseInt(parts[0], 8)
+      const perm = Number.parseInt(parts[0], 8)
       if (!isNaN(perm) && perm > 0o600) {
         const keyName = parts[1]?.split('/').pop() || 'host key'
         problems.push(`${n.node}: ${keyName} perm ${parts[0]}`)

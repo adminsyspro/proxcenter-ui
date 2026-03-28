@@ -1455,7 +1455,7 @@ return map
     if (!allVMsData?.data?.vms) return []
     
 return allVMsData.data.vms.map(vm => ({
-      vmid: parseInt(vm.vmid, 10) || 0,
+      vmid: Number.parseInt(vm.vmid, 10) || 0,
       name: vm.name,
       node: vm.node || vm.host,
       type: vm.type,
@@ -1641,7 +1641,7 @@ return Object.entries(metricsData as any)
             // sid format: "vm:100" or "ct:200"
             const match = r.sid?.match(/^(?:vm|ct):(\d+)$/)
             if (match) {
-              const vmid = parseInt(match[1], 10)
+              const vmid = Number.parseInt(match[1], 10)
               haVmids.add(vmid)
               if (r.group) vmGroupMap.set(vmid, r.group)
             }

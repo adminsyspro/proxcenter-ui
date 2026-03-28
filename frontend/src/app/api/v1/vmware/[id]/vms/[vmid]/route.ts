@@ -140,9 +140,9 @@ export async function GET(
 
       const name = extractProp(xml, 'name')
       const guestOS = extractProp(xml, 'config.guestFullName') || extractProp(xml, 'guest.guestFullName')
-      const numCPU = parseInt(extractProp(xml, 'config.hardware.numCPU'), 10) || 0
-      const numCoresPerSocket = parseInt(extractProp(xml, 'config.hardware.numCoresPerSocket'), 10) || 1
-      const memoryMB = parseInt(extractProp(xml, 'config.hardware.memoryMB'), 10) || 0
+      const numCPU = Number.parseInt(extractProp(xml, 'config.hardware.numCPU'), 10) || 0
+      const numCoresPerSocket = Number.parseInt(extractProp(xml, 'config.hardware.numCoresPerSocket'), 10) || 1
+      const memoryMB = Number.parseInt(extractProp(xml, 'config.hardware.memoryMB'), 10) || 0
       const vmxVersion = extractProp(xml, 'config.version')
       const uuid = extractProp(xml, 'config.uuid')
       const firmware = extractProp(xml, 'config.firmware')
@@ -153,14 +153,14 @@ export async function GET(
       const hostName = extractProp(xml, 'guest.hostName')
       const powerState = extractProp(xml, 'runtime.powerState')
       const bootTime = extractProp(xml, 'runtime.bootTime')
-      const maxCpuUsage = parseInt(extractProp(xml, 'runtime.maxCpuUsage'), 10) || 0
+      const maxCpuUsage = Number.parseInt(extractProp(xml, 'runtime.maxCpuUsage'), 10) || 0
 
       // Storage usage
       const storageXml = extractProp(xml, 'storage.perDatastoreUsage')
       const committedMatch = storageXml.match(/<committed>(\d+)<\/committed>/)
       const uncommittedMatch = storageXml.match(/<uncommitted>(\d+)<\/uncommitted>/)
-      const committed = committedMatch ? parseInt(committedMatch[1], 10) : 0
-      const uncommitted = uncommittedMatch ? parseInt(uncommittedMatch[1], 10) : 0
+      const committed = committedMatch ? Number.parseInt(committedMatch[1], 10) : 0
+      const uncommitted = uncommittedMatch ? Number.parseInt(uncommittedMatch[1], 10) : 0
 
       // Parse disks from hardware devices
       const devicesXml = extractProp(xml, 'config.hardware.device')
@@ -179,7 +179,7 @@ export async function GET(
         const thinProvisioned = d.includes('<thinProvisioned>true</thinProvisioned>')
         disks.push({
           label,
-          capacityBytes: capacityBytes ? parseInt(capacityBytes, 10) : (capacityKB ? parseInt(capacityKB, 10) * 1024 : 0),
+          capacityBytes: capacityBytes ? Number.parseInt(capacityBytes, 10) : (capacityKB ? Number.parseInt(capacityKB, 10) * 1024 : 0),
           fileName,
           thinProvisioned,
         })

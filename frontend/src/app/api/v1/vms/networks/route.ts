@@ -40,7 +40,7 @@ function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ 
 
         if (slashIdx > 0) {
           ip = v.substring(0, slashIdx)
-          cidr = parseInt(v.substring(slashIdx + 1), 10)
+          cidr = Number.parseInt(v.substring(slashIdx + 1), 10)
           if (!Number.isFinite(cidr)) cidr = null
         } else {
           ip = v
@@ -50,7 +50,7 @@ function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ 
 
     // QEMU: check matching ipconfig{N} for static IP
     if (vmType !== 'lxc') {
-      const idx = key.replace('net', '')
+      const idx = key.replaceAll('net', '')
       const ipconfigVal = config[`ipconfig${idx}`]
 
       if (typeof ipconfigVal === 'string') {
@@ -66,7 +66,7 @@ function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ 
 
             if (slashIdx > 0) {
               ip = v.substring(0, slashIdx)
-              cidr = parseInt(v.substring(slashIdx + 1), 10)
+              cidr = Number.parseInt(v.substring(slashIdx + 1), 10)
               if (!Number.isFinite(cidr)) cidr = null
             } else {
               ip = v

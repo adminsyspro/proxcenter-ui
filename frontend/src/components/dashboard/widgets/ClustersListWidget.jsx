@@ -49,7 +49,7 @@ function ClustersListWidget({ data, loading }) {
             {cluster.cephHealth && (
               <Chip 
                 size='small' 
-                label={cluster.cephHealth.replace('HEALTH_', '')} 
+                label={cluster.cephHealth.replaceAll('HEALTH_', '')} 
                 color={cluster.cephHealth === 'HEALTH_OK' ? 'success' : cluster.cephHealth === 'HEALTH_WARN' ? 'warning' : 'error'} 
                 sx={{ fontSize: 9, height: 18 }} 
               />

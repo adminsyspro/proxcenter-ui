@@ -1147,7 +1147,7 @@ export default function FlowsTab() {
             type="number"
             label="Sampling Rate"
             value={samplingRate}
-            onChange={(e) => setSamplingRate(Math.max(1, parseInt(e.target.value) || 512))}
+            onChange={(e) => setSamplingRate(Math.max(1, Number.parseInt(e.target.value) || 512))}
             InputProps={{ sx: { fontFamily: 'monospace' } }}
           />
           <Box sx={{ mt: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>

@@ -94,7 +94,7 @@ function checkPolicyOut(data: HardeningData): HardeningCheck {
 
 function checkPveVersion(data: HardeningData): HardeningCheck {
   const ver = data.version?.version || ''
-  const major = parseInt(ver.split('.')[0], 10)
+  const major = Number.parseInt(ver.split('.')[0], 10)
   const ok = !isNaN(major) && major >= LATEST_PVE_MAJOR
   return {
     id: 'pve_version',

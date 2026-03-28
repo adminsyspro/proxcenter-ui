@@ -56,7 +56,7 @@ return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
 }
 
 function parseSize(value: string, unit: string): number {
-  const num = parseFloat(value)
+  const num = Number.parseFloat(value)
   const unitLower = unit.toLowerCase()
 
   if (unitLower === 'b') return num
@@ -135,7 +135,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
       const diskName = transferMatch[1]
       const transferred = parseSize(transferMatch[2], transferMatch[3])
       const total = parseSize(transferMatch[4], transferMatch[5])
-      const timeInSec = transferMatch[7] ? parseInt(transferMatch[7]) : 0
+      const timeInSec = transferMatch[7] ? Number.parseInt(transferMatch[7]) : 0
 
       const existingDisk = state.disks.get(diskName)
       const prevTransferred = existingDisk?.transferredBytes || 0
@@ -340,7 +340,7 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
     const progressMatch = text.match(progressRegex)
 
     if (progressMatch) {
-      const pct = parseFloat(progressMatch[1])
+      const pct = Number.parseFloat(progressMatch[1])
 
       if (pct > progress) {
         progress = pct

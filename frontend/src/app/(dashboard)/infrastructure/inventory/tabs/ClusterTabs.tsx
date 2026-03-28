@@ -1174,7 +1174,7 @@ export default function ClusterTabs(props: any) {
                                       {sorted.map(entry => (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('cpu_', '')}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
                                         </Box>
                                       ))}
@@ -1214,7 +1214,7 @@ export default function ClusterTabs(props: any) {
                                       {sorted.map(entry => (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('ram_', '')}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
                                         </Box>
                                       ))}
@@ -1301,7 +1301,7 @@ export default function ClusterTabs(props: any) {
                                       {sorted.map(entry => (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('load_', '')}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
                                         </Box>
                                       ))}

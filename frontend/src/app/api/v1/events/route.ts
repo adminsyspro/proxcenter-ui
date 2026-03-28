@@ -62,7 +62,7 @@ export async function GET(req: Request) {
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
+    const limit = Math.min(Number.parseInt(searchParams.get('limit') || '100'), 500)
     const source = searchParams.get('source') || 'all' // 'tasks', 'logs', 'all'
 
     // Récupérer uniquement les connexions PVE (pas PBS)

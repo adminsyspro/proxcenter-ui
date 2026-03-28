@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (denied) return denied
 
     const url = new URL(req.url)
-    const days = Math.min(parseInt(url.searchParams.get('days') || '30', 10), 90)
+    const days = Math.min(Number.parseInt(url.searchParams.get('days') || '30', 10), 90)
 
     const conn = await getPbsConnectionById(id)
 

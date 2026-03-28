@@ -225,7 +225,7 @@ return
               let sizeGB = 0
 
               if (sizeMatch) {
-                sizeGB = parseFloat(sizeMatch[1])
+                sizeGB = Number.parseFloat(sizeMatch[1])
                 if (sizeMatch[2] === 'T') sizeGB *= 1024
                 else if (sizeMatch[2] === 'M') sizeGB /= 1024
               }

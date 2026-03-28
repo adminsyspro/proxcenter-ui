@@ -585,7 +585,7 @@ export default function ConnectionDialog({
                 label={t('settings.sshPort')}
                 type="number"
                 value={form.sshPort}
-                onChange={e => handleChange('sshPort', parseInt(e.target.value) || 22)}
+                onChange={e => handleChange('sshPort', Number.parseInt(e.target.value) || 22)}
                 sx={{ width: 120 }}
                 InputProps={{
                   inputProps: { min: 1, max: 65535 }
@@ -792,7 +792,7 @@ export default function ConnectionDialog({
               <TextField
                 label={t('settings.latitude')}
                 value={form.latitude}
-                onChange={e => handleChange('latitude', e.target.value.replace(',', '.'))}
+                onChange={e => handleChange('latitude', e.target.value.replaceAll(',', '.'))}
                 placeholder="48.8566"
                 sx={{ flex: 1 }}
                 InputProps={{ inputProps: { min: -90, max: 90, step: 'any' } }}
@@ -800,7 +800,7 @@ export default function ConnectionDialog({
               <TextField
                 label={t('settings.longitude')}
                 value={form.longitude}
-                onChange={e => handleChange('longitude', e.target.value.replace(',', '.'))}
+                onChange={e => handleChange('longitude', e.target.value.replaceAll(',', '.'))}
                 placeholder="2.3522"
                 sx={{ flex: 1 }}
                 InputProps={{ inputProps: { min: -180, max: 180, step: 'any' } }}

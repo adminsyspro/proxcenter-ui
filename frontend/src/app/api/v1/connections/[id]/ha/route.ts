@@ -45,7 +45,7 @@ export async function GET(
     }
     
     // Déterminer la version majeure (8 ou 9)
-    const majorVersion = parseInt(pveVersion.split('.')[0], 10) || 8
+    const majorVersion = Number.parseInt(pveVersion.split('.')[0], 10) || 8
 
     return NextResponse.json({
       data: {

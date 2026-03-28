@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       if (f.startsWith('background.')) await unlink(path.join(uploadDir, f))
     }
 
-    const ext = file.type.split('/')[1].replace('jpeg', 'jpg')
+    const ext = file.type.split('/')[1].replaceAll('jpeg', 'jpg')
     const filename = `background.${ext}`
     const bytes = await file.arrayBuffer()
     await writeFile(path.join(uploadDir, filename), Buffer.from(bytes))

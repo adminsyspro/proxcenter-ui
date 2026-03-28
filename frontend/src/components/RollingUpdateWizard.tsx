@@ -879,7 +879,7 @@ export default function RollingUpdateWizard({
                         type="number"
                         size="small"
                         value={config.migration_timeout}
-                        onChange={(e) => setConfig(c => ({ ...c, migration_timeout: parseInt(e.target.value) || 600 }))}
+                        onChange={(e) => setConfig(c => ({ ...c, migration_timeout: Number.parseInt(e.target.value) || 600 }))}
                         InputProps={{ inputProps: { min: 60, max: 3600 } }}
                       />
                       
@@ -888,7 +888,7 @@ export default function RollingUpdateWizard({
                         type="number"
                         size="small"
                         value={config.reboot_timeout}
-                        onChange={(e) => setConfig(c => ({ ...c, reboot_timeout: parseInt(e.target.value) || 300 }))}
+                        onChange={(e) => setConfig(c => ({ ...c, reboot_timeout: Number.parseInt(e.target.value) || 300 }))}
                         InputProps={{ inputProps: { min: 60, max: 600 } }}
                       />
                       
@@ -897,7 +897,7 @@ export default function RollingUpdateWizard({
                         type="number"
                         size="small"
                         value={config.min_healthy_nodes}
-                        onChange={(e) => setConfig(c => ({ ...c, min_healthy_nodes: parseInt(e.target.value) || 2 }))}
+                        onChange={(e) => setConfig(c => ({ ...c, min_healthy_nodes: Number.parseInt(e.target.value) || 2 }))}
                         InputProps={{ inputProps: { min: 1, max: 10 } }}
                         helperText={t('updates.minHealthyNodesHelper')}
                       />

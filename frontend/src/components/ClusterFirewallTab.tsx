@@ -316,7 +316,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
     setSaving(true)
 
     try {
-      const currentEnable = rule.enable === undefined ? 1 : (typeof rule.enable === 'string' ? parseInt(rule.enable, 10) : rule.enable)
+      const currentEnable = rule.enable === undefined ? 1 : (typeof rule.enable === 'string' ? Number.parseInt(rule.enable, 10) : rule.enable)
       const newEnable = currentEnable === 1 ? 0 : 1
 
       const res = await fetch(`/api/v1/firewall/cluster/${connectionId}/rules/${rule.pos}`, {

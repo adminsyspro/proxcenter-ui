@@ -160,7 +160,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
       const sizeMatch = disk.size.match(/(\d+(?:\.\d+)?)\s*(G|T|M)?/i)
 
       if (sizeMatch) {
-        const value = parseFloat(sizeMatch[1])
+        const value = Number.parseFloat(sizeMatch[1])
         const unit = (sizeMatch[2] || 'G').toUpperCase()
 
         if (unit === 'T') {
@@ -256,7 +256,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
     const sizeMatch = disk.size.match(/(\d+(?:\.\d+)?)\s*(G|T|M)?/i)
 
     if (!sizeMatch) return 0
-    const value = parseFloat(sizeMatch[1])
+    const value = Number.parseFloat(sizeMatch[1])
     const unit = (sizeMatch[2] || 'G').toUpperCase()
 
     if (unit === 'T') return value * 1024
@@ -267,7 +267,7 @@ return value
 
   // Calculer la nouvelle taille en GB
   const newSizeGB = useMemo(() => {
-    const value = parseFloat(newSize) || 0
+    const value = Number.parseFloat(newSize) || 0
 
 
 return sizeUnit === 'T' ? value * 1024 : value
@@ -384,7 +384,7 @@ return
     const prefix = reassignBus === 'virtio' ? 'virtio' : reassignBus
     const usedIndexes = existingDisks
       .filter(d => d.startsWith(prefix))
-      .map(d => { const m = d.match(/(\d+)$/); return m ? parseInt(m[1]) : -1 })
+      .map(d => { const m = d.match(/(\d+)$/); return m ? Number.parseInt(m[1]) : -1 })
       .filter(i => i >= 0)
     let next = 0
     while (usedIndexes.includes(next)) next++
@@ -551,7 +551,7 @@ return
               size="small"
               type="number"
               value={reassignIndex}
-              onChange={(e) => setReassignIndex(parseInt(e.target.value) || 0)}
+              onChange={(e) => setReassignIndex(Number.parseInt(e.target.value) || 0)}
               sx={{ width: 80 }}
               inputProps={{ min: 0, max: 30 }}
             />

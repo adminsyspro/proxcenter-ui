@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 200)
+    const limit = Math.min(Number.parseInt(searchParams.get("limit") || "50"), 200)
     const status = searchParams.get("status")
 
     const where: any = {}

@@ -798,7 +798,7 @@ function RootInventoryView({
                               return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('cpu_', '')}</Typography>
                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: valColor }}>{v.toFixed(1)}%</Typography>
                               </Box>
                               )
@@ -866,7 +866,7 @@ function RootInventoryView({
                             {sorted.map(entry => (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('load_', '')}</Typography>
                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
                               </Box>
                             ))}
@@ -937,7 +937,7 @@ function RootInventoryView({
                               return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('ram_', '')}</Typography>
                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: valColor }}>{v.toFixed(1)}%</Typography>
                               </Box>
                               )
@@ -1097,7 +1097,7 @@ function RootInventoryView({
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
-                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replace('cpu_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replaceAll('cpu_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
                       return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(33,150,243,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -1109,7 +1109,7 @@ function RootInventoryView({
                             {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('cpu_', '')}</Typography>
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('cpu_', '')}</Typography>
                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: valColor }}>{v.toFixed(1)}%</Typography>
                               </Box>
                             )})}
@@ -1136,7 +1136,7 @@ function RootInventoryView({
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
-                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replace('load_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replaceAll('load_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
                       return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(156,39,176,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -1148,7 +1148,7 @@ function RootInventoryView({
                             {sorted.map(entry => (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('load_', '')}</Typography>
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('load_', '')}</Typography>
                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
                               </Box>
                             ))}
@@ -1175,7 +1175,7 @@ function RootInventoryView({
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
-                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replace('ram_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+                      const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replaceAll('ram_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
                       return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(76,175,80,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -1187,7 +1187,7 @@ function RootInventoryView({
                             {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replace('ram_', '')}</Typography>
+                                <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('ram_', '')}</Typography>
                                 <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: valColor }}>{v.toFixed(1)}%</Typography>
                               </Box>
                             )})}

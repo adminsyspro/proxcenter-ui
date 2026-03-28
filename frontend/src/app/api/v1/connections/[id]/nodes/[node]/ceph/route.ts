@@ -56,7 +56,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; nod
 
     const url = new URL(req.url)
     const section = url.searchParams.get('section') || 'all'
-    const logLines = parseInt(url.searchParams.get('logLines') || '100', 10)
+    const logLines = Number.parseInt(url.searchParams.get('logLines') || '100', 10)
 
     const conn = await getConnectionById(id)
 

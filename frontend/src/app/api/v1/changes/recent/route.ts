@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const limit = Number.parseInt(searchParams.get('limit') || '10')
 
     // Get tenant's connection IDs for filtering
     const prisma = await getSessionPrisma()

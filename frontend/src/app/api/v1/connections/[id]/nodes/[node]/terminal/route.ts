@@ -34,13 +34,13 @@ export async function POST(
     try {
       const url = new URL(conn.baseUrl)
       host = url.hostname
-      port = url.port ? parseInt(url.port) : 8006
+      port = url.port ? Number.parseInt(url.port) : 8006
     } catch {
       // Si le parsing échoue, essayer de parser manuellement
       const match = conn.baseUrl.match(/https?:\/\/([^:/]+)(?::(\d+))?/)
       if (match) {
         host = match[1]
-        port = match[2] ? parseInt(match[2]) : 8006
+        port = match[2] ? Number.parseInt(match[2]) : 8006
       }
     }
 

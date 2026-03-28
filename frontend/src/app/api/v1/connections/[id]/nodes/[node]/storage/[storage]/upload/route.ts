@@ -67,8 +67,8 @@ async function handleChunk(
     const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
 
-    const chunkIndex = parseInt(req.headers.get("x-chunk-index") || "0", 10)
-    const totalSize = parseInt(req.headers.get("x-total-size") || "0", 10)
+    const chunkIndex = Number.parseInt(req.headers.get("x-chunk-index") || "0", 10)
+    const totalSize = Number.parseInt(req.headers.get("x-total-size") || "0", 10)
     const fileName = req.headers.get("x-file-name") || "upload"
     const contentType = req.headers.get("x-content-type") || "iso"
     const mimeType = req.headers.get("x-mime-type") || "application/octet-stream"

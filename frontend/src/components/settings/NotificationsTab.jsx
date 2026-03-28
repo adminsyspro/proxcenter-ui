@@ -248,7 +248,7 @@ return
               value={settings.email?.smtp_port || 587}
               onChange={e => setSettings(s => ({
                 ...s,
-                email: { ...s.email, smtp_port: parseInt(e.target.value) || 587 }
+                email: { ...s.email, smtp_port: Number.parseInt(e.target.value) || 587 }
               }))}
               helperText={t('notifications.smtp.portHelper')}
             />
@@ -594,7 +594,7 @@ return
               type='number'
               label={t('notifications.rateLimit')}
               value={settings.rate_limit_per_hour || 100}
-              onChange={e => setSettings(s => ({ ...s, rate_limit_per_hour: parseInt(e.target.value) || 100 }))}
+              onChange={e => setSettings(s => ({ ...s, rate_limit_per_hour: Number.parseInt(e.target.value) || 100 }))}
               InputProps={{
                 endAdornment: <InputAdornment position='end'>emails/h</InputAdornment>
               }}

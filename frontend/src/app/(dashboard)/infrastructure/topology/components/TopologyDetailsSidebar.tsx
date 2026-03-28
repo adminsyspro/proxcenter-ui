@@ -305,7 +305,7 @@ function VmRrdDetail({ guest, connectionId, nodeName, onBack }: {
 }) {
   const t = useTranslations('topology')
   const router = useRouter()
-  const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
+  const vmid = typeof guest.vmid === 'string' ? Number.parseInt(guest.vmid, 10) : guest.vmid
   const vmType = guest.type || 'qemu'
   const statusColor = getVmStatusColor(guest.status)
   const isRunning = guest.status === 'running'
@@ -495,7 +495,7 @@ function HostDetails({ data, connections }: { data: HostNodeData; connections: I
           <CollapsibleSection title={`${t('virtualMachines')} (${guests.length})`}>
             <Box sx={{ maxHeight: 300, overflow: 'auto', mx: -0.5 }}>
               {guests.map(guest => {
-                const vmid = typeof guest.vmid === 'string' ? parseInt(guest.vmid, 10) : guest.vmid
+                const vmid = typeof guest.vmid === 'string' ? Number.parseInt(guest.vmid, 10) : guest.vmid
                 const isRunning = guest.status === 'running'
                 const cpuUsage = (guest.maxcpu || 0) > 0 ? (guest.cpu || 0) / (guest.maxcpu || 1) : 0
                 const ramUsage = (guest.maxmem || 0) > 0 ? (guest.mem || 0) / (guest.maxmem || 1) : 0

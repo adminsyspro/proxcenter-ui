@@ -730,7 +730,7 @@ return '—'
                 label={t('backups.retention')}
                 type="number"
                 value={formData.maxfiles}
-                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: parseInt(e.target.value) || 1 }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: Number.parseInt(e.target.value) || 1 }))}
                 inputProps={{ min: 1 }}
               />
               <TextField
@@ -1474,7 +1474,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
                   label={t('backups.reVerifyAfter')}
                   type="number"
                   value={formData.outdatedAfter}
-                  onChange={(e) => setFormData(prev => ({ ...prev, outdatedAfter: parseInt(e.target.value) || 30 }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, outdatedAfter: Number.parseInt(e.target.value) || 30 }))}
                   inputProps={{ min: 1 }}
                 />
               </>
@@ -1491,7 +1491,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
                     label={t('backups.keepLast')}
                     type="number"
                     value={formData.keepLast}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepLast: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, keepLast: Number.parseInt(e.target.value) || 0 }))}
                     inputProps={{ min: 0 }}
                   />
                   <TextField
@@ -1499,7 +1499,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
                     label={t('backups.keepDaily')}
                     type="number"
                     value={formData.keepDaily}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepDaily: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, keepDaily: Number.parseInt(e.target.value) || 0 }))}
                     inputProps={{ min: 0 }}
                   />
                   <TextField
@@ -1507,7 +1507,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
                     label={t('backups.keepWeekly')}
                     type="number"
                     value={formData.keepWeekly}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepWeekly: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, keepWeekly: Number.parseInt(e.target.value) || 0 }))}
                     inputProps={{ min: 0 }}
                   />
                   <TextField
@@ -1515,7 +1515,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
                     label={t('backups.keepMonthly')}
                     type="number"
                     value={formData.keepMonthly}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepMonthly: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, keepMonthly: Number.parseInt(e.target.value) || 0 }))}
                     inputProps={{ min: 0 }}
                   />
                   <TextField
@@ -1523,7 +1523,7 @@ function PbsJobsTab({ pbsConnections = [] }) {
                     label={t('backups.keepYearly')}
                     type="number"
                     value={formData.keepYearly}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepYearly: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, keepYearly: Number.parseInt(e.target.value) || 0 }))}
                     inputProps={{ min: 0 }}
                   />
                 </Box>

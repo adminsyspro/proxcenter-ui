@@ -258,8 +258,8 @@ async function fetchOneCluster(conn: {
 
     for (const nodeData of nodeMap.values()) {
       nodeData.guests.sort((a, b) => {
-        const aId = parseInt(String(a.vmid), 10) || 0
-        const bId = parseInt(String(b.vmid), 10) || 0
+        const aId = Number.parseInt(String(a.vmid), 10) || 0
+        const bId = Number.parseInt(String(b.vmid), 10) || 0
         return aId - bId
       })
     }

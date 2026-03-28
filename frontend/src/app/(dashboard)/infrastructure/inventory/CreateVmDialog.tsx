@@ -193,7 +193,7 @@ function CreateVmDialog({
       console.error('Error loading next VMID from API:', e)
     }
     // Fallback: client-side computation
-    const usedVmids = new Set(allVms.map(vm => parseInt(String(vm.vmid), 10)))
+    const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
     let nextId = 100
     while (usedVmids.has(nextId)) nextId++
     setVmid(String(nextId))
@@ -351,7 +351,7 @@ function CreateVmDialog({
 return
     }
     
-    const vmidNum = parseInt(numericValue, 10)
+    const vmidNum = Number.parseInt(numericValue, 10)
     
     // Vérifier les limites Proxmox (100-999999999)
     if (vmidNum < 100) {
@@ -367,7 +367,7 @@ return
     }
     
     // Vérifier si le VMID est déjà utilisé
-    const isUsed = allVms.some(vm => parseInt(String(vm.vmid), 10) === vmidNum)
+    const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === vmidNum)
 
     if (isUsed) {
       setVmidError(t('inventory.createVm.vmIdInUse', { id: vmidNum }))
@@ -383,7 +383,7 @@ return
     if (selectedConnection) {
       await loadNextVmid(selectedConnection)
     } else {
-      const usedVmids = new Set(allVms.map(vm => parseInt(String(vm.vmid), 10)))
+      const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
       let nextId = 100
       while (usedVmids.has(nextId)) nextId++
       setVmid(String(nextId))
@@ -551,7 +551,7 @@ return
   const handleNodeChange = (value: string) => {
     setSelectedNodeValue(value)
     if (value.startsWith('cluster:')) {
-      const connId = value.replace('cluster:', '')
+      const connId = value.replaceAll('cluster:', '')
       const bestNode = findBestNode(connId)
       if (bestNode) {
         setResolvedNode(bestNode)
@@ -626,7 +626,7 @@ return
     
     try {
       const payload: any = {
-        vmid: parseInt(vmid, 10),
+        vmid: Number.parseInt(vmid, 10),
         ostype: guestOsVersion,
         sockets: cpuSockets,
         cores: cpuCores,
@@ -1245,7 +1245,7 @@ return
                         <TextField
                           label={t('inventory.createVm.diskSizeGib')}
                           value={disk.size}
-                          onChange={(e) => updateDisk(diskIdx, { size: parseInt(e.target.value) || 0 })}
+                          onChange={(e) => updateDisk(diskIdx, { size: Number.parseInt(e.target.value) || 0 })}
                           size="small"
                           type="number"
                         />
@@ -1327,7 +1327,7 @@ return
                 <TextField
                   label={t('inventory.createVm.sockets')}
                   value={cpuSockets}
-                  onChange={(e) => setCpuSockets(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setCpuSockets(Number.parseInt(e.target.value) || 1)}
                   size="small"
                   type="number"
                   inputProps={{ min: 1, max: 4 }}
@@ -1335,7 +1335,7 @@ return
                 <TextField
                   label={t('inventory.createVm.cores')}
                   value={cpuCores}
-                  onChange={(e) => setCpuCores(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setCpuCores(Number.parseInt(e.target.value) || 1)}
                   size="small"
                   type="number"
                   inputProps={{ min: 1, max: 128 }}
@@ -1401,14 +1401,14 @@ return
                     <TextField
                       label={t('inventory.createVm.cpuUnits')}
                       value={cpuUnits}
-                      onChange={(e) => setCpuUnits(parseInt(e.target.value) || 100)}
+                      onChange={(e) => setCpuUnits(Number.parseInt(e.target.value) || 100)}
                       size="small"
                       type="number"
                     />
                     <TextField
                       label={t('inventory.createVm.cpuLimit')}
                       value={cpuLimit === 0 ? 'unlimited' : cpuLimit}
-                      onChange={(e) => setCpuLimit(e.target.value === 'unlimited' ? 0 : parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setCpuLimit(e.target.value === 'unlimited' ? 0 : Number.parseFloat(e.target.value) || 0)}
                       size="small"
                       placeholder="unlimited"
                     />
@@ -1481,7 +1481,7 @@ return
               <TextField
                 label={t('inventory.createVm.memoryMib')}
                 value={memorySize}
-                onChange={(e) => setMemorySize(parseInt(e.target.value) || 512)}
+                onChange={(e) => setMemorySize(Number.parseInt(e.target.value) || 512)}
                 size="small"
                 type="number"
                 inputProps={{ min: 128, step: 128 }}
@@ -1509,7 +1509,7 @@ return
                     <TextField
                       label={t('inventory.createVm.minMemoryMib')}
                       value={minMemory}
-                      onChange={(e) => setMinMemory(parseInt(e.target.value) || 512)}
+                      onChange={(e) => setMinMemory(Number.parseInt(e.target.value) || 512)}
                       size="small"
                       type="number"
                       inputProps={{ min: 128, step: 128 }}

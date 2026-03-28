@@ -300,7 +300,7 @@ export async function GET(req: Request) {
     })
 
     // Apply limit
-    const limitNum = parseInt(limit, 10)
+    const limitNum = Number.parseInt(limit, 10)
     if (limitNum > 0) {
       filtered = filtered.slice(0, limitNum)
     }

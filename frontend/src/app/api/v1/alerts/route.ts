@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     const status = searchParams.get('status') || 'all' // active, acknowledged, resolved, all
     const severity = searchParams.get('severity') || 'all'
     const source = searchParams.get('source') || 'all'
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
+    const limit = Math.min(Number.parseInt(searchParams.get('limit') || '100'), 500)
 
     const where: any = {}
 
@@ -237,7 +237,7 @@ export async function DELETE(req: Request) {
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
-    const olderThanDays = parseInt(searchParams.get('olderThanDays') || '30')
+    const olderThanDays = Number.parseInt(searchParams.get('olderThanDays') || '30')
 
     const cutoffDate = new Date()
 

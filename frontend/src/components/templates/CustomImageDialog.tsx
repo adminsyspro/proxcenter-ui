@@ -433,7 +433,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
               label={t('templates.catalog.minCores')}
               type="number"
               value={minCores}
-              onChange={e => setMinCores(parseInt(e.target.value) || 1)}
+              onChange={e => setMinCores(Number.parseInt(e.target.value) || 1)}
               slotProps={{ htmlInput: { min: 1 } }}
             />
             <TextField
@@ -441,7 +441,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
               label={t('templates.catalog.recCores')}
               type="number"
               value={recommendedCores}
-              onChange={e => setRecommendedCores(parseInt(e.target.value) || 2)}
+              onChange={e => setRecommendedCores(Number.parseInt(e.target.value) || 2)}
               slotProps={{ htmlInput: { min: 1 } }}
             />
             <TextField
@@ -449,7 +449,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
               label={t('templates.catalog.minMem')}
               type="number"
               value={minMemory}
-              onChange={e => setMinMemory(parseInt(e.target.value) || 512)}
+              onChange={e => setMinMemory(Number.parseInt(e.target.value) || 512)}
               helperText="MB"
               slotProps={{ htmlInput: { min: 128, step: 256 } }}
             />
@@ -458,7 +458,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
               label={t('templates.catalog.recMem')}
               type="number"
               value={recommendedMemory}
-              onChange={e => setRecommendedMemory(parseInt(e.target.value) || 2048)}
+              onChange={e => setRecommendedMemory(Number.parseInt(e.target.value) || 2048)}
               helperText="MB"
               slotProps={{ htmlInput: { min: 128, step: 256 } }}
             />

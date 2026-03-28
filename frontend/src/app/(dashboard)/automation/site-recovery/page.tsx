@@ -112,7 +112,7 @@ export default function SiteRecoveryPage() {
   // All VMs for create job dialog
   const allVMs = useMemo(() =>
     (allVMsData?.data?.vms || []).map((vm: any) => ({
-      vmid: parseInt(vm.vmid, 10) || 0,
+      vmid: Number.parseInt(vm.vmid, 10) || 0,
       name: vm.name,
       node: vm.node || vm.host,
       connId: vm.connId,

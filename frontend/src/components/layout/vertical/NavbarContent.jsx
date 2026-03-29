@@ -64,7 +64,7 @@ import { useActiveAlerts, useDRSRecommendations, useVersionCheck, useOrchestrato
 import { useDRSSettings } from '@/hooks/useDRS'
 
 // Version config
-import { GIT_SHA } from '@/config/version'
+import { APP_VERSION } from '@/config/version'
 
 // GitHub Stars badge
 function GitHubStars() {
@@ -272,13 +272,11 @@ const NavbarContent = () => {
   // Update available notification (admin only)
   const updateNotif = canViewAdmin && updateInfo?.updateAvailable ? {
     id: 'version-update',
-    message: updateInfo.commitsBehind > 0
-      ? t('about.commitsBehind', { count: updateInfo.commitsBehind })
-      : t('about.newCommitAvailable', { count: 0 }),
+    message: t('about.newVersionAvailable', { version: updateInfo.latestVersion }),
     severity: 'info',
     source: 'ProxCenter',
     isUpdateNotif: true,
-    compareUrl: updateInfo.compareUrl
+    releaseUrl: updateInfo.releaseUrl
   } : null
 
   // DRS recommendations as notifications (only pending ones, limited per cluster by settings)
@@ -813,21 +811,21 @@ return () => window.removeEventListener('keydown', onKeyDown)
                           color='info'
                           sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
                         />
-                        {updateInfo?.latestSha && (
+                        {updateInfo?.latestVersion && (
                           <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem', fontFamily: 'JetBrains Mono, monospace' }}>
-                            {updateInfo.latestSha.substring(0, 7)}
+                            v{updateInfo.latestVersion}
                           </Typography>
                         )}
                       </Box>
                     </Box>
                     <Box sx={{ display: 'flex', ml: 1 }}>
-                      {notif.compareUrl && (
-                        <Tooltip title={t('about.viewChanges')}>
+                      {notif.releaseUrl && (
+                        <Tooltip title={t('about.viewRelease')}>
                           <IconButton
                             size='small'
                             onClick={(e) => {
                               e.stopPropagation()
-                              window.open(notif.compareUrl, '_blank')
+                              window.open(notif.releaseUrl, '_blank')
                             }}
                             sx={{
                               opacity: 0.7,
@@ -1361,7 +1359,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {t('about.title')}
             <Chip
-              label={GIT_SHA ? GIT_SHA.substring(0, 7) : 'dev'}
+              label={APP_VERSION !== 'dev' ? 'v' + APP_VERSION : 'dev'}
               size='small'
               sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }}
               color={updateInfo?.updateAvailable ? 'warning' : 'default'}

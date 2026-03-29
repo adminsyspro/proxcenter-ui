@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { GIT_SHA, GITHUB_REPO } from '@/config/version'
+import { APP_VERSION, GIT_SHA, GITHUB_REPO } from '@/config/version'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -12,76 +12,62 @@ const HEADERS = {
 }
 
 interface VersionCheckResponse {
-  currentSha: string | null
-  latestSha: string | null
+  currentVersion: string
+  latestVersion: string | null
   updateAvailable: boolean
-  commitsBehind: number
-  latestMessage: string | null
-  latestDate: string | null
-  latestAuthor: string | null
-  compareUrl: string | null
+  releaseUrl: string | null
+  releaseNotes: string | null
+  releaseDate: string | null
   error: string | null
+}
+
+function semverCompare(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1
+  }
+  return 0
 }
 
 export async function GET() {
   const base: VersionCheckResponse = {
-    currentSha: GIT_SHA || null,
-    latestSha: null,
+    currentVersion: APP_VERSION,
+    latestVersion: null,
     updateAvailable: false,
-    commitsBehind: 0,
-    latestMessage: null,
-    latestDate: null,
-    latestAuthor: null,
-    compareUrl: null,
+    releaseUrl: null,
+    releaseNotes: null,
+    releaseDate: null,
     error: null
   }
 
-  // Local dev — no SHA baked in, skip check
-  if (!GIT_SHA) {
+  // Dev build — no version to compare, skip check
+  if (APP_VERSION === 'dev') {
     return NextResponse.json(base)
   }
 
   try {
-    // 1. Fetch latest commit on main
-    const commitRes = await fetch(
-      `${GITHUB_API}/repos/${GITHUB_REPO}/commits/main`,
+    const releaseRes = await fetch(
+      `${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`,
       { headers: HEADERS, next: { revalidate: 3600 } }
     )
 
-    if (!commitRes.ok) {
-      throw new Error(`GitHub API error: ${commitRes.status}`)
+    if (!releaseRes.ok) {
+      throw new Error(`GitHub API error: ${releaseRes.status}`)
     }
 
-    const commit = await commitRes.json()
-    const latestSha: string = commit.sha
+    const release = await releaseRes.json()
+    const latestTag: string = (release.tag_name || '').replace(/^v/, '')
 
-    base.latestSha = latestSha
-    base.latestMessage = commit.commit?.message?.split('\n')[0] || null
-    base.latestDate = commit.commit?.committer?.date || null
-    base.latestAuthor = commit.commit?.author?.name || null
+    base.latestVersion = latestTag
+    base.releaseUrl = release.html_url || null
+    base.releaseNotes = release.body || null
+    base.releaseDate = release.published_at || null
 
-    // Same SHA — up to date
-    if (latestSha === GIT_SHA) {
-      return NextResponse.json(base)
-    }
-
-    // 2. Different SHA — fetch compare to get commits behind
-    base.updateAvailable = true
-    base.compareUrl = `https://github.com/${GITHUB_REPO}/compare/${GIT_SHA}...main`
-
-    try {
-      const compareRes = await fetch(
-        `${GITHUB_API}/repos/${GITHUB_REPO}/compare/${GIT_SHA}...main`,
-        { headers: HEADERS, next: { revalidate: 3600 } }
-      )
-
-      if (compareRes.ok) {
-        const compare = await compareRes.json()
-        base.commitsBehind = compare.ahead_by ?? 0
-      }
-      // 404 = SHA deleted (force-push) — still updateAvailable, commitsBehind stays 0
-    } catch {
-      // Compare failed — still flag update, just no count
+    // Compare versions: update available if latest > current
+    if (latestTag && semverCompare(latestTag, APP_VERSION) > 0) {
+      base.updateAvailable = true
     }
 
     return NextResponse.json(base)

@@ -125,6 +125,10 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   const [pbsRestoreStorages, setPbsRestoreStorages] = useState<any[]>([])
   const [pbsRestoreNodes, setPbsRestoreNodes] = useState<any[]>([])
   const [pbsRestoreNode, setPbsRestoreNode] = useState('')
+  const [pbsRestoreConnId, setPbsRestoreConnId] = useState('')
+  const [pbsRestoreConnections, setPbsRestoreConnections] = useState<any[]>([])
+  const [pbsRestoreUsedVmIds, setPbsRestoreUsedVmIds] = useState<Set<number>>(new Set())
+  const [pbsRestoreVmIdError, setPbsRestoreVmIdError] = useState<string | null>(null)
   const [pbsFileRestoreDialog, setPbsFileRestoreDialog] = useState<{ open: boolean; backup: any }>({ open: false, backup: null })
   const [pbsFileLoading, setPbsFileLoading] = useState(false)
   const [pbsFileError, setPbsFileError] = useState<string | null>(null)
@@ -139,7 +143,9 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   const openPbsRestoreDialog = useCallback(async (backup: any, si: any) => {
     const vmType = backup.format === 'pbs-ct' ? 'lxc' : 'qemu'
     setPbsRestoreDialog({ open: true, backup, storageType: vmType })
-    setPbsRestoreVmId(backup.vmid ? String(backup.vmid) : '')
+    setPbsRestoreVmId('')
+    setPbsRestoreVmIdError(null)
+    setPbsRestoreUsedVmIds(new Set())
     setPbsRestoreStorage('')
     setPbsRestoreBwLimit('')
     setPbsRestoreUnique(false)
@@ -151,6 +157,8 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     setPbsRestoreCores('')
     setPbsRestoreSockets('')
     setPbsRestoreNode(si.node || '')
+    setPbsRestoreConnId(si.connId || '')
+    setPbsRestoreConnections([])
 
     // Load nodes and storages for restore target
     try {
@@ -162,7 +170,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       }
     } catch {}
 
-    // Load storages on the target node
+    // Load storages + used VM IDs on the target node
     const node = si.node || ''
     if (node) {
       try {
@@ -173,6 +181,14 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
         }
       } catch {}
     }
+    // Load used VM IDs for validation
+    try {
+      const resR = await fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/resources`, { cache: 'no-store' })
+      if (resR.ok) {
+        const json = await resR.json()
+        setPbsRestoreUsedVmIds(new Set((json.data || []).map((r: any) => Number(r.vmid))))
+      }
+    } catch {}
   }, [])
 
   // PBS storage: load storages when node changes
@@ -192,11 +208,20 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
 
   // PBS storage: execute restore
   const handlePbsRestore = useCallback(async () => {
-    if (!pbsRestoreDialog.backup || !data?.storageInfo) return
-    const si = data.storageInfo
+    if (!pbsRestoreDialog.backup) return
     const backup = pbsRestoreDialog.backup
-    const node = pbsRestoreNode || si.node
-    if (!node) return
+    let connId: string
+    let node: string
+    if (data?.storageInfo) {
+      connId = data.storageInfo.connId
+      node = pbsRestoreNode || data.storageInfo.node || ''
+    } else {
+      // Datastore context: pbsRestoreNode is "connId:nodeName"
+      connId = pbsRestoreConnId
+      const sepIdx = pbsRestoreNode.indexOf(':')
+      node = sepIdx >= 0 ? pbsRestoreNode.substring(sepIdx + 1) : pbsRestoreNode
+    }
+    if (!connId || !node) return
 
     setPbsRestoring(true)
     try {
@@ -218,7 +243,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       }
 
       const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(si.connId)}/nodes/${encodeURIComponent(node)}/restore`,
+        `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/restore`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -228,7 +253,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
 
-      if (json.data) trackTask({ upid: json.data, connId: si.connId, node, description: `Restore ${pbsRestoreDialog.storageType === 'lxc' ? 'CT' : 'VM'} ${pbsRestoreVmId}` })
+      if (json.data) trackTask({ upid: json.data, connId, node, description: `Restore ${pbsRestoreDialog.storageType === 'lxc' ? 'CT' : 'VM'} ${pbsRestoreVmId}` })
       toast.success(t('inventory.pbsRestoreStarted'))
       setPbsRestoreDialog({ open: false, backup: null, storageType: 'qemu' })
     } catch (e: any) {
@@ -236,7 +261,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     } finally {
       setPbsRestoring(false)
     }
-  }, [pbsRestoreDialog, pbsRestoreVmId, pbsRestoreStorage, pbsRestoreBwLimit, pbsRestoreUnique, pbsRestoreStart, pbsRestoreLive, pbsRestoreOverride, pbsRestoreName, pbsRestoreMemory, pbsRestoreCores, pbsRestoreSockets, pbsRestoreNode, data, trackTask, toast, t])
+  }, [pbsRestoreDialog, pbsRestoreVmId, pbsRestoreStorage, pbsRestoreBwLimit, pbsRestoreUnique, pbsRestoreStart, pbsRestoreLive, pbsRestoreOverride, pbsRestoreName, pbsRestoreMemory, pbsRestoreCores, pbsRestoreSockets, pbsRestoreNode, pbsRestoreConnId, data, trackTask, toast, t])
 
   // PBS file restore: helper to parse files from API response
   const parsePbsFiles = useCallback((files: any[]) => {
@@ -1316,11 +1341,13 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   </Box>
                                   <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0 }}>
                                     <MuiTooltip title={backup.backupType === 'ct' ? t('inventory.pbsRestoreCt') : t('inventory.pbsRestoreVm')}>
-                                      <IconButton size="small" sx={{ p: 0.15 }} onClick={() => {
+                                      <IconButton size="small" sx={{ p: 0.15 }} onClick={async () => {
                                         // Build a pseudo storageInfo-like item for the restore dialog
                                         const vmType = backup.backupType === 'ct' ? 'lxc' : 'qemu'
                                         setPbsRestoreDialog({ open: true, backup: { ...backup, format: backup.backupType === 'ct' ? 'pbs-ct' : 'pbs-vm', vmid: backup.backupId }, storageType: vmType })
-                                        setPbsRestoreVmId(backup.backupId || '')
+                                        setPbsRestoreVmId('')
+                                        setPbsRestoreVmIdError(null)
+                                        setPbsRestoreUsedVmIds(new Set())
                                         setPbsRestoreStorage('')
                                         setPbsRestoreBwLimit('')
                                         setPbsRestoreUnique(false)
@@ -1332,8 +1359,30 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                         setPbsRestoreCores('')
                                         setPbsRestoreSockets('')
                                         setPbsRestoreNode('')
-                                        // Load nodes
-                                        fetch('/api/v1/nodes').then(r => r.json()).then(j => setPbsRestoreNodes(j.data || [])).catch(() => {})
+                                        setPbsRestoreConnId('')
+                                        setPbsRestoreNodes([])
+                                        setPbsRestoreStorages([])
+                                        // Load all PVE connections + their nodes for a flat node selector
+                                        try {
+                                          const r = await fetch('/api/v1/connections')
+                                          const d = await r.json()
+                                          const pveConns = (d.data || d || []).filter((c: any) => c.type === 'pve')
+                                          setPbsRestoreConnections(pveConns)
+                                          const allNodes: any[] = []
+                                          await Promise.all(pveConns.map(async (c: any) => {
+                                            try {
+                                              const nodesR = await fetch(`/api/v1/connections/${encodeURIComponent(c.id)}/nodes`, { cache: 'no-store' })
+                                              if (nodesR.ok) {
+                                                const json = await nodesR.json()
+                                                const nodes = Array.isArray(json) ? json : (json?.data || [])
+                                                nodes.filter((n: any) => n.status === 'online').forEach((n: any) => {
+                                                  allNodes.push({ ...n, connId: c.id, connName: c.name || c.id, isCluster: (c.hosts?.length || 0) > 1 })
+                                                })
+                                              }
+                                            } catch {}
+                                          }))
+                                          setPbsRestoreNodes(allNodes)
+                                        } catch {}
                                       }}>
                                         <i className="ri-inbox-unarchive-line" style={{ fontSize: 13, color: '#2196f3' }} />
                                       </IconButton>
@@ -1422,18 +1471,6 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
         </DialogTitle>
         <DialogContent sx={{ pt: '8px !important' }}>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            {/* Source */}
-            <TextField
-              label={t('inventory.pbsRestoreSource')}
-              value={pbsRestoreDialog.backup?.volid || ''}
-              disabled
-              size="small"
-              fullWidth
-              InputProps={{
-                sx: { fontFamily: 'JetBrains Mono, monospace', fontSize: 12 },
-              }}
-            />
-
             {/* Target node */}
             <FormControl size="small" fullWidth>
               <InputLabel>Node</InputLabel>
@@ -1441,15 +1478,76 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                 value={pbsRestoreNode}
                 label="Node"
                 onChange={e => {
-                  const node = e.target.value
-                  if (data?.storageInfo) {
-                    loadPbsRestoreStoragesForNode(node, data.storageInfo.connId, pbsRestoreDialog.storageType)
+                  const nodeVal = e.target.value
+                  // Reset VM ID validation on node change
+                  setPbsRestoreVmId('')
+                  setPbsRestoreVmIdError(null)
+
+                  if (!data?.storageInfo) {
+                    // Datastore context: node value encodes connId (connId:nodeName)
+                    const sepIdx = nodeVal.indexOf(':')
+                    const connId = nodeVal.substring(0, sepIdx)
+                    const nodeName = nodeVal.substring(sepIdx + 1)
+                    setPbsRestoreConnId(connId)
+                    setPbsRestoreNode(nodeVal)
+                    setPbsRestoreStorage('')
+                    setPbsRestoreStorages([])
+                    // Load storages + used VM IDs in parallel
+                    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/storages?content=${pbsRestoreDialog.storageType === 'lxc' ? 'rootdir' : 'images'}`, { cache: 'no-store' })
+                      .then(r => r.ok ? r.json() : null)
+                      .then(json => { if (json) setPbsRestoreStorages(json?.data || []) })
+                      .catch(() => {})
+                    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
+                      .then(r => r.ok ? r.json() : null)
+                      .then(json => {
+                        if (json) setPbsRestoreUsedVmIds(new Set((json.data || []).map((r: any) => Number(r.vmid))))
+                      })
+                      .catch(() => {})
+                  } else {
+                    const connId = data.storageInfo.connId
+                    loadPbsRestoreStoragesForNode(nodeVal, connId, pbsRestoreDialog.storageType)
+                    // Load used VM IDs
+                    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
+                      .then(r => r.ok ? r.json() : null)
+                      .then(json => {
+                        if (json) setPbsRestoreUsedVmIds(new Set((json.data || []).map((r: any) => Number(r.vmid))))
+                      })
+                      .catch(() => {})
                   }
                 }}
               >
-                {pbsRestoreNodes.map((n: any) => (
-                  <MenuItem key={n.node} value={n.node}>{n.node}</MenuItem>
-                ))}
+                {!data?.storageInfo ? (
+                  // Datastore context: flat list of all nodes across all PVE connections, grouped by connection
+                  pbsRestoreConnections.map((c: any) => {
+                    const connNodes = pbsRestoreNodes.filter((n: any) => n.connId === c.id)
+                    if (connNodes.length === 0) return null
+                    const isCluster = (c.hosts?.length || 0) > 1
+                    return [
+                      <MenuItem key={`header-${c.id}`} disabled sx={{ opacity: '0.7 !important', py: 0.5, minHeight: 32 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {isCluster
+                            ? <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.8 }} />
+                            : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                          }
+                          <Typography variant="caption" fontWeight={700}>{c.name || c.id}</Typography>
+                        </Box>
+                      </MenuItem>,
+                      ...connNodes.map((n: any) => (
+                        <MenuItem key={`${c.id}:${n.node}`} value={`${c.id}:${n.node}`} sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 4 }}>
+                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
+                          {n.node}
+                        </MenuItem>
+                      ))
+                    ]
+                  })
+                ) : (
+                  pbsRestoreNodes.map((n: any) => (
+                    <MenuItem key={n.node} value={n.node} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
+                      {n.node}
+                    </MenuItem>
+                  ))
+                )}
               </Select>
             </FormControl>
 
@@ -1472,7 +1570,17 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
             <TextField
               label={t('inventory.pbsRestoreVmId')}
               value={pbsRestoreVmId}
-              onChange={e => setPbsRestoreVmId(e.target.value.replace(/\D/g, ''))}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '')
+                setPbsRestoreVmId(val)
+                if (val && pbsRestoreUsedVmIds.has(Number(val))) {
+                  setPbsRestoreVmIdError(t('inventory.createVm.vmIdInUse', { id: val }))
+                } else {
+                  setPbsRestoreVmIdError(null)
+                }
+              }}
+              error={!!pbsRestoreVmIdError}
+              helperText={pbsRestoreVmIdError}
               size="small"
               fullWidth
               type="number"
@@ -1568,7 +1676,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
           <Button
             variant="contained"
             onClick={handlePbsRestore}
-            disabled={pbsRestoring || !pbsRestoreVmId}
+            disabled={pbsRestoring || !pbsRestoreVmId || !!pbsRestoreVmIdError || !pbsRestoreNode || !(data?.storageInfo?.connId || pbsRestoreConnId)}
             startIcon={pbsRestoring ? <CircularProgress size={16} /> : <i className="ri-inbox-unarchive-line" />}
           >
             {pbsRestoreDialog.storageType === 'lxc' ? t('inventory.pbsRestoreCt') : t('inventory.pbsRestoreVm')}

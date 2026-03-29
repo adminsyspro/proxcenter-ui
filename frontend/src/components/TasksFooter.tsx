@@ -677,7 +677,7 @@ export default function TasksFooter({
           <Box sx={{ height: maxHeight, display: activeTab === 'proxmox' ? 'block' : 'none' }}>
             {loading ? (
               <Box sx={{ p: 2 }}>
-                {[...Array(5)].map((_, i) => (
+                {[...new Array(5)].map((_, i) => (
                   <Skeleton key={i} height={32} sx={{ my: 0.5 }} />
                 ))}
               </Box>

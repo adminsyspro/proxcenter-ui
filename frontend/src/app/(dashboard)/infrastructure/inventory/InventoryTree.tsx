@@ -428,7 +428,7 @@ function getTagColor(tag: string): { bg: string; color: string } {
   let hash = 0
 
   for (let i = 0; i < tag.length; i++) {
-    hash = ((hash << 5) - hash) + tag.charCodeAt(i)
+    hash = ((hash << 5) - hash) + tag.codePointAt(i)!
     hash = Math.trunc(hash)
   }
   

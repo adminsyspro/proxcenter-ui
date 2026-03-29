@@ -20,7 +20,7 @@ export const TAG_PALETTE = [
 export function hashStringToInt(str: string) {
   let h = 0
 
-  for (let i = 0; i < str.length; i++) h = Math.trunc(h * 31 + str.charCodeAt(i))
+  for (let i = 0; i < str.length; i++) h = Math.trunc(h * 31 + str.codePointAt(i)!)
 
 return Math.abs(h)
 }

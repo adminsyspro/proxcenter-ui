@@ -399,6 +399,7 @@ export interface EsxiDiskInfo {
   thinProvisioned: boolean
   datastoreName: string
   relativePath: string
+  controllerType?: string // "scsi" | "sata" | "ide" — derived from controllerKey
 }
 
 export interface EsxiNicInfo {
@@ -446,6 +447,27 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
 
   // Disks
   const devicesXml = extractProp(xml, "config.hardware.device")
+
+  // Build controllerKey -> type map from controller devices in the XML
+  // ESXi controller keys: 1000-1003 = SCSI, 15000-15003 = SATA, 200-201 = IDE
+  const controllerKeyMap = new Map<number, string>()
+  const scsiCtrlRegex = /xsi:type="Virtual(?:LSILogic|BusLogic|ParaVirtual|LSILogicSAS)(?:Controller)?">([\s\S]*?)(?=<VirtualDevice|$)/g
+  let ctrlMatch
+  while ((ctrlMatch = scsiCtrlRegex.exec(devicesXml)) !== null) {
+    const key = Number.parseInt(ctrlMatch[1].match(/<key>(\d+)<\/key>/)?.[1] || "0", 10)
+    if (key) controllerKeyMap.set(key, "scsi")
+  }
+  const sataCtrlRegex = /xsi:type="VirtualAHCIController">([\s\S]*?)(?=<VirtualDevice|$)/g
+  while ((ctrlMatch = sataCtrlRegex.exec(devicesXml)) !== null) {
+    const key = Number.parseInt(ctrlMatch[1].match(/<key>(\d+)<\/key>/)?.[1] || "0", 10)
+    if (key) controllerKeyMap.set(key, "sata")
+  }
+  const ideCtrlRegex = /xsi:type="VirtualIDEController">([\s\S]*?)(?=<VirtualDevice|$)/g
+  while ((ctrlMatch = ideCtrlRegex.exec(devicesXml)) !== null) {
+    const key = Number.parseInt(ctrlMatch[1].match(/<key>(\d+)<\/key>/)?.[1] || "0", 10)
+    if (key) controllerKeyMap.set(key, "ide")
+  }
+
   const disks: EsxiDiskInfo[] = []
   const diskRegex = /xsi:type="VirtualDisk">([\s\S]*?)(?=<VirtualDevice|$)/g
   let diskMatch
@@ -462,7 +484,11 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     const datastoreName = dsMatch?.[1] || ""
     const relativePath = dsMatch?.[2] || ""
 
-    disks.push({ label, fileName, capacityBytes, thinProvisioned, datastoreName, relativePath })
+    // Resolve controller type from controllerKey
+    const controllerKey = Number.parseInt(d.match(/<controllerKey>(\d+)<\/controllerKey>/)?.[1] || "0", 10)
+    const controllerType = controllerKeyMap.get(controllerKey) || (controllerKey >= 1000 && controllerKey < 2000 ? "scsi" : controllerKey >= 15000 ? "sata" : controllerKey >= 200 && controllerKey < 300 ? "ide" : undefined)
+
+    disks.push({ label, fileName, capacityBytes, thinProvisioned, datastoreName, relativePath, controllerType })
   }
 
   // NICs

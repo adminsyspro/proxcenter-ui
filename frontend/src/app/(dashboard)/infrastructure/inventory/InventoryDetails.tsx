@@ -3210,7 +3210,7 @@ return vm?.isCluster ?? false
           )}
 
 
-          {!(selection?.type === 'node' && data.status === 'crit') && selection?.type !== 'ext' && selection?.type !== 'ext-type' && selection?.type !== 'extvm' && selection?.type !== 'storage' && selection?.type !== 'datastore' && selection?.type !== 'pbs-datastore' && selection?.type !== 'pbs' && !data.isTemplate && (<>
+          {!(selection?.type === 'node' && data.status === 'crit') && selection?.type !== 'cluster' && selection?.type !== 'ext' && selection?.type !== 'ext-type' && selection?.type !== 'extvm' && selection?.type !== 'storage' && selection?.type !== 'datastore' && selection?.type !== 'pbs-datastore' && selection?.type !== 'pbs' && !data.isTemplate && (<>
           <Divider sx={{ flexShrink: 0 }} />
 
           <Box sx={{ flexShrink: 0 }}>

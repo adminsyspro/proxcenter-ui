@@ -596,7 +596,7 @@
     "pause": "Pause",
     "hibernate": "Hiberner",
     "reboot": "Redémarrer",
-    "reset": "Réinitialiser (dangereux)",
+    "reset": "Réinitialiser",
     "takeSnapshot": "Prendre un Snapshot",
     "backupNow": "Sauvegarder maintenant",
     "backupStarted": "Sauvegarde lancée",

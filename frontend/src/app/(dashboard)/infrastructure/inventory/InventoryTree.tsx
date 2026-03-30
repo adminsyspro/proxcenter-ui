@@ -520,7 +520,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
 
   if (variant === 'tree') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         <Box
           component="span"
           onClick={(e: React.MouseEvent) => {
@@ -570,7 +570,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
           alignItems: 'center',
           gap: 1,
           px: 1.5,
-          py: 0.75,
+          py: 0.4,
           cursor: isMigrating ? 'not-allowed' : 'pointer',
           borderRadius: 1,
           bgcolor: isSelected
@@ -621,7 +621,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
           alignItems: 'center',
           gap: 1,
           px: 1.5,
-          py: 0.75,
+          py: 0.4,
           cursor: isMigrating ? 'not-allowed' : 'pointer',
           borderRadius: 1,
           bgcolor: isSelected
@@ -672,7 +672,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         alignItems: 'center',
         gap: 1,
         px: 1.5,
-        ...(isGrouped ? { pl: 3, py: 0.5 } : { py: 0.75 }),
+        ...(isGrouped ? { pl: 3, py: 0.25 } : { py: 0.4 }),
         cursor: isMigrating ? 'not-allowed' : 'pointer',
         ...(!isGrouped ? { borderRadius: 1 } : {}),
         bgcolor: isSelected
@@ -2641,7 +2641,7 @@ return favorites.has(vmKey)
   const virtualizer = useVirtualizer({
     count: flatItems?.length ?? 0,
     getScrollElement: () => virtualScrollRef.current,
-    estimateSize: () => 40,
+    estimateSize: () => 30,
     overscan: 10,
   })
 
@@ -4032,18 +4032,18 @@ return (
             ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
             : undefined
         }
-        slotProps={{ paper: { sx: { '& .MuiListItemIcon-root': { minWidth: 36, mr: 1 } } } }}
+        slotProps={{ paper: { sx: { minWidth: 200, '& .MuiListItemIcon-root': { minWidth: 32 } } } }}
       >
         {/* Header du menu */}
-        <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             {contextMenu && (
               <i
                 className={getVmIcon(contextMenu.type, contextMenu.template)}
-                style={{ fontSize: 16, opacity: 0.8 }}
+                style={{ fontSize: 14, opacity: 0.5 }}
               />
             )}
-            <Typography variant="subtitle2" fontWeight={900}>
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>
               {contextMenu?.name}
             </Typography>
           </Box>
@@ -4075,9 +4075,9 @@ return (
             disabled={actionBusy || contextMenu?.status === 'running'}
           >
             <ListItemIcon>
-              <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
+              <i className="ri-play-fill" style={{ fontSize: 18, color: '#4caf50' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'success.main', fontWeight: 600 } }}>{t('audit.actions.start')}</ListItemText>
+            <ListItemText>{t('audit.actions.start')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -4086,9 +4086,9 @@ return (
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <PauseIcon fontSize="small" sx={{ color: 'info.main' }} />
+              <i className="ri-pause-fill" style={{ fontSize: 18, color: '#2196f3' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'info.main', fontWeight: 600 } }}>{t('inventory.pause')}</ListItemText>
+            <ListItemText>{t('inventory.pause')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -4097,9 +4097,9 @@ return (
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-zzz-line" style={{ fontSize: 20, color: 'var(--mui-palette-info-main)' }} />
+              <i className="ri-zzz-line" style={{ fontSize: 18, color: '#2196f3' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'info.main', fontWeight: 600 } }}>{t('inventory.hibernate')}</ListItemText>
+            <ListItemText>{t('inventory.hibernate')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -4108,9 +4108,9 @@ return (
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />
+              <i className="ri-shut-down-line" style={{ fontSize: 18, color: '#ff9800' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'warning.main', fontWeight: 600 } }}>{t('inventoryPage.shutdownClean')}</ListItemText>
+            <ListItemText>{t('inventoryPage.shutdownClean')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -4119,9 +4119,9 @@ return (
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <StopIcon fontSize="small" sx={{ color: 'error.main' }} />
+              <i className="ri-stop-fill" style={{ fontSize: 18, color: '#f44336' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'error.main', fontWeight: 600 } }}>{t('audit.actions.stop')}</ListItemText>
+            <ListItemText>{t('audit.actions.stop')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -4130,9 +4130,9 @@ return (
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-restart-line" style={{ fontSize: 20, color: 'var(--mui-palette-warning-main)' }} />
+              <i className="ri-restart-line" style={{ fontSize: 18, color: '#ff9800' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'warning.main', fontWeight: 600 } }}>{t('inventory.reboot')}</ListItemText>
+            <ListItemText>{t('inventory.reboot')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -4141,9 +4141,9 @@ return (
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-loop-left-line" style={{ fontSize: 20, color: 'var(--mui-palette-error-main)' }} />
+              <i className="ri-loop-left-line" style={{ fontSize: 18, color: '#f44336' }} />
             </ListItemIcon>
-            <ListItemText sx={{ '& .MuiTypography-root': { color: 'error.main', fontWeight: 600 } }}>{t('inventory.reset')}</ListItemText>
+            <ListItemText>{t('inventory.reset')}</ListItemText>
           </MenuItem>,
 
           <Divider key="divider1" />,
@@ -4240,17 +4240,17 @@ return (
             ? { top: nodeContextMenu.mouseY, left: nodeContextMenu.mouseX }
             : undefined
         }
-        slotProps={{ paper: { sx: { '& .MuiListItemIcon-root': { minWidth: 36, mr: 1 } } } }}
+        slotProps={{ paper: { sx: { minWidth: 200, '& .MuiListItemIcon-root': { minWidth: 32 } } } }}
       >
-        <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <NodeIcon status={(() => {
               if (!nodeContextMenu) return 'online'
               const clu = clusters.find(c => c.connId === nodeContextMenu.connId)
               const n = clu?.nodes.find(n => n.node === nodeContextMenu.node)
               return n?.status || 'online'
-            })()} maintenance={nodeContextMenu?.maintenance} size={16} />
-            <Typography variant="subtitle2" fontWeight={900}>
+            })()} maintenance={nodeContextMenu?.maintenance} size={14} />
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>
               {nodeContextMenu?.node}
             </Typography>
           </Box>

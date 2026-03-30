@@ -2458,7 +2458,7 @@ return vm?.isCluster ?? false
   }, [selection, allVms])
 
   return (
-    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', fontSize: 13, '& .MuiTypography-body2': { fontSize: '13px !important', fontWeight: '400 !important' }, '& .MuiTypography-body1': { fontSize: '13px !important' }, '& .MuiTypography-caption': { fontSize: '11px !important' }, ...(viewMode === 'vms' || viewMode === 'hosts' || viewMode === 'pools' || viewMode === 'tags' || viewMode === 'favorites' ? { height: '100%', display: 'flex', flexDirection: 'column' } : {}) }}>
+    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', fontSize: 13, '& .MuiTypography-body2': { fontSize: '13px !important', fontWeight: '400 !important' }, '& .MuiTypography-body1': { fontSize: '13px !important' }, '& .MuiTypography-caption': { fontSize: '11px !important' } }}>
       {progress}
 
       {error ? (
@@ -2534,7 +2534,7 @@ return vm?.isCluster ?? false
         />
       ) : !selection || selection?.type === 'root' ? (
         viewMode === 'vms' && displayVms.length > 0 ? (
-          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Box sx={{ height: 'calc(100vh - 180px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 0, flex: 1, minHeight: 0, border: 'none', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{

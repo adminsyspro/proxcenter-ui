@@ -642,9 +642,9 @@ return () => setPageInfo('', '', '')
           flexDirection: 'column',
           flex: 1,
           width: '100%',
+          overflow: 'hidden',
         }}
       >
-        {/* Contenu scrollable */}
         <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <InventoryDetails
             selection={selection}

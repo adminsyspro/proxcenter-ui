@@ -88,7 +88,7 @@ return next
   })
   
   return (
-    <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
+    <Box sx={{ p: 2, height: 'calc(100vh - 180px)', overflow: 'auto' }}>
       <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
           {/* Header */}

@@ -1507,11 +1507,11 @@ export default function ClusterTabs(props: any) {
                               overflow: 'hidden'
                             }}>
                               {/* Header */}
-                              <Box sx={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: clusterPveMajorVersion >= 9 
-                                  ? '100px 100px 150px 100px 100px 200px'
-                                  : '100px 100px 150px 100px 100px 1fr 200px',
+                              <Box sx={{
+                                display: 'grid',
+                                gridTemplateColumns: clusterPveMajorVersion >= 9
+                                  ? '100px 1fr 100px 150px 100px 100px 200px'
+                                  : '100px 1fr 100px 150px 100px 100px 1fr 200px',
                                 gap: 1,
                                 px: 1.5,
                                 py: 1,
@@ -1521,6 +1521,7 @@ export default function ClusterTabs(props: any) {
                                 '& > *': { fontWeight: 600, fontSize: 12, opacity: 0.8 }
                               }}>
                                 <Typography variant="caption">{t('inventory.id')}</Typography>
+                                <Typography variant="caption">{t('inventory.name')}</Typography>
                                 <Typography variant="caption">{t('cluster.state')}</Typography>
                                 <Typography variant="caption">{t('cluster.nodeCol')}</Typography>
                                 <Typography variant="caption">{t('cluster.maxRestart')}</Typography>
@@ -1533,10 +1534,10 @@ export default function ClusterTabs(props: any) {
                                 <Box 
                                   key={res.sid}
                                   sx={{ 
-                                    display: 'grid', 
-                                    gridTemplateColumns: clusterPveMajorVersion >= 9 
-                                      ? '100px 100px 150px 100px 100px 200px'
-                                      : '100px 100px 150px 100px 100px 1fr 200px',
+                                    display: 'grid',
+                                    gridTemplateColumns: clusterPveMajorVersion >= 9
+                                      ? '100px 1fr 100px 150px 100px 100px 200px'
+                                      : '100px 1fr 100px 150px 100px 100px 1fr 200px',
                                     gap: 1,
                                     px: 1.5,
                                     py: 0.75,
@@ -1549,9 +1550,16 @@ export default function ClusterTabs(props: any) {
                                   <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
                                     {res.sid}
                                   </Typography>
+                                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {(() => {
+                                      const vmid = String(res.sid).split(':')[1]
+                                      const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
+                                      return vm?.name || '-'
+                                    })()}
+                                  </Typography>
                                   <Box>
-                                    <Chip 
-                                      size="small" 
+                                    <Chip
+                                      size="small"
                                       label={res.state || 'started'} 
                                       color={res.state === 'started' || res.state === 'enabled' ? 'success' : res.state === 'ignored' ? 'warning' : 'default'}
                                       sx={{ height: 20, fontSize: 11 }} 

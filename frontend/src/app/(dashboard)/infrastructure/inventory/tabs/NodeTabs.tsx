@@ -561,10 +561,10 @@ export default function NodeTabs(props: any) {
                                       <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                     </Box>
                                     <Box sx={{ px: 1.5, py: 0.75 }}>
-                                      {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                      {payload.filter(e => e.value != null).map(entry => { const v = Number(entry.value); const isIo = String(entry.dataKey) === 'iowait'; const c = isIo ? '#f59e0b' : v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                          <Typography variant="caption" sx={{ flex: 1 }}>CPU</Typography>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: isIo ? '#f59e0b' : entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>{isIo ? 'IO Wait' : 'CPU'}</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v.toFixed(1)}%</Typography>
                                         </Box>
                                       )})}
@@ -573,6 +573,7 @@ export default function NodeTabs(props: any) {
                                 )
                               }} />
                               <Area type="monotone" dataKey="cpuPct" stroke={primaryColor} fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
+                              <Area type="monotone" dataKey="iowait" stroke="#f59e0b" fill="none" strokeWidth={1.5} strokeDasharray="4 2" isAnimationActive={false} name="IO Wait" connectNulls />
                             </AreaChart>
                           </ResponsiveContainer>
                         </ExpandableChart>
@@ -735,6 +736,92 @@ export default function NodeTabs(props: any) {
                             )}
                           </ResponsiveContainer>
                         </ExpandableChart>
+
+                        {/* Memory Available & ZFS ARC (nodes only) */}
+                        {selection?.type === 'node' && series.some(p => p.memAvailable != null || p.arcSize != null) && (
+                          <ExpandableChart title="Memory Available / ZFS ARC" height={160}>
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                              <AreaChart data={series}>
+                                <defs>
+                                  <linearGradient id="nGradMemAvail" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                                  </linearGradient>
+                                  <linearGradient id="nGradArc" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <YAxis tickFormatter={v => formatBytes(Number(v))} tick={{ fontSize: 9 }} width={55} domain={[0, 'auto']} />
+                                <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
+                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                        <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#10b981' }}>Memory Detail</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                      </Box>
+                                      <Box sx={{ px: 1.5, py: 0.75 }}>
+                                        {payload.filter(e => e.value != null).map(entry => (
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.dataKey) === 'memAvailable' ? 'Available' : 'ZFS ARC'}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    </Box>
+                                  )
+                                }} />
+                                <Area type="monotone" dataKey="memAvailable" stroke="#10b981" fill="url(#nGradMemAvail)" strokeWidth={1.5} isAnimationActive={false} name="Available" connectNulls />
+                                <Area type="monotone" dataKey="arcSize" stroke="#8b5cf6" fill="url(#nGradArc)" strokeWidth={1.5} isAnimationActive={false} name="ZFS ARC" connectNulls />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </ExpandableChart>
+                        )}
+
+                        {/* PSI - Pressure Stall Information (nodes only, kernel 4.20+) */}
+                        {selection?.type === 'node' && series.some(p => p.psiCpuSome != null) && (
+                          <ExpandableChart title="Pressure Stall Information (PSI)" height={160}>
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                              <AreaChart data={series}>
+                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <YAxis domain={[0, 'auto']} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={35} />
+                                <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  const psiLabels: Record<string, string> = { psiCpuSome: 'CPU some', psiCpuFull: 'CPU full', psiIoSome: 'IO some', psiIoFull: 'IO full', psiMemSome: 'Mem some', psiMemFull: 'Mem full' }
+                                  const psiColors: Record<string, string> = { psiCpuSome: '#2196f3', psiCpuFull: '#1565c0', psiIoSome: '#f59e0b', psiIoFull: '#d97706', psiMemSome: '#10b981', psiMemFull: '#059669' }
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
+                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                        <i className="ri-pulse-line" style={{ fontSize: 13, color: '#ef4444' }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#ef4444' }}>PSI</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                      </Box>
+                                      <Box sx={{ px: 1.5, py: 0.75 }}>
+                                        {payload.filter(e => e.value != null).map(entry => (
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: psiColors[String(entry.dataKey)] || entry.color, flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>{psiLabels[String(entry.dataKey)] || String(entry.dataKey)}</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}%</Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    </Box>
+                                  )
+                                }} />
+                                <Area type="monotone" dataKey="psiCpuSome" stroke="#2196f3" fill="none" strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                <Area type="monotone" dataKey="psiIoSome" stroke="#f59e0b" fill="none" strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                <Area type="monotone" dataKey="psiMemSome" stroke="#10b981" fill="none" strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                <Area type="monotone" dataKey="psiCpuFull" stroke="#1565c0" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
+                                <Area type="monotone" dataKey="psiIoFull" stroke="#d97706" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
+                                <Area type="monotone" dataKey="psiMemFull" stroke="#059669" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </ExpandableChart>
+                        )}
                       </Box>
                     )}
                   </Box>

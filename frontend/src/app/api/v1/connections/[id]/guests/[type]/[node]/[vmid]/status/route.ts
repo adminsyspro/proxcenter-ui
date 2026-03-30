@@ -44,6 +44,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
         cpu: statusData?.cpu,
         mem: statusData?.mem,
         maxmem: statusData?.maxmem,
+        disk: statusData?.disk,
+        maxdisk: statusData?.maxdisk,
       }
     })
   } catch (e: any) {

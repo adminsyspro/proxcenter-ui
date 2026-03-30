@@ -80,8 +80,17 @@ export function useCephPerf(
     }
 
     fetchCephPerf()
-    const interval = setInterval(fetchCephPerf, 2000)
-    return () => clearInterval(interval)
+
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    function start() { if (interval !== null) return; interval = setInterval(fetchCephPerf, 2000) }
+    function stop() { if (interval !== null) { clearInterval(interval); interval = null } }
+    function onVis() { document.visibilityState === 'visible' ? (fetchCephPerf(), start()) : stop() }
+
+    document.addEventListener('visibilitychange', onVis)
+    if (document.visibilityState === 'visible') start()
+
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
   }, [active, selectionId])
 
   // Compute trends from history

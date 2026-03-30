@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { InventorySelection, DetailsPayload } from '../types'
-import { fetchDetails, parseVmId, parseNodeId, asArray, safeJson, cpuPct, pct } from '../helpers'
+import { fetchDetails, parseVmId, parseNodeId, cpuPct, pct } from '../helpers'
 import type { VmRow, TrendPoint } from '@/components/VmsTable'
 
 /**
@@ -60,6 +60,10 @@ export function useDetailData(selection: InventorySelection | null) {
   }, [selection?.type, selection?.id])
 
   // ---- Live-metrics polling (CPU/RAM/Storage every 2s) ----
+  // Uses targeted /status/current endpoint instead of /cluster/resources (all VMs).
+  // Pauses when the browser tab is hidden (Page Visibility API).
+  const pollAliveRef = useRef(true)
+
   useEffect(() => {
     if (!selection || !data) return
     const isVm = selection.type === 'vm'
@@ -70,16 +74,21 @@ export function useDetailData(selection: InventorySelection | null) {
     if (isVm && data.vmRealStatus !== 'running') return
     if (isNode && data.status !== 'ok') return
 
-    let alive = true
+    pollAliveRef.current = true
+    let intervalId: ReturnType<typeof setInterval> | null = null
 
     const poll = async () => {
+      if (!pollAliveRef.current) return
       try {
         if (isVm) {
           const { connId, node, type, vmid } = parseVmId(selection.id)
-          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
-          const resources = asArray<any>(safeJson(await res.json()))
-          const g = resources.find((x: any) => String(x.node) === String(node) && String(x.type) === String(type) && String(x.vmid) === String(vmid))
-          if (!g || !alive) return
+          const res = await fetch(
+            `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`,
+            { cache: 'no-store' }
+          )
+          const json = await res.json()
+          const g = json?.data
+          if (!g || !pollAliveRef.current) return
           setData(prev => prev ? {
             ...prev,
             metrics: {
@@ -90,17 +99,25 @@ export function useDetailData(selection: InventorySelection | null) {
           } : prev)
         } else {
           const { connId, node } = parseNodeId(selection.id)
-          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
-          const resources = asArray<any>(safeJson(await res.json()))
-          const n = resources.find((x: any) => x.type === 'node' && String(x.node) === String(node))
-          if (!n || !alive) return
+          const res = await fetch(
+            `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`,
+            { cache: 'no-store' }
+          )
+          const json = await res.json()
+          const n = json?.data
+          if (!n || !pollAliveRef.current) return
+          const cpu = n.cpu
+          const mem = n.memory?.used ?? n.mem
+          const maxmem = n.memory?.total ?? n.maxmem
+          const disk = n.rootfs?.used ?? n.disk
+          const maxdisk = n.rootfs?.total ?? n.maxdisk
           setData(prev => prev ? {
             ...prev,
             metrics: {
               ...prev.metrics,
-              cpu: { label: 'CPU', pct: cpuPct(n.cpu), used: cpuPct(n.cpu), max: 100 },
-              ram: { label: 'RAM', pct: pct(Number(n.mem ?? 0), Number(n.maxmem ?? 0)), used: Number(n.mem ?? 0), max: Number(n.maxmem ?? 0) },
-              storage: { label: 'Storage', pct: pct(Number(n.disk ?? 0), Number(n.maxdisk ?? 0)), used: Number(n.disk ?? 0), max: Number(n.maxdisk ?? 0) },
+              cpu: { label: 'CPU', pct: cpuPct(cpu), used: cpuPct(cpu), max: 100 },
+              ram: { label: 'RAM', pct: pct(Number(mem ?? 0), Number(maxmem ?? 0)), used: Number(mem ?? 0), max: Number(maxmem ?? 0) },
+              storage: { label: 'Storage', pct: pct(Number(disk ?? 0), Number(maxdisk ?? 0)), used: Number(disk ?? 0), max: Number(maxdisk ?? 0) },
             },
           } : prev)
         }
@@ -109,8 +126,32 @@ export function useDetailData(selection: InventorySelection | null) {
       }
     }
 
-    const id = setInterval(poll, 2000)
-    return () => { alive = false; clearInterval(id) }
+    function start() {
+      if (intervalId !== null) return
+      poll()
+      intervalId = setInterval(poll, 2000)
+    }
+
+    function stop() {
+      if (intervalId !== null) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
+    }
+
+    function onVisChange() {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+
+    document.addEventListener('visibilitychange', onVisChange)
+    if (document.visibilityState === 'visible') start()
+
+    return () => {
+      pollAliveRef.current = false
+      stop()
+      document.removeEventListener('visibilitychange', onVisChange)
+    }
   }, [selection?.type, selection?.id, data?.vmRealStatus, data?.status])
 
   // ---- refreshData callback ----

@@ -104,6 +104,20 @@ export function formatOsType(code: string | undefined): string {
   return osTypeLabels[code] || code
 }
 
+export function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let v = bytes
+
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024
+    i++
+  }
+
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`
+}
+
 export function formatBps(bps: number) {
   if (!Number.isFinite(bps) || bps <= 0) return '0 B/s'
   const u = ['B/s', 'KB/s', 'MB/s', 'GB/s']
@@ -268,6 +282,21 @@ export function buildSeriesFromRrd(raw: any[], maxMem?: number): SeriesPoint[] {
     const diskRead = pickNumber(p, ['diskread', 'disk_read'])
     const diskWrite = pickNumber(p, ['diskwrite', 'disk_write'])
 
+    // Extended metrics (node-level, from PVE rrddata)
+    const iowaitRaw = pickNumber(p, ['iowait', 'io_wait'])
+    const iowait = iowaitRaw != null ? Math.max(0, Math.min(100, iowaitRaw <= 1.5 ? iowaitRaw * 100 : iowaitRaw)) : undefined
+
+    const memAvailable = pickNumber(p, ['memavailable', 'mem_available'])
+    const arcSize = pickNumber(p, ['arcsize', 'arc_size', 'zfs_arcsize'])
+
+    // PSI (Pressure Stall Information) - values are percentages (0-100)
+    const psiCpuSome = pickNumber(p, ['cpu_some', 'psi_cpu_some']) ?? undefined
+    const psiCpuFull = pickNumber(p, ['cpu_full', 'psi_cpu_full']) ?? undefined
+    const psiIoSome = pickNumber(p, ['io_some', 'psi_io_some']) ?? undefined
+    const psiIoFull = pickNumber(p, ['io_full', 'psi_io_full']) ?? undefined
+    const psiMemSome = pickNumber(p, ['mem_some', 'psi_mem_some']) ?? undefined
+    const psiMemFull = pickNumber(p, ['mem_full', 'psi_mem_full']) ?? undefined
+
     out.push({
       t,
       cpuPct: cpuPctVal,
@@ -277,6 +306,15 @@ export function buildSeriesFromRrd(raw: any[], maxMem?: number): SeriesPoint[] {
       netOutBps: netOut ?? undefined,
       diskReadBps: diskRead ?? undefined,
       diskWriteBps: diskWrite ?? undefined,
+      iowait,
+      memAvailable: memAvailable ?? undefined,
+      arcSize: arcSize ?? undefined,
+      psiCpuSome,
+      psiCpuFull,
+      psiIoSome,
+      psiIoFull,
+      psiMemSome,
+      psiMemFull,
     })
   }
 

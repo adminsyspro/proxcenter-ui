@@ -224,10 +224,27 @@ export default function InventoryPage() {
     // Fetch initial
     fetchRunningTasks()
 
-    // Polling toutes les 3 secondes
-    const interval = setInterval(fetchRunningTasks, 3000)
+    // Polling toutes les 3 secondes, pause quand l'onglet est caché
+    let interval: ReturnType<typeof setInterval> | null = null
 
-    return () => clearInterval(interval)
+    function start() {
+      if (interval !== null) return
+      interval = setInterval(fetchRunningTasks, 3000)
+    }
+
+    function stop() {
+      if (interval !== null) { clearInterval(interval); interval = null }
+    }
+
+    function onVis() {
+      if (document.visibilityState === 'visible') { fetchRunningTasks(); start() }
+      else stop()
+    }
+
+    document.addEventListener('visibilitychange', onVis)
+    if (document.visibilityState === 'visible') start()
+
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
   }, [refreshTree])
 
   // Page title

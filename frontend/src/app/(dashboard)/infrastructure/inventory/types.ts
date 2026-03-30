@@ -469,6 +469,16 @@ export type SeriesPoint = {
   netOutBps?: number
   diskReadBps?: number
   diskWriteBps?: number
+  // Extended metrics (matching PVE rrddata fields)
+  iowait?: number
+  memAvailable?: number
+  arcSize?: number
+  psiCpuSome?: number
+  psiCpuFull?: number
+  psiIoSome?: number
+  psiIoFull?: number
+  psiMemSome?: number
+  psiMemFull?: number
 }
 
 export type ActiveDialog =

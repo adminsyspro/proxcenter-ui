@@ -1910,29 +1910,39 @@ return next
         if (!alive) return
         try {
           const d = JSON.parse(e.data)
-          setClusters(prev => prev.map(clu => {
-            if (clu.connId !== d.connId) return clu
-            let changed = false
-            const nodes = clu.nodes.map(n => {
-              // Handle node migration: VM moved to a different node
-              const vms = n.vms.map(vm => {
-                if (String(vm.vmid) !== String(d.vmid) || vm.type !== d.type) return vm
-                changed = true
-                return {
-                  ...vm,
-                  status: d.status,
-                  cpu: d.cpu ?? vm.cpu,
-                  mem: d.mem ?? vm.mem,
-                  maxmem: d.maxmem ?? vm.maxmem,
-                  disk: d.disk ?? vm.disk,
-                  maxdisk: d.maxdisk ?? vm.maxdisk,
-                  name: d.name ?? vm.name,
-                }
+          setClusters(prev => {
+            let anyClusterChanged = false
+            const next = prev.map(clu => {
+              if (clu.connId !== d.connId) return clu
+              let nodeChanged = false
+              const nodes = clu.nodes.map(n => {
+                let vmChanged = false
+                const vms = n.vms.map(vm => {
+                  if (String(vm.vmid) !== String(d.vmid) || vm.type !== d.type) return vm
+                  // Only create new object if values actually differ
+                  const newStatus = d.status
+                  const newCpu = d.cpu ?? vm.cpu
+                  const newMem = d.mem ?? vm.mem
+                  const newMaxmem = d.maxmem ?? vm.maxmem
+                  const newDisk = d.disk ?? vm.disk
+                  const newMaxdisk = d.maxdisk ?? vm.maxdisk
+                  const newName = d.name ?? vm.name
+                  if (vm.status === newStatus && vm.cpu === newCpu && vm.mem === newMem &&
+                      vm.maxmem === newMaxmem && vm.disk === newDisk && vm.maxdisk === newMaxdisk &&
+                      vm.name === newName) return vm
+                  vmChanged = true
+                  return { ...vm, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem, disk: newDisk, maxdisk: newMaxdisk, name: newName }
+                })
+                if (!vmChanged) return n
+                nodeChanged = true
+                return { ...n, vms }
               })
-              return changed ? { ...n, vms } : n
+              if (!nodeChanged) return clu
+              anyClusterChanged = true
+              return { ...clu, nodes }
             })
-            return changed ? { ...clu, nodes } : clu
-          }))
+            return anyClusterChanged ? next : prev
+          })
         } catch { /* ignore */ }
       })
 
@@ -1940,16 +1950,23 @@ return next
         if (!alive) return
         try {
           const d = JSON.parse(e.data)
-          setClusters(prev => prev.map(clu => {
-            if (clu.connId !== d.connId) return clu
-            let changed = false
-            const nodes = clu.nodes.map(n => {
-              if (n.node !== d.node) return n
-              changed = true
-              return { ...n, status: d.status }
+          setClusters(prev => {
+            let anyChanged = false
+            const next = prev.map(clu => {
+              if (clu.connId !== d.connId) return clu
+              let nodeChanged = false
+              const nodes = clu.nodes.map(n => {
+                if (n.node !== d.node) return n
+                if (n.status === d.status) return n
+                nodeChanged = true
+                return { ...n, status: d.status }
+              })
+              if (!nodeChanged) return clu
+              anyChanged = true
+              return { ...clu, nodes }
             })
-            return changed ? { ...clu, nodes } : clu
-          }))
+            return anyChanged ? next : prev
+          })
         } catch { /* ignore */ }
       })
 
@@ -1957,30 +1974,37 @@ return next
         if (!alive) return
         try {
           const d = JSON.parse(e.data)
-          setClusters(prev => prev.map(clu => {
-            if (clu.connId !== d.connId) return clu
-            const nodes = clu.nodes.map(n => {
-              if (n.node !== d.node) return n
-              // Check if VM already exists (avoid duplicates)
-              if (n.vms.some(vm => String(vm.vmid) === String(d.vmid) && vm.type === d.type)) return n
-              return {
-                ...n,
-                vms: [...n.vms, {
-                  type: d.type,
-                  vmid: String(d.vmid),
-                  name: d.name || `${d.type}/${d.vmid}`,
-                  status: d.status || 'unknown',
-                  cpu: d.cpu,
-                  mem: d.mem,
-                  maxmem: d.maxmem,
-                  pool: null,
-                  tags: null,
-                  template: false,
-                }].sort((a, b) => Number.parseInt(a.vmid, 10) - Number.parseInt(b.vmid, 10))
-              }
+          setClusters(prev => {
+            let anyChanged = false
+            const next = prev.map(clu => {
+              if (clu.connId !== d.connId) return clu
+              let nodeChanged = false
+              const nodes = clu.nodes.map(n => {
+                if (n.node !== d.node) return n
+                if (n.vms.some(vm => String(vm.vmid) === String(d.vmid) && vm.type === d.type)) return n
+                nodeChanged = true
+                return {
+                  ...n,
+                  vms: [...n.vms, {
+                    type: d.type,
+                    vmid: String(d.vmid),
+                    name: d.name || `${d.type}/${d.vmid}`,
+                    status: d.status || 'unknown',
+                    cpu: d.cpu,
+                    mem: d.mem,
+                    maxmem: d.maxmem,
+                    pool: null,
+                    tags: null,
+                    template: false,
+                  }].sort((a, b) => Number.parseInt(a.vmid, 10) - Number.parseInt(b.vmid, 10))
+                }
+              })
+              if (!nodeChanged) return clu
+              anyChanged = true
+              return { ...clu, nodes }
             })
-            return { ...clu, nodes }
-          }))
+            return anyChanged ? next : prev
+          })
         } catch { /* ignore */ }
       })
 
@@ -1988,17 +2012,23 @@ return next
         if (!alive) return
         try {
           const d = JSON.parse(e.data)
-          setClusters(prev => prev.map(clu => {
-            if (clu.connId !== d.connId) return clu
-            let changed = false
-            const nodes = clu.nodes.map(n => {
-              const before = n.vms.length
-              const vms = n.vms.filter(vm => !(String(vm.vmid) === String(d.vmid) && vm.type === d.type))
-              if (vms.length !== before) changed = true
-              return changed ? { ...n, vms } : n
+          setClusters(prev => {
+            let anyChanged = false
+            const next = prev.map(clu => {
+              if (clu.connId !== d.connId) return clu
+              let nodeChanged = false
+              const nodes = clu.nodes.map(n => {
+                const vms = n.vms.filter(vm => !(String(vm.vmid) === String(d.vmid) && vm.type === d.type))
+                if (vms.length === n.vms.length) return n
+                nodeChanged = true
+                return { ...n, vms }
+              })
+              if (!nodeChanged) return clu
+              anyChanged = true
+              return { ...clu, nodes }
             })
-            return changed ? { ...clu, nodes } : clu
-          }))
+            return anyChanged ? next : prev
+          })
         } catch { /* ignore */ }
       })
 
@@ -2015,10 +2045,25 @@ return next
     // Start after a short delay to let the initial stream load finish first
     const startTimer = setTimeout(connect, 3000)
 
+    // Pause SSE when tab is hidden, reconnect when visible
+    function onVisChange() {
+      if (!alive) return
+      if (document.visibilityState === 'visible') {
+        if (!es) connect()
+      } else {
+        es?.close()
+        es = null
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisChange)
+
     return () => {
       alive = false
       clearTimeout(startTimer)
       if (reconnectTimer) clearTimeout(reconnectTimer)
+      document.removeEventListener('visibilitychange', onVisChange)
       es?.close()
       es = null
     }

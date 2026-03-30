@@ -1460,18 +1460,22 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
   useEffect(() => {
     let alive = true
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    let isFirstLoad = true
 
     async function runRrd() {
-      setRrdError(null)
-
-      // Ne pas reset series immédiatement pour éviter le flash
-      // setSeries([])
+      if (!alive) return
+      if (!isFirstLoad) {
+        // Silent refresh: don't show loading spinner or clear errors
+      } else {
+        setRrdError(null)
+      }
 
       if (!selection) return
       if (selection.type !== 'node' && selection.type !== 'vm') return
 
       try {
-        setRrdLoading(true)
+        if (isFirstLoad) setRrdLoading(true)
 
         let connectionId = ''
         let path = ''
@@ -1495,20 +1499,44 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
         setSeries(built)
       } catch (e: any) {
         if (!alive) return
-        setRrdError(e?.message || String(e))
+        if (isFirstLoad) setRrdError(e?.message || String(e))
       } finally {
         if (!alive) return
-        setRrdLoading(false)
+        if (isFirstLoad) setRrdLoading(false)
+        isFirstLoad = false
       }
     }
 
     // Petit délai pour laisser l'UI s'afficher d'abord
     const timer = setTimeout(runRrd, 50)
 
-    
-return () => {
+    // Auto-refresh every 30s with visibility pause
+    function startRefresh() {
+      if (intervalId !== null) return
+      intervalId = setInterval(runRrd, 30000)
+    }
+
+    function stopRefresh() {
+      if (intervalId !== null) { clearInterval(intervalId); intervalId = null }
+    }
+
+    function onVis() {
+      if (document.visibilityState === 'visible') { runRrd(); startRefresh() }
+      else stopRefresh()
+    }
+
+    document.addEventListener('visibilitychange', onVis)
+    // Start refresh interval after initial load delay
+    const refreshTimer = setTimeout(() => {
+      if (document.visibilityState === 'visible') startRefresh()
+    }, 30000)
+
+    return () => {
       alive = false
       clearTimeout(timer)
+      clearTimeout(refreshTimer)
+      stopRefresh()
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [selection?.type, selection?.id, tf]) // Retirer data?.metrics?.ram?.max des dépendances
 
@@ -1926,8 +1954,17 @@ return
       } catch { /* ignore */ }
     }
     fetchPerf()
-    const iv = setInterval(fetchPerf, 3000)
-    return () => clearInterval(iv)
+
+    let iv: ReturnType<typeof setInterval> | null = null
+
+    function start() { if (iv !== null) return; iv = setInterval(fetchPerf, 3000) }
+    function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
+    function onVis() { document.visibilityState === 'visible' ? (fetchPerf(), start()) : stop() }
+
+    document.addEventListener('visibilitychange', onVis)
+    if (document.visibilityState === 'visible') start()
+
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
   }, [selection?.type, selection?.id, data?.storageInfo])
 
   // Fetch storage RRD history when viewing any storage
@@ -1957,7 +1994,18 @@ return
       } catch { setStorageRrdHistory([]) }
     }
     load()
-    return () => { cancelled = true }
+
+    // Auto-refresh every 30s with visibility pause
+    let iv: ReturnType<typeof setInterval> | null = null
+
+    function start() { if (iv !== null) return; iv = setInterval(load, 30000) }
+    function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
+    function onVis() { document.visibilityState === 'visible' ? (load(), start()) : stop() }
+
+    document.addEventListener('visibilitychange', onVis)
+    const refreshTimer = setTimeout(() => { if (document.visibilityState === 'visible') start() }, 30000)
+
+    return () => { cancelled = true; clearTimeout(refreshTimer); stop(); document.removeEventListener('visibilitychange', onVis) }
   }, [selection?.type, selection?.id, data?.storageInfo, storageRrdTimeframe])
 
   // Détecter si les valeurs CPU ont été modifiées

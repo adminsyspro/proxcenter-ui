@@ -40,7 +40,7 @@ export function useSyslogLive(
 
     function start() { if (interval !== null) return; interval = setInterval(fetchLogs, 2000) }
     function stop() { if (interval !== null) { clearInterval(interval); interval = null } }
-    function onVis() { document.visibilityState === 'visible' ? (fetchLogs(), start()) : stop() }
+    function onVis() { if (document.visibilityState === 'visible') { fetchLogs(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()
@@ -94,7 +94,7 @@ export function useCephLogLive(
 
     function start() { if (interval !== null) return; interval = setInterval(fetchLogs, 2000) }
     function stop() { if (interval !== null) { clearInterval(interval); interval = null } }
-    function onVis() { document.visibilityState === 'visible' ? (fetchLogs(), start()) : stop() }
+    function onVis() { if (document.visibilityState === 'visible') { fetchLogs(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()

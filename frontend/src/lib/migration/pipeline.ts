@@ -1207,7 +1207,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } else {
         try {
           const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
-          const unusedKeys = Object.keys(vmConf).filter(k => k.startsWith("unused")).sort()
+          const unusedKeys = Object.keys(vmConf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
           if (unusedKeys.length > 0) diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
         } catch {}
         if (!diskVolume) diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
@@ -1662,7 +1662,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, "=== SSHFS BOOT: Near-zero downtime migration ===", "info")
 
       // ── Phase 1: Deploy temp SSH key to ESXi (QEMU libssh requires key auth) ──
-      const esxiHost = esxiUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+      const esxiHost = new URL(esxiUrl).hostname
       const esxiSshPort = esxiConn.sshPort || 22
       const esxiSshUser = esxiConn.sshUser || "root"
       const esxiPass = esxiConn.sshPassEnc ? decryptSecret(esxiConn.sshPassEnc) : ""

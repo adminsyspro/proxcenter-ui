@@ -1987,7 +1987,7 @@ return
 
     function start() { if (iv !== null) return; iv = setInterval(fetchPerf, 3000) }
     function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
-    function onVis() { document.visibilityState === 'visible' ? (fetchPerf(), start()) : stop() }
+    function onVis() { if (document.visibilityState === 'visible') { fetchPerf(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()
@@ -2028,7 +2028,7 @@ return
 
     function start() { if (iv !== null) return; iv = setInterval(load, 30000) }
     function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
-    function onVis() { document.visibilityState === 'visible' ? (load(), start()) : stop() }
+    function onVis() { if (document.visibilityState === 'visible') { load(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     const refreshTimer = setTimeout(() => { if (document.visibilityState === 'visible') start() }, 30000)

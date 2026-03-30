@@ -87,7 +87,7 @@ export async function POST(req: Request) {
     const tenantId = await getCurrentTenantId()
     after(async () => {
       if (sourceType === "xcpng") {
-        await runXcpngMigrationPipeline(job.id, migrationConfig, tenantId)
+        await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: (migrationType === "sshfs_boot" ? "cold" : migrationType) as "cold" | "live" }, tenantId)
       } else {
         await runMigrationPipeline(job.id, migrationConfig, tenantId)
       }

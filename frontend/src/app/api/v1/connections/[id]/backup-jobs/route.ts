@@ -52,6 +52,15 @@ export async function GET(_req: Request, ctx: RouteContext) {
     
     // Récupérer les nodes du cluster
     const nodes = await pveFetch<any[]>(conn, `/nodes`)
+
+    // Récupérer l'usage des storages depuis le premier node online
+    const firstOnlineNode = (nodes || []).find((n: any) => n.status === 'online')
+    let storageStatus: any[] = []
+    if (firstOnlineNode) {
+      try {
+        storageStatus = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(firstOnlineNode.node)}/storage`) || []
+      } catch { /* ignore */ }
+    }
     
     // Formater les jobs avec plus d'infos
     const formattedJobs = (jobs || []).map((job: any) => {
@@ -113,22 +122,42 @@ return job.namespace || ''
         // Protection
         protected: job.protected === 1,
 
-        // Notifications
+        // Notifications — PVE values: 'auto', 'legacy-sendmail', 'notification-system'
         notificationMode: job['notification-mode'] || 'auto',
         notificationTarget: job['notification-target'] || '',
 
         // Repeat missed (PVE 8+)
-        repeatMissed: job['repeat-missed'] === 1 || job['repeat-missed'] === true,
+        repeatMissed: job['repeat-missed'] === 1 || job['repeat-missed'] === true || job['repeat-missed'] === '1',
 
-        // Fleecing (PVE 8+)
-        fleecing: job.fleecing || null,
+        // Note template
+        notesTemplate: job['notes-template'] || '',
+
+        // Fleecing (PVE 8+) - can be object {enabled:1,storage:"local"}, string "enabled=1,storage=local", or boolean
+        fleecing: (() => {
+          const f = job.fleecing
+          if (!f) return false
+          if (typeof f === 'object') return f.enabled === 1 || f.enabled === true
+          if (typeof f === 'string') return f.includes('enabled=1')
+          return f === 1 || f === true
+        })(),
+        fleecingStorage: (() => {
+          const f = job.fleecing
+          if (!f) return ''
+          if (typeof f === 'object') return f.storage || ''
+          if (typeof f === 'string') {
+            const m = f.match(/storage=([^\s,]+)/)
+            return m ? m[1] : ''
+          }
+          return ''
+        })(),
 
         // Performance options
         bwlimit: job.bwlimit || null,
-        ionice: job.ionice || null,
-        lockwait: job.lockwait || null,
-        pigz: job.pigz || null,
+        ioWorkers: job['io-workers'] || null,
         zstd: job.zstd || null,
+
+        // PBS change detection
+        pbsChangeDetectionMode: job['pbs-change-detection-mode'] || 'default',
 
         // Next run (calculé depuis le schedule)
         nextRun: job['next-run'] || null,
@@ -142,16 +171,22 @@ return job.namespace || ''
       data: {
         jobs: formattedJobs,
 
-        // Storages PBS uniquement (pour les backups avec namespace)
-        storages: backupStorages.map(s => ({
-          id: s.storage,
-          name: s.storage,
-          type: s.type,
-          content: s.content,
-          enabled: s.enabled !== 0,
-          shared: s.shared === 1,
-          isPbs: s.type === 'pbs'
-        })),
+        // Tous les storages qui supportent les backups
+        storages: allBackupStorages.map(s => {
+          const status = storageStatus.find((ss: any) => ss.storage === s.storage)
+          return {
+            id: s.storage,
+            name: s.storage,
+            type: s.type,
+            content: s.content,
+            enabled: s.enabled !== 0,
+            shared: s.shared === 1,
+            isPbs: s.type === 'pbs',
+            total: status?.total || 0,
+            used: status?.used || 0,
+            avail: status?.avail || 0,
+          }
+        }),
 
         // Tous les storages qui supportent les backups
         allBackupStorages: allBackupStorages.map(s => ({
@@ -258,23 +293,52 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (body.mailnotification) {
       params.set('mailnotification', body.mailnotification)
     }
-    
-    // Retention
+
+    // Notification mode
+    if (body.notificationMode) {
+      params.set('notification-mode', body.notificationMode)
+    }
+
+    // Retention (prune-backups)
+    if (!body.keepAll) {
+      const parts: string[] = []
+      if (body.keepLast) parts.push(`keep-last=${body.keepLast}`)
+      if (body.keepHourly) parts.push(`keep-hourly=${body.keepHourly}`)
+      if (body.keepDaily) parts.push(`keep-daily=${body.keepDaily}`)
+      if (body.keepWeekly) parts.push(`keep-weekly=${body.keepWeekly}`)
+      if (body.keepMonthly) parts.push(`keep-monthly=${body.keepMonthly}`)
+      if (body.keepYearly) parts.push(`keep-yearly=${body.keepYearly}`)
+      if (parts.length > 0) {
+        params.set('prune-backups', parts.join(','))
+      }
+    }
+
     if (body.maxfiles !== undefined) {
       params.set('maxfiles', String(body.maxfiles))
     }
 
-    if (body.pruneBackups) {
-      params.set('prune-backups', body.pruneBackups)
+    // Note template
+    if (body.notesTemplate) {
+      params.set('notes-template', body.notesTemplate)
     }
 
-    // PBS Namespace (pour organiser les backups sur PBS)
-    // Note: Le namespace est passé dans prune-backups ou via notes-template selon la version PVE
-    if (body.namespace) {
-      // Pour PVE 8.x, le namespace PBS peut être inclus dans les options de prune
-      // ou directement via le storage qui le supporte
-      const existingPrune = params.get('prune-backups') || ''
+    // Advanced options
+    if (body.bwlimit) params.set('bwlimit', body.bwlimit)
+    if (body.zstd) params.set('zstd', body.zstd)
+    if (body.ioWorkers) params.set('io-workers', body.ioWorkers)
+    if (body.fleecing) {
+      const fleeceParts = ['enabled=1']
+      if (body.fleecingStorage) fleeceParts.push(`storage=${body.fleecingStorage}`)
+      params.set('fleecing', fleeceParts.join(','))
+    }
+    if (body.repeatMissed) params.set('repeat-missed', '1')
+    if (body.pbsChangeDetectionMode && body.pbsChangeDetectionMode !== 'default') {
+      params.set('pbs-change-detection-mode', body.pbsChangeDetectionMode)
+    }
 
+    // PBS Namespace
+    if (body.namespace) {
+      const existingPrune = params.get('prune-backups') || ''
       if (existingPrune && !existingPrune.includes('ns=')) {
         params.set('prune-backups', `${existingPrune},ns=${body.namespace}`)
       } else if (!existingPrune) {

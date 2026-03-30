@@ -3270,7 +3270,7 @@ return vm?.isCluster ?? false
             <ClusterTabs
               {...{allVms, cephTrends, clusterActionError, clusterActionLoading, clusterCephData,
                 clusterCephLoading, clusterCephPerf, clusterCephPerfFiltered, clusterCephTimeframe, clusterConfig,
-                clusterConfigLoaded, clusterConfigLoading, clusterHaGroups, clusterHaLoaded, clusterHaLoading, clusterHaResources, clusterHaRules,
+                clusterConfigLoaded, clusterConfigLoading, clusterHaGroups, clusterHaLoaded, clusterHaLoading, clusterHaResources, clusterHaRules, loadClusterHa,
                 clusterNotesContent, clusterNotesEditMode, clusterNotesLoading, clusterNotesSaving, clusterPveMajorVersion,
                 clusterStorageData, clusterStorageLoading, clusterTab, createClusterDialogOpen, data,
                 error, expandedClusterNodes, favorites, handleCreateCluster, handleJoinCluster, handleNodeBulkAction, loadVmTrendsBatch,

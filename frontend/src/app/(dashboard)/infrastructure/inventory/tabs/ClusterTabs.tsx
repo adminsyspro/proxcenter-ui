@@ -89,6 +89,14 @@ export default function ClusterTabs(props: any) {
   const [cephOsdFlagsLoading, setCephOsdFlagsLoading] = useState(false)
   const [cephFlagToggling, setCephFlagToggling] = useState<string | null>(null)
   const [refreshingUpdates, setRefreshingUpdates] = useState(false)
+  const [addHaDialogOpen, setAddHaDialogOpen] = useState(false)
+  const [addHaSid, setAddHaSid] = useState('')
+  const [addHaState, setAddHaState] = useState('started')
+  const [addHaMaxRestart, setAddHaMaxRestart] = useState(1)
+  const [addHaMaxRelocate, setAddHaMaxRelocate] = useState(1)
+  const [addHaGroup, setAddHaGroup] = useState('')
+  const [addHaComment, setAddHaComment] = useState('')
+  const [addHaSaving, setAddHaSaving] = useState(false)
   const theme = useTheme()
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
   const toast = useToast()
@@ -111,6 +119,7 @@ export default function ClusterTabs(props: any) {
     clusterHaLoading,
     clusterHaResources,
     clusterHaRules,
+    loadClusterHa,
     clusterNotesContent,
     clusterNotesEditMode,
     clusterNotesLoading,
@@ -200,6 +209,50 @@ export default function ClusterTabs(props: any) {
       .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
       .slice(0, maxPendingRecs)
   }, [drsRecommendations, selection, executedRecIds, maxPendingRecs])
+
+  // VMs/CTs available for HA (not already in HA resources, filtered by current cluster)
+  const availableVmsForHa = useMemo(() => {
+    const connId = selection?.type === 'cluster' ? selection.id : ''
+    const existingSids = new Set((clusterHaResources || []).map((r: any) => r.sid))
+    return (allVms || []).filter((vm: any) => {
+      if (vm.connId !== connId) return false
+      const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`
+      return !existingSids.has(sid)
+    })
+  }, [allVms, clusterHaResources, selection])
+
+  const handleAddHaResource = useCallback(async () => {
+    if (!addHaSid) return
+    setAddHaSaving(true)
+    try {
+      const connId = selection?.type === 'cluster' ? selection.id : ''
+      const body: any = { state: addHaState, max_restart: addHaMaxRestart, max_relocate: addHaMaxRelocate }
+      if (addHaGroup) body.group = addHaGroup
+      if (addHaComment) body.comment = addHaComment
+      const res = await fetch(`/api/v1/connections/${connId}/ha/${encodeURIComponent(addHaSid)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to create HA resource')
+      }
+      setAddHaDialogOpen(false)
+      setAddHaSid('')
+      setAddHaState('started')
+      setAddHaMaxRestart(1)
+      setAddHaMaxRelocate(1)
+      setAddHaGroup('')
+      setAddHaComment('')
+      loadClusterHa(connId)
+      toast.success(t('common.success'))
+    } catch (e: any) {
+      toast.error(e.message || t('errors.genericError'))
+    } finally {
+      setAddHaSaving(false)
+    }
+  }, [addHaSid, addHaState, addHaMaxRestart, addHaMaxRelocate, addHaGroup, addHaComment, selection, loadClusterHa, toast, t])
 
   const handleEvaluate = useCallback(async () => {
     setEvaluating(true)
@@ -1490,10 +1543,20 @@ export default function ClusterTabs(props: any) {
 
                         {/* Section Ressources HA */}
                         <Box>
-                          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <i className="ri-stack-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                            {t('cluster.haResources')} ({clusterHaResources.length})
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                            <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <i className="ri-stack-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                              {t('cluster.haResources')} ({clusterHaResources.length})
+                            </Typography>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              startIcon={<AddIcon />}
+                              onClick={() => setAddHaDialogOpen(true)}
+                            >
+                              {t('common.add')}
+                            </Button>
+                          </Box>
                           
                           {clusterHaResources.length === 0 ? (
                             <Alert severity="info" sx={{ py: 1 }}>
@@ -1510,8 +1573,8 @@ export default function ClusterTabs(props: any) {
                               <Box sx={{
                                 display: 'grid',
                                 gridTemplateColumns: clusterPveMajorVersion >= 9
-                                  ? '100px 1fr 100px 150px 100px 100px 200px'
-                                  : '100px 1fr 100px 150px 100px 100px 1fr 200px',
+                                  ? '1fr 100px 150px 100px 100px 200px'
+                                  : '1fr 100px 150px 100px 100px 1fr 200px',
                                 gap: 1,
                                 px: 1.5,
                                 py: 1,
@@ -1520,7 +1583,6 @@ export default function ClusterTabs(props: any) {
                                 borderColor: 'divider',
                                 '& > *': { fontWeight: 600, fontSize: 12, opacity: 0.8 }
                               }}>
-                                <Typography variant="caption">{t('inventory.id')}</Typography>
                                 <Typography variant="caption">{t('inventory.name')}</Typography>
                                 <Typography variant="caption">{t('cluster.state')}</Typography>
                                 <Typography variant="caption">{t('cluster.nodeCol')}</Typography>
@@ -1536,8 +1598,8 @@ export default function ClusterTabs(props: any) {
                                   sx={{ 
                                     display: 'grid',
                                     gridTemplateColumns: clusterPveMajorVersion >= 9
-                                      ? '100px 1fr 100px 150px 100px 100px 200px'
-                                      : '100px 1fr 100px 150px 100px 100px 1fr 200px',
+                                      ? '1fr 100px 150px 100px 100px 200px'
+                                      : '1fr 100px 150px 100px 100px 1fr 200px',
                                     gap: 1,
                                     px: 1.5,
                                     py: 0.75,
@@ -1547,14 +1609,11 @@ export default function ClusterTabs(props: any) {
                                     '&:hover': { bgcolor: 'action.hover' }
                                   }}
                                 >
-                                  <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
-                                    {res.sid}
-                                  </Typography>
                                   <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {(() => {
                                       const vmid = String(res.sid).split(':')[1]
                                       const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
-                                      return vm?.name || '-'
+                                      return vm?.name || res.sid
                                     })()}
                                   </Typography>
                                   <Box>
@@ -3822,6 +3881,83 @@ export default function ClusterTabs(props: any) {
                 disabled={clusterActionLoading || !joinClusterInfo || !joinClusterPassword}
               >
                 {clusterActionLoading ? <CircularProgress size={20} /> : t('cluster.join')}
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Add HA Resource Dialog */}
+          <Dialog open={addHaDialogOpen} onClose={() => setAddHaDialogOpen(false)} maxWidth="sm" fullWidth>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-shield-check-line" style={{ fontSize: 20 }} />
+              {t('cluster.addHaResource')}
+            </DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>{t('cluster.selectVm')}</InputLabel>
+                <Select
+                  value={addHaSid}
+                  label={t('cluster.selectVm')}
+                  onChange={(e) => setAddHaSid(e.target.value)}
+                >
+                  {availableVmsForHa.map((vm: any) => {
+                    const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`
+                    return (
+                      <MenuItem key={sid} value={sid}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: vm.status === 'running' ? '#4caf50' : '#9e9e9e', flexShrink: 0 }} />
+                          <i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 14, opacity: 0.6 }} />
+                          <Typography variant="body2">{vm.name || vm.vmid}</Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>{vm.node}</Typography>
+                        </Box>
+                      </MenuItem>
+                    )
+                  })}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth size="small">
+                <InputLabel>{t('cluster.state')}</InputLabel>
+                <Select value={addHaState} label={t('cluster.state')} onChange={(e) => setAddHaState(e.target.value)}>
+                  <MenuItem value="started">started</MenuItem>
+                  <MenuItem value="stopped">stopped</MenuItem>
+                  <MenuItem value="enabled">enabled</MenuItem>
+                  <MenuItem value="disabled">disabled</MenuItem>
+                  <MenuItem value="ignored">ignored</MenuItem>
+                </Select>
+              </FormControl>
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <TextField
+                  fullWidth size="small" type="number" label={t('cluster.maxRestart')}
+                  value={addHaMaxRestart} onChange={(e) => setAddHaMaxRestart(Number(e.target.value))}
+                  inputProps={{ min: 0, max: 10 }}
+                />
+                <TextField
+                  fullWidth size="small" type="number" label={t('cluster.maxRelocate')}
+                  value={addHaMaxRelocate} onChange={(e) => setAddHaMaxRelocate(Number(e.target.value))}
+                  inputProps={{ min: 0, max: 10 }}
+                />
+              </Box>
+              {clusterPveMajorVersion < 9 && clusterHaGroups.length > 0 && (
+                <FormControl fullWidth size="small">
+                  <InputLabel>{t('cluster.group')}</InputLabel>
+                  <Select value={addHaGroup} label={t('cluster.group')} onChange={(e) => setAddHaGroup(e.target.value)}>
+                    <MenuItem value="">{t('common.none')}</MenuItem>
+                    {clusterHaGroups.map((g: any) => (
+                      <MenuItem key={g.group} value={g.group}>{g.group}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              <TextField
+                fullWidth size="small" label={t('common.description')}
+                value={addHaComment} onChange={(e) => setAddHaComment(e.target.value)}
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setAddHaDialogOpen(false)} disabled={addHaSaving}>
+                {t('common.cancel')}
+              </Button>
+              <Button variant="contained" onClick={handleAddHaResource} disabled={!addHaSid || addHaSaving}>
+                {addHaSaving ? <CircularProgress size={20} /> : t('common.add')}
               </Button>
             </DialogActions>
           </Dialog>

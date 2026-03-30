@@ -150,10 +150,52 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if (body.mailnotification) {
       params.set('mailnotification', body.mailnotification)
     }
-    
-    // Retention
+
+    // Notification mode
+    if (body.notificationMode) {
+      params.set('notification-mode', body.notificationMode)
+    }
+
+    // Retention (prune-backups)
+    if (!body.keepAll) {
+      const parts: string[] = []
+      if (body.keepLast) parts.push(`keep-last=${body.keepLast}`)
+      if (body.keepHourly) parts.push(`keep-hourly=${body.keepHourly}`)
+      if (body.keepDaily) parts.push(`keep-daily=${body.keepDaily}`)
+      if (body.keepWeekly) parts.push(`keep-weekly=${body.keepWeekly}`)
+      if (body.keepMonthly) parts.push(`keep-monthly=${body.keepMonthly}`)
+      if (body.keepYearly) parts.push(`keep-yearly=${body.keepYearly}`)
+      if (parts.length > 0) {
+        params.set('prune-backups', parts.join(','))
+      }
+    }
+
     if (body.maxfiles !== undefined) {
       params.set('maxfiles', String(body.maxfiles))
+    }
+
+    // Note template
+    if (body.notesTemplate) {
+      params.set('notes-template', body.notesTemplate)
+    }
+
+    // Advanced options — only set if they have a value, never delete (PVE rejects delete for unknown options)
+    if (body.bwlimit) params.set('bwlimit', body.bwlimit)
+    if (body.zstd) params.set('zstd', body.zstd)
+    if (body.ioWorkers) params.set('io-workers', body.ioWorkers)
+
+    if (body.fleecing) {
+      const fleeceParts = ['enabled=1']
+      if (body.fleecingStorage) fleeceParts.push(`storage=${body.fleecingStorage}`)
+      params.set('fleecing', fleeceParts.join(','))
+    }
+
+    if (body.repeatMissed !== undefined) {
+      params.set('repeat-missed', body.repeatMissed ? '1' : '0')
+    }
+
+    if (body.pbsChangeDetectionMode && body.pbsChangeDetectionMode !== 'default') {
+      params.set('pbs-change-detection-mode', body.pbsChangeDetectionMode)
     }
 
     // Mettre à jour

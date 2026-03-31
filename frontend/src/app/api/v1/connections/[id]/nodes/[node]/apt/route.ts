@@ -43,12 +43,21 @@ export async function GET(
       // Si l'erreur est liée aux permissions ou à l'absence de liste de paquets,
       // retourner une liste vide plutôt qu'une erreur 500
       const errMsg = aptError?.message || String(aptError)
-      if (errMsg.includes('no package') || errMsg.includes('apt update') || 
-          errMsg.includes('596') || errMsg.includes('403') || errMsg.includes('Permission')) {
-        return NextResponse.json({ 
+      if (errMsg.includes('no package') || errMsg.includes('apt update') || errMsg.includes('596')) {
+        // 596 = Proxmox "apt update not run yet" — package lists are stale/empty
+        // Tell the frontend to trigger an apt update first
+        return NextResponse.json({
           data: [],
           count: 0,
-          warning: 'Package list not available or insufficient permissions.'
+          needsRefresh: true,
+          warning: 'Package list not available. Run apt update first.'
+        })
+      }
+      if (errMsg.includes('403') || errMsg.includes('Permission')) {
+        return NextResponse.json({
+          data: [],
+          count: 0,
+          warning: 'Insufficient permissions to check updates.'
         })
       }
       throw aptError
@@ -104,8 +113,38 @@ export async function POST(
       { method: "POST" }
     )
 
+    // Wait for the apt update task to complete (poll task status)
+    const upid = typeof result === 'string' ? result : result?.data
+    if (upid) {
+      const maxWait = 30_000 // 30s max
+      const interval = 2_000
+      const start = Date.now()
+      while (Date.now() - start < maxWait) {
+        await new Promise(r => setTimeout(r, interval))
+        try {
+          const taskStatus = await pveFetch<any>(
+            conn,
+            `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`,
+            { method: "GET" }
+          )
+          if (taskStatus?.status === 'stopped') break
+        } catch {
+          break
+        }
+      }
+    }
+
     return NextResponse.json({ data: result })
   } catch (e: any) {
+    const errMsg = e?.message || String(e)
+    // PVE 403 = token/user lacks Sys.Modify on the node
+    if (errMsg.includes('403') || errMsg.includes('Permission') || errMsg.includes('Sys.Modify')) {
+      return NextResponse.json({
+        error: 'permissionDenied',
+        requiredPermission: 'Sys.Modify',
+        message: 'The Proxmox API token does not have the Sys.Modify permission on this node, which is required to refresh package lists.'
+      }, { status: 403 })
+    }
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

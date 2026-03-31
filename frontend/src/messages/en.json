@@ -4443,6 +4443,8 @@
     "pveVersion": "PVE Version",
     "lastCheck": "Last Check",
     "upToDate": "Up to date",
+    "permissionError": "Missing Proxmox permission",
+    "permissionErrorDesc": "The API token used for this connection does not have the {permission} permission on this node. This permission is required to refresh the package list. Please update the token permissions in Proxmox (Datacenter > Permissions).",
     "viewPackages": "View Packages",
     "rebootRequired": "Reboot required",
     "updateStrategy": "Update Strategy",

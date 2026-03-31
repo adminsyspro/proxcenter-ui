@@ -1836,20 +1836,40 @@ return
       [node]: { count: 0, updates: [], version: null, loading: true }
     }))
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`)
+    const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`
+
+    const fetchAndSet = (json: any, permError?: string) => {
+      const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
+      const pveVersion = pvePkg?.currentVersion || null
+      setNodeUpdates(prev => ({
+        ...prev,
+        [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false, permissionError: permError || null }
+      }))
+    }
+
+    fetch(aptUrl)
       .then(res => res.json())
       .then(json => {
-        const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-        const pveVersion = pvePkg?.currentVersion || null
-        setNodeUpdates(prev => ({
-          ...prev,
-          [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false }
-        }))
+        if (json.needsRefresh) {
+          // Package list stale (e.g. apt update never ran) - trigger apt update then re-fetch
+          return fetch(aptUrl, { method: 'POST' })
+            .then(async (postRes) => {
+              if (postRes.status === 403) {
+                const postJson = await postRes.json()
+                fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
+                return
+              }
+              const res = await fetch(aptUrl)
+              const freshJson = await res.json()
+              fetchAndSet(freshJson)
+            })
+        }
+        fetchAndSet(json)
       })
       .catch(() => {
         setNodeUpdates(prev => ({
           ...prev,
-          [node]: { count: 0, updates: [], version: null, loading: false }
+          [node]: { count: 0, updates: [], version: null, loading: false, permissionError: null }
         }))
       })
   }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeUpdates])
@@ -1867,26 +1887,45 @@ return
             [node.node]: { count: 0, updates: [], version: null, loading: true }
           }))
 
-          fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node.node)}/apt`)
+          const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node.node)}/apt`
+
+          const fetchAndSet = (json: any, permError?: string) => {
+            const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
+            const pveVersion = pvePkg?.currentVersion || node.pveversion || null
+            setNodeUpdates(prev => ({
+              ...prev,
+              [node.node]: {
+                count: json.count || 0,
+                updates: json.data || [],
+                version: pveVersion,
+                loading: false,
+                permissionError: permError || null
+              }
+            }))
+          }
+
+          fetch(aptUrl)
             .then(res => res.json())
             .then(json => {
-              // Find pve-manager version from the updates list, or use node status data
-              const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-              const pveVersion = pvePkg?.currentVersion || node.pveversion || null
-              setNodeUpdates(prev => ({
-                ...prev,
-                [node.node]: {
-                  count: json.count || 0,
-                  updates: json.data || [],
-                  version: pveVersion,
-                  loading: false
-                }
-              }))
+              if (json.needsRefresh) {
+                return fetch(aptUrl, { method: 'POST' })
+                  .then(async (postRes) => {
+                    if (postRes.status === 403) {
+                      const postJson = await postRes.json()
+                      fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
+                      return
+                    }
+                    const res = await fetch(aptUrl)
+                    const freshJson = await res.json()
+                    fetchAndSet(freshJson)
+                  })
+              }
+              fetchAndSet(json)
             })
             .catch(() => {
               setNodeUpdates(prev => ({
                 ...prev,
-                [node.node]: { count: 0, updates: [], version: null, loading: false }
+                [node.node]: { count: 0, updates: [], version: null, loading: false, permissionError: null }
               }))
             })
         }

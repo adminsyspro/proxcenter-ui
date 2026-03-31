@@ -3378,8 +3378,34 @@ export default function NodeTabs(props: any) {
                             variant="outlined"
                             size="small"
                             startIcon={<i className="ri-refresh-line" />}
-                            onClick={() => {
-                              setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
+                            onClick={async () => {
+                              const { connId } = parseNodeId(selection?.id || '')
+                              const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/apt`
+                              setNodeUpdates((prev: any) => ({
+                                ...prev,
+                                [nodeName]: { count: 0, updates: [], version: null, loading: true }
+                              }))
+                              try {
+                                // Trigger apt update first, then fetch fresh list
+                                const postRes = await fetch(aptUrl, { method: 'POST' })
+                                if (postRes.status === 403) {
+                                  const postJson = await postRes.json()
+                                  setNodeUpdates((prev: any) => ({
+                                    ...prev,
+                                    [nodeName]: { count: 0, updates: [], version: null, loading: false, permissionError: postJson.requiredPermission || 'Sys.Modify' }
+                                  }))
+                                  return
+                                }
+                                const res = await fetch(aptUrl)
+                                const json = await res.json()
+                                const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
+                                setNodeUpdates((prev: any) => ({
+                                  ...prev,
+                                  [nodeName]: { count: json.count || 0, updates: json.data || [], version: pvePkg?.currentVersion || null, loading: false, permissionError: null }
+                                }))
+                              } catch {
+                                setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
+                              }
                             }}
                           >
                             {t('updates.refresh')}
@@ -3397,6 +3423,18 @@ export default function NodeTabs(props: any) {
                               {t('updates.checkUpdates')}
                             </Typography>
                           </Alert>
+                        ) : nodeUpdate?.permissionError ? (
+                          <>
+                            {/* Permission error - show only this alert */}
+                            <Alert severity="warning" icon={<i className="ri-shield-keyhole-line" />}>
+                              <Typography variant="body2" fontWeight={600}>
+                                {t('updates.permissionError')}
+                              </Typography>
+                              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                                {t('updates.permissionErrorDesc', { permission: nodeUpdate.permissionError })}
+                              </Typography>
+                            </Alert>
+                          </>
                         ) : (
                           <>
                             {/* Version card */}

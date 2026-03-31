@@ -2831,9 +2831,7 @@ export default function ClusterTabs(props: any) {
                                     fetch(`/api/v1/connections/${encodeURIComponent(cId)}/nodes/${encodeURIComponent(n.node)}/apt`, { method: 'POST' }).catch(() => null)
                                   )
                               )
-                              // Wait for apt update tasks to complete on PVE nodes
-                              await new Promise(r => setTimeout(r, 5000))
-                              // Reload update lists
+                              // POST now waits for apt update tasks to complete — reload update lists
                               setNodeUpdates({})
                               setNodeLocalVms({})
                             } finally {

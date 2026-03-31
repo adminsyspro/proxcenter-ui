@@ -4438,6 +4438,8 @@
     "pveVersion": "Version PVE",
     "lastCheck": "Dernière vérification",
     "upToDate": "À jour",
+    "permissionError": "Permission Proxmox manquante",
+    "permissionErrorDesc": "Le token API utilisé pour cette connexion ne possède pas la permission {permission} sur ce nœud. Cette permission est nécessaire pour rafraîchir la liste des paquets. Veuillez mettre à jour les permissions du token dans Proxmox (Datacenter > Permissions).",
     "viewPackages": "Voir les paquets",
     "rebootRequired": "Redémarrage requis",
     "updateStrategy": "Stratégie de mise à jour",

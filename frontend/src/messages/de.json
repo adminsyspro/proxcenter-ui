@@ -4414,6 +4414,8 @@
     "pveVersion": "PVE-Version",
     "lastCheck": "Letzte Überprüfung",
     "upToDate": "Auf dem neuesten Stand",
+    "permissionError": "Fehlende Proxmox-Berechtigung",
+    "permissionErrorDesc": "Das für diese Verbindung verwendete API-Token hat keine {permission}-Berechtigung auf diesem Node. Diese Berechtigung wird benötigt, um die Paketliste zu aktualisieren. Bitte aktualisieren Sie die Token-Berechtigungen in Proxmox (Datacenter > Permissions).",
     "viewPackages": "Pakete anzeigen",
     "rebootRequired": "Reboot erforderlich",
     "updateStrategy": "aktualisieren Strategy",

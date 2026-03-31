@@ -385,6 +385,8 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
       if (json.error) {
         setError(json.error)
+      } else {
+        loadJobs()
       }
     } catch (e: any) {
       setError(e?.message || t('inventory.failedToRunBackupJob'))

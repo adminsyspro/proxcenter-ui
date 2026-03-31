@@ -217,6 +217,8 @@ export function useSnapshots({
           } else {
             toast.success(t('inventory.snapshotRestored'))
             setConfirmAction(null)
+            setTimeout(loadSnapshots, 2000)
+            fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
           }
         } catch (e: any) {
           const errorMsg = e.message || t('errors.updateError')

@@ -3233,6 +3233,7 @@ return vm?.isCluster ?? false
                           return
                         }
                         setExitMaintenanceDialogOpen(false)
+                        refreshData()
                         if (onRefresh) await onRefresh()
                       } catch (e: any) {
                         setExitMaintenanceError(e?.message || 'Unknown error')
@@ -6556,7 +6557,9 @@ return
                   <Button
                     color="error"
                     onClick={async () => {
-                      await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
+                      const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
+                      const d = await res.json().catch(() => ({}))
+                      if (d.data) setMigJob(d.data)
                     }}
                   >
                     {t('inventoryPage.esxiMigration.cancelMigration')}

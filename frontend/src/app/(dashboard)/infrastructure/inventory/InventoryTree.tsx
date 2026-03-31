@@ -1969,9 +1969,13 @@ return next
               let nodeChanged = false
               const nodes = clu.nodes.map(n => {
                 if (n.node !== d.node) return n
-                if (n.status === d.status) return n
+                const newStatus = d.status ?? n.status
+                const newCpu = d.cpu ?? n.cpu
+                const newMem = d.mem ?? n.mem
+                const newMaxmem = d.maxmem ?? n.maxmem
+                if (n.status === newStatus && n.cpu === newCpu && n.mem === newMem && n.maxmem === newMaxmem) return n
                 nodeChanged = true
-                return { ...n, status: d.status }
+                return { ...n, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem }
               })
               if (!nodeChanged) return clu
               anyChanged = true

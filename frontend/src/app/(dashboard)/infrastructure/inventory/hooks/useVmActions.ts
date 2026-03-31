@@ -850,9 +850,13 @@ export function useVmActions({
                 connId: vm.connId,
                 node: vm.node,
                 description: `${vm.name}: ${t(`vmActions.${apiAction}`)}`,
+                onSuccess: () => {
+                  fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
+                },
               })
             } else {
               toast.success(t(`vmActions.${apiAction}Success`))
+              fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
             }
 
             setConfirmAction(null)
@@ -885,9 +889,13 @@ export function useVmActions({
           connId: vm.connId,
           node: vm.node,
           description: `${vm.name}: ${t(`vmActions.${apiAction}`)}`,
+          onSuccess: () => {
+            fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
+          },
         })
       } else {
         toast.success(t(`vmActions.${apiAction}Success`))
+        fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
       }
     } catch (e: any) {
       const errorMsg = e?.message || e

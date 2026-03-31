@@ -732,9 +732,6 @@ return updated.slice(-30)
             <i className='ri-refresh-line' />
           </IconButton>
         </Tooltip>
-        <Button variant='outlined' size='small' component={Link} href='/storage/overview'>
-          {t('storage.storages')}
-        </Button>
       </Box>
 
       {/* Loading / Error */}

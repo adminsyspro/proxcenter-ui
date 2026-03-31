@@ -94,9 +94,27 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Statistiques du cluster
     const pgmap = status.pgmap || {}
-    const totalBytes = pgmap.bytes_total || 0
-    const usedBytes = pgmap.bytes_used || 0
-    const availBytes = pgmap.bytes_avail || 0
+    // RAW capacity from pgmap (total physical disk space, before replication)
+    const rawTotalBytes = pgmap.bytes_total || 0
+    const rawUsedBytes = pgmap.bytes_used || 0
+    const rawAvailBytes = pgmap.bytes_avail || 0
+
+    // Effective capacity (accounting for replication factor) from pool stats
+    // bytes_used per pool is RAW (includes replicas), divide by pool size for logical
+    // max_avail already accounts for the replication overhead
+    // Effective capacity using data_bytes (logical data, no replication overhead)
+    // and bytes_avail / avg replication factor for available space
+    const poolsArr = Array.isArray(poolList) ? poolList : []
+    const avgReplication = poolsArr.length > 0
+      ? poolsArr.reduce((sum: number, p: any) => sum + (p.size || 3), 0) / poolsArr.length
+      : 3
+    const dataBytes = pgmap.data_bytes || 0
+    const effectiveAvailBytes = rawAvailBytes > 0 ? rawAvailBytes / avgReplication : 0
+    const effectiveTotalBytes = dataBytes + effectiveAvailBytes
+
+    const totalBytes = effectiveTotalBytes > 0 ? effectiveTotalBytes : rawTotalBytes
+    const usedBytes = effectiveTotalBytes > 0 ? dataBytes : rawUsedBytes
+    const availBytes = effectiveTotalBytes > 0 ? effectiveAvailBytes : rawAvailBytes
     const usedPct = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100 * 10) / 10 : 0
 
     // Performance
@@ -320,7 +338,7 @@ return {
         numChecks: healthIssues.length,
       },
 
-      // Capacité
+      // Capacité (effective, accounting for replication)
       capacity: {
         totalBytes,
         usedBytes,
@@ -329,6 +347,11 @@ return {
         totalFormatted: formatBytes(totalBytes),
         usedFormatted: formatBytes(usedBytes),
         availFormatted: formatBytes(availBytes),
+        // RAW (physical disk totals, before replication)
+        rawTotalBytes,
+        rawUsedBytes,
+        rawTotalFormatted: formatBytes(rawTotalBytes),
+        rawUsedFormatted: formatBytes(rawUsedBytes),
       },
 
       // Performance

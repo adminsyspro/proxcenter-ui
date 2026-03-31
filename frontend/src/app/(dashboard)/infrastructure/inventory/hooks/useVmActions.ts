@@ -148,8 +148,8 @@ export function useVmActions({
 
   // ── Creation handlers ───────────────────────────────────────────────
 
-  const handleVmCreated = useCallback(async (vmid: string, connId: string, node: string) => {
-    setCreationPending({ vmid, connId, node, type: 'qemu' })
+  const handleGuestCreated = useCallback(async (vmid: string, connId: string, node: string, guestType: 'qemu' | 'lxc') => {
+    setCreationPending({ vmid, connId, node, type: guestType })
 
     await new Promise(resolve => setTimeout(resolve, 2000))
 
@@ -177,41 +177,19 @@ export function useVmActions({
       clearInterval(pollInterval)
     }, 30000)
   }, [onRefresh])
+
+  const handleVmCreated = useCallback(async (vmid: string, connId: string, node: string) => {
+    return handleGuestCreated(vmid, connId, node, 'qemu')
+  }, [handleGuestCreated])
 
   const handleLxcCreated = useCallback(async (ctid: string, connId: string, node: string) => {
-    setCreationPending({ vmid: ctid, connId, node, type: 'lxc' })
-
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    if (onRefresh) {
-      await onRefresh()
-    }
-
-    let attempts = 0
-    const maxAttempts = 10
-
-    const pollInterval = setInterval(async () => {
-      attempts++
-
-      if (onRefresh) {
-        await onRefresh()
-      }
-
-      if (attempts >= maxAttempts) {
-        clearInterval(pollInterval)
-        setCreationPending(null)
-      }
-    }, 3000)
-
-    setTimeout(() => {
-      clearInterval(pollInterval)
-    }, 30000)
-  }, [onRefresh])
+    return handleGuestCreated(ctid, connId, node, 'lxc')
+  }, [handleGuestCreated])
 
   // ── Migration handlers (selected VM panel) ──────────────────────────
 
   const handleMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
-    if (!selection || selection.type !== 'vm') throw new Error('No VM selected')
+    if (selection?.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
@@ -256,7 +234,7 @@ export function useVmActions({
   // ── Cross-cluster migration (selected VM panel) ─────────────────────
 
   const handleCrossClusterMigrate = useCallback(async (params: CrossClusterMigrateParams) => {
-    if (!selection || selection.type !== 'vm') throw new Error('No VM selected')
+    if (selection?.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
@@ -299,7 +277,7 @@ export function useVmActions({
   // ── Clone (selected VM panel) ───────────────────────────────────────
 
   const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
-    if (!selection || selection.type !== 'vm') throw new Error('No VM selected')
+    if (selection?.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
@@ -625,7 +603,7 @@ export function useVmActions({
   // ── VM action (selected VM panel) ───────────────────────────────────
 
   const handleVmAction = useCallback(async (action: string) => {
-    if (!selection || selection.type !== 'vm') return
+    if (selection?.type !== 'vm') return
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 

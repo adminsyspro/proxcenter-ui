@@ -57,7 +57,7 @@ export function useSnapshots({
   const [snapshotFeatureAvailable, setSnapshotFeatureAvailable] = useState<boolean | null>(null)
 
   const loadSnapshots = useCallback(async () => {
-    if (!selection || selection.type !== 'vm') return
+    if (selection?.type !== 'vm') return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
     const vmKey = `${connId}:${type}:${node}:${vmid}`
@@ -99,7 +99,7 @@ export function useSnapshots({
   }, [selection, t])
 
   const createSnapshot = useCallback(async () => {
-    if (!selection || selection.type !== 'vm' || !newSnapshotName.trim()) return
+    if (selection?.type !== 'vm' || !newSnapshotName.trim()) return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
     const vmKey = `${connId}:${type}:${node}:${vmid}`
@@ -145,7 +145,7 @@ export function useSnapshots({
   }, [selection, newSnapshotName, newSnapshotDesc, newSnapshotRam, loadSnapshots, toast, t])
 
   const deleteSnapshot = useCallback(async (snapname: string) => {
-    if (!selection || selection.type !== 'vm') return
+    if (selection?.type !== 'vm') return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
     const vmKey = `${connId}:${type}:${node}:${vmid}`
@@ -189,7 +189,7 @@ export function useSnapshots({
   }, [selection, loadSnapshots, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
 
   const rollbackSnapshot = useCallback(async (snapname: string, hasVmstate?: boolean) => {
-    if (!selection || selection.type !== 'vm') return
+    if (selection?.type !== 'vm') return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
     const vmKey = `${connId}:${type}:${node}:${vmid}`

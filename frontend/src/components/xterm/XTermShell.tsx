@@ -112,9 +112,12 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
         wsRef.current.close()
       }
 
-      // Connexion WebSocket via le proxy (unified server handles WS on same port)
+      // Connexion WebSocket via le proxy
+      // In dev mode, next dev doesn't handle WS upgrades, redirect to standalone ws-proxy on 3001
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      let proxyWsUrl = `${wsProtocol}//${window.location.host}/api/internal/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
+      const isDev = window.location.port === '3000' && window.location.hostname === 'localhost'
+      const wsHost = isDev ? 'localhost:3001' : window.location.host
+      let proxyWsUrl = `${wsProtocol}//${wsHost}/api/internal/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
 
       if (user) {
         proxyWsUrl += `&user=${encodeURIComponent(user)}`

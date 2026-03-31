@@ -254,8 +254,12 @@ node bundle-novnc.js
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // wsUrl comes from API as "/ws/console/{sessionId}"
-        // Unified server handles WS on same port — always use /api/internal prefix
-        const wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
+        // In production, the unified server (start.js) handles WS upgrades on the same port.
+        // In dev mode, next dev doesn't handle WS upgrades, so we redirect to the standalone
+        // ws-proxy on port 3001 (started via concurrently in package.json).
+        const isDev = window.location.port === '3000' && window.location.hostname === 'localhost';
+        const wsHost = isDev ? 'localhost:3001' : window.location.host;
+        const wsFullUrl = `${wsProtocol}//${wsHost}/api/internal${wsUrl}`;
         console.log('WebSocket URL:', wsFullUrl);
         
         rfb = new RFB(screen, wsFullUrl, { credentials: { password } });

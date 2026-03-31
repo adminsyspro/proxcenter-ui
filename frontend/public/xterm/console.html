@@ -221,19 +221,20 @@
         
         const { wsUrl, password } = json?.data || {};
         if (!wsUrl) throw new Error('Session invalide');
-        
+
         loadingText.textContent = 'Connexion au terminal...';
-        
+
         // Initialiser le terminal
         if (!terminal) {
           initTerminal();
         }
-        
+
         // Connexion WebSocket
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // wsUrl comes from API as "/ws/shell?..."
-        // Unified server handles WS on same port — always use /api/internal prefix
-        const wsFullUrl = `${wsProtocol}//${window.location.host}/api/internal${wsUrl}`;
+        // In dev mode, redirect to standalone ws-proxy on port 3001
+        const isDev = window.location.port === '3000' && window.location.hostname === 'localhost';
+        const wsHost = isDev ? 'localhost:3001' : window.location.host;
+        const wsFullUrl = `${wsProtocol}//${wsHost}/api/internal${wsUrl}`;
         console.log('WebSocket URL:', wsFullUrl);
         
         socket = new WebSocket(wsFullUrl, 'binary');

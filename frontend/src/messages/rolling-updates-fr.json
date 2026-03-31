@@ -28,6 +28,7 @@
     "localVmsBlocking": "{count} VM(s) avec stockage local bloquant la migration",
     "localVmsWithReplication": "{count} VM(s) avec réplication peuvent être migrées",
     "localVmsBlockingMigration": "Ces VMs empêchent la mise à jour automatique car elles ont un stockage local",
-    "startRollingUpdate": "Démarrer le Rolling Update"
+    "startRollingUpdate": "Démarrer le Rolling Update",
+    "monitorRollingUpdate": "Suivre le Rolling Update"
   }
 }

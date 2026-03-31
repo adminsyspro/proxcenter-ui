@@ -184,6 +184,8 @@ interface RollingUpdateWizardProps {
   nodeUpdates: Record<string, { count: number; updates: any[]; version: string | null }>
   connectedNode?: string | null
   hasCeph?: boolean
+  /** When set, the wizard opens directly in monitoring mode for an existing rolling update */
+  resumeRollingUpdateId?: string | null
 }
 
 function buildDefaultConfig(hasCeph: boolean): RollingUpdateConfig {
@@ -213,6 +215,7 @@ export default function RollingUpdateWizard({
   nodeUpdates,
   connectedNode,
   hasCeph = false,
+  resumeRollingUpdateId,
 }: RollingUpdateWizardProps) {
   const t = useTranslations()
   
@@ -263,6 +266,49 @@ export default function RollingUpdateWizard({
     }
   }, [nodes])
   
+  // Resume monitoring an existing rolling update
+  useEffect(() => {
+    if (!open || !resumeRollingUpdateId) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/v1/orchestrator/rolling-updates/${resumeRollingUpdateId}`)
+        const json = await res.json()
+        if (cancelled || !res.ok || !json.data) return
+
+        setRollingUpdate(json.data)
+        const isTerminal = ['completed', 'failed', 'cancelled'].includes(json.data.status)
+        setActiveStep(isTerminal ? 3 : 2)
+
+        if (!isTerminal) {
+          const interval = setInterval(async () => {
+            try {
+              const r = await fetch(`/api/v1/orchestrator/rolling-updates/${resumeRollingUpdateId}`)
+              const j = await r.json()
+              if (r.ok && j.data) {
+                setRollingUpdate(j.data)
+                if (['completed', 'failed', 'cancelled'].includes(j.data.status)) {
+                  clearInterval(interval)
+                  setPollingInterval(null)
+                  setActiveStep(3)
+                }
+              }
+            } catch (e) {
+              console.error('Polling error:', e)
+            }
+          }, 3000)
+          setPollingInterval(interval)
+        }
+      } catch (e) {
+        console.error('Failed to resume rolling update monitoring:', e)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [open, resumeRollingUpdateId])
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {

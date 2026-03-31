@@ -4408,6 +4408,7 @@
     "rollingUpdateDescription": "Rolling Update ermöglicht das Aktualisieren aller Cluster-Nodes ohne Dienstunterbrechung.",
     "checkUpdates": "Check aktualisierens",
     "startRollingUpdate": "Start Rolling aktualisieren",
+    "monitorRollingUpdate": "Rolling Update überwachen",
     "configureStrategy": "Strategie konfigurieren",
     "nodesStatus": "Node-Status",
     "status": "Status",

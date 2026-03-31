@@ -4437,6 +4437,7 @@
     "rollingUpdateDescription": "Rolling update allows you to update all cluster nodes without service interruption.",
     "checkUpdates": "Check Updates",
     "startRollingUpdate": "Start Rolling Update",
+    "monitorRollingUpdate": "Monitor Rolling Update",
     "configureStrategy": "Configure Strategy",
     "nodesStatus": "Nodes Status",
     "status": "Status",

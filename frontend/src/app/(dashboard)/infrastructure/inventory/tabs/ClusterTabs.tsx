@@ -65,6 +65,7 @@ import HaRuleDialog from '../HaRuleDialog'
 import { AddIcon } from '../components/IconWrappers'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 
@@ -188,6 +189,11 @@ export default function ClusterTabs(props: any) {
     updatesDialogNode,
     updatesDialogOpen,
   } = props
+
+  // Track active rolling update for this cluster (from global context)
+  const { hasActiveUpdate, openMonitor } = useRollingUpdates()
+  const clusterConnId = selection?.type === 'cluster' ? selection.id : ''
+  const activeRollingUpdateId = hasActiveUpdate(clusterConnId)
 
   const drsHealth = useMemo(() => {
     if (!isEnterprise || !(drsStatus as any)?.enabled || !metricsData) return null
@@ -3172,8 +3178,22 @@ export default function ClusterTabs(props: any) {
                         })()
                       )}
 
+                      {/* Active rolling update — monitor button */}
+                      {activeRollingUpdateId && (
+                        <Button
+                          variant="contained"
+                          color="info"
+                          size="large"
+                          startIcon={<i className="ri-eye-line" style={{ fontSize: 20 }} />}
+                          onClick={() => openMonitor(activeRollingUpdateId, clusterConnId)}
+                          sx={{ alignSelf: 'flex-start' }}
+                        >
+                          {t('updates.monitorRollingUpdate')}
+                        </Button>
+                      )}
+
                       {/* Bouton démarrer le Rolling Update */}
-                      {(Object.values(nodeUpdates) as any[]).reduce((sum: number, n: any) => sum + n.count, 0) > 0 ? (
+                      {!activeRollingUpdateId && (Object.values(nodeUpdates) as any[]).reduce((sum: number, n: any) => sum + n.count, 0) > 0 ? (
                         <Button
                           variant="contained"
                           color="warning"
@@ -3184,7 +3204,7 @@ export default function ClusterTabs(props: any) {
                         >
                           {t('updates.startRollingUpdate')}
                         </Button>
-                      ) : Object.keys(nodeUpdates).length > 0 ? (
+                      ) : !activeRollingUpdateId && Object.keys(nodeUpdates).length > 0 ? (
                         <Alert severity="success" icon={<i className="ri-checkbox-circle-line" />}>
                           <Typography variant="body2" fontWeight={600}>
                             {t('updates.upToDate')}

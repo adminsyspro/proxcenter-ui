@@ -23,6 +23,7 @@ import {
 
 import { useRunningTasks } from '@/hooks/useRunningTasks'
 import { useRecentChanges } from '@/hooks/useChanges'
+import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 
 type RunningTask = {
   id: string
@@ -198,6 +199,9 @@ export default function TasksDropdown() {
   const { data: changesResponse } = useRecentChanges(5)
   const recentChanges: RecentChange[] = changesResponse?.data || []
 
+  // Rolling updates
+  const { activeUpdates, openMonitor } = useRollingUpdates()
+
   // Sync SWR data to local state and handle notifications
   useEffect(() => {
     if (!tasksResponse?.data) return
@@ -339,7 +343,7 @@ return () => window.removeEventListener('focus', handleFocus)
     setAnchorEl(null)
   }
 
-  const taskCount = tasks.length
+  const taskCount = tasks.length + activeUpdates.length
 
   return (
     <>
@@ -506,6 +510,71 @@ return () => window.removeEventListener('focus', handleFocus)
             ))
           )}
         </Box>
+
+        {/* Active Rolling Updates */}
+        {activeUpdates.length > 0 && (
+          <Box>
+            <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-refresh-line" style={{ fontSize: 16, opacity: 0.6, animation: 'spin 2s linear infinite' }} />
+              <Typography variant="subtitle2" fontWeight={600} sx={{ opacity: 0.8 }}>
+                Rolling Updates
+              </Typography>
+              <Chip label={activeUpdates.length} size="small" color="warning" sx={{ height: 18, fontSize: '0.65rem' }} />
+            </Box>
+            {activeUpdates.map((ru, idx) => (
+              <Box key={ru.id}>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: 'action.hover' }
+                  }}
+                  onClick={() => { openMonitor(ru.id, ru.connection_id); handleClose() }}
+                >
+                  <Box sx={{
+                    width: 32,
+                    height: 32,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: ru.status === 'paused' ? 'warning.main' : 'info.main',
+                    color: 'white',
+                    borderRadius: 1,
+                    position: 'relative'
+                  }}>
+                    <i className={ru.status === 'paused' ? 'ri-pause-fill' : 'ri-download-cloud-line'} style={{ fontSize: 16 }} />
+                    {ru.status === 'running' && (
+                      <CircularProgress size={32} thickness={2} sx={{ position: 'absolute', color: 'info.light', opacity: 0.5 }} />
+                    )}
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={500}>
+                      {t('updates.rollingUpdate')}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                      <Chip
+                        label={ru.status}
+                        size="small"
+                        color={ru.status === 'paused' ? 'warning' : 'info'}
+                        sx={{ height: 18, fontSize: '0.65rem' }}
+                      />
+                      <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                        {ru.completed_nodes}/{ru.total_nodes} nodes
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <i className="ri-arrow-right-s-line" style={{ fontSize: 18, opacity: 0.4 }} />
+                </Box>
+                {idx < activeUpdates.length - 1 && <Divider />}
+              </Box>
+            ))}
+          </Box>
+        )}
 
         {/* Recent Changes section */}
         {recentChanges.length > 0 && (

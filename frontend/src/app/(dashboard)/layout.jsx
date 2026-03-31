@@ -17,6 +17,7 @@ import OnboardingGuard from '@components/OnboardingGuard'
 import DemoBanner from '@components/DemoBanner'
 import DemoInterceptor from '@components/DemoInterceptor'
 import { ProxCenterTasksProvider } from '@/contexts/ProxCenterTasksContext'
+import { RollingUpdateProvider } from '@/contexts/RollingUpdateContext'
 
 // Util Imports
 import { getMode, getSystemMode } from '@core/utils/serverHelpers'
@@ -35,6 +36,7 @@ const Layout = async props => {
       <DemoBanner />
       <DemoInterceptor />
       <ProxCenterTasksProvider>
+      <RollingUpdateProvider>
       <LayoutWrapper
         systemMode={systemMode}
         verticalLayout={
@@ -49,6 +51,7 @@ const Layout = async props => {
         }
       />
       <TasksFooter />
+      </RollingUpdateProvider>
       </ProxCenterTasksProvider>
       <ScrollToTop className='mui-fixed'>
         <Button variant='contained' className='is-10 bs-10 rounded-full p-0 min-is-0 flex items-center justify-center'>

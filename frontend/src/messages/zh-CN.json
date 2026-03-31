@@ -4408,6 +4408,7 @@
     "rollingUpdateDescription": "滚动更新允许您在不中断服务的情况下更新所有集群节点。",
     "checkUpdates": "检查更新",
     "startRollingUpdate": "开始滚动更新",
+    "monitorRollingUpdate": "监控滚动更新",
     "configureStrategy": "配置策略",
     "nodesStatus": "节点状态",
     "status": "状态",

@@ -4432,6 +4432,7 @@
     "rollingUpdateDescription": "Le Rolling Update permet de mettre à jour les nœuds Proxmox de manière séquentielle, en migrant automatiquement les VMs avant chaque mise à jour pour éviter toute interruption de service.",
     "checkUpdates": "Vérifier les mises à jour",
     "startRollingUpdate": "Démarrer la mise à jour",
+    "monitorRollingUpdate": "Suivre le Rolling Update",
     "configureStrategy": "Configurer la stratégie",
     "nodesStatus": "Statut des nœuds",
     "status": "Statut",

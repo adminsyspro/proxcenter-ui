@@ -28,6 +28,7 @@
     "localVmsBlocking": "{count} 个使用本地存储的 VM 阻止迁移",
     "localVmsWithReplication": "{count} 个具有副本的 VM 可以迁移",
     "localVmsBlockingMigration": "这些 VM 因使用本地存储而无法自动更新",
-    "startRollingUpdate": "开始滚动更新"
+    "startRollingUpdate": "开始滚动更新",
+    "monitorRollingUpdate": "监控滚动更新"
   }
 }

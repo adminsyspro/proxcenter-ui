@@ -24,6 +24,8 @@ export type ProxmoxClientOptions = {
 /** Check whether an error is a network-level failure (connection refused, timeout, etc.) */
 function isNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
+  // AbortSignal.timeout() throws a DOMException with name "TimeoutError"
+  if (err.name === "TimeoutError") return true
   const codes = ["ECONNREFUSED", "ETIMEDOUT", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND", "UND_ERR_CONNECT_TIMEOUT"]
   const msg = err.message || ""
   const cause = (err as any).cause
@@ -98,15 +100,23 @@ export async function pveFetch<T>(
   }
 
   /** Core request logic against a specific baseUrl */
-  async function doRequest(baseUrl: string): Promise<T> {
+  async function doRequest(baseUrl: string, timeoutMs = 15_000): Promise<T> {
     const url = `${baseUrl.replace(/\/$/, "")}/api2/json${path}`
+
+    // Use caller signal if provided, otherwise create a timeout signal.
+    // Combine both when caller provides its own signal.
+    const callerSignal = init.signal ?? undefined
+    const timeoutSignal = AbortSignal.timeout(timeoutMs)
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, timeoutSignal])
+      : timeoutSignal
 
     const res = await request(url, {
       method,
       headers,
       body,
       dispatcher,
-      signal: init.signal ?? undefined,
+      signal,
     })
 
     const text = await res.body.text()
@@ -129,31 +139,46 @@ export async function pveFetch<T>(
     return json.data as T
   }
 
-  // Try primary baseUrl first
-  try {
-    const result = await doRequest(opts.baseUrl)
-    // Original URL works — clear any failover cache
-    if (opts.id) clearFailoverUrl(opts.id)
-    return result
-  } catch (err) {
-    // If original fails and we have a cached failover URL, try it
-    if (opts.id) {
-      const cachedUrl = getFailoverUrl(opts.id)
-      if (cachedUrl) {
-        try {
-          return await doRequest(cachedUrl)
-        } catch {
-          // cached failover also failed, clear it and continue to full failover
-          clearFailoverUrl(opts.id)
-        }
-      }
-    }
-    // Skip failover entirely when behind a reverse proxy (IPs are not reachable)
-    if (opts.behindProxy) throw err
-    // Only attempt failover for network errors when we have a connection ID
-    if (!opts.id || !isNetworkError(err)) throw err
+  // When a failover URL is cached, try it first — the original baseUrl is likely
+  // still down and waiting for its TCP timeout would stall the UI for seconds.
+  const cachedFailoverUrl = opts.id ? getFailoverUrl(opts.id) : null
 
-    const connId = opts.id
+  if (cachedFailoverUrl) {
+    try {
+      return await doRequest(cachedFailoverUrl)
+    } catch (cachedErr) {
+      // Cached failover failed — try the original (maybe it recovered)
+      clearFailoverUrl(opts.id!)
+      try {
+        const result = await doRequest(opts.baseUrl)
+        return result
+      } catch {
+        // Both failed — fall through to full failover
+      }
+      if (opts.behindProxy) throw cachedErr
+      if (!isNetworkError(cachedErr)) throw cachedErr
+    }
+  }
+
+  // No cached failover — try primary baseUrl first
+  let primaryErr: unknown
+  if (!cachedFailoverUrl) {
+    try {
+      const result = await doRequest(opts.baseUrl)
+      return result
+    } catch (err) {
+      primaryErr = err
+      // Skip failover entirely when behind a reverse proxy (IPs are not reachable)
+      if (opts.behindProxy) throw err
+      // Only attempt failover for network errors when we have a connection ID
+      if (!opts.id || !isNetworkError(err)) throw err
+    }
+  }
+
+  {
+    const err = primaryErr || new Error("all cached failover nodes failed")
+
+    const connId = opts.id!
 
     // Check if another request is already performing failover
     const existingLock = getFailoverLock(connId)
@@ -196,8 +221,8 @@ export async function pveFetch<T>(
         if (ip === currentHost) continue
         const candidateUrl = replaceHostInUrl(opts.baseUrl, ip)
         try {
-          // Test the candidate with a lightweight call
-          await doRequest(candidateUrl)
+          // Test the candidate with a lightweight call (short timeout)
+          await doRequest(candidateUrl, 5_000)
           // Success — persist the new baseUrl
           await updateConnectionBaseUrl(connId, candidateUrl)
           return candidateUrl

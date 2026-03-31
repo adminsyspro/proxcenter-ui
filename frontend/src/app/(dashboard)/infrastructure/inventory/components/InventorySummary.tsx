@@ -254,7 +254,7 @@ return `${mins}m`
                 borderRadius: 2,
                 p: 1.25,
                 pb: 1,
-                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
+                bgcolor: 'background.paper',
               }}
             >
               {!isTemplate && (
@@ -409,7 +409,7 @@ return `${mins}m`
                 borderColor: 'divider',
                 borderRadius: 2,
                 p: 1.25,
-                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
+                bgcolor: 'background.paper',
               }}
             >
               <UsageBar themeColor={primaryColor} label="CPU usage" used={cpuNowPct} capacity={100} mode="pct" />
@@ -467,7 +467,7 @@ return `${mins}m`
                 p: 1.25,
                 position: 'relative',
                 overflow: 'hidden',
-                bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
+                bgcolor: 'background.paper',
               }}
             >
               <Stack spacing={2.5}>
@@ -810,7 +810,7 @@ return `${mins}m`
                   borderColor: 'divider',
                   borderRadius: 2,
                   p: 1.25,
-                  bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : undefined,
+                  bgcolor: 'background.paper',
                 }}
               >
                 {kindLabel === 'PBS' || kindLabel === 'STORAGE' ? (

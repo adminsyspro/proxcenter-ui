@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 
@@ -11,16 +11,93 @@ import {
   Typography,
 } from '@mui/material'
 
-function ConsolePreview({ 
-  height = 210, 
-  connId, 
-  node, 
-  type, 
+/**
+ * Decode a base64-encoded PPM (P6 binary) image and draw it onto a canvas.
+ * Returns a data URL (JPEG) or null on failure.
+ */
+function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const binary = atob(b64Data)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+      // Parse PPM P6 header: "P6\n<width> <height>\n<maxval>\n"
+      let offset = 0
+      const readLine = (): string => {
+        let line = ''
+        while (offset < bytes.length) {
+          const ch = bytes[offset++]
+          if (ch === 10) break // \n
+          line += String.fromCharCode(ch)
+        }
+        // Skip comment lines
+        if (line.startsWith('#')) return readLine()
+        return line.trim()
+      }
+
+      const magic = readLine()
+      if (magic !== 'P6') { resolve(null); return }
+
+      // Width and height might be on one line or two
+      let dims = readLine()
+      const parts = dims.split(/\s+/)
+      let width: number, height: number
+      if (parts.length >= 2) {
+        width = parseInt(parts[0])
+        height = parseInt(parts[1])
+      } else {
+        width = parseInt(parts[0])
+        height = parseInt(readLine())
+      }
+
+      const maxVal = parseInt(readLine())
+      if (!width || !height || !maxVal) { resolve(null); return }
+
+      // Create canvas and draw pixel data
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { resolve(null); return }
+
+      const imageData = ctx.createImageData(width, height)
+      const data = imageData.data
+      const pixelBytes = maxVal > 255 ? 6 : 3
+
+      for (let i = 0; i < width * height; i++) {
+        const srcIdx = offset + i * pixelBytes
+        if (pixelBytes === 3) {
+          data[i * 4] = bytes[srcIdx]       // R
+          data[i * 4 + 1] = bytes[srcIdx + 1] // G
+          data[i * 4 + 2] = bytes[srcIdx + 2] // B
+        } else {
+          // 16-bit: take high byte
+          data[i * 4] = bytes[srcIdx]
+          data[i * 4 + 1] = bytes[srcIdx + 2]
+          data[i * 4 + 2] = bytes[srcIdx + 4]
+        }
+        data[i * 4 + 3] = 255 // A
+      }
+
+      ctx.putImageData(imageData, 0, 0)
+      resolve(canvas.toDataURL('image/jpeg', 0.75))
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+function ConsolePreview({
+  height = 210,
+  connId,
+  node,
+  type,
   vmid,
   vmStatus,
   osInfo,
   osLoading
-}: { 
+}: {
   height?: number
   connId?: string
   node?: string
@@ -32,34 +109,82 @@ function ConsolePreview({
 }) {
   const t = useTranslations()
   const isRunning = vmStatus?.toLowerCase() === 'running'
-  
+  const isQemu = type === 'qemu'
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
+  const [screenshotFailed, setScreenshotFailed] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   // URL de la page console fullscreen (noVNC)
-  const consoleUrl = connId && node && type && vmid 
+  const consoleUrl = connId && node && type && vmid
     ? `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
     : null
+
+  const fetchScreenshot = useCallback(async () => {
+    if (!connId || !node || !type || !vmid || !isRunning || !isQemu) return
+
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/screenshot`
+      )
+      const json = await res.json()
+
+      if (json.data) {
+        const dataUrl = await decodePpmToDataUrl(json.data)
+        if (dataUrl) {
+          setScreenshotUrl(dataUrl)
+          setScreenshotFailed(false)
+          return
+        }
+      }
+      // No data or decode failed - keep existing screenshot if any, mark as failed for fresh attempts
+      setScreenshotFailed(true)
+    } catch {
+      setScreenshotFailed(true)
+    }
+  }, [connId, node, type, vmid, isRunning, isQemu])
+
+  // Fetch screenshot on mount and every 10s for running QEMU VMs
+  useEffect(() => {
+    if (!isRunning || !isQemu) {
+      setScreenshotUrl(null)
+      setScreenshotFailed(false)
+      return
+    }
+
+    fetchScreenshot()
+    intervalRef.current = setInterval(fetchScreenshot, 10_000)
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [fetchScreenshot, isRunning, isQemu])
+
+  // Reset screenshot when VM changes
+  useEffect(() => {
+    setScreenshotUrl(null)
+    setScreenshotFailed(false)
+  }, [vmid, connId])
 
   const handleOpenConsole = () => {
     if (consoleUrl) {
       window.open(
-        consoleUrl, 
+        consoleUrl,
         `console-${vmid}`,
         'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
       )
     }
   }
 
-  // Déterminer l'icône SVG à afficher selon l'OS
+  // Determine OS icon
   const getOsIconData = () => {
     if (!osInfo?.name && !osInfo?.type) return null
 
     const osName = osInfo?.name || ''
     const osType = osInfo?.type
 
-    // Try SVG icon first
     const svgIcon = getOsSvgIcon(osName, osType)
     if (svgIcon) return { type: 'svg' as const, src: svgIcon }
 
-    // macOS
     if (osName.toLowerCase().includes('mac') || osName.toLowerCase().includes('darwin')) {
       return { type: 'ri' as const, className: 'ri-apple-fill' }
     }
@@ -103,7 +228,23 @@ function ConsolePreview({
           } : {},
         }}
       >
-        {/* Icône OS en fond */}
+        {/* Live screenshot for running QEMU VMs */}
+        {screenshotUrl && (
+          <img
+            src={screenshotUrl}
+            alt="VM screen"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'fill',
+              zIndex: 1,
+            }}
+          />
+        )}
+
+        {/* OS icon watermark */}
         {osIconData && (
           <Box
             sx={{
@@ -113,6 +254,7 @@ function ConsolePreview({
               alignItems: 'center',
               justifyContent: 'center',
               pointerEvents: 'none',
+              zIndex: 2,
             }}
           >
             {osIconData.type === 'svg' ? (
@@ -139,18 +281,22 @@ function ConsolePreview({
             color: 'rgba(255,255,255,0.65)',
             px: 2,
             textAlign: 'center',
+            zIndex: screenshotUrl ? 0 : 2,
           }}
         >
           {isRunning ? (
             <Box>
-              {/* Zone cliquable vide - juste l'icône OS en fond suffit */}
+              {/* Click to open console overlay - only visible when no screenshot */}
+              {!screenshotUrl && !screenshotFailed && isQemu && (
+                <CircularProgress size={20} sx={{ color: 'rgba(255,255,255,0.3)' }} />
+              )}
             </Box>
           ) : (
             <Box>
-              <Box 
-                component="i" 
-                className="ri-shut-down-line" 
-                sx={{ fontSize: 40, color: 'rgba(255,255,255,0.25)', mb: 1, display: 'block' }} 
+              <Box
+                component="i"
+                className="ri-shut-down-line"
+                sx={{ fontSize: 40, color: 'rgba(255,255,255,0.25)', mb: 1, display: 'block' }}
               />
               <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)' }}>
                 {t('common.offline')}
@@ -161,9 +307,34 @@ function ConsolePreview({
             </Box>
           )}
         </Box>
+
+        {/* "Click to open" overlay on hover when screenshot is shown */}
+        {screenshotUrl && isRunning && (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0,
+              transition: 'opacity 0.2s ease',
+              bgcolor: 'rgba(0,0,0,0.5)',
+              '&:hover': { opacity: 1 },
+            }}
+          >
+            <Box sx={{ textAlign: 'center', color: 'white' }}>
+              <i className="ri-fullscreen-line" style={{ fontSize: 28 }} />
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                Console
+              </Typography>
+            </Box>
+          </Box>
+        )}
       </Box>
 
-      {/* OS Info en dessous de la console */}
+      {/* OS Info below console */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 0.5, mt: 0.5 }}>
         {osLoading ? (
           <>
@@ -171,7 +342,7 @@ function ConsolePreview({
             <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('common.loading')}</Typography>
           </>
         ) : osInfo ? (
-          <MuiTooltip 
+          <MuiTooltip
             title={
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{osInfo.name || 'Unknown OS'}</Typography>

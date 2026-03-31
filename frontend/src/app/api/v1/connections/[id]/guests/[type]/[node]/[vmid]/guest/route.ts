@@ -159,13 +159,49 @@ return undefined
               `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/get-fsinfo`
             )
             const filesystems = fsData?.result || []
+
+            // Virtual/network filesystem types to exclude -- these are not
+            // backed by the VM's own virtual disks and would skew the totals
+            // (e.g. a ZFS dataset mounted from the host reports the entire pool size).
+            const virtualFsTypes = new Set([
+              'tmpfs', 'devtmpfs', 'sysfs', 'proc', 'devpts', 'securityfs',
+              'cgroup', 'cgroup2', 'pstore', 'efivarfs', 'bpf', 'debugfs',
+              'tracefs', 'hugetlbfs', 'mqueue', 'fusectl', 'configfs',
+              'overlay', 'squashfs', 'ramfs', 'autofs',
+              'nfs', 'nfs4', 'cifs', 'smbfs', '9p', 'fuse.sshfs',
+              'fuse.gvfsd-fuse', 'virtiofs',
+            ])
+
+            // Only count filesystems backed by real disk devices.
+            // The guest agent populates the "disk" array only for filesystems
+            // on actual virtual disks (virtio, scsi, ide, sata).
+            const localFs = filesystems.filter((fs: any) => {
+              if (!fs['total-bytes'] || fs['total-bytes'] <= 0) return false
+              const fsType = (fs.type || '').toLowerCase()
+              if (virtualFsTypes.has(fsType)) return false
+              // Require at least one disk device entry
+              if (Array.isArray(fs.disk) && fs.disk.length > 0) return true
+              // Windows: guest agent may omit disk array but type is reliable
+              if (['ntfs', 'refs', 'fat32', 'fat16', 'exfat', 'fat'].includes(fsType)) return true
+              return false
+            })
+
+            // Fallback: if filtering excluded everything but raw data exists,
+            // use all non-virtual filesystems (some guest agent versions
+            // don't populate the disk array).
+            const effective = localFs.length > 0
+              ? localFs
+              : filesystems.filter((fs: any) => {
+                  if (!fs['total-bytes'] || fs['total-bytes'] <= 0) return false
+                  const fsType = (fs.type || '').toLowerCase()
+                  return !virtualFsTypes.has(fsType)
+                })
+
             let totalBytes = 0
             let usedBytes = 0
-            for (const fs of filesystems) {
-              if (fs['total-bytes'] && fs['total-bytes'] > 0) {
-                totalBytes += Number(fs['total-bytes'])
-                usedBytes += Number(fs['used-bytes'] || 0)
-              }
+            for (const fs of effective) {
+              totalBytes += Number(fs['total-bytes'])
+              usedBytes += Number(fs['used-bytes'] || 0)
             }
             if (totalBytes > 0) return { used: usedBytes, total: totalBytes }
           } catch {

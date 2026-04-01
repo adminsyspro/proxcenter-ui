@@ -17,9 +17,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
-  // RBAC: Check node.view permission
-  const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
-
+  // RBAC: Check node.view without resource context so scoped users (node/vm/tag/pool) pass.
+  // Actual filtering happens after fetching.
+  const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
   if (denied) return denied
 
   const conn = await getConnectionById(id)

@@ -167,6 +167,21 @@ function TimelineEntry({ change, t }: { change: any; t: any }) {
         >
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              {(change.resourceType === 'vm' || change.resourceType === 'ct') ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <Box sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0 }}>
+                    <i className={change.resourceType === 'ct' ? 'ri-instance-fill' : 'ri-computer-fill'} style={{ fontSize: 16, opacity: 0.7 }} />
+                    <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: '#4caf50', border: '1.5px solid', borderColor: 'background.paper' }} />
+                  </Box>
+                  <Typography variant='body2' fontWeight={600}>
+                    {change.resourceName || `${resConfig.label} ${change.resourceId}`}
+                  </Typography>
+                </Box>
+              ) : (
+                <Typography variant='body2' fontWeight={600}>
+                  {change.resourceName || `${resConfig.label} ${change.resourceId}`}
+                </Typography>
+              )}
               <Chip
                 size='small'
                 icon={<i className={actConfig.icon} style={{ fontSize: 14 }} />}
@@ -175,14 +190,6 @@ function TimelineEntry({ change, t }: { change: any; t: any }) {
                 variant='outlined'
                 sx={{ height: 24, fontSize: '0.7rem' }}
               />
-              <Typography variant='body2' fontWeight={600}>
-                {resConfig.label} {change.resourceId}
-              </Typography>
-              {change.resourceName && (
-                <Typography variant='body2' sx={{ opacity: 0.7 }}>
-                  &ldquo;{change.resourceName}&rdquo;
-                </Typography>
-              )}
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>

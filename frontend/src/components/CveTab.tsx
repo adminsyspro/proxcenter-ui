@@ -311,7 +311,13 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
                 </TableCell>
                 {!node && (
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: 12 }}>{cve.node}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <Box sx={{ position: 'relative', display: 'inline-flex', width: 14, height: 14, flexShrink: 0 }}>
+                        <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 6, height: 6, borderRadius: '50%', bgcolor: '#4caf50', border: '1.5px solid', borderColor: 'background.paper' }} />
+                      </Box>
+                      <Typography variant="body2" sx={{ fontSize: 12 }}>{cve.node}</Typography>
+                    </Box>
                   </TableCell>
                 )}
                 <TableCell sx={{ maxWidth: 360 }}>

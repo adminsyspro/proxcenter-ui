@@ -4451,6 +4451,7 @@
     "summaryUpdates": "{nodes} 个节点上有 {count} 个可用更新",
     "totalEstimatedTime": "预计总时间",
     "estimatedTime": "预计时间：{time}",
+    "estimatedTimeLabel": "预计时间",
     "rebootsRequired": "需要 {count} 次重启",
     "node": "节点",
     "version": "版本",

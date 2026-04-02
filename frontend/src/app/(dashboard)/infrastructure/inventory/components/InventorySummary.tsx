@@ -562,19 +562,6 @@ return `${mins}m`
                 <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
               ) : null}
 
-              {/* IO delay */}
-              {hostInfo.ioDelay != null && (
-                <>
-                  <Divider sx={{ my: 1.25 }} />
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                    <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ioDelay')}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
-                    </Box>
-                  </Box>
-                </>
-              )}
             </Box>
 
             {/* Colonne 2 - Informations système */}

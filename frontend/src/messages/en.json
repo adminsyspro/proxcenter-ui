@@ -4483,6 +4483,7 @@
     "summaryUpdates": "{count} update(s) available on {nodes} node(s)",
     "totalEstimatedTime": "Total estimated time",
     "estimatedTime": "Estimated time: {time}",
+    "estimatedTimeLabel": "Estimated Time",
     "rebootsRequired": "{count} reboot(s) required",
     "node": "Node",
     "version": "Version",

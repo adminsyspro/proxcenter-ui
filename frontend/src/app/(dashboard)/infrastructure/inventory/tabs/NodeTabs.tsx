@@ -1067,7 +1067,7 @@ export default function NodeTabs(props: any) {
 
                 {/* Onglet VMs - Index 3 */}
                 {nodeTab === 3 && (
-                  <>
+                  <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                     <Box sx={{ 
                       px: 2, 
                       py: 1.5, 
@@ -1092,11 +1092,11 @@ export default function NodeTabs(props: any) {
                     </Box>
                     {data.vmsData.length > 0 ? (
                       <Box sx={{
-                        resize: 'vertical',
-                        overflow: 'auto',
+                        overflow: 'hidden',
                         minHeight: 200,
-                        height: expandedVmsTable ? 600 : 450,
-                        pb: '6px',
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
                         position: 'relative',
                         '&::after': {
                           content: '""',
@@ -1115,7 +1115,8 @@ export default function NodeTabs(props: any) {
                           vms={data.vmsData as VmRow[]}
                           compact={!expandedVmsTable}
                           expanded={expandedVmsTable}
-                          maxHeight={expandedVmsTable ? 560 : 410}
+                          maxHeight="100%"
+                          autoPageSize
                           showTrends
                           showActions={true}
                           onLoadTrendsBatch={loadVmTrendsBatch}
@@ -1136,7 +1137,7 @@ export default function NodeTabs(props: any) {
                         <Typography>{t('inventory.noVmsOnNode')}</Typography>
                       </Box>
                     )}
-                  </>
+                  </Box>
                 )}
 
                 {/* Onglet Snapshots - Index 4 */}

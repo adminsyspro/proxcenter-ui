@@ -4478,6 +4478,7 @@
     "summaryUpdates": "{count} mise(s) à jour disponible(s) sur {nodes} nœud(s)",
     "totalEstimatedTime": "Temps total estimé",
     "estimatedTime": "Temps estimé: {time}",
+    "estimatedTimeLabel": "Temps estime",
     "rebootsRequired": "{count} redémarrage(s) requis",
     "node": "Nœud",
     "version": "Version",

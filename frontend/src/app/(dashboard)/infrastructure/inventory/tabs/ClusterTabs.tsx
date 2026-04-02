@@ -3253,7 +3253,7 @@ export default function ClusterTabs(props: any) {
                                   <TableCell>{t('updates.version')}</TableCell>
                                   <TableCell align="center">{t('updates.vms')}</TableCell>
                                   <TableCell align="center">{t('updates.availableUpdates')}</TableCell>
-                                  <TableCell align="center">{t('updates.estimatedTime')}</TableCell>
+                                  <TableCell align="center">{t('updates.estimatedTimeLabel')}</TableCell>
                                   <TableCell align="center">{t('updates.status')}</TableCell>
                                 </TableRow>
                               </TableHead>
@@ -3303,7 +3303,7 @@ export default function ClusterTabs(props: any) {
                                           <Typography variant="body2" fontWeight={600}>{node.node}</Typography>
                                         </Box>
                                       </TableCell>
-                                      <TableCell align="center">
+                                      <TableCell>
                                         {nodeUpdate?.loading ? (
                                           <CircularProgress size={14} />
                                         ) : (
@@ -3921,46 +3921,38 @@ export default function ClusterTabs(props: any) {
                         <Card variant="outlined">
                           <CardContent>
                             {clusterConfig?.isCluster ? (
-                              <>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                                  <Chip 
-                                    icon={<i className="ri-checkbox-circle-fill" />}
-                                    label={t('cluster.clusterActive')}
-                                    color="success" 
-                                    size="small"
-                                  />
-                                  <Typography variant="h6" fontWeight={700}>
-                                    {clusterConfig?.clusterName || t('cluster.unnamedCluster')}
-                                  </Typography>
-                                </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+                                <Chip
+                                  icon={<i className="ri-checkbox-circle-fill" />}
+                                  label={t('cluster.clusterActive')}
+                                  color="success"
+                                  size="small"
+                                />
+                                <Typography variant="body1" fontWeight={700}>
+                                  {clusterConfig?.clusterName || t('cluster.unnamedCluster')}
+                                </Typography>
                                 {clusterConfig?.clusterStatus && (
-                                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
-                                    <Box>
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.configVersion')}</Typography>
-                                      <Typography variant="body2" fontWeight={600}>
-                                        {clusterConfig.clusterStatus.version || '—'}
-                                      </Typography>
+                                  <>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('cluster.configVersion')}</Typography>
+                                      <Typography variant="body2" fontWeight={600}>{clusterConfig.clusterStatus.version || '—'}</Typography>
                                     </Box>
-                                    <Box>
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.quorum')}</Typography>
-                                      <Typography variant="body2" fontWeight={600}>
-                                        <Chip 
-                                          size="small" 
-                                          label={clusterConfig.clusterStatus.quorate ? t('common.yes') : t('common.no')}
-                                          color={clusterConfig.clusterStatus.quorate ? 'success' : 'error'}
-                                          sx={{ height: 20, fontSize: 11 }}
-                                        />
-                                      </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('cluster.quorum')}</Typography>
+                                      <Chip
+                                        size="small"
+                                        label={clusterConfig.clusterStatus.quorate ? t('common.yes') : t('common.no')}
+                                        color={clusterConfig.clusterStatus.quorate ? 'success' : 'error'}
+                                        sx={{ height: 20, fontSize: 11 }}
+                                      />
                                     </Box>
-                                    <Box>
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('inventory.nodesLabel')}</Typography>
-                                      <Typography variant="body2" fontWeight={600}>
-                                        {clusterConfig.clusterStatus.nodes || clusterConfig?.nodes?.length || 0}
-                                      </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('inventory.nodesLabel')}</Typography>
+                                      <Typography variant="body2" fontWeight={600}>{clusterConfig.clusterStatus.nodes || clusterConfig?.nodes?.length || 0}</Typography>
                                     </Box>
-                                  </Box>
+                                  </>
                                 )}
-                              </>
+                              </Box>
                             ) : (
                               <Box sx={{ textAlign: 'center', py: 2 }}>
                                 <i className="ri-server-line" style={{ fontSize: 48, opacity: 0.3 }} />
@@ -4037,15 +4029,10 @@ export default function ClusterTabs(props: any) {
                                     }}
                                   >
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
-                                      <Box
-                                        sx={{
-                                          width: 8,
-                                          height: 8,
-                                          borderRadius: '50%',
-                                          bgcolor: node.maintenance ? 'warning.main' : node.online ? 'success.main' : 'error.main'
-                                        }}
-                                      />
+                                      <Box sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0 }}>
+                                        <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: node.online ? 0.8 : 0.4 }} />
+                                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.maintenance ? '#ff9800' : node.online ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
+                                      </Box>
                                       <Typography variant="body2" fontWeight={node.local ? 700 : 400}>
                                         {node.name}
                                         {node.local && <Chip size="small" label="local" sx={{ ml: 1, height: 16, fontSize: 9 }} />}

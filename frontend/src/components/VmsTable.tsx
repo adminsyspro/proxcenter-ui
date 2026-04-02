@@ -805,94 +805,57 @@ return (
         flex: 1,
         minWidth: isMobile ? 100 : 150,
         renderHeader: isMobile ? headerIconOnly('ri-computer-line') : headerWithIcon('ri-computer-line', t('common.name')),
-        renderCell: (params) => (
-          <Stack direction='row' spacing={0.5} sx={{ alignItems: 'center', overflow: 'hidden', width: '100%' }}>
-            <VmIcon type={params.row.type} template={params.row.template} />
-            <Box sx={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
-              <Typography variant='body2' sx={{ 
-                fontWeight: 600, 
-                fontSize: '0.75rem',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}>
-                {params.row.name || `VM ${params.row.vmid}`}
-              </Typography>
-              {/* Afficher ID et Type sur mobile en sous-ligne */}
-              {isMobile && (
-                <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.6rem' }}>
-                  #{params.row.vmid} • {params.row.type === 'lxc' ? 'LXC' : 'VM'}
-                </Typography>
-              )}
-            </Box>
-          </Stack>
-        )
-      },
-
-      // Status (icône comme dans le tree)
-      {
-        field: 'status',
-        headerName: t('common.status'),
-        width: 50,
-        renderHeader: headerIconOnly('ri-pulse-line'),
         renderCell: (params) => {
           const vm = params.row as VmRow
           const isMigrating = isVmMigrating(vm.connId, vm.vmid)
+          const iconClass = vm.template ? 'ri-file-copy-fill' : vm.type === 'lxc' ? 'ri-instance-fill' : 'ri-computer-fill'
+          const dotColor = vm.template ? 'transparent' : vm.status === 'running' ? '#4caf50' : vm.status === 'paused' ? '#ed6c02' : '#f44336'
 
-          if (isMigrating) {
-            return (
-              <Tooltip title={t('common.loading')}>
-                <Box sx={{
-                  display: 'inline-flex', alignItems: 'center',
-                  '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }}>
-                  <i className="ri-swap-box-line" style={{ fontSize: 16, color: '#ed6c02' }} />
+          return (
+            <Stack direction='row' spacing={0.75} sx={{ alignItems: 'center', overflow: 'hidden', width: '100%' }}>
+              <Tooltip title={`${vm.template ? 'Template' : vm.type === 'lxc' ? 'LXC' : 'VM'} - ${vm.status}`}>
+                <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                  {isMigrating ? (
+                    <Box sx={{
+                      '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                    }}>
+                      <i className={iconClass} style={{ fontSize: 18, opacity: 0.7 }} />
+                      <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: '#ed6c02', border: '1.5px solid', borderColor: 'background.paper' }} />
+                    </Box>
+                  ) : (
+                    <>
+                      <i className={iconClass} style={{ fontSize: 18, opacity: 0.7 }} />
+                      {!vm.template && (
+                        <Box sx={{
+                          position: 'absolute', bottom: -1, right: -2,
+                          width: 8, height: 8, borderRadius: '50%',
+                          bgcolor: dotColor,
+                          border: '1.5px solid', borderColor: 'background.paper',
+                          boxShadow: vm.status === 'running' ? `0 0 4px ${dotColor}` : 'none',
+                        }} />
+                      )}
+                    </>
+                  )}
                 </Box>
               </Tooltip>
-            )
-          }
-
-          if (vm.template) {
-            return <i className="ri-stop-fill" style={{ fontSize: 16, opacity: 0.25 }} />
-          }
-          if (vm.status === 'running') {
-            return <i className="ri-play-fill" style={{ fontSize: 16, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76,175,80,0.5))' }} />
-          }
-          if (vm.status === 'paused') {
-            return <i className="ri-pause-fill" style={{ fontSize: 16, color: '#ed6c02' }} />
-          }
-          return <i className="ri-stop-fill" style={{ fontSize: 16, color: '#f44336' }} />
-        }
-      },
-
-      // Type
-      {
-        field: 'type',
-        headerName: 'Type',
-        width: 75,
-        renderHeader: headerWithIcon('ri-stack-line', 'Type'),
-        renderCell: (params: any) => {
-          if (params.row.template) {
-            return (
-              <Chip 
-                label="Tmpl" 
-                size='small' 
-                variant='outlined'
-                color='info'
-                sx={{ height: 18, fontSize: '0.6rem' }}
-              />
-            )
-          }
-
-          
-return (
-            <Chip 
-              label={params.row.type === 'lxc' ? 'LXC' : 'VM'} 
-              size='small' 
-              variant='outlined'
-              sx={{ height: 18, fontSize: '0.6rem' }}
-            />
+              <Box sx={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
+                <Typography variant='body2' sx={{
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {params.row.name || `VM ${params.row.vmid}`}
+                </Typography>
+                {isMobile && (
+                  <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.6rem' }}>
+                    #{params.row.vmid} • {params.row.type === 'lxc' ? 'LXC' : 'VM'}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
           )
         }
       },
@@ -908,20 +871,14 @@ return (
         maxWidth: 150,
         renderHeader: headerWithIcon('ri-server-line', 'Node'),
         renderCell: (params) => (
-          <Typography 
-            variant='body2' 
-            sx={{ 
-              fontSize: '0.7rem', 
-              opacity: 0.8,
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
               cursor: onNodeClick ? 'pointer' : 'default',
-              whiteSpace: 'nowrap',
               overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              '&:hover': onNodeClick ? { 
-                color: 'primary.main',
-                textDecoration: 'underline',
-                opacity: 1
-              } : {}
+              '&:hover': onNodeClick ? { '& .node-name': { color: 'primary.main', textDecoration: 'underline', opacity: 1 } } : {}
             }}
             onClick={(e) => {
               if (onNodeClick) {
@@ -930,8 +887,27 @@ return (
               }
             }}
           >
-            {params.row.node}
-          </Typography>
+            <img
+              src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+              alt=""
+              width={14}
+              height={14}
+              style={{ opacity: 0.7, flexShrink: 0 }}
+            />
+            <Typography
+              className="node-name"
+              variant='body2'
+              sx={{
+                fontSize: '0.7rem',
+                opacity: 0.8,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {params.row.node}
+            </Typography>
+          </Box>
         )
       })
     }
@@ -1730,8 +1706,6 @@ return true
                 { field: 'vmid', label: '#ID' },
                 { field: 'favorite', label: t('vms.favorites') },
                 { field: 'name', label: t('common.name') },
-                { field: 'type', label: t('common.type') },
-                { field: 'status', label: t('common.status') },
                 { field: 'node', label: t('common.node') },
                 { field: 'ha', label: 'HA' },
                 { field: 'cpu', label: 'CPU' },

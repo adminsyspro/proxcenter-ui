@@ -2293,7 +2293,7 @@ return vm?.isCluster ?? false
   }, [selection, allVms])
 
   return (
-    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', fontSize: 13, '& .MuiTypography-body2': { fontSize: '13px !important', fontWeight: '400 !important' }, '& .MuiTypography-body1': { fontSize: '13px !important' }, '& .MuiTypography-caption': { fontSize: '11px !important' } }}>
+    <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontSize: 13, '& .MuiTypography-body2': { fontSize: '13px !important', fontWeight: '400 !important' }, '& .MuiTypography-body1': { fontSize: '13px !important' }, '& .MuiTypography-caption': { fontSize: '11px !important' } }}>
       {progress}
 
       {error ? (
@@ -2450,7 +2450,7 @@ return vm?.isCluster ?? false
                     favorites={favorites}
                     onToggleFavorite={toggleFavorite}
                     migratingVmIds={migratingVmIds}
-                    defaultHiddenColumns={['type', 'node', 'ha']}
+                    defaultHiddenColumns={['node', 'ha']}
                   />
                 </Box>
               </CardContent>

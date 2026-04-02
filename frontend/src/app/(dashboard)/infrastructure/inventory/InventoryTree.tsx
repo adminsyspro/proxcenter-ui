@@ -61,66 +61,64 @@ import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 /* Status Icon Component                                              */
 /* ------------------------------------------------------------------ */
 
-function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, template }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; isPendingAction?: boolean; maintenance?: string; template?: boolean }) {
-  // Templates: no status icon color
-  if (template) {
-    return (
-      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
-        <StopIcon sx={{ fontSize: 14, color: 'text.disabled', opacity: 0.4 }} />
-      </Box>
-    )
-  }
-
-  // Si la VM a une action en cours (start, stop, etc.), afficher un spinner
-  if (type === 'vm' && isPendingAction) {
-    return (
-      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
-        <CircularProgress size={12} thickness={5} sx={{ color: '#ff9800' }} />
-      </Box>
-    )
-  }
-
-  // Si la VM est en cours de migration, afficher une icône spéciale
-  if (type === 'vm' && isMigrating) {
-    return (
-      <Box
-        component="span"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 14,
-          height: 14,
-          color: '#ff9800',
-          animation: 'pulse 1.5s ease-in-out infinite',
-          '@keyframes pulse': {
-            '0%, 100%': { opacity: 1 },
-            '50%': { opacity: 0.4 }
-          }
-        }}
-      >
-        <i className="ri-swap-box-line" style={{ fontSize: 14 }} />
-      </Box>
-    )
-  }
-  
+function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, template, vmType }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; isPendingAction?: boolean; maintenance?: string; template?: boolean; vmType?: string }) {
   if (type === 'node') {
     return null // Use NodeIcon instead for nodes
   }
 
-  // Pour les VMs
-  if (status === 'running') {
+  // VM icon with status dot badge
+  const iconClass = getVmIcon(vmType || 'qemu', template)
+  const size = 16
+  const dotSize = 8
+
+  // Pending action: spinner instead of dot
+  if (isPendingAction) {
     return (
-      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
-        <PlayArrowIcon sx={{ fontSize: 14, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))' }} />
+      <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: size, height: size, flexShrink: 0 }}>
+        <i className={iconClass} style={{ fontSize: size, opacity: 0.7 }} />
+        <Box sx={{ position: 'absolute', bottom: -2, right: -3 }}>
+          <CircularProgress size={dotSize} thickness={6} sx={{ color: '#ff9800' }} />
+        </Box>
       </Box>
     )
   }
 
-  // VM stopped ou autre état
+  // Migrating: pulsing orange dot
+  if (isMigrating) {
+    return (
+      <Box component="span" sx={{
+        position: 'relative', display: 'inline-flex', width: size, height: size, flexShrink: 0,
+        '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
+        animation: 'pulse 1.5s ease-in-out infinite',
+      }}>
+        <i className={iconClass} style={{ fontSize: size, opacity: 0.7 }} />
+        <Box sx={{ position: 'absolute', bottom: -2, right: -3, width: dotSize, height: dotSize, borderRadius: '50%', bgcolor: '#ff9800', border: '1.5px solid', borderColor: 'background.paper' }} />
+      </Box>
+    )
+  }
+
+  // Template: no dot
+  if (template) {
+    return (
+      <Box component="span" sx={{ display: 'inline-flex', width: size, height: size, flexShrink: 0 }}>
+        <i className={iconClass} style={{ fontSize: size, opacity: 0.5 }} />
+      </Box>
+    )
+  }
+
+  // Normal VM: icon + colored status dot
+  const dotColor = status === 'running' ? '#4caf50' : status === 'paused' ? '#ed6c02' : '#f44336'
+
   return (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
-      <StopIcon sx={{ fontSize: 14, color: '#f44336' }} />
+    <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: size, height: size, flexShrink: 0 }}>
+      <i className={iconClass} style={{ fontSize: size, opacity: 0.7 }} />
+      <Box sx={{
+        position: 'absolute', bottom: -2, right: -3,
+        width: dotSize, height: dotSize, borderRadius: '50%',
+        bgcolor: dotColor,
+        border: '1.5px solid', borderColor: 'background.paper',
+        boxShadow: status === 'running' ? `0 0 4px ${dotColor}` : 'none',
+      }} />
     </Box>
   )
 }
@@ -538,8 +536,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         >
           <i className={isFavorite ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 14 }} />
         </Box>
-        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} />
-        <i className={getVmIcon(vmType, template)} style={{ opacity: 0.8, fontSize: 14 }} />
+        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} />
         <Typography variant="body2" sx={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {name}
         </Typography>
@@ -646,8 +643,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
         >
           <i className="ri-star-fill" style={{ fontSize: 14 }} />
         </IconButton>
-        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} />
-        <i className={getVmIcon(vmType, template)} style={{ opacity: 0.8, fontSize: 14 }} />
+        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {name}
@@ -701,8 +697,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
       >
         <i className={isFavorite ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 14 }} />
       </IconButton>
-      <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} />
-      <i className={getVmIcon(vmType, template)} style={{ opacity: 0.8, fontSize: 14 }} />
+      <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} />
       {isGrouped ? (
         <>
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -3881,8 +3876,7 @@ return (
                                 itemId={`vm:${vmKey}:${netId}:${tag}`}
                                 label={
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <StatusIcon status={vm.status} type="vm" />
-                                    <i className={getVmIcon(vm.type)} style={{ opacity: 0.8, fontSize: 14 }} />
+                                    <StatusIcon status={vm.status} type="vm" vmType={vm.type} />
                                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                       {vm.name}
                                     </Typography>

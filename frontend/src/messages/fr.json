@@ -5020,6 +5020,11 @@
   "cluster": {
     "nodesCount": "{count} nœuds",
     "usageOf": "{used} sur {total}",
+    "autoHaEnabled": "Les nouvelles VMs auront automatiquement la HA configuree.",
+    "autoHaDisabled": "Les VMs doivent etre ajoutees manuellement a la HA.",
+    "autoHaDefaultState": "Etat par defaut",
+    "autoHaSyncNow": "Synchroniser",
+    "autoHaSyncSuccess": "{added} ajoutee(s), {skipped} deja configuree(s)",
     "haResources": "Ressources",
     "state": "État",
     "nodeCol": "Nœud",

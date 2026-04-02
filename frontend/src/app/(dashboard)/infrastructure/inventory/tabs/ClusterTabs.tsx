@@ -28,6 +28,7 @@ import {
   MenuItem,
   Select,
   Stack,
+  Switch,
   Tab,
   Table,
   TableBody,
@@ -70,6 +71,75 @@ import { useToast } from '@/contexts/ToastContext'
 import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
+
+const HA_STATES = ['started', 'stopped', 'enabled', 'disabled', 'ignored'] as const
+const HA_STATE_META: Record<string, { color: string; icon: string; chipColor: string }> = {
+  started:  { color: '#22c55e', icon: 'ri-play-circle-line', chipColor: 'success' },
+  stopped:  { color: '#9ca3af', icon: 'ri-stop-circle-line', chipColor: 'default' },
+  enabled:  { color: '#3b82f6', icon: 'ri-checkbox-circle-line', chipColor: 'success' },
+  disabled: { color: '#6b7280', icon: 'ri-forbid-line', chipColor: 'default' },
+  ignored:  { color: '#f59e0b', icon: 'ri-eye-off-line', chipColor: 'warning' },
+}
+
+function HaResourceStateCell({ sid, state, group, connId, t }: {
+  sid: string; state: string; group?: string; connId: string; t: (key: string) => string
+}) {
+  const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  const [displayState, setDisplayState] = React.useState(state)
+
+  React.useEffect(() => { setDisplayState(state) }, [state])
+
+  const handleChange = async (newState: string) => {
+    setAnchorEl(null)
+    if (newState === displayState) return
+    setDisplayState(newState)
+    setSaving(true)
+    try {
+      await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(sid)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: newState, group: group || undefined }),
+        }
+      )
+    } catch {
+      setDisplayState(state) // revert on error
+    }
+    setSaving(false)
+  }
+
+  const meta = HA_STATE_META[displayState] || HA_STATE_META.started
+
+  return (
+    <Box>
+      <Chip
+        size="small"
+        label={displayState}
+        color={meta.chipColor as any}
+        onClick={(e) => setAnchorEl(e.currentTarget)}
+        deleteIcon={<i className="ri-arrow-down-s-line" style={{ fontSize: 12 }} />}
+        onDelete={(e: any) => setAnchorEl(e.currentTarget.closest('.MuiChip-root'))}
+        sx={{ height: 20, fontSize: 11, cursor: 'pointer', '& .MuiChip-deleteIcon': { fontSize: 12, ml: -0.25, color: 'inherit', opacity: 0.6 } }}
+      />
+      {saving && <CircularProgress size={10} sx={{ ml: 0.5 }} />}
+      <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)} slotProps={{ paper: { sx: { minWidth: 150 } } }}>
+        {HA_STATES.map(s => {
+          const m = HA_STATE_META[s]
+          return (
+            <MenuItem key={s} selected={s === displayState} onClick={() => handleChange(s)} sx={{ fontSize: 13, py: 0.75, gap: 1 }}>
+              <i className={m.icon} style={{ fontSize: 16, color: m.color }} />
+              <Typography variant="body2" sx={{ fontWeight: s === displayState ? 700 : 400, color: m.color, textTransform: 'capitalize' }}>
+                {s}
+              </Typography>
+            </MenuItem>
+          )
+        })}
+      </Menu>
+    </Box>
+  )
+}
 
 export default function ClusterTabs(props: any) {
   const t = useTranslations()
@@ -334,8 +404,62 @@ export default function ClusterTabs(props: any) {
     setExecutingAll(false)
   }, [clusterRecs, mutateRecs, toast, t])
 
-  // Fetch RRD data for all nodes when in Summary tab
+  // Auto-HA state
   const connId = selection?.type === 'cluster' ? selection.id : ''
+  const [autoHaSettings, setAutoHaSettings] = useState<any>(null)
+  const [autoHaLoading, setAutoHaLoading] = useState(false)
+  const [autoHaSaving, setAutoHaSaving] = useState(false)
+  const [autoHaSyncing, setAutoHaSyncing] = useState(false)
+  const [autoHaSyncResult, setAutoHaSyncResult] = useState<any>(null)
+
+  const loadAutoHaSettings = useCallback(async () => {
+    if (!connId) return
+    setAutoHaLoading(true)
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`)
+      const json = await res.json()
+      setAutoHaSettings(json.data)
+    } catch { /* ignore */ }
+    setAutoHaLoading(false)
+  }, [connId])
+
+  const saveAutoHaSettings = useCallback(async (data: any) => {
+    if (!connId) return
+    setAutoHaSaving(true)
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const json = await res.json()
+      setAutoHaSettings(json.data)
+    } catch { /* ignore */ }
+    setAutoHaSaving(false)
+  }, [connId])
+
+  const syncAutoHa = useCallback(async () => {
+    if (!connId) return
+    setAutoHaSyncing(true)
+    setAutoHaSyncResult(null)
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha/sync`, { method: 'POST' })
+      const json = await res.json()
+      setAutoHaSyncResult(json.data || json.error)
+    } catch (e: any) {
+      setAutoHaSyncResult({ error: e?.message })
+    }
+    setAutoHaSyncing(false)
+  }, [connId])
+
+  // Load Auto-HA settings when HA tab is activated
+  useEffect(() => {
+    if (clusterTab === 3 && connId && !autoHaSettings && !autoHaLoading) {
+      loadAutoHaSettings()
+    }
+  }, [clusterTab, connId])
+
+  // Fetch RRD data for all nodes when in Summary tab
   const [clusterNodeRrd, setClusterNodeRrd] = useState<Record<string, any[]>>({})
   const [clusterNodeRrdLoading, setClusterNodeRrdLoading] = useState(false)
   const [clusterNodeRrdTf, setClusterNodeRrdTf] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('hour')
@@ -1551,20 +1675,109 @@ export default function ClusterTabs(props: any) {
                       </Box>
                     ) : (
                       <Stack spacing={3}>
-                        {/* Badge version PVE */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip 
-                            size="small" 
-                            label={`Proxmox VE ${clusterPveMajorVersion}.x`}
-                            color={clusterPveMajorVersion >= 9 ? 'success' : 'default'}
-                            sx={{ height: 22 }}
-                          />
-                          {clusterPveMajorVersion >= 9 && (
-                            <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                              {t('drs.affinityRules')}
-                            </Typography>
-                          )}
-                        </Box>
+                        {/* Auto-HA */}
+                        {autoHaSettings && (
+                          <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: autoHaSettings.enabled ? 2 : 0 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                  <i className="ri-shield-star-line" style={{ fontSize: 20, opacity: 0.7 }} />
+                                  <Typography variant="subtitle2" fontWeight={700}>Auto-HA</Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.5 }}>
+                                    {autoHaSettings.enabled ? t('cluster.autoHaEnabled') : t('cluster.autoHaDisabled')}
+                                  </Typography>
+                                </Box>
+                                <Switch
+                                  checked={autoHaSettings.enabled}
+                                  onChange={(e) => saveAutoHaSettings({ ...autoHaSettings, enabled: e.target.checked })}
+                                  disabled={autoHaSaving}
+                                />
+                              </Box>
+
+                              {autoHaSettings.enabled && (
+                                <Stack spacing={2}>
+                                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <FormControl size="small" sx={{ flex: 1 }}>
+                                      <InputLabel>{t('cluster.autoHaDefaultState')}</InputLabel>
+                                      <Select
+                                        value={autoHaSettings.state || 'started'}
+                                        label={t('cluster.autoHaDefaultState')}
+                                        onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, state: e.target.value }))}
+                                      >
+                                        <MenuItem value="started">Started</MenuItem>
+                                        <MenuItem value="stopped">Stopped</MenuItem>
+                                        <MenuItem value="enabled">Enabled</MenuItem>
+                                        <MenuItem value="disabled">Disabled</MenuItem>
+                                      </Select>
+                                    </FormControl>
+
+                                    {clusterPveMajorVersion < 9 && clusterHaGroups.length > 0 && (
+                                      <FormControl size="small" sx={{ flex: 1 }}>
+                                        <InputLabel>{t('common.group')}</InputLabel>
+                                        <Select
+                                          value={autoHaSettings.group || ''}
+                                          label={t('common.group')}
+                                          onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, group: e.target.value }))}
+                                        >
+                                          <MenuItem value=""><em>{t('common.none')}</em></MenuItem>
+                                          {clusterHaGroups.map((g: any) => (
+                                            <MenuItem key={g.group} value={g.group}>{g.group}</MenuItem>
+                                          ))}
+                                        </Select>
+                                      </FormControl>
+                                    )}
+
+                                    <TextField
+                                      size="small"
+                                      type="number"
+                                      label="Max Restart"
+                                      value={autoHaSettings.max_restart ?? 1}
+                                      onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, max_restart: parseInt(e.target.value) || 0 }))}
+                                      inputProps={{ min: 0, max: 10 }}
+                                      sx={{ flex: 1 }}
+                                    />
+                                    <TextField
+                                      size="small"
+                                      type="number"
+                                      label="Max Relocate"
+                                      value={autoHaSettings.max_relocate ?? 1}
+                                      onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, max_relocate: parseInt(e.target.value) || 0 }))}
+                                      inputProps={{ min: 0, max: 10 }}
+                                      sx={{ flex: 1 }}
+                                    />
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() => saveAutoHaSettings(autoHaSettings)}
+                                      disabled={autoHaSaving}
+                                      startIcon={autoHaSaving ? <CircularProgress size={14} /> : <i className="ri-save-line" />}
+                                    >
+                                      {t('common.save')}
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      onClick={syncAutoHa}
+                                      disabled={autoHaSyncing}
+                                      startIcon={autoHaSyncing ? <CircularProgress size={14} /> : <i className="ri-refresh-line" />}
+                                    >
+                                      {t('cluster.autoHaSyncNow')}
+                                    </Button>
+                                  </Box>
+                                  {autoHaSyncResult && !autoHaSyncResult.error && (
+                                    <Alert severity="success" sx={{ py: 0.5 }}>
+                                      {t('cluster.autoHaSyncSuccess', { added: autoHaSyncResult.added, skipped: autoHaSyncResult.skipped })}
+                                      {autoHaSyncResult.errors?.length > 0 && ` (${autoHaSyncResult.errors.length} errors)`}
+                                    </Alert>
+                                  )}
+                                  {autoHaSyncResult?.error && (
+                                    <Alert severity="error" sx={{ py: 0.5 }}>{autoHaSyncResult.error}</Alert>
+                                  )}
+                                </Stack>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
 
                         {/* Section Ressources HA */}
                         <Box>
@@ -1634,21 +1847,42 @@ export default function ClusterTabs(props: any) {
                                     '&:hover': { bgcolor: 'action.hover' }
                                   }}
                                 >
-                                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {(() => {
-                                      const vmid = String(res.sid).split(':')[1]
-                                      const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
-                                      return vm?.name || res.sid
-                                    })()}
-                                  </Typography>
-                                  <Box>
-                                    <Chip
-                                      size="small"
-                                      label={res.state || 'started'} 
-                                      color={res.state === 'started' || res.state === 'enabled' ? 'success' : res.state === 'ignored' ? 'warning' : 'default'}
-                                      sx={{ height: 20, fontSize: 11 }} 
-                                    />
-                                  </Box>
+                                  {(() => {
+                                    const sidParts = String(res.sid).split(':')
+                                    const vmType = sidParts[0] === 'ct' ? 'lxc' : 'qemu'
+                                    const vmid = sidParts[1]
+                                    const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
+                                    const vmStatus = vm?.status || 'unknown'
+                                    const iconClass = vm?.template ? 'ri-file-copy-fill' : vmType === 'lxc' ? 'ri-instance-fill' : 'ri-computer-fill'
+                                    const dotColor = vm?.template ? 'transparent' : vmStatus === 'running' ? '#4caf50' : vmStatus === 'paused' ? '#ed6c02' : '#f44336'
+
+                                    return (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden' }}>
+                                        <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                                          <i className={iconClass} style={{ fontSize: 16, opacity: 0.7 }} />
+                                          {!vm?.template && (
+                                            <Box sx={{
+                                              position: 'absolute', bottom: -1, right: -2,
+                                              width: 7, height: 7, borderRadius: '50%',
+                                              bgcolor: dotColor,
+                                              border: '1.5px solid', borderColor: 'background.paper',
+                                              boxShadow: vmStatus === 'running' ? `0 0 4px ${dotColor}` : 'none',
+                                            }} />
+                                          )}
+                                        </Box>
+                                        <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {vm?.name || res.sid}
+                                        </Typography>
+                                      </Box>
+                                    )
+                                  })()}
+                                  <HaResourceStateCell
+                                    sid={res.sid}
+                                    state={res.state || 'started'}
+                                    group={res.group}
+                                    connId={connId}
+                                    t={t}
+                                  />
                                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
                                     {res.node || '-'}
                                   </Typography>

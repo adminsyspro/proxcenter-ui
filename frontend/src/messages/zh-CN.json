@@ -4984,6 +4984,11 @@
   "cluster": {
     "nodesCount": "{count} 个节点",
     "usageOf": "{used} / {total}",
+    "autoHaEnabled": "新虚拟机将自动配置高可用性。",
+    "autoHaDisabled": "虚拟机必须手动添加到高可用性。",
+    "autoHaDefaultState": "默认状态",
+    "autoHaSyncNow": "立即同步",
+    "autoHaSyncSuccess": "已添加 {added} 个，{skipped} 个已配置",
     "haResources": "资源",
     "state": "状态",
     "nodeCol": "节点",

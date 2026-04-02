@@ -10,13 +10,14 @@
 import { prisma } from "@/lib/db/prisma"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { getDb } from "@/lib/db/sqlite"
 
 // ---------- Types ----------
 
 export type InventoryEvent =
   | { event: 'vm:update'; connId: string; vmid: string | number; node: string; type: string; status: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; name?: string }
   | { event: 'node:update'; connId: string; node: string; status: string; cpu?: number; mem?: number; maxmem?: number }
-  | { event: 'vm:added'; connId: string; vmid: string | number; node: string; type: string; status: string; name?: string; cpu?: number; mem?: number; maxmem?: number }
+  | { event: 'vm:added'; connId: string; vmid: string | number; node: string; type: string; status: string; name?: string; cpu?: number; mem?: number; maxmem?: number; template?: number }
   | { event: 'vm:removed'; connId: string; vmid: string | number; node: string; type: string }
 
 export type Subscriber = (events: InventoryEvent[]) => void
@@ -36,6 +37,7 @@ type ResourceSnapshot = {
   node?: string
   type?: string
   vmid?: string | number
+  template?: number
 }
 
 type ConnectionPoller = {
@@ -102,6 +104,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
           node: r.node,
           type: r.type,
           vmid: r.vmid,
+          template: r.template,
         }
 
         const prev = poller.prevState.get(id)
@@ -119,6 +122,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
               cpu: r.cpu,
               mem: r.mem,
               maxmem: r.maxmem,
+              template: r.template,
             })
           }
         } else if (hasChanged(prev, curr)) {
@@ -230,9 +234,67 @@ async function pollAll() {
           // Subscriber error — will be cleaned up on unsubscribe
         }
       }
+
+      // Auto-HA: enable HA on newly added VMs if Auto-HA is enabled
+      handleAutoHaEvents(allEvents)
     }
   } catch (e: any) {
     console.error('[inventory-poller] Master poll error:', e?.message)
+  }
+}
+
+// ---------- Auto-HA Handler ----------
+
+async function handleAutoHaEvents(events: InventoryEvent[]) {
+  const addedVms = events.filter(
+    (e): e is Extract<InventoryEvent, { event: 'vm:added' }> =>
+      e.event === 'vm:added' && (e as any).template !== 1
+  )
+
+  if (addedVms.length === 0) return
+
+  // Group by connId
+  const byConn = new Map<string, typeof addedVms>()
+  for (const e of addedVms) {
+    const list = byConn.get(e.connId) || []
+    list.push(e)
+    byConn.set(e.connId, list)
+  }
+
+  for (const [connId, vms] of byConn) {
+    try {
+      const db = getDb()
+      const row = db.prepare("SELECT value FROM settings WHERE key = ? AND tenant_id = ?").get(`auto_ha:${connId}`, "default") as any
+      const settings = row?.value ? JSON.parse(row.value) : null
+      if (!settings?.enabled) continue
+
+      const conn = await getConnectionById(connId)
+
+      for (const vm of vms) {
+        const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`
+        try {
+          const params = new URLSearchParams()
+          params.append("sid", sid)
+          params.append("state", settings.state || "started")
+          if (settings.group) params.append("group", settings.group)
+          if (settings.max_restart !== undefined) params.append("max_restart", String(settings.max_restart))
+          if (settings.max_relocate !== undefined) params.append("max_relocate", String(settings.max_relocate))
+          if (settings.comment) params.append("comment", settings.comment || "Auto-HA")
+
+          await pveFetch<any>(conn, "/cluster/ha/resources", {
+            method: "POST",
+            body: params.toString(),
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          })
+
+          console.log(`[auto-ha] Enabled HA on ${sid} (${vm.name || 'unnamed'}) in ${connId}`)
+        } catch (e: any) {
+          console.error(`[auto-ha] Failed to enable HA on ${sid}:`, e?.message)
+        }
+      }
+    } catch (e: any) {
+      console.error(`[auto-ha] Error processing connId ${connId}:`, e?.message)
+    }
   }
 }
 

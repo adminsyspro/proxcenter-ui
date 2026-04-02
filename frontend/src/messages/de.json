@@ -4986,6 +4986,11 @@
   "cluster": {
     "nodesCount": "{count} Nodes",
     "usageOf": "{used} of {total}",
+    "autoHaEnabled": "Neue VMs erhalten automatisch eine HA-Konfiguration.",
+    "autoHaDisabled": "VMs muessen manuell zur HA hinzugefuegt werden.",
+    "autoHaDefaultState": "Standardstatus",
+    "autoHaSyncNow": "Jetzt synchronisieren",
+    "autoHaSyncSuccess": "{added} hinzugefuegt, {skipped} bereits konfiguriert",
     "haResources": "Ressourcen",
     "state": "Zustand",
     "nodeCol": "Node",

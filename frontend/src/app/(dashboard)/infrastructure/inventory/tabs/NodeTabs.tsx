@@ -305,7 +305,7 @@ export default function NodeTabs(props: any) {
     <>
           {/* Onglets pour Node: Summary / Notes / Shell / VMs / Disks / System / Ceph (si cluster) / Backups / Cluster (si standalone) / Replication / Subscription */}
           {selection?.type === 'node' && data.vmsData ? (
-            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Tabs
                 value={nodeTab}
                 onChange={(_e, v) => setNodeTab(v)}
@@ -521,7 +521,7 @@ export default function NodeTabs(props: any) {
                 />
               </Tabs>
 
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
                 {/* Onglet Summary - Graphiques RRD */}
                 {nodeTab === 0 && canShowRrd && (
                   <Box sx={{ p: 2 }}>
@@ -568,8 +568,8 @@ export default function NodeTabs(props: any) {
                             <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 <linearGradient id="nGradCpu" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                  <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                  <stop offset="0%" stopColor="#2196f3" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#2196f3" stopOpacity={0} />
                                 </linearGradient>
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
@@ -584,10 +584,10 @@ export default function NodeTabs(props: any) {
                                       <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                     </Box>
                                     <Box sx={{ px: 1.5, py: 0.75 }}>
-                                      {payload.filter(e => e.value != null).map(entry => { const v = Number(entry.value); const isIo = String(entry.dataKey) === 'iowait'; const c = isIo ? '#f59e0b' : v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                      {payload.filter(e => e.value != null && String(e.dataKey) !== 'iowait').map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: isIo ? '#f59e0b' : entry.color, flexShrink: 0 }} />
-                                          <Typography variant="caption" sx={{ flex: 1 }}>{isIo ? 'IO Wait' : 'CPU'}</Typography>
+                                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                          <Typography variant="caption" sx={{ flex: 1 }}>CPU</Typography>
                                           <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v.toFixed(1)}%</Typography>
                                         </Box>
                                       )})}
@@ -595,8 +595,7 @@ export default function NodeTabs(props: any) {
                                   </Box>
                                 )
                               }} />
-                              <Area type="monotone" dataKey="cpuPct" stroke={primaryColor} fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
-                              <Area type="monotone" dataKey="iowait" stroke="#f59e0b" fill="none" strokeWidth={1.5} strokeDasharray="4 2" isAnimationActive={false} name="IO Wait" connectNulls />
+                              <Area type="monotone" dataKey="cpuPct" stroke="#2196f3" fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
                             </AreaChart>
                           </ResponsiveContainer>
                         </ExpandableChart>
@@ -607,8 +606,8 @@ export default function NodeTabs(props: any) {
                             <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 <linearGradient id="nGradRam" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                  <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                                 </linearGradient>
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
@@ -634,7 +633,7 @@ export default function NodeTabs(props: any) {
                                   </Box>
                                 )
                               }} />
-                              <Area type="monotone" dataKey="ramPct" stroke={primaryColor} fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
+                              <Area type="monotone" dataKey="ramPct" stroke="#10b981" fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
                             </AreaChart>
                           </ResponsiveContainer>
                         </ExpandableChart>
@@ -645,12 +644,12 @@ export default function NodeTabs(props: any) {
                             <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 <linearGradient id="nGradNetIn" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                  <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#06b6d4" stopOpacity={0} />
                                 </linearGradient>
                                 <linearGradient id="nGradNetOut" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={primaryColorLight} stopOpacity={0.35} />
-                                  <stop offset="100%" stopColor={primaryColorLight} stopOpacity={0} />
+                                  <stop offset="0%" stopColor="#67e8f9" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#67e8f9" stopOpacity={0} />
                                 </linearGradient>
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
@@ -676,8 +675,8 @@ export default function NodeTabs(props: any) {
                                   </Box>
                                 )
                               }} />
-                              <Area type="monotone" dataKey="netInBps" stroke={primaryColor} fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
-                              <Area type="monotone" dataKey="netOutBps" stroke={primaryColorLight} fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
+                              <Area type="monotone" dataKey="netInBps" stroke="#06b6d4" fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
+                              <Area type="monotone" dataKey="netOutBps" stroke="#67e8f9" fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
                             </AreaChart>
                           </ResponsiveContainer>
                         </ExpandableChart>
@@ -689,8 +688,8 @@ export default function NodeTabs(props: any) {
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="nGradLoad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                    <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                    <stop offset="0%" stopColor="#f97316" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
@@ -699,9 +698,9 @@ export default function NodeTabs(props: any) {
                                   if (!active || !payload?.length) return null
                                   return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
-                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                        <i className="ri-bar-chart-line" style={{ fontSize: 13, color: '#f59e0b' }} />
-                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b' }}>Server Load</Typography>
+                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f97316', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                        <i className="ri-bar-chart-line" style={{ fontSize: 13, color: '#f97316' }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#f97316' }}>Server Load</Typography>
                                         <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
@@ -716,18 +715,18 @@ export default function NodeTabs(props: any) {
                                     </Box>
                                   )
                                 }} />
-                                <Area type="monotone" dataKey="loadAvg" stroke={primaryColor} fill="url(#nGradLoad)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                <Area type="monotone" dataKey="loadAvg" stroke="#f97316" fill="url(#nGradLoad)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               </AreaChart>
                             ) : (
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="nGradDiskRead" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={primaryColor} stopOpacity={0.35} />
-                                    <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
                                   </linearGradient>
                                   <linearGradient id="nGradDiskWrite" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={primaryColorLight} stopOpacity={0.35} />
-                                    <stop offset="100%" stopColor={primaryColorLight} stopOpacity={0} />
+                                    <stop offset="0%" stopColor="#fca5a5" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#fca5a5" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
@@ -753,8 +752,8 @@ export default function NodeTabs(props: any) {
                                     </Box>
                                   )
                                 }} />
-                                <Area type="monotone" dataKey="diskReadBps" stroke={primaryColor} fill="url(#nGradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
-                                <Area type="monotone" dataKey="diskWriteBps" stroke={primaryColorLight} fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
+                                <Area type="monotone" dataKey="diskReadBps" stroke="#ef4444" fill="url(#nGradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
+                                <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
                               </AreaChart>
                             )}
                           </ResponsiveContainer>
@@ -800,6 +799,46 @@ export default function NodeTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="memAvailable" stroke="#10b981" fill="url(#nGradMemAvail)" strokeWidth={1.5} isAnimationActive={false} name="Available" connectNulls />
                                 <Area type="monotone" dataKey="arcSize" stroke="#8b5cf6" fill="url(#nGradArc)" strokeWidth={1.5} isAnimationActive={false} name="ZFS ARC" connectNulls />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </ExpandableChart>
+                        )}
+
+                        {/* IO Wait (nodes only) */}
+                        {selection?.type === 'node' && series.some(p => p.iowait != null) && (
+                          <ExpandableChart title="IO Wait" height={185}>
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                                <defs>
+                                  <linearGradient id="nGradIoWait" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <YAxis domain={[0, 'auto']} tickFormatter={v => { const n = Number(v); return n < 1 ? `${n.toFixed(2)}%` : `${n.toFixed(0)}%` }} tick={{ fontSize: 9 }} width={40} />
+                                <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
+                                  if (!active || !payload?.length) return null
+                                  return (
+                                    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
+                                      <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                        <i className="ri-time-line" style={{ fontSize: 13, color: '#f59e0b' }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b' }}>IO Wait</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                      </Box>
+                                      <Box sx={{ px: 1.5, py: 0.75 }}>
+                                        {payload.filter(e => e.value != null).map(entry => { const v = Number(entry.value); const c = v >= 20 ? '#f44336' : v >= 10 ? '#ff9800' : '#4caf50'; return (
+                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f59e0b', flexShrink: 0 }} />
+                                            <Typography variant="caption" sx={{ flex: 1 }}>IO Wait</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace', color: c }}>{v < 1 ? `${v.toFixed(3)}%` : `${v.toFixed(2)}%`}</Typography>
+                                          </Box>
+                                        )})}
+                                      </Box>
+                                    </Box>
+                                  )
+                                }} />
+                                <Area type="monotone" dataKey="iowait" stroke="#f59e0b" fill="url(#nGradIoWait)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               </AreaChart>
                             </ResponsiveContainer>
                           </ExpandableChart>

@@ -557,35 +557,22 @@ return `${mins}m`
                   <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.loadAvg}</Typography>
                 </Box>
               ) : null}
-              <UsageBar themeColor={primaryColor} label="RAM usage" used={memUsed} capacity={memCap} mode="bytes" />
+              <UsageBar themeColor={primaryColor} label={hostInfo.ksmSharing != null ? `RAM usage (KSM: ${formatBytes(hostInfo.ksmSharing)})` : "RAM usage"} used={memUsed} capacity={memCap} mode="bytes" />
               {swapCap > 0 ? (
                 <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
               ) : null}
 
-              {/* IO delay + KSM */}
-              {(hostInfo.ioDelay != null || hostInfo.ksmSharing != null) && (
+              {/* IO delay */}
+              {hostInfo.ioDelay != null && (
                 <>
                   <Divider sx={{ my: 1.25 }} />
-                  <Stack spacing={1}>
-                    {hostInfo.ioDelay != null && (
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                        <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ioDelay')}</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
-                        </Box>
-                      </Box>
-                    )}
-                    {hostInfo.ksmSharing != null && (
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                        <i className="ri-share-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ksmSharing')}</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{formatBytes(hostInfo.ksmSharing)}</Typography>
-                        </Box>
-                      </Box>
-                    )}
-                  </Stack>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.ioDelay')}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.ioDelay.toFixed(2)}%</Typography>
+                    </Box>
+                  </Box>
                 </>
               )}
             </Box>
@@ -641,20 +628,6 @@ return `${mins}m`
                   </Box>
                 ) : null}
               </Stack>
-              <Box
-                component="img"
-                src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
-                alt=""
-                sx={{
-                  position: 'absolute',
-                  bottom: 8,
-                  right: 8,
-                  width: 56,
-                  height: 56,
-                  opacity: 0.13,
-                  pointerEvents: 'none',
-                }}
-              />
             </Box>
 
             {/* Colonne 4 - Mises à jour disponibles */}

@@ -27,6 +27,7 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -1196,6 +1197,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
   // Entity tags (cluster/node) - stored in ProxCenter DB
   const [entityTags, setEntityTags] = useState<string[]>([])
+  const [headerCollapsed, setHeaderCollapsed] = useState(false)
 
   useEffect(() => {
     setEntityTags([])
@@ -1239,6 +1241,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     setBackupsPreloaded(false)
     // Note: backupsLoadedForIdRef est géré dans l'effet de chargement des backups
     setGuestInfo(null)
+    setHeaderCollapsed(false)
 
     // Réinitialiser les états HA
     resetHA()
@@ -2641,6 +2644,8 @@ return vm?.isCluster ?? false
 
       {selection && data ? (
         <Stack spacing={2} sx={{ width: '100%', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+          {/* Collapsible header zone for VMs and Nodes */}
+          <Collapse in={!((selection?.type === 'vm' || selection?.type === 'node') && headerCollapsed)} timeout={200} sx={{ flexShrink: 0 }}>
           {/* Header title + tags (VM only) + ACTIONS TOP RIGHT */}
           {selection?.type === 'vm' ? (
 
@@ -3100,6 +3105,28 @@ return vm?.isCluster ?? false
           />
           </Box>
           </>)}
+
+          </Collapse>
+
+          {/* Collapse toggle for VM/Node header */}
+          {(selection?.type === 'vm' || selection?.type === 'node') && (
+            <Box
+              onClick={() => setHeaderCollapsed(prev => !prev)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+                py: 0.25,
+                opacity: 0.4,
+                transition: 'opacity 0.15s',
+                '&:hover': { opacity: 0.8 },
+              }}
+            >
+              <i className={headerCollapsed ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line'} style={{ fontSize: 16 }} />
+            </Box>
+          )}
 
           {/* VM Detail Tabs */}
           {selection?.type === 'vm' && (

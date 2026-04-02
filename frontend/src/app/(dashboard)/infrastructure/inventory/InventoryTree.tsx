@@ -61,15 +61,15 @@ import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 /* Status Icon Component                                              */
 /* ------------------------------------------------------------------ */
 
-function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, template, vmType }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; isPendingAction?: boolean; maintenance?: string; template?: boolean; vmType?: string }) {
+export function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, template, vmType, size: propSize }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; isPendingAction?: boolean; maintenance?: string; template?: boolean; vmType?: string; size?: number }) {
   if (type === 'node') {
     return null // Use NodeIcon instead for nodes
   }
 
   // VM icon with status dot badge
   const iconClass = getVmIcon(vmType || 'qemu', template)
-  const size = 16
-  const dotSize = 8
+  const size = propSize || 16
+  const dotSize = Math.round(size * 0.5)
 
   // Pending action: spinner instead of dot
   if (isPendingAction) {
@@ -123,7 +123,7 @@ function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, t
   )
 }
 
-function NodeIcon({ status, maintenance, size = 16 }: { status?: string; maintenance?: string; size?: number }) {
+export function NodeIcon({ status, maintenance, size = 16 }: { status?: string; maintenance?: string; size?: number }) {
   const theme = useTheme()
   const dotSize = Math.round(size * 0.5)
   const logoSrc = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
@@ -161,7 +161,7 @@ function NodeIcon({ status, maintenance, size = 16 }: { status?: string; mainten
   )
 }
 
-function ClusterIcon({ nodes, size = 14 }: { nodes: { status?: string }[]; size?: number }) {
+export function ClusterIcon({ nodes, size = 14 }: { nodes: { status?: string }[]; size?: number }) {
   const dotSize = Math.round(size * 0.5)
   const allOnline = nodes.length > 0 && nodes.every(n => n.status === 'online')
   const dotColor = allOnline ? '#4caf50' : '#ff9800'

@@ -105,7 +105,7 @@ import StorageDashboard from './StorageDashboard'
 import NetworkDashboard from './NetworkDashboard'
 import BackupDashboard from './BackupDashboard'
 import MigrationDashboard from './MigrationDashboard'
-import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
+import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
 import NetworkDetailPanel from './components/NetworkDetailPanel'
 import TagManager from './components/TagManager'
 import EntityTagManager from './components/EntityTagManager'
@@ -2672,46 +2672,15 @@ return vm?.isCluster ?? false
                     </IconButton>
                   )}
 
-                  {data.isTemplate ? (
-                    <Chip label="TEMPLATE" size="small" variant="outlined" color="warning" sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700 }} />
-                  ) : vmState === 'running' ? (
-                    <i className="ri-play-fill" style={{ fontSize: 18, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))', flexShrink: 0 }} />
-                  ) : vmState === 'stopped' ? (
-                    <i className="ri-stop-fill" style={{ fontSize: 18, color: '#f44336', flexShrink: 0 }} />
-                  ) : vmState === 'paused' ? (
-                    <i className="ri-pause-fill" style={{ fontSize: 18, color: '#ff9800', flexShrink: 0 }} />
-                  ) : (
-                    <StatusChip status={data.status} />
-                  )}
-                  {/* Icône VM/LXC/Template — OS icon si disponible */}
-                  {(() => {
-                    const osIcon = !data.isTemplate && guestInfo?.osInfo
-                      ? getOsSvgIcon(guestInfo.osInfo.name || '', guestInfo.osInfo.type)
-                      : null
-                    // Fallback basé sur ostype de la config PVE
-                    const configOsIcon = !osIcon && !data.isTemplate && data.optionsInfo?.ostype
-                      ? (data.optionsInfo.ostype.startsWith('w') ? '/images/os/windows.svg'
-                        : data.optionsInfo.ostype.startsWith('l') ? '/images/os/linux.svg'
-                        : null)
-                      : null
-                    const finalIcon = osIcon || configOsIcon
-                    return (
-                      <Box sx={{
-                        width: 28, height: 28,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
-                      }}>
-                        {finalIcon ? (
-                          <img src={finalIcon} alt="" width={18} height={18} style={{ opacity: 0.85, filter: theme.palette.mode === 'dark' ? 'brightness(0) invert(1) opacity(0.85)' : undefined }} />
-                        ) : (
-                          <i
-                            className={data.isTemplate ? 'ri-file-copy-fill' : isLxc ? 'ri-instance-fill' : 'ri-computer-fill'}
-                            style={{ fontSize: 16, color: data.isTemplate ? theme.palette.warning.main : iconColor }}
-                          />
-                        )}
-                      </Box>
-                    )
-                  })()}
+                  <StatusIcon
+                    status={vmState}
+                    type="vm"
+                    template={data.isTemplate}
+                    vmType={data.vmType}
+                    isMigrating={migratingVmIds?.has(`${connId}:${vmid}`)}
+                    isPendingAction={pendingActionVmIds?.has(`${connId}:${vmid}`)}
+                    size={22}
+                  />
 
                   {/* Nom + meta inline */}
                   <Typography variant="subtitle1" fontWeight={900} noWrap sx={{ minWidth: 0, flexShrink: 1 }}>
@@ -2842,25 +2811,26 @@ return vm?.isCluster ?? false
                 </IconButton>
               )}
               
-              <Chip
-                size="small"
-                label={data.kindLabel}
-                variant="filled"
-                icon={
-                  data.kindLabel === 'HOST' ? (
-                    <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
-                  ) : data.kindLabel === 'CLUSTER' ? (
-                    <i className="ri-server-fill" style={{ fontSize: 14, marginLeft: 8 }} />
-                  ) : data.kindLabel === 'VMWARE ESXI' || data.kindLabel === 'VMWARE VM' ? (
-                    <img src="/images/esxi-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
-                  ) : data.kindLabel === 'XCP-NG' ? (
-                    <img src="/images/xcpng-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
-                  ) : undefined
-                }
-              />
-              <StatusChip status={data.status} />
+              {data.kindLabel === 'HOST' ? (
+                <NodeIcon status={data.status === 'crit' ? 'offline' : 'online'} maintenance={data.hostInfo?.maintenance} size={22} />
+              ) : data.kindLabel === 'CLUSTER' ? (
+                <ClusterIcon nodes={data.nodesData?.map((n: any) => ({ status: n.status })) || []} size={22} />
+              ) : (
+                <Chip
+                  size="small"
+                  label={data.kindLabel}
+                  variant="filled"
+                  icon={
+                    data.kindLabel === 'VMWARE ESXI' || data.kindLabel === 'VMWARE VM' ? (
+                      <img src="/images/esxi-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
+                    ) : data.kindLabel === 'XCP-NG' ? (
+                      <img src="/images/xcpng-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
+                    ) : undefined
+                  }
+                />
+              )}
 
-              <Typography variant="h6" fontWeight={900}>
+              <Typography variant="subtitle1" fontWeight={900}>
                 {data.title}
               </Typography>
 

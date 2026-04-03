@@ -166,7 +166,7 @@ export function parseMarkdown(md: string): string {
   // Collect protected blocks (HTML tags, code blocks) so inline markdown
   // transforms (bold, italic…) cannot touch URLs or code content.
   const shields: string[] = []
-  const shield = (s: string) => { shields.push(s); return `\x00${shields.length - 1}\x00` }
+  const shield = (s: string) => { shields.push(s); return `\uFFFF${shields.length - 1}\uFFFF` }
 
   // 1. Protect fenced code blocks
   let html = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
@@ -226,7 +226,7 @@ export function parseMarkdown(md: string): string {
   html = html.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>')
 
   // 5. Restore all shielded blocks
-  html = html.replace(/\x00(\d+)\x00/g, (_, i) => shields[Number(i)])
+  html = html.replace(/\uFFFF(\d+)\uFFFF/g, (_, i) => shields[Number(i)])
 
   if (!html.startsWith('<')) {
     html = '<p>' + html + '</p>'

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
 
@@ -61,6 +62,9 @@ function toTrendPoints(rrd: any[], timeframe: string) {
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   const params = await Promise.resolve(ctx.params)
   const id = (params as any)?.id
 

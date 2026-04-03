@@ -3,6 +3,7 @@
 import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 function formatUptime(seconds) {
   if (!seconds || seconds <= 0) return '—'
@@ -31,17 +32,17 @@ function UptimeNodesWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const nodes = data?.nodes || []
 
   if (nodes.length === 0) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid',
-          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5,
           p: 1.5,
           display: 'flex',
@@ -58,19 +59,18 @@ function UptimeNodesWidget({ data, loading }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
         height: '100%',
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5,
         p: 1.5,
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': {
-          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)',
         },
       }}
     >
@@ -86,7 +86,7 @@ function UptimeNodesWidget({ data, loading }) {
               justifyContent: 'space-between',
               py: 0.75,
               borderBottom: idx < sortedNodes.length - 1 ? '1px solid' : 'none',
-              borderColor: 'rgba(255,255,255,0.08)',
+              borderColor: c.surfaceSubtle,
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

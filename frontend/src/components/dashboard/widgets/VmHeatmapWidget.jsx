@@ -7,6 +7,7 @@ import {
   Box, Checkbox, IconButton, ListItemText, Menu, MenuItem,
   Tooltip as MuiTooltip, Typography, useTheme,
 } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
 function getHeatColor(pct) {
@@ -37,37 +38,40 @@ function formatBytes(bytes) {
 }
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
-function TileTooltip({ vm, mode }) {
+function TileTooltip({ vm, mode, isDark }) {
   const headerColor = mode === 'status' ? getStatusColor(vm.status) : getHeatColor(mode === 'cpu' ? vm.cpuPct : vm.ramPct)
+  const c = widgetColors(isDark)
+  const labelColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)'
+  const footerColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'
   return (
-    <div style={{ background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140, color: c.tooltipText }}>
       <div style={{ background: headerColor, color: '#fff', padding: '3px 8px', fontWeight: 700, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, textShadow: '0 0 2px rgba(0,0,0,0.4)' }}>
         <i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 11 }} />
         {vm.name || `VM ${vm.vmid}`}
       </div>
       <div style={{ padding: '5px 8px', display: 'flex', gap: 12 }}>
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9 }}>Status</div>
+          <div style={{ color: labelColor, fontSize: 9 }}>Status</div>
           <div style={{ fontWeight: 600, color: getStatusColor(vm.status), fontFamily: '"JetBrains Mono", monospace' }}>{vm.status}</div>
         </div>
         {vm.status === 'running' && (
           <>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9 }}>CPU</div>
-              <div style={{ fontWeight: mode === 'cpu' ? 700 : 400, fontFamily: '"JetBrains Mono", monospace', color: '#fff' }}>{vm.cpuPct}%</div>
+              <div style={{ color: labelColor, fontSize: 9 }}>CPU</div>
+              <div style={{ fontWeight: mode === 'cpu' ? 700 : 400, fontFamily: '"JetBrains Mono", monospace' }}>{vm.cpuPct}%</div>
             </div>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9 }}>RAM</div>
-              <div style={{ fontWeight: mode === 'ram' ? 700 : 400, fontFamily: '"JetBrains Mono", monospace', color: '#fff' }}>{vm.ramPct}%</div>
+              <div style={{ color: labelColor, fontSize: 9 }}>RAM</div>
+              <div style={{ fontWeight: mode === 'ram' ? 700 : 400, fontFamily: '"JetBrains Mono", monospace' }}>{vm.ramPct}%</div>
             </div>
           </>
         )}
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9 }}>Alloc</div>
-          <div style={{ fontFamily: '"JetBrains Mono", monospace', color: '#fff' }}>{formatBytes(vm.maxmem)}</div>
+          <div style={{ color: labelColor, fontSize: 9 }}>Alloc</div>
+          <div style={{ fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(vm.maxmem)}</div>
         </div>
       </div>
-      <div style={{ padding: '0 8px 4px', fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>
+      <div style={{ padding: '0 8px 4px', fontSize: 9, color: footerColor }}>
         #{vm.vmid} · {vm.type === 'lxc' ? 'LXC' : 'VM'} · {vm.node}
       </div>
     </div>
@@ -116,6 +120,7 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
   const theme = useTheme()
   const router = useRouter()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [mode, setMode] = useState('status')
   const [minThreshold, setMinThreshold] = useState(0)
 
@@ -198,23 +203,23 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
   }
 
   const darkCard = {
-    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
     borderRadius: 2.5, p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
-    '&:hover': { borderColor: 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+    '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
 
   if (!data || dashboardLoading) {
-    return <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: 11 }}>Loading...</Typography></Box>
+    return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: 11 }}>Loading...</Typography></Box>
   }
 
   if (guests.length === 0) {
-    return <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: 11 }}>{t('common.noData')}</Typography></Box>
+    return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: 11 }}>{t('common.noData')}</Typography></Box>
   }
 
   return (
-    <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', ...darkCard, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75, gap: 0.5, flexWrap: 'wrap' }}>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -230,7 +235,7 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
               {mode !== 'status' && (
                 <>
                   <Typography sx={{ fontSize: 10, opacity: 0.6 }}>
-                    Avg <span style={{ fontWeight: 700, color: '#fff', fontFamily: '"JetBrains Mono", monospace' }}>{stats.avg}%</span>
+                    Avg <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.avg}%</span>
                   </Typography>
                   {stats.hot > 0 && <Typography sx={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>{stats.hot} hot</Typography>}
                 </>
@@ -244,8 +249,8 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
           {MODES.map((v) => (
             <Box key={v} onClick={() => setMode(v)} sx={{
               px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: 10, fontWeight: mode === v ? 700 : 400,
-              color: mode === v ? '#fff' : 'rgba(255,255,255,0.5)', bgcolor: mode === v ? 'rgba(255,255,255,0.12)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+              color: mode === v ? '#fff' : c.textMuted, bgcolor: mode === v ? c.surfaceActive : 'transparent',
+              '&:hover': { bgcolor: c.surfaceSubtle },
             }}>{v === 'status' ? 'Status' : v.toUpperCase()}</Box>
           ))}
 
@@ -253,9 +258,9 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
           {mode !== 'status' && (
             <Box onClick={cycleThreshold} sx={{
               px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: 10, fontWeight: 600,
-              color: minThreshold > 0 ? '#fff' : 'rgba(255,255,255,0.5)',
-              bgcolor: minThreshold > 0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+              color: minThreshold > 0 ? '#fff' : c.textMuted,
+              bgcolor: minThreshold > 0 ? c.surfaceActive : c.borderLight,
+              '&:hover': { bgcolor: c.surfaceSubtle },
             }}>{minThreshold > 0 ? `>${minThreshold}%` : 'All'}</Box>
           )}
 
@@ -270,7 +275,7 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.4 }}>
               <Box sx={{ position: 'relative', width: 14, height: 14, flexShrink: 0 }}>
                 <img src='/images/proxmox-logo-dark.svg' alt="" width={12} height={12} style={{ opacity: 0.6 }} />
-                <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: '#4caf50', border: '1px solid #1e1e2d' }} />
+                <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: '#4caf50', border: `1px solid ${isDark ? '#1e1e2d' : '#fff'}` }} />
               </Box>
               <Typography sx={{ fontWeight: 600, fontSize: 10, opacity: 0.6 }}>{group.node}</Typography>
               <Typography sx={{ fontSize: 9, opacity: 0.35 }}>({group.vms.length})</Typography>
@@ -282,8 +287,8 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
                 const label = getTileLabel(vm)
                 const isRunning = vm.status === 'running'
                 return (
-                  <MuiTooltip key={vm.id} title={<TileTooltip vm={vm} mode={mode} />} arrow placement="top" enterDelay={80} leaveDelay={0}
-                    slotProps={{ tooltip: { sx: { bgcolor: 'transparent', p: 0, maxWidth: 'none' } }, arrow: { sx: { color: '#1e1e2d' } } }}
+                  <MuiTooltip key={vm.id} title={<TileTooltip vm={vm} mode={mode} isDark={isDark} />} arrow placement="top" enterDelay={80} leaveDelay={0}
+                    slotProps={{ tooltip: { sx: { bgcolor: 'transparent', p: 0, maxWidth: 'none' } }, arrow: { sx: { color: c.tooltipBg } } }}
                   >
                     <Box
                       onClick={() => handleClick(vm)}
@@ -306,7 +311,7 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
                         </Typography>
                       )}
                       {mode === 'status' && !isRunning && (
-                        <i className='ri-stop-fill' style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)' }} />
+                        <i className='ri-stop-fill' style={{ fontSize: 8, color: c.textSecondary }} />
                       )}
                     </Box>
                   </MuiTooltip>

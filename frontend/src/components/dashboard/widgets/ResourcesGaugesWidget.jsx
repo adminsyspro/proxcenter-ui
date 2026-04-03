@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 function CircularGauge({ value, color, trackColor, size = 72, strokeWidth = 6 }) {
   const [animatedValue, setAnimatedValue] = useState(0)
@@ -80,9 +81,10 @@ function ResourcesGaugesWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const resources = data?.resources || {}
 
-  const trackColor = 'rgba(255,255,255,0.08)'
+  const trackColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
   const gauges = [
     {
@@ -110,11 +112,10 @@ function ResourcesGaugesWidget({ data, loading }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5,
         p: 1.5,
         height: '100%',
@@ -150,7 +151,7 @@ function ResourcesGaugesWidget({ data, loading }) {
             </Typography>
             <Typography sx={{
               fontFamily: '"JetBrains Mono", monospace',
-              color: 'rgba(255,255,255,0.5)',
+              color: c.textMuted,
               fontSize: '0.65rem',
               lineHeight: 1,
               textAlign: 'center',
@@ -184,7 +185,7 @@ function ResourcesGaugesWidget({ data, loading }) {
             </Typography>
             <Typography sx={{
               fontFamily: '"JetBrains Mono", monospace',
-              color: 'rgba(255,255,255,0.7)',
+              color: c.textSecondary,
               fontSize: '0.7rem',
               fontWeight: 600,
               lineHeight: 1,

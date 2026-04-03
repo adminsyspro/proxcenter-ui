@@ -3,13 +3,13 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
-function HealthRing({ score, size = 100, strokeWidth = 8 }) {
+function HealthRing({ score, size = 100, strokeWidth = 8, trackColor = 'rgba(255,255,255,0.08)' }) {
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const [mounted, setMounted] = useState(false)
   const offset = mounted ? circumference - (score / 100) * circumference : circumference
-  const trackColor = 'rgba(255,255,255,0.08)'
 
   const color = score >= 80 ? '#4caf50' : score >= 50 ? '#ff9800' : '#f44336'
 
@@ -59,6 +59,7 @@ function ClusterHealthWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
 
   const summary = data?.summary || {}
   const resources = data?.resources || {}
@@ -97,12 +98,11 @@ function ClusterHealthWidget({ data, loading }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
         height: '100%',
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        borderColor: c.borderLight,
         borderRadius: 2.5,
         p: 1.5,
         display: 'flex',
@@ -112,13 +112,13 @@ function ClusterHealthWidget({ data, loading }) {
         gap: 1.5,
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': {
-          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          borderColor: c.surfaceActive,
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)',
         },
       }}
     >
       {/* Health ring */}
-      <HealthRing score={score} />
+      <HealthRing score={score} trackColor={c.surfaceSubtle} />
 
       {/* Stats grid */}
       <Box sx={{

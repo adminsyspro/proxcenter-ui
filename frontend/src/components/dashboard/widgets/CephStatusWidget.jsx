@@ -4,9 +4,11 @@ import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { widgetColors } from './themeColors'
 
 // ─── Animated Circular Gauge ─────────────────────────────────────────────────
-function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, sublabel }) {
+function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, sublabel, isDark = true }) {
+  const c = widgetColors(isDark)
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const [mounted, setMounted] = useState(false)
@@ -18,7 +20,7 @@ function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, subl
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
       <Box sx={{ position: 'relative', width: size, height: size }}>
         <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={strokeWidth} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={c.surfaceSubtle} strokeWidth={strokeWidth} />
           <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
             strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
@@ -42,12 +44,21 @@ function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, subl
 }
 
 // ─── Sparkline Tooltips ──────────────────────────────────────────────────────
-function ThroughputTooltip({ active, payload }) {
+function formatTime(payload) {
+  const t = payload?.[0]?.payload?.t
+  if (!t) return null
+  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return t
+}
+
+function ThroughputTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
+  const time = formatTime(payload)
+  const c = widgetColors(isDark)
   return (
-    <div style={{ background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-speed-line' style={{ fontSize: 10 }} /> Throughput
+        <i className='ri-speed-line' style={{ fontSize: 10 }} /> Throughput {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
         {payload.map(e => (
@@ -61,12 +72,14 @@ function ThroughputTooltip({ active, payload }) {
   )
 }
 
-function IopsTooltip({ active, payload }) {
+function IopsTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
+  const time = formatTime(payload)
+  const c = widgetColors(isDark)
   return (
-    <div style={{ background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#8b5cf6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-flashlight-line' style={{ fontSize: 10 }} /> IOPS
+        <i className='ri-flashlight-line' style={{ fontSize: 10 }} /> IOPS {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
         {payload.map(e => (
@@ -105,6 +118,7 @@ function formatBps(bps) {
 
 // ─── Ceph Cluster Card ───────────────────────────────────────────────────────
 function CephClusterCard({ cluster, isDark, perfData }) {
+  const c = widgetColors(isDark)
   const healthColor = cluster.health === 'HEALTH_OK' ? '#4caf50' : cluster.health === 'HEALTH_WARN' ? '#ff9800' : '#f44336'
   const osdPct = cluster.osdsTotal > 0 ? Math.round((cluster.osdsUp / cluster.osdsTotal) * 100) : 0
   const storagePct = cluster.usedPct || 0
@@ -113,13 +127,12 @@ function CephClusterCard({ cluster, isDark, perfData }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column',
         transition: 'border-color 0.2s, box-shadow 0.2s',
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+        '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
     >
       {/* Top content */}
@@ -131,7 +144,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
           <img src="/images/ceph-logo.svg" alt="Ceph" width={18} height={18} style={{ opacity: 0.8 }} />
           <Box sx={{
             position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%',
-            bgcolor: healthColor, border: '1.5px solid #1e1e2d',
+            bgcolor: healthColor, border: '1.5px solid', borderColor: c.dotBorder,
           }} />
         </Box>
         <Typography sx={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
@@ -148,8 +161,8 @@ function CephClusterCard({ cluster, isDark, perfData }) {
 
       {/* Gauges: OSD + Storage */}
       <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
-        <CircularGauge value={osdPct} label="OSDs" color={osdPct >= 100 ? '#4caf50' : osdPct >= 80 ? '#ff9800' : '#f44336'} sublabel={`${cluster.osdsUp}/${cluster.osdsTotal}`} />
-        <CircularGauge value={storagePct} label="Storage" color={getGaugeColor(storagePct)} sublabel={`${formatBytes(cluster.bytesUsed)} / ${formatBytes(cluster.bytesTotal)}`} />
+        <CircularGauge value={osdPct} label="OSDs" color={osdPct >= 100 ? '#4caf50' : osdPct >= 80 ? '#ff9800' : '#f44336'} sublabel={`${cluster.osdsUp}/${cluster.osdsTotal}`} isDark={isDark} />
+        <CircularGauge value={storagePct} label="Storage" color={getGaugeColor(storagePct)} sublabel={`${formatBytes(cluster.bytesUsed)} / ${formatBytes(cluster.bytesTotal)}`} isDark={isDark} />
       </Box>
 
       {/* OSD icons */}
@@ -184,9 +197,9 @@ function CephClusterCard({ cluster, isDark, perfData }) {
           {hasPerfData ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={perfData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<ThroughputTooltip />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                <Area type="monotone" dataKey="read" stroke="#4caf50" fill="#4caf50" fillOpacity={0.12} strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="write" stroke="#f97316" fill="transparent" strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <RTooltip content={<ThroughputTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type="monotone" dataKey="read" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="write" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -206,9 +219,9 @@ function CephClusterCard({ cluster, isDark, perfData }) {
           {hasPerfData ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={perfData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<IopsTooltip />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#8b5cf6', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                <Area type="monotone" dataKey="readIops" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.12} strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="writeIops" stroke="#ec4899" fill="transparent" strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <RTooltip content={<IopsTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#8b5cf6', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type="monotone" dataKey="readIops" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="writeIops" stroke="#ec4899" fill="#ec4899" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -332,11 +345,10 @@ function CephStatusWidget({ data, loading }) {
   if (clusters.length === 0) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5, p: 1.5,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.65,
         }}
@@ -352,7 +364,7 @@ function CephStatusWidget({ data, loading }) {
       height: '100%', overflow: 'auto',
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-      gap: 1, p: 0.5, alignContent: 'start',
+      gap: 1, p: 0.5,
     }}>
       {clusters.map((cluster, idx) => (
         <CephClusterCard

@@ -7,6 +7,7 @@ import {
   Box, Button, ButtonBase, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, IconButton, List, ListItemButton, ListItemText, Typography, useTheme
 } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
   if (!alert) return null
@@ -201,6 +202,7 @@ function KpiAlertsWidget({ data, loading }) {
   const router = useRouter()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const alertsSummary = data?.alertsSummary || {}
@@ -236,10 +238,9 @@ function KpiAlertsWidget({ data, loading }) {
         sx={{ height: '100%', width: '100%', display: 'block', borderRadius: 2.5, textAlign: 'left' }}
       >
         <Box
-          {...(!isDark && { 'data-dark': '' })}
           sx={{
-            bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-            border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+            bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+            border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
             borderRadius: 2.5, p: 1.5, height: '100%',
             display: 'flex', alignItems: 'center', gap: 1.5,
           }}

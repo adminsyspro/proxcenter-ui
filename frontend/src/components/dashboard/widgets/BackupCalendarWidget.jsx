@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, CircularProgress, Tooltip as MuiTooltip, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getCalendarColor(total, verified, unverified) {
@@ -23,34 +24,37 @@ function formatSize(bytes) {
 }
 
 // ─── Day Tooltip ─────────────────────────────────────────────────────────────
-function DayTooltip({ day }) {
+function DayTooltip({ day, isDark }) {
   if (!day.date) return null
   const dateObj = new Date(day.date + 'T00:00:00')
   const formatted = dateObj.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+  const c = widgetColors(isDark)
+  const labelColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'
+  const separatorColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
   return (
-    <div style={{ background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140, color: c.tooltipText }}>
       <div style={{ background: day.total > 0 ? '#3b82f6' : '#616161', color: '#fff', padding: '4px 10px', fontWeight: 700, fontSize: 11 }}>
         {formatted}
       </div>
       <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: 'rgba(255,255,255,0.6)' }}>Total</span>
+          <span style={{ color: labelColor }}>Total</span>
           <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{day.total}</span>
         </div>
         {day.vm > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: 'rgba(255,255,255,0.6)' }}>VM</span>
+          <span style={{ color: labelColor }}>VM</span>
           <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{day.vm}</span>
         </div>}
         {day.ct > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: 'rgba(255,255,255,0.6)' }}>CT</span>
+          <span style={{ color: labelColor }}>CT</span>
           <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{day.ct}</span>
         </div>}
         {day.host > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: 'rgba(255,255,255,0.6)' }}>Host</span>
+          <span style={{ color: labelColor }}>Host</span>
           <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{day.host}</span>
         </div>}
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 4, marginTop: 2 }}>
+        <div style={{ borderTop: `1px solid ${separatorColor}`, paddingTop: 4, marginTop: 2 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: '#4caf50' }}>Verified</span>
             <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{day.verified}</span>
@@ -74,6 +78,7 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [trendData, setTrendData] = useState(null)
   const [loadingTrends, setLoadingTrends] = useState(false)
 
@@ -162,16 +167,16 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
   }, [trendData])
 
   const darkCard = {
-    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
     borderRadius: 2.5, p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
-    '&:hover': { borderColor: 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+    '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
 
   if (!data || dashboardLoading || loadingTrends || !weeks.length) {
     return (
-      <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {pbsServers.length === 0 ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.65 }}>
             <i className='ri-calendar-check-line' style={{ fontSize: 24 }} />
@@ -183,7 +188,7 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
   }
 
   return (
-    <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Box sx={{ height: '100%', ...darkCard, display: 'flex', flexDirection: 'column', gap: 1 }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
@@ -191,7 +196,7 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
             <>
               <Typography sx={{ fontSize: 10, opacity: 0.6 }}>30d</Typography>
               <Typography sx={{ fontSize: 10, opacity: 0.6 }}>
-                <span style={{ fontWeight: 700, color: '#fff', fontFamily: '"JetBrains Mono", monospace' }}>{stats.total}</span> backups
+                <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.total}</span> backups
               </Typography>
               <Typography sx={{ fontSize: 10, color: '#4caf50' }}>
                 <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.verified}</span> verified
@@ -239,8 +244,8 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
               const bgColor = getCalendarColor(day.total, day.verified, day.unverified)
 
               return (
-                <MuiTooltip key={dIdx} title={<DayTooltip day={day} />} arrow placement="top"
-                  slotProps={{ tooltip: { sx: { bgcolor: 'transparent', p: 0, maxWidth: 'none' } }, arrow: { sx: { color: '#1e1e2d' } } }}
+                <MuiTooltip key={dIdx} title={<DayTooltip day={day} isDark={isDark} />} arrow placement="top"
+                  slotProps={{ tooltip: { sx: { bgcolor: 'transparent', p: 0, maxWidth: 'none' } }, arrow: { sx: { color: c.tooltipBg } } }}
                 >
                   <Box sx={{
                     flex: 1, aspectRatio: '1', borderRadius: 1,

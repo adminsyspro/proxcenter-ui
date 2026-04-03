@@ -7,9 +7,10 @@ import {
   Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, IconButton, Table, TableBody, TableCell, TableRow, Typography, useTheme
 } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 // ─── Entity icon with status dot ─────────────────────────────────────────────
-function EntityIcon({ entityType, severity }) {
+function EntityIcon({ entityType, severity, isDark }) {
   const dotColor = severity === 'crit' ? '#f44336' : severity === 'warn' ? '#ff9800' : '#3b82f6'
   const isNode = entityType === 'node'
   const icon = isNode ? null
@@ -25,7 +26,7 @@ function EntityIcon({ entityType, severity }) {
       }
       <Box sx={{
         position: 'absolute', bottom: -1, right: -1, width: 6, height: 6, borderRadius: '50%',
-        bgcolor: dotColor, border: '1.5px solid #1e1e2d',
+        bgcolor: dotColor, border: '1.5px solid', borderColor: isDark ? '#1e1e2d' : '#fff',
       }} />
     </Box>
   )
@@ -135,6 +136,7 @@ function AlertsListWidget({ data, loading }) {
   const router = useRouter()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [selectedAlert, setSelectedAlert] = useState(null)
 
   const alerts = data?.alerts || []
@@ -168,16 +170,16 @@ function AlertsListWidget({ data, loading }) {
   }
 
   const darkCard = {
-    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
     borderRadius: 2.5, p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
-    '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+    '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
 
   if (alerts.length === 0) {
     return (
-      <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.65 }}>
           <i className='ri-checkbox-circle-line' style={{ fontSize: 18, color: '#4caf50' }} />
           <Typography sx={{ fontSize: 12 }}>{t('alerts.noActiveAlerts')}</Typography>
@@ -188,7 +190,7 @@ function AlertsListWidget({ data, loading }) {
 
   return (
     <>
-      <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, overflow: 'auto' }}>
+      <Box sx={{ height: '100%', ...darkCard, overflow: 'auto' }}>
         {alerts.map((alert, idx) => {
           const sevColor = getSeverityColor(alert.severity)
           const sevLabel = alert.severity === 'crit' ? 'CRIT' : alert.severity === 'warn' ? 'WARN' : 'INFO'
@@ -201,9 +203,9 @@ function AlertsListWidget({ data, loading }) {
               sx={{
                 display: 'flex', alignItems: 'center', gap: 0.75,
                 px: 0.75, py: 0.6,
-                borderBottom: idx < alerts.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                borderBottom: idx < alerts.length - 1 ? `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` : 'none',
                 cursor: 'pointer',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' },
               }}
             >
               {/* Severity badge */}
@@ -224,7 +226,7 @@ function AlertsListWidget({ data, loading }) {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
                 <Box sx={{ position: 'relative', width: 14, height: 14, flexShrink: 0 }}>
                   <img src='/images/proxmox-logo-dark.svg' alt="" width={12} height={12} style={{ opacity: 0.7 }} />
-                  <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: nodeStatusMap[alert.source] === false ? '#f44336' : '#4caf50', border: '1px solid #1e1e2d' }} />
+                  <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: nodeStatusMap[alert.source] === false ? '#f44336' : '#4caf50', border: '1px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
                 </Box>
                 <Typography sx={{ fontSize: 9, opacity: 0.65, fontFamily: '"JetBrains Mono", monospace', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {alert.source}

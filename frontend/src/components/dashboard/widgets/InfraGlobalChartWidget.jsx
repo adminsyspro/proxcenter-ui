@@ -9,6 +9,7 @@ import {
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from 'recharts'
+import { widgetColors } from './themeColors'
 
 const NODE_COLORS = [
   '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
@@ -24,10 +25,11 @@ const TIMEFRAMES = [
 ]
 
 // ─── Custom Tooltip ──────────────────────────────────────────────────────────
-function ChartTooltip({ active, payload, label, metric }) {
+function ChartTooltip({ active, payload, label, metric, isDark }) {
   if (!active || !payload?.length) return null
+  const c = widgetColors(isDark)
   return (
-    <div style={{ background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 100 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 100, color: c.tooltipText }}>
       <div style={{ background: metric === 'cpu' ? '#f97316' : '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className={metric === 'cpu' ? 'ri-cpu-line' : 'ri-database-2-line'} style={{ fontSize: 10 }} />
         {metric.toUpperCase()} - {label}
@@ -36,8 +38,8 @@ function ChartTooltip({ active, payload, label, metric }) {
         {payload.filter(e => !e.hide).map((entry) => (
           <div key={entry.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: entry.color, flexShrink: 0 }} />
-            <span style={{ flex: 1, color: 'rgba(255,255,255,0.7)' }}>{entry.name}</span>
-            <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', color: '#fff' }}>{entry.value}%</span>
+            <span style={{ flex: 1, color: c.tooltipText }}>{entry.name}</span>
+            <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{entry.value}%</span>
           </div>
         ))}
       </div>
@@ -92,6 +94,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [timeframe, setTimeframe] = useState('hour')
   const [metric, setMetric] = useState('ram')
   const [trendsData, setTrendsData] = useState(null)
@@ -132,7 +135,8 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
     const fetchTrends = async () => {
       const connIds = Object.keys(nodesByConnection)
       if (connIds.length === 0) return
-      setLoading(true)
+      // Only show full loading on first fetch, not on refresh
+      if (!trendsData) setLoading(true)
       try {
         const results = await Promise.all(
           connIds.map(async (connId) => {
@@ -217,13 +221,12 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75,
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
         height: '100%',
       }}
     >
@@ -235,9 +238,9 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
             onClick={() => setMetric(v)}
             sx={{
               px: 1, py: 0.25, fontSize: 10, fontWeight: metric === v ? 700 : 400, cursor: 'pointer',
-              borderRadius: 1, color: metric === v ? '#fff' : 'rgba(255,255,255,0.5)',
-              bgcolor: metric === v ? 'rgba(255,255,255,0.12)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+              borderRadius: 1, color: metric === v ? '#fff' : c.textMuted,
+              bgcolor: metric === v ? c.surfaceActive : 'transparent',
+              '&:hover': { bgcolor: c.surfaceSubtle },
             }}
           >
             {v.toUpperCase()}
@@ -249,9 +252,9 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
             onClick={() => setTimeframe(tf.value)}
             sx={{
               px: 1, py: 0.25, fontSize: 10, fontWeight: timeframe === tf.value ? 700 : 400, cursor: 'pointer',
-              borderRadius: 1, color: timeframe === tf.value ? '#fff' : 'rgba(255,255,255,0.5)',
-              bgcolor: timeframe === tf.value ? 'rgba(255,255,255,0.12)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+              borderRadius: 1, color: timeframe === tf.value ? '#fff' : c.textMuted,
+              bgcolor: timeframe === tf.value ? c.surfaceActive : 'transparent',
+              '&:hover': { bgcolor: c.surfaceSubtle },
             }}
           >
             {tf.label}
@@ -263,7 +266,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
       </Box>
 
       {/* Chart */}
-      <Box sx={{ height: 220, width: '100%' }}>
+      <Box sx={{ flex: 1, minHeight: 100, width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <AreaChart data={trendsData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
@@ -277,10 +280,10 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
                 )
               })}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-            <XAxis dataKey="t" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.5)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.5)' }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-            <RTooltip content={<ChartTooltip metric={metric} />} wrapperStyle={{ backgroundColor: 'transparent' }} />
+            <CartesianGrid strokeDasharray="3 3" stroke={c.borderLight} />
+            <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.textMuted }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: c.textMuted }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+            <RTooltip content={<ChartTooltip metric={metric} isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} />
             {nodeNames.map((name, i) => {
               const color = NODE_COLORS[i % NODE_COLORS.length]
               return (

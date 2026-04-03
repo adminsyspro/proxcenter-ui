@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 function getBarColor(value) {
   if (value >= 80) return '#ef4444'
@@ -16,6 +17,7 @@ function TopConsumersWidget({ data, loading }) {
   const theme = useTheme()
   const router = useRouter()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [mode, setMode] = useState('cpu')
 
   const topCpu = data?.topCpu || []
@@ -32,11 +34,10 @@ function TopConsumersWidget({ data, loading }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        borderColor: c.borderLight,
         borderRadius: 2.5,
         p: 1.5,
         height: '100%',
@@ -44,8 +45,8 @@ function TopConsumersWidget({ data, loading }) {
         flexDirection: 'column',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': {
-          borderColor: 'rgba(255,255,255,0.15)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.2)'
+          borderColor: c.borderHover,
+          boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.2)' : '0 4px 24px rgba(0,0,0,0.06)'
         }
       }}
     >
@@ -66,11 +67,11 @@ function TopConsumersWidget({ data, loading }) {
               textTransform: 'uppercase',
               userSelect: 'none',
               transition: 'all 0.15s',
-              color: mode === m ? '#fff' : 'rgba(255,255,255,0.5)',
-              bgcolor: mode === m ? 'rgba(255,255,255,0.12)' : 'transparent',
+              color: mode === m ? c.textPrimary : c.textMuted,
+              bgcolor: mode === m ? c.surfaceActive : 'transparent',
               '&:hover': {
-                color: '#fff',
-                bgcolor: mode === m ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)'
+                color: c.textPrimary,
+                bgcolor: mode === m ? c.surfaceHighlight : c.borderLight
               }
             }}
           >
@@ -100,7 +101,7 @@ function TopConsumersWidget({ data, loading }) {
                 px: 0.75,
                 py: 0.5,
                 transition: 'background 0.15s',
-                '&:hover': vm.connId ? { bgcolor: 'rgba(255,255,255,0.05)' } : {}
+                '&:hover': vm.connId ? { bgcolor: c.surfaceHover } : {}
               }}
             >
               {/* Name + value */}
@@ -109,7 +110,7 @@ function TopConsumersWidget({ data, loading }) {
                   sx={{
                     fontSize: 11,
                     fontWeight: 600,
-                    color: 'rgba(255,255,255,0.85)',
+                    color: c.textPrimary,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -136,7 +137,7 @@ function TopConsumersWidget({ data, loading }) {
                   width: '100%',
                   height: 4,
                   borderRadius: 2,
-                  bgcolor: 'rgba(255,255,255,0.08)',
+                  bgcolor: c.surfaceSubtle,
                   overflow: 'hidden'
                 }}
               >

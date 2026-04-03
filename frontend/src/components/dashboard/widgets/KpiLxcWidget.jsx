@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
-function CircularGauge({ value, max, size = 56, strokeWidth = 4.5, color }) {
+function CircularGauge({ value, max, size = 56, strokeWidth = 4.5, color, trackColor = 'rgba(255,255,255,0.08)' }) {
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const pct = max > 0 ? value / max : 0
@@ -16,7 +17,7 @@ function CircularGauge({ value, max, size = 56, strokeWidth = 4.5, color }) {
   return (
     <Box sx={{ position: 'relative', width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={trackColor} strokeWidth={strokeWidth} />
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
           strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
           style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
@@ -35,20 +36,20 @@ function KpiLxcWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const secondaryColor = theme.palette.secondary.main
   const summary = data?.summary || {}
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5, height: '100%',
         display: 'flex', alignItems: 'center', gap: 1.5,
       }}
     >
-      <CircularGauge value={summary.lxcRunning || 0} max={summary.lxcTotal || 0} color={secondaryColor} />
+      <CircularGauge value={summary.lxcRunning || 0} max={summary.lxcTotal || 0} color={secondaryColor} trackColor={c.surfaceSubtle} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontSize: 10, opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           LXC

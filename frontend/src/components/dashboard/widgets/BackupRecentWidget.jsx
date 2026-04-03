@@ -3,11 +3,13 @@
 import React from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Chip, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 function BackupRecentWidget({ data, loading }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const pbs = data?.pbs || {}
 
   function timeAgo(ts) {
@@ -43,15 +45,14 @@ function BackupRecentWidget({ data, loading }) {
   if (items.length === 0 && backups24h.total > 0) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5, p: 2,
           display: 'flex', flexDirection: 'column', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
-          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
         }}
       >
         <Box sx={{ textAlign: 'center' }}>
@@ -85,15 +86,14 @@ function BackupRecentWidget({ data, loading }) {
   if (items.length === 0) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5, p: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
-          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
         }}
       >
         <Typography variant='caption' sx={{ opacity: 0.65 }}>{t('common.noData')}</Typography>
@@ -103,15 +103,14 @@ function BackupRecentWidget({ data, loading }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
         height: '100%',
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5,
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
     >
       {items.map((item, idx) => (

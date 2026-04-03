@@ -11,8 +11,8 @@ function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme 
   const circumference = 2 * Math.PI * radius
   const [mounted, setMounted] = useState(false)
   const offset = mounted ? circumference - (value / 100) * circumference : circumference
-  // Cards are always dark-themed
-  const trackColor = 'rgba(255,255,255,0.08)'
+  const isDark = theme?.palette?.mode === 'dark'
+  const trackColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
 
@@ -107,14 +107,22 @@ function buildSeries(raw) {
 }
 
 // ─── Sparkline Tooltips ──────────────────────────────────────────────────────
+function formatTime(payload) {
+  const t = payload?.[0]?.payload?.t
+  if (!t) return null
+  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return t
+}
+
 function CpuRamTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const cpu = payload.find(p => p.dataKey === 'cpu')?.value
   const ram = payload.find(p => p.dataKey === 'ram')?.value
+  const time = formatTime(payload)
   return (
     <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
       <div style={{ background: 'var(--mui-palette-warning-main)', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM
+        <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {cpu != null && <div><span style={{ color: 'var(--mui-palette-warning-main)', fontWeight: 700 }}>CPU</span> {cpu}%</div>}
@@ -128,10 +136,11 @@ function IoNetTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const diskio = payload.find(p => p.dataKey === 'diskio')?.value
   const net = payload.find(p => p.dataKey === 'net')?.value
+  const time = formatTime(payload)
   return (
     <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
       <div style={{ background: '#ab47bc', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-exchange-line' style={{ fontSize: 10 }} /> IO / NET
+        <i className='ri-exchange-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {diskio != null && <div><span style={{ color: '#ab47bc', fontWeight: 700 }}>IO</span> {formatRate(diskio)}</div>}
@@ -154,19 +163,18 @@ function NodeCard({ node, theme, trends }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column', gap: 1,
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Box sx={{ position: 'relative', width: 18, height: 18, flexShrink: 0 }}>
           <img src='/images/proxmox-logo-dark.svg' alt="" width={18} height={18} style={{ opacity: 0.8 }} />
-          <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: isOnline ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: '#1e1e2d' }} />
+          <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: isOnline ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
         </Box>
         <Typography sx={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {node.name}
@@ -194,8 +202,8 @@ function NodeCard({ node, theme, trends }) {
                 <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={trends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                     <RTooltip content={<CpuRamTooltip />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: theme.palette.warning.main, strokeWidth: 1, strokeDasharray: '3 3' }} />
-                    <Area type="monotone" dataKey="cpu" stroke={theme.palette.warning.main} fill={theme.palette.warning.main} fillOpacity={0.12} strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                    <Area type="monotone" dataKey="ram" stroke={theme.palette.info.main} fill="transparent" strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey="cpu" stroke={theme.palette.warning.main} fill={theme.palette.warning.main} fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey="ram" stroke={theme.palette.info.main} fill={theme.palette.info.main} fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}
@@ -209,8 +217,8 @@ function NodeCard({ node, theme, trends }) {
                 <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                   <AreaChart data={trends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                     <RTooltip content={<IoNetTooltip />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#ab47bc', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                    <Area type="monotone" dataKey="diskio" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.12} strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                    <Area type="monotone" dataKey="net" stroke="#26a69a" fill="transparent" strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey="diskio" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey="net" stroke="#26a69a" fill="#26a69a" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}
@@ -355,18 +363,15 @@ function NodesGaugesWidget({ data, loading, config, onUpdateSettings }) {
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Filter bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, px: 0.5, pb: 0.5 }}>
+    <Box sx={{ height: '100%', position: 'relative' }}>
+      <Box sx={{ position: 'absolute', top: 4, right: 4, zIndex: 5 }}>
         <NodeFilter nodes={allNodes} selected={selectedNodes} onChange={handleFilterChange} />
       </Box>
-
-      {/* Grid */}
       <Box sx={{
-        flex: 1, overflow: 'auto',
+        height: '100%', overflow: 'auto',
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
-        gap: 1, px: 0.5, pb: 0.5, alignContent: 'start',
+        gap: 1, p: 0.5,
       }}>
         {nodes.map((node) => (
           <NodeCard

@@ -4,23 +4,24 @@ import React from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Box, Chip, Typography, useTheme } from '@mui/material'
+import { widgetColors } from './themeColors'
 
 function ClustersListWidget({ data, loading }) {
   const t = useTranslations()
   const router = useRouter()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const clusters = (data?.clusters || []).filter(c => c.isCluster)
 
   if (clusters.length === 0) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid',
-          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5,
           p: 1.5,
           display: 'flex',
@@ -35,12 +36,11 @@ function ClustersListWidget({ data, loading }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
         height: '100%',
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5,
         p: 1.5,
         display: 'flex',
@@ -49,8 +49,8 @@ function ClustersListWidget({ data, loading }) {
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': {
-          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          borderColor: c.surfaceActive,
+          boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)',
         },
       }}
     >
@@ -62,12 +62,12 @@ function ClustersListWidget({ data, loading }) {
             p: 1.5, borderRadius: 1.5,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
             cursor: cluster.id ? 'pointer' : 'default',
-            '&:hover': cluster.id ? { bgcolor: 'rgba(255,255,255,0.05)' } : {},
+            '&:hover': cluster.id ? { bgcolor: c.surfaceHover } : {},
           }}
         >
           <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0 }}>
             <i className='ri-server-fill' style={{ fontSize: 18, opacity: 0.8 }} />
-            <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: cluster.onlineNodes > 0 ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d' }} />
+            <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: cluster.onlineNodes > 0 ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: isDark ? 'rgba(255,255,255,0.03)' : '#fff' }} />
           </Box>
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant='body2' sx={{ fontWeight: 700, fontSize: 13 }}>{cluster.name}</Typography>

@@ -4,9 +4,11 @@ import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { widgetColors } from './themeColors'
 
 // ─── Circular Gauge (animated) ───────────────────────────────────────────────
-function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublabel }) {
+function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublabel, isDark = true }) {
+  const c = widgetColors(isDark)
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const [mounted, setMounted] = useState(false)
@@ -18,7 +20,7 @@ function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublab
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
       <Box sx={{ position: 'relative', width: size, height: size }}>
         <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={strokeWidth} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={c.surfaceSubtle} strokeWidth={strokeWidth} />
           <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
             strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
@@ -38,12 +40,21 @@ function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublab
 }
 
 // ─── Tooltips ────────────────────────────────────────────────────────────────
-function IoTooltip({ active, payload }) {
+function formatTime(payload) {
+  const t = payload?.[0]?.payload?.time || payload?.[0]?.payload?.t
+  if (!t) return null
+  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return t
+}
+
+function IoTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
+  const time = formatTime(payload)
+  const c = widgetColors(isDark)
   return (
-    <div style={{ background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-speed-line' style={{ fontSize: 10 }} /> IO / NET
+        <i className='ri-speed-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
         {payload.map(e => (
@@ -83,6 +94,7 @@ function formatRate(bytes) {
 // ─── PBS Server Card ─────────────────────────────────────────────────────────
 function PbsCard({ server, theme, t, rrdData }) {
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const usagePct = server.usagePct || 0
   const hasErrors = server.backupsError > 0
 
@@ -99,26 +111,22 @@ function PbsCard({ server, theme, t, rrdData }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column',
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+        '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
     >
-      {/* Top content */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
         <Box sx={{ position: 'relative', width: 18, height: 18, flexShrink: 0 }}>
           <i className='ri-shield-check-line' style={{ fontSize: 16, opacity: 0.6 }} />
           <Box sx={{
             position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%',
             bgcolor: hasErrors ? '#f44336' : '#4caf50',
-            border: '1.5px solid #1e1e2d'
+            border: '1.5px solid', borderColor: c.dotBorder
           }} />
         </Box>
         <Typography sx={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
@@ -129,36 +137,37 @@ function PbsCard({ server, theme, t, rrdData }) {
         </Typography>
       </Box>
 
-      {/* Gauges: Storage + Backup success rate */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
-        <CircularGauge value={usagePct} label={t('storage.title')} color={getGaugeColor(usagePct)} sublabel={`${formatBytes(server.totalUsed)} / ${formatBytes(server.totalSize)}`} />
-        <CircularGauge value={successRate} label="Backups" color={successRate >= 100 ? '#4caf50' : successRate >= 80 ? '#ff9800' : '#f44336'} sublabel={`${okBackups}/${totalBackups}`} />
-      </Box>
+      {/* Gauges + Stats centered */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
+        {/* Gauges: Storage + Backup success rate */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
+          <CircularGauge value={usagePct} label={t('storage.title')} size={56} strokeWidth={5} color={getGaugeColor(usagePct)} sublabel={`${formatBytes(server.totalUsed)} / ${formatBytes(server.totalSize)}`} isDark={isDark} />
+          <CircularGauge value={successRate} label="Backups" size={56} strokeWidth={5} color={successRate >= 100 ? '#4caf50' : successRate >= 80 ? '#ff9800' : '#f44336'} sublabel={`${okBackups}/${totalBackups}`} isDark={isDark} />
+        </Box>
 
-      {/* Stats: OK / Failed / Verify */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-around', gap: 0.5 }}>
-        <Box sx={{ textAlign: 'center' }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color: '#4caf50', lineHeight: 1 }}>
-            {okBackups}
-          </Typography>
-          <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>OK 24h</Typography>
+        {/* Stats: OK / Failed / Verify */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-around', gap: 0.5 }}>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color: '#4caf50', lineHeight: 1 }}>
+              {okBackups}
+            </Typography>
+            <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>OK 24h</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color: errorBackups > 0 ? '#f44336' : 'text.disabled', lineHeight: 1 }}>
+              {errorBackups}
+            </Typography>
+            <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>{t('jobs.failed')}</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color: verifyError > 0 ? '#ff9800' : '#2196f3', lineHeight: 1 }}>
+              {verifyOk}{verifyError > 0 && <span style={{ color: '#f44336', fontSize: 10 }}>/{verifyError}</span>}
+            </Typography>
+            <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>
+              <i className='ri-verified-badge-fill' style={{ fontSize: 8, marginRight: 2 }} />Verify
+            </Typography>
+          </Box>
         </Box>
-        <Box sx={{ textAlign: 'center' }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color: errorBackups > 0 ? '#f44336' : 'text.disabled', lineHeight: 1 }}>
-            {errorBackups}
-          </Typography>
-          <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>{t('jobs.failed')}</Typography>
-        </Box>
-        <Box sx={{ textAlign: 'center' }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color: verifyError > 0 ? '#ff9800' : '#2196f3', lineHeight: 1 }}>
-            {verifyOk}{verifyError > 0 && <span style={{ color: '#f44336', fontSize: 10 }}>/{verifyError}</span>}
-          </Typography>
-          <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>
-            <i className='ri-verified-badge-fill' style={{ fontSize: 8, marginRight: 2 }} />Verify
-          </Typography>
-        </Box>
-      </Box>
-
       </Box>
 
       {/* Sparklines pushed to bottom */}
@@ -168,11 +177,11 @@ function PbsCard({ server, theme, t, rrdData }) {
           {hasRrd ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={rrdData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<IoTooltip />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                <Area type="monotone" dataKey="diskread" name="Disk R" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.12} strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="diskwrite" name="Disk W" stroke="#ec4899" fill="transparent" strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="netin" name="Net In" stroke="#4caf50" fill="transparent" strokeWidth={1} dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="netout" name="Net Out" stroke="#f97316" fill="transparent" strokeWidth={1} dot={false} isAnimationActive={false} />
+                <RTooltip content={<IoTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type="monotone" dataKey="diskread" name="Disk R" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="diskwrite" name="Disk W" stroke="#ec4899" fill="#ec4899" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="netin" name="Net In" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="netout" name="Net Out" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -238,7 +247,7 @@ function PbsOverviewWidget({ data, loading }) {
     <Box sx={{
       height: '100%', overflow: 'auto',
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
       gridAutoRows: '1fr',
       gap: 1, p: 0.5,
     }}>

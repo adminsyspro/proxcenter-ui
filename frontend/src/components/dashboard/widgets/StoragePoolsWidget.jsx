@@ -6,11 +6,13 @@ import { useTranslations } from 'next-intl'
 import { Alert, Box, Chip, CircularProgress, LinearProgress, Typography, useTheme } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { widgetColors } from './themeColors'
 
 function StoragePoolsWidget({ data, loading, config }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const [storages, setStorages] = useState([])
   const [loadingStorages, setLoadingStorages] = useState(true)
 
@@ -71,11 +73,10 @@ function StoragePoolsWidget({ data, loading, config }) {
   if (loadingStorages) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5, p: 1.5,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
@@ -88,15 +89,14 @@ function StoragePoolsWidget({ data, loading, config }) {
   if (storages.length === 0) {
     return (
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{
           height: '100%',
-          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+          bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+          border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
           borderRadius: 2.5, p: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
-          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+          '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
         }}
       >
         <Alert severity='info' sx={{ width: '100%' }}>{t('common.noData')}</Alert>
@@ -106,15 +106,14 @@ function StoragePoolsWidget({ data, loading, config }) {
 
   return (
     <Box
-      {...(!isDark && { 'data-dark': '' })}
       sx={{
         height: '100%',
-        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+        bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+        border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
         borderRadius: 2.5, p: 1.5,
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
-        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+        '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
     >
       {storages.slice(0, 8).map((storage, idx) => {
@@ -148,7 +147,7 @@ function StoragePoolsWidget({ data, loading, config }) {
                 variant='determinate'
                 value={usagePct}
                 sx={{
-                  height: 14, borderRadius: 0, bgcolor: 'rgba(255,255,255,0.12)',
+                  height: 14, borderRadius: 0, bgcolor: c.surfaceActive,
                   '& .MuiLinearProgress-bar': { borderRadius: 0, background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)', backgroundSize: usagePct > 0 ? `${(100 / usagePct) * 100}% 100%` : '100% 100%' }
                 }}
               />

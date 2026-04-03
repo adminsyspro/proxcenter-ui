@@ -7,9 +7,10 @@ import {
   Button, Divider, IconButton, Typography, useTheme
 } from '@mui/material'
 import { useTaskEvents } from '@/hooks/useTaskEvents'
+import { widgetColors } from './themeColors'
 
 // ─── Entity icon with status dot ─────────────────────────────────────────────
-function EntityIcon({ isGuest, type, status, taskStatus }) {
+function EntityIcon({ isGuest, type, status, taskStatus, isDark }) {
   // Use task status for the dot color (reflects what happened)
   const dotColor = taskStatus === 'running' ? '#3b82f6'
     : taskStatus === 'OK' ? '#4caf50'
@@ -22,7 +23,7 @@ function EntityIcon({ isGuest, type, status, taskStatus }) {
     return (
       <Box sx={{ position: 'relative', width: 20, height: 20, flexShrink: 0, mr: 0.25 }}>
         <img src='/images/proxmox-logo-dark.svg' alt="" width={18} height={18} style={{ opacity: 0.8 }} />
-        <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', bgcolor: dotColor, border: '2px solid #1e1e2d' }} />
+        <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', bgcolor: dotColor, border: '2px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
       </Box>
     )
   }
@@ -33,7 +34,7 @@ function EntityIcon({ isGuest, type, status, taskStatus }) {
   return (
     <Box sx={{ position: 'relative', width: 20, height: 20, flexShrink: 0, mr: 0.25 }}>
       <i className={icon} style={{ fontSize: 18, opacity: 0.8 }} />
-      <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', bgcolor: dotColor, border: '2px solid #1e1e2d' }} />
+      <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', bgcolor: dotColor, border: '2px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
     </Box>
   )
 }
@@ -110,6 +111,7 @@ function ActivityFeedWidget({ data, loading, config }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+  const c = widgetColors(isDark)
   const { data: eventsData, isLoading: loadingEvents } = useTaskEvents(20)
   const events = Array.isArray(eventsData?.data) ? eventsData.data : []
   const [selectedEvent, setSelectedEvent] = useState(null)
@@ -164,16 +166,16 @@ function ActivityFeedWidget({ data, loading, config }) {
   }
 
   const darkCard = {
-    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#1e1e2d',
-    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+    bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+    border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
     borderRadius: 2.5, p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
-    '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+    '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
 
   if (loadingEvents) {
     return (
-      <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress size={24} />
       </Box>
     )
@@ -181,7 +183,7 @@ function ActivityFeedWidget({ data, loading, config }) {
 
   if (events.length === 0) {
     return (
-      <Box {...(!isDark && { 'data-dark': '' })} sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.65 }}>
+      <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.65 }}>
         <Typography variant='caption'>{t('common.noData')}</Typography>
       </Box>
     )
@@ -190,7 +192,6 @@ function ActivityFeedWidget({ data, loading, config }) {
   return (
     <>
       <Box
-        {...(!isDark && { 'data-dark': '' })}
         sx={{ height: '100%', ...darkCard, overflow: 'auto' }}
       >
         {events.map((event, idx) => {
@@ -209,13 +210,13 @@ function ActivityFeedWidget({ data, loading, config }) {
               sx={{
                 display: 'flex', alignItems: 'center', gap: 0.75,
                 px: 0.75, py: 0.6,
-                borderBottom: idx < events.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                borderBottom: idx < events.length - 1 ? `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` : 'none',
                 cursor: 'pointer',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' },
               }}
             >
               {/* Entity icon */}
-              <EntityIcon isGuest={isGuest} type={guestType} status={guestStatus} taskStatus={event.status} />
+              <EntityIcon isGuest={isGuest} type={guestType} status={guestStatus} taskStatus={event.status} isDark={isDark} />
 
               {/* Task label + guest name */}
               <Typography sx={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>

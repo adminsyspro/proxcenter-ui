@@ -118,11 +118,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   // Persist node IPs in DB for failover after restart
+  const liveNodeNames: string[] = []
   try {
     await Promise.all(
       enrichedNodes.map((n: any) => {
         const nodeName = n.node || n.name
         if (!nodeName) return Promise.resolve()
+        liveNodeNames.push(nodeName)
         return prisma.managedHost.upsert({
           where: { connectionId_node: { connectionId: id, node: nodeName } },
           update: { ip: n.ip || null },
@@ -130,6 +132,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         })
       })
     )
+
+    // Cleanup stale ManagedHost entries for nodes removed from the cluster
+    if (liveNodeNames.length > 0) {
+      await prisma.managedHost.deleteMany({
+        where: { connectionId: id, node: { notIn: liveNodeNames } },
+      })
+    }
   } catch {
     // Non-blocking — don't break the API response
   }

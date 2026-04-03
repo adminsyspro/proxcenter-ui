@@ -54,14 +54,13 @@ export const DEFAULT_LAYOUT: WidgetConfig[] = [
   { id: 'kpi-3', type: 'kpi-lxc', x: 1, y: 1, w: 1, h: 3 },
   { id: 'kpi-4', type: 'kpi-alerts', x: 11, y: 1, w: 1, h: 7 },
   { id: 'clusters-g', type: 'clusters-gauges', x: 2, y: 1, w: 4, h: 7 },
-  { id: 'heatmap-1', type: 'vm-heatmap', x: 6, y: 1, w: 3, h: 7 },
+  { id: 'resources-1', type: 'resources-gauges', x: 6, y: 1, w: 3, h: 7 },
   { id: 'drs-1', type: 'drs-status', x: 9, y: 1, w: 2, h: 7 },
-
   // Section: Cluster / Ceph
-  { id: 'sec-2', type: 'section-header', x: 0, y: 8, w: 12, h: 1, settings: { title: 'Cluster / Ceph' } },
-  { id: 'ceph-1', type: 'ceph-status', x: 0, y: 9, w: 3, h: 10 },
-  { id: 'infra-1', type: 'infra-global-chart', x: 3, y: 9, w: 6, h: 10 },
-  { id: 'storage-1', type: 'storage-pools', x: 9, y: 9, w: 3, h: 10 },
+  { id: 'sec-2', type: 'section-header', x: 0, y: 18, w: 12, h: 1, settings: { title: 'Cluster / Ceph' } },
+  { id: 'ceph-1', type: 'ceph-status', x: 0, y: 8, w: 3, h: 10 },
+  { id: 'infra-1', type: 'infra-global-chart', x: 3, y: 8, w: 6, h: 10 },
+  { id: 'heatmap-1', type: 'vm-heatmap', x: 9, y: 8, w: 3, h: 10 },
 ]
 
 // Layouts prédéfinis (ROW_HEIGHT=40)

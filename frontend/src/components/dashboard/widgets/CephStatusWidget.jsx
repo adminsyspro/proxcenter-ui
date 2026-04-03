@@ -209,7 +209,7 @@ return (
           {hasPerfData ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={perfData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<ThroughputTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <RTooltip content={<ThroughputTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="read" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="write" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>

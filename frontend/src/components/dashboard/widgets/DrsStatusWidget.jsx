@@ -271,7 +271,7 @@ return (
           <Box sx={{ height: 36, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={trends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<CpuRamTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#f97316', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <RTooltip content={<CpuRamTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#f97316', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="cpu" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="ram" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>

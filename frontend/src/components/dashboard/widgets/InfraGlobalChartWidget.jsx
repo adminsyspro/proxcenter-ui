@@ -296,7 +296,7 @@ return (
             <CartesianGrid strokeDasharray="3 3" stroke={c.borderLight} />
             <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.textMuted }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
             <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: c.textMuted }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-            <RTooltip content={<ChartTooltip metric={metric} isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} />
+            <RTooltip content={<ChartTooltip metric={metric} isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} />
             {nodeNames.map((name, i) => {
               const color = NODE_COLORS[i % NODE_COLORS.length]
 

@@ -24,7 +24,7 @@ function EntityIcon({ isGuest, type, status, taskStatus, isDark }) {
   if (!isGuest) {
     return (
       <Box sx={{ position: 'relative', width: 20, height: 20, flexShrink: 0, mr: 0.25 }}>
-        <img src='/images/proxmox-logo-dark.svg' alt="" width={18} height={18} style={{ opacity: 0.8 }} />
+        <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={18} height={18} style={{ opacity: 0.8 }} />
         <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', bgcolor: dotColor, border: '2px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
       </Box>
     )
@@ -243,7 +243,7 @@ return '#4caf50'
 
               {/* Node */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
-                <img src='/images/proxmox-logo-dark.svg' alt="" width={10} height={10} style={{ opacity: 0.5 }} />
+                <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={10} height={10} style={{ opacity: 0.5 }} />
                 <Typography sx={{ fontSize: 9, opacity: 0.5, fontFamily: '"JetBrains Mono", monospace' }}>
                   {event.node}
                 </Typography>

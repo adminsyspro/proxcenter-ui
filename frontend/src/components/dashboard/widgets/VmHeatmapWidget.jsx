@@ -314,7 +314,7 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
           <Box key={group.node} sx={{ mb: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.4 }}>
               <Box sx={{ position: 'relative', width: 14, height: 14, flexShrink: 0 }}>
-                <img src='/images/proxmox-logo-dark.svg' alt="" width={12} height={12} style={{ opacity: 0.6 }} />
+                <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} style={{ opacity: 0.6 }} />
                 <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: '#4caf50', border: `1px solid ${isDark ? '#1e1e2d' : '#fff'}` }} />
               </Box>
               <Typography sx={{ fontWeight: 600, fontSize: 10, opacity: 0.6 }}>{group.node}</Typography>

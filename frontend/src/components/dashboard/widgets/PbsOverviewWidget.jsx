@@ -183,7 +183,7 @@ function PbsCard({ server, theme, t, rrdData }) {
           {hasRrd ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={rrdData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<IoTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <RTooltip content={<IoTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="diskread" name="Disk R" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="diskwrite" name="Disk W" stroke="#ec4899" fill="#ec4899" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="netin" name="Net In" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />

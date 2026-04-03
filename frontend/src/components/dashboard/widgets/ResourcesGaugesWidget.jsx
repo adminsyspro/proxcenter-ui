@@ -7,7 +7,7 @@ import { Box, Typography, useTheme } from '@mui/material'
 
 import { widgetColors } from './themeColors'
 
-function CircularGauge({ value, color, trackColor, size = 72, strokeWidth = 6 }) {
+function CircularGauge({ value, color, trackColor, textColor, size = 72, strokeWidth = 6 }) {
   const [animatedValue, setAnimatedValue] = useState(0)
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
@@ -65,7 +65,7 @@ return () => clearTimeout(timer)
           fontWeight: 700,
           fontSize: '0.85rem',
           lineHeight: 1,
-          color: c.textPrimary,
+          color: textColor,
         }}>
           {Math.round(animatedValue)}%
         </Typography>
@@ -144,6 +144,7 @@ function ResourcesGaugesWidget({ data, loading }) {
               value={g.pct}
               color={getGaugeColor(g.pct)}
               trackColor={trackColor}
+              textColor={c.textPrimary}
               size={72}
               strokeWidth={6}
             />

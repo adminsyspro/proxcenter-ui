@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Box, Checkbox, Chip, IconButton, ListItemText, Menu, MenuItem, Tooltip, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 
+import { widgetColors } from './themeColors'
 import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
 
 // ─── Circular Gauge (animated on mount) ──────────────────────────────────────
@@ -87,7 +88,7 @@ function buildSeries(raw) {
       else if (maxMem > 0) ram = Math.round((memRaw / maxMem) * 100)
     }
 
-    out.push({ t, cpu, ram, net: (p.netin ?? 0) + (p.netout ?? 0), diskio: (p.diskread ?? 0) + (p.diskwrite ?? 0) })
+    out.push({ t, cpu, ram, netin: p.netin ?? 0, netout: p.netout ?? 0, iowait: p.iowait != null ? Math.round(p.iowait * 100 * 10) / 10 : 0 })
   }
 
   
@@ -102,56 +103,57 @@ function mergeNodeTrends(nodeKeys, allTrends) {
 
   
 return base.map((point, i) => {
-    let cpu = 0, ram = 0, net = 0, diskio = 0, count = 0
+    let cpu = 0, ram = 0, netin = 0, netout = 0, iowait = 0, count = 0
 
     for (const s of allSeries) {
-      if (s[i]) { cpu += s[i].cpu || 0; ram += s[i].ram || 0; net += s[i].net || 0; diskio += s[i].diskio || 0; count++ }
+      if (s[i]) { cpu += s[i].cpu || 0; ram += s[i].ram || 0; netin += s[i].netin || 0; netout += s[i].netout || 0; iowait += s[i].iowait || 0; count++ }
     }
 
-    if (count === 0) return { t: point.t, cpu: 0, ram: 0, net: 0, diskio: 0 }
+    if (count === 0) return { t: point.t, cpu: 0, ram: 0, netin: 0, netout: 0, iowait: 0 }
 
-    // CPU/RAM = average across nodes, IO/NET = sum (total throughput)
-    return { t: point.t, cpu: Math.round(cpu / count), ram: Math.round(ram / count), net, diskio }
+    return { t: point.t, cpu: Math.round(cpu / count), ram: Math.round(ram / count), netin, netout, iowait: Math.round(iowait / count * 10) / 10 }
   })
 }
 
 // ─── Sparkline Tooltips ──────────────────────────────────────────────────────
 
-function CpuRamTooltip({ active, payload }) {
+function CpuRamTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
   const cpu = payload.find(p => p.dataKey === 'cpu')?.value
   const ram = payload.find(p => p.dataKey === 'ram')?.value
   const time = formatTime(payload)
+  const c = widgetColors(isDark)
 
-  
-return (
-    <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
-      <div style={{ background: 'var(--mui-palette-warning-main)', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
+  return (
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
+      <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {cpu != null && <div><span style={{ color: 'var(--mui-palette-warning-main)', fontWeight: 700 }}>CPU</span> {cpu}%</div>}
-        {ram != null && <div><span style={{ color: 'var(--mui-palette-info-main)', fontWeight: 700 }}>RAM</span> {ram}%</div>}
+        {cpu != null && <div><span style={{ color: '#f97316', fontWeight: 700 }}>CPU</span> {cpu}%</div>}
+        {ram != null && <div><span style={{ color: '#3b82f6', fontWeight: 700 }}>RAM</span> {ram}%</div>}
       </div>
     </div>
   )
 }
 
-function IoNetTooltip({ active, payload }) {
+function IoNetTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
-  const diskio = payload.find(p => p.dataKey === 'diskio')?.value
-  const net = payload.find(p => p.dataKey === 'net')?.value
+  const netin = payload.find(p => p.dataKey === 'netin')?.value
+  const netout = payload.find(p => p.dataKey === 'netout')?.value
+  const iowait = payload.find(p => p.dataKey === 'iowait')?.value
   const time = formatTime(payload)
+  const c = widgetColors(isDark)
 
-  
-return (
-    <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
+  return (
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
       <div style={{ background: '#ab47bc', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-exchange-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {diskio != null && <div><span style={{ color: '#ab47bc', fontWeight: 700 }}>IO</span> {formatRate(diskio)}</div>}
-        {net != null && <div><span style={{ color: '#26a69a', fontWeight: 700 }}>NET</span> {formatRate(net)}</div>}
+        {netin != null && <div><span style={{ color: '#4caf50', fontWeight: 700 }}>Net In</span> {formatRate(netin)}</div>}
+        {netout != null && <div><span style={{ color: '#f97316', fontWeight: 700 }}>Net Out</span> {formatRate(netout)}</div>}
+        {iowait != null && <div><span style={{ color: '#ab47bc', fontWeight: 700 }}>IO Wait</span> {iowait}%</div>}
       </div>
     </div>
   )
@@ -237,7 +239,7 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
           {hasTrends ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={mergedTrends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<CpuRamTooltip />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: theme.palette.warning.main, strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <RTooltip content={<CpuRamTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#f97316', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="cpu" stroke={theme.palette.warning.main} fill={theme.palette.warning.main} fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="ram" stroke={theme.palette.info.main} fill={theme.palette.info.main} fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
@@ -252,9 +254,9 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
           {hasTrends ? (
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={mergedTrends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <RTooltip content={<IoNetTooltip />} wrapperStyle={{ backgroundColor: 'transparent' }} cursor={{ stroke: '#ab47bc', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                <Area type="monotone" dataKey="diskio" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
-                <Area type="monotone" dataKey="net" stroke="#26a69a" fill="#26a69a" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <RTooltip content={<IoNetTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#ab47bc', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type="monotone" dataKey="netin" name="Net In" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="netout" name="Net Out" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}

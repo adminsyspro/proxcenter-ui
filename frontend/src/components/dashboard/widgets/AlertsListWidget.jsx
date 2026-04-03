@@ -25,7 +25,7 @@ function EntityIcon({ entityType, severity, isDark }) {
   return (
     <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
       {isNode
-        ? <img src='/images/proxmox-logo-dark.svg' alt="" width={14} height={14} style={{ opacity: 0.8 }} />
+        ? <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
         : <i className={icon} style={{ fontSize: 14, opacity: 0.7 }} />
       }
       <Box sx={{
@@ -237,7 +237,7 @@ return '#3b82f6'
               {/* Source with Proxmox logo + node online status dot */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
                 <Box sx={{ position: 'relative', width: 14, height: 14, flexShrink: 0 }}>
-                  <img src='/images/proxmox-logo-dark.svg' alt="" width={12} height={12} style={{ opacity: 0.7 }} />
+                  <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} style={{ opacity: 0.7 }} />
                   <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: nodeStatusMap[alert.source] === false ? '#f44336' : '#4caf50', border: '1px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
                 </Box>
                 <Typography sx={{ fontSize: 9, opacity: 0.65, fontFamily: '"JetBrains Mono", monospace', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

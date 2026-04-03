@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
+import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
@@ -558,6 +559,9 @@ function triggerBackgroundRevalidation(tenantId: string) {
 /* ------------------------------------------------------------------ */
 
 export async function GET(request: NextRequest) {
+  const demo = demoResponse(request)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied

@@ -8,10 +8,14 @@ import { authOptions } from "@/lib/auth/config"
 import { getDb } from "@/lib/db/sqlite"
 import { hasPermission } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { demoResponse } from "@/lib/demo/demo-api"
 
 // GET /api/v1/rbac/effective - Récupérer les permissions effectives d'un utilisateur
 // Query params: user_id (optionnel, admin only), resource_type, resource_id
 export async function GET(req: NextRequest) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 

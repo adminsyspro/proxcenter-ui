@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -12,7 +13,10 @@ export const runtime = "nodejs"
  * GET /api/v1/storage
  * Récupère tous les storages de toutes les connexions PVE en une seule requête
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const prisma = await getSessionPrisma()
     // RBAC: Check storage.view permission

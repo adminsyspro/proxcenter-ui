@@ -485,6 +485,63 @@ const EXTRA_MOCKS: MockDataMap = {
   // --- Data endpoints ---
   'GET:/api/v1/alerts': { data: [] },
   'GET:/api/v1/alert-rules': { data: [] },
+
+  // --- Orchestrator Alerts (for /operations/alerts page) ---
+  get 'GET:/api/v1/orchestrator/alerts'() {
+    const now = Date.now()
+    const severities = ['critical', 'warning', 'warning', 'info', 'critical', 'warning', 'info', 'warning']
+    const messages = [
+      'Node pve-node-03: RAM usage critical (94%)',
+      'Node pve-node-07: CPU usage high (82%)',
+      'VM db-master: Disk I/O latency > 50ms',
+      'Backup job vzdump-weekly completed with warnings',
+      'Ceph OSD.7 is down on pve-dr-02',
+      'Node pve-node-11: Storage pool local-zfs usage 87%',
+      'PBS datastore backup-main: GC completed',
+      'VM web-prod-01: High network packet loss detected',
+    ]
+    const sources = ['pve-node-03','pve-node-07','pve-node-01','pve-node-05','pve-dr-02','pve-node-11','PBS-MASTER','pve-node-01']
+    return {
+      data: messages.map((msg, i) => ({
+        id: `alert-demo-${i}`,
+        fingerprint: `fp-${i}`,
+        severity: severities[i],
+        message: msg,
+        source: sources[i],
+        sourceType: 'pve',
+        entityType: i < 2 ? 'node' : i === 4 ? 'osd' : 'vm',
+        entityName: sources[i],
+        metric: i === 0 ? 'ram' : i === 1 ? 'cpu' : i === 2 ? 'disk_io' : null,
+        currentValue: i === 0 ? 94 : i === 1 ? 82 : i === 5 ? 87 : null,
+        threshold: i === 0 ? 90 : i === 1 ? 80 : i === 5 ? 85 : null,
+        status: i < 5 ? 'active' : 'resolved',
+        occurrences: 1 + Math.floor(Math.random() * 10),
+        firstSeenAt: new Date(now - (i + 1) * 3600000).toISOString(),
+        lastSeenAt: new Date(now - i * 600000).toISOString(),
+        acknowledgedAt: i === 2 ? new Date(now - 1800000).toISOString() : null,
+        acknowledgedBy: i === 2 ? 'admin' : null,
+        resolvedAt: i >= 5 ? new Date(now - i * 300000).toISOString() : null,
+      })),
+      total: messages.length,
+    }
+  },
+  'GET:/api/v1/orchestrator/alerts/summary': {
+    data: { total: 8, active: 5, acknowledged: 1, resolved: 3, critical: 2, warning: 4, info: 2 },
+  },
+  get 'GET:/api/v1/orchestrator/alerts/rules'() {
+    return {
+      data: [
+        { id: 'rule-1', name: 'High CPU Usage', metric: 'cpu', operator: '>', threshold: 80, severity: 'warning', duration: 300, enabled: true, cooldown: 600 },
+        { id: 'rule-2', name: 'Critical RAM Usage', metric: 'ram', operator: '>', threshold: 90, severity: 'critical', duration: 120, enabled: true, cooldown: 300 },
+        { id: 'rule-3', name: 'Storage Almost Full', metric: 'storage', operator: '>', threshold: 85, severity: 'warning', duration: 600, enabled: true, cooldown: 1800 },
+        { id: 'rule-4', name: 'Node Offline', metric: 'status', operator: '==', threshold: 0, severity: 'critical', duration: 60, enabled: true, cooldown: 120 },
+        { id: 'rule-5', name: 'Backup Failed', metric: 'backup_status', operator: '==', threshold: 0, severity: 'warning', duration: 0, enabled: false, cooldown: 3600 },
+      ],
+    }
+  },
+  'GET:/api/v1/orchestrator/alerts/thresholds': {
+    data: { cpu: 80, ram: 90, storage: 85, iowait: 30 },
+  },
   get 'GET:/api/v1/audit'() {
     const actions = [
       'user.login', 'user.login', 'user.logout',
@@ -1961,6 +2018,27 @@ export function demoResponse(req: Request): NextResponse | Response | null {
         { node: 'pve-node-03', ip: '10.10.10.3', connectionId: 'demo-pve-cluster-001', connectionName: 'PVE-CLUSTER-DEMO', online: true, hasOvs: true, ovsVersion: '3.1.0', sflowConfigured: true, sflowTarget: '10.10.10.254:6343', sflowSampling: 512, bridges: ['vmbr0'] },
       ],
     }, { headers: demoHeaders })
+  }
+
+  // --- PBS backups/trends ---
+  if (cleanPath.match(/\/api\/v1\/pbs\/[^/]+\/backups\/trends/)) {
+    const days = Number(urlObj.searchParams.get('days') || 30)
+    const now = new Date()
+    const data = Array.from({ length: days }, (_, i) => {
+      const date = new Date(now.getTime() - (days - 1 - i) * 86400000)
+      const isWeekend = date.getDay() === 0 || date.getDay() === 6
+      const baseCount = isWeekend ? 2 + Math.floor(Math.random() * 3) : 8 + Math.floor(Math.random() * 6)
+      const errors = Math.random() < 0.08 ? 1 : 0
+      return {
+        date: date.toISOString().split('T')[0],
+        count: baseCount,
+        ok: baseCount - errors,
+        error: errors,
+        verified: Math.random() < 0.7 ? baseCount - errors : 0,
+      }
+    })
+
+    return NextResponse.json({ data }, { headers: demoHeaders })
   }
 
   // --- Dynamic RRD endpoints ---

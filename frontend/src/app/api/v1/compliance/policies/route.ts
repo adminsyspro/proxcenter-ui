@@ -4,13 +4,17 @@ import { getServerSession } from 'next-auth'
 
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { authOptions } from '@/lib/auth/config'
+import { demoResponse } from '@/lib/demo/demo-api'
 import { getSecurityPolicies, updateSecurityPolicies } from '@/lib/compliance/policies'
 import { audit } from '@/lib/audit'
 import { getCurrentTenantId } from '@/lib/tenant'
 
 export const runtime = 'nodejs'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
@@ -25,6 +29,9 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied

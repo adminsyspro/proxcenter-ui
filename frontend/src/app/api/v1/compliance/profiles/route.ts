@@ -4,11 +4,15 @@ import { NextResponse } from 'next/server'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { listProfiles, createProfile } from '@/lib/compliance/profiles'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { demoResponse } from '@/lib/demo/demo-api'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
@@ -25,6 +29,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied

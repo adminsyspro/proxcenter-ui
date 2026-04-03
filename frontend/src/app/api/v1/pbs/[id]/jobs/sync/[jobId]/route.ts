@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -15,6 +16,9 @@ type RouteContext = {
  * Met à jour un Sync Job
  */
 export async function PUT(req: Request, ctx: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const { id, jobId } = await ctx.params
     const body = await req.json()
@@ -62,7 +66,10 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * DELETE /api/v1/pbs/[id]/jobs/sync/[jobId]
  * Supprime un Sync Job
  */
-export async function DELETE(_req: Request, ctx: RouteContext) {
+export async function DELETE(req: Request, ctx: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const { id, jobId } = await ctx.params
 

@@ -9,6 +9,7 @@ import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { demoResponse } from "@/lib/demo/demo-api"
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -16,6 +17,9 @@ interface RouteContext {
 
 // GET /api/v1/rbac/roles/[id] - Détails d'un rôle
 export async function GET(req: NextRequest, context: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -85,6 +89,9 @@ return NextResponse.json(
 
 // PATCH /api/v1/rbac/roles/[id] - Modifier un rôle
 export async function PATCH(req: NextRequest, context: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -186,6 +193,9 @@ return NextResponse.json(
 
 // DELETE /api/v1/rbac/roles/[id] - Supprimer un rôle
 export async function DELETE(req: NextRequest, context: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 

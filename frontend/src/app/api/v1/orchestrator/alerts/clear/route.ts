@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { demoResponse } from '@/lib/demo/demo-api'
 import { getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -12,6 +13,9 @@ export const dynamic = 'force-dynamic'
  * Résout toutes les alertes actives (scoped to tenant connections)
  */
 export async function DELETE(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied

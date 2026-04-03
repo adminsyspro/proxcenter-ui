@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
@@ -10,9 +11,12 @@ export const runtime = "nodejs"
 // GET /api/v1/pbs/[id]/backups/[backupId]/content
 // backupId format: datastore/type/vmid/timestamp (URL encoded)
 export async function GET(
-  req: Request, 
+  req: Request,
   ctx: { params: Promise<{ id: string; backupId: string }> | { id: string; backupId: string } }
 ) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id

@@ -3,6 +3,7 @@ import { NextRequest } from "next/server"
 import { subscribe, type InventoryEvent } from "@/lib/cache/inventoryPoller"
 import { getTenantConnectionIds } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
 
@@ -24,7 +25,10 @@ export const runtime = "nodejs"
  *   - event: heartbeat    → {}  (keep-alive every 30s)
  */
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
+  const demo = demoResponse(request)
+  if (demo) return demo
+
   const denied = await checkPermission(PERMISSIONS.VM_VIEW)
   if (denied) return denied
 

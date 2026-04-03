@@ -11,9 +11,13 @@ import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { demoResponse } from "@/lib/demo/demo-api"
 
 // GET /api/v1/rbac/assignments - Liste toutes les assignations
 export async function GET(req: NextRequest) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -102,6 +106,9 @@ return NextResponse.json(
 
 // POST /api/v1/rbac/assignments - Assigner un rôle à un utilisateur
 export async function POST(req: NextRequest) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 

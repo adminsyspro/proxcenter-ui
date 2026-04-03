@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
+import { demoResponse } from '@/lib/demo/demo-api'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
@@ -10,7 +11,10 @@ export const dynamic = 'force-dynamic'
  * GET /api/v1/orchestrator/alerts/thresholds
  * Récupère les seuils d'alertes configurés
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_VIEW)
     if (denied) return denied
@@ -49,6 +53,9 @@ return NextResponse.json(response.data)
  * Met à jour les seuils d'alertes
  */
 export async function PUT(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied

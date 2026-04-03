@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { demoResponse } from '@/lib/demo/demo-api'
 import { getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -11,7 +12,10 @@ export const dynamic = 'force-dynamic'
  * GET /api/v1/orchestrator/alerts/rules
  * Liste les règles d'événements (filtrées par tenant)
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_VIEW)
     if (denied) return denied
@@ -47,6 +51,9 @@ export async function GET() {
  * Crée une nouvelle règle
  */
 export async function POST(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied

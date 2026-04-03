@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -16,6 +17,9 @@ type RouteContext = {
  * Note: jobId format attendu: "datastore:jobid" ou on utilise le store du body
  */
 export async function PUT(req: Request, ctx: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const { id, jobId } = await ctx.params
     const body = await req.json()
@@ -79,6 +83,9 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Note: Nécessite le store dans les query params
  */
 export async function DELETE(req: Request, ctx: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const { id, jobId } = await ctx.params
     const { searchParams } = new URL(req.url)

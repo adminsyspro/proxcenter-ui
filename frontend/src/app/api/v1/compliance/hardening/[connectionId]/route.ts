@@ -11,6 +11,7 @@ import {
 } from '@/lib/compliance/hardening'
 import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance/profiles'
 import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
+import { demoResponse } from '@/lib/demo/demo-api'
 import { buildSSHAuditCommand, parseSSHAuditOutput, type SSHNodeData, type SSHHardeningData } from '@/lib/compliance/ssh-checks'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
@@ -32,6 +33,9 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ connectionId: string }> }
 ) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)

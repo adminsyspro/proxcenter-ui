@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -15,6 +16,9 @@ type RouteContext = {
  * Crée un nouveau Sync Job sur PBS
  */
 export async function POST(req: Request, ctx: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const { id } = await ctx.params
     const body = await req.json()

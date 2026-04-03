@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth"
 import { nanoid } from "nanoid"
 
 import { authOptions } from "@/lib/auth/config"
+import { demoResponse } from "@/lib/demo/demo-api"
 import { getDb } from "@/lib/db/sqlite"
 import { audit } from "@/lib/audit"
 import { hasPermission } from "@/lib/rbac"
@@ -14,6 +15,9 @@ import { getCurrentTenantId } from "@/lib/tenant"
 
 // GET /api/v1/rbac/roles - Liste tous les rôles
 export async function GET(req: NextRequest) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -71,6 +75,9 @@ return NextResponse.json(
 
 // POST /api/v1/rbac/roles - Créer un nouveau rôle
 export async function POST(req: NextRequest) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 

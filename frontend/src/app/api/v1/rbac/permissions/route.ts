@@ -5,10 +5,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
+import { demoResponse } from "@/lib/demo/demo-api"
 import { getDb } from "@/lib/db/sqlite"
 
 // GET /api/v1/rbac/permissions - Liste toutes les permissions disponibles
 export async function GET(req: NextRequest) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const session = await getServerSession(authOptions)
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -20,7 +21,10 @@ type RouteContext = {
  * - GC Jobs (garbage collection)
  * - Tape Backup Jobs (si tape library configurée)
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+export async function GET(req: Request, ctx: RouteContext) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const { id } = await ctx.params
 

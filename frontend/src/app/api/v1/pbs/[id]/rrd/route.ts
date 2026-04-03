@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -15,6 +16,9 @@ export const runtime = "nodejs"
  *   - cf: AVERAGE | MAX (default: AVERAGE)
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id

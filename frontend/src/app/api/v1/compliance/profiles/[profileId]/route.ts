@@ -4,14 +4,18 @@ import { NextResponse } from 'next/server'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getProfile, getProfileChecks, updateProfile, updateProfileChecks, deleteProfile } from '@/lib/compliance/profiles'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { demoResponse } from '@/lib/demo/demo-api'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ profileId: string }> }
 ) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
@@ -34,6 +38,9 @@ export async function PUT(
   req: Request,
   ctx: { params: Promise<{ profileId: string }> }
 ) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
@@ -66,9 +73,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ profileId: string }> }
 ) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied

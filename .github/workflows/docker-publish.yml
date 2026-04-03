@@ -295,3 +295,52 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+
+  # ========================================
+  # Create GitHub Release (on version tags)
+  # ========================================
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-frontend, build-orchestrator]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges)
+          else
+            NOTES="Initial release"
+          fi
+          echo "notes<<NOTESEOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "NOTESEOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ## Changes
+
+            ${{ steps.notes.outputs.notes }}
+
+            ## Docker Images
+
+            ```bash
+            docker pull ghcr.io/adminsyspro/proxcenter-frontend:${{ github.ref_name }}
+            docker pull ghcr.io/adminsyspro/proxcenter-orchestrator:${{ github.ref_name }}
+            ```
+          draft: false
+          prerelease: false
+          make_latest: true

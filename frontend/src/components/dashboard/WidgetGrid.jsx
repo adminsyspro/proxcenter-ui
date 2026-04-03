@@ -8,7 +8,7 @@ import { ResponsiveGridLayout } from 'react-grid-layout'
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
   Skeleton, Tooltip, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Chip, Tabs, Tab, Snackbar, Alert, useTheme
+  Button, Chip, Tabs, Tab, Snackbar, Alert, useTheme, TextField, ListItemIcon, ListItemText, Divider
 } from '@mui/material'
 
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory } from './widgetRegistry'
@@ -191,6 +191,30 @@ function WidgetContainer({
   )
 }
 
+// Lightweight name input dialog (own state to avoid re-rendering the grid)
+function NameDialog({ open, title, label, submitLabel, initialValue = '', onClose, onSubmit }) {
+  const [value, setValue] = useState(initialValue)
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <TextField
+          autoFocus fullWidth size="small" margin="dense"
+          label={label}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && value.trim() && onSubmit(value.trim())}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={() => onSubmit(value.trim())} disabled={!value.trim()}>{submitLabel}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // Dialog pour ajouter un widget
 function AddWidgetDialog({ open, onClose, onAdd, t }) {
   const [tab, setTab] = useState(0)
@@ -289,6 +313,17 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [layoutLoaded, setLayoutLoaded] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
 
+  // Multi-dashboard state
+  const [dashboards, setDashboards] = useState([])
+  const [currentDashboard, setCurrentDashboard] = useState('Default')
+  const [dashTabAnchor, setDashTabAnchor] = useState(null)
+  const [dashTabTarget, setDashTabTarget] = useState(null)
+  const [newDashDialog, setNewDashDialog] = useState(false)
+  const [renameDashDialog, setRenameDashDialog] = useState(false)
+  const [deleteDashDialog, setDeleteDashDialog] = useState(false)
+  const [dragTabName, setDragTabName] = useState(null)
+  const [dragOverName, setDragOverName] = useState(null)
+
   const [timeRange, setTimeRange] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('dashboard-timerange') || 'hour'
     
@@ -331,71 +366,70 @@ return 'hour'
     resizeObserverRef.current.observe(node)
   }, [])
 
-  // Charger le layout depuis l'API
-  useEffect(() => {
-    const loadLayout = async () => {
-      try {
-        const res = await fetch('/api/v1/dashboard/layout')
+  // Load dashboard list + active dashboard
+  const loadDashboard = useCallback(async (name) => {
+    try {
+      const url = name ? `/api/v1/dashboard/layout?name=${encodeURIComponent(name)}` : '/api/v1/dashboard/layout'
+      const res = await fetch(url)
 
-        if (res.ok) {
-          const json = await res.json()
+      if (res.ok) {
+        const json = await res.json()
 
-          if (json.data?.widgets && Array.isArray(json.data.widgets)) {
-            // Filter out widgets whose type no longer exists in the registry
-            const cleaned = json.data.widgets.filter(w => WIDGET_REGISTRY[w.type])
+        if (json.data?.widgets && Array.isArray(json.data.widgets)) {
+          const cleaned = json.data.widgets.filter(w => WIDGET_REGISTRY[w.type])
 
-            setLayout(cleaned.length > 0 ? cleaned : DEFAULT_LAYOUT.map(w => ({ ...w, id: generateId() })))
-          }
+          // Only fallback to DEFAULT_LAYOUT if this is the "Default" dashboard with no saved data
+          setLayout(json.data.id ? cleaned : (cleaned.length > 0 ? cleaned : DEFAULT_LAYOUT.map(w => ({ ...w, id: generateId() }))))
+          setCurrentDashboard(json.data.name || 'Default')
         }
-      } catch (e) {
-        console.error('Failed to load layout:', e)
-
-        // Fallback sur localStorage si l'API échoue
-        const saved = localStorage.getItem('dashboard-layout')
-
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved)
-            const cleaned = parsed.filter(w => WIDGET_REGISTRY[w.type])
-
-            setLayout(cleaned.length > 0 ? cleaned : DEFAULT_LAYOUT.map(w => ({ ...w, id: generateId() })))
-          } catch {}
-        }
-      } finally {
-        setLayoutLoaded(true)
       }
+    } catch (e) {
+      console.error('Failed to load dashboard:', e)
+    }
+  }, [])
+
+  const refreshDashboardList = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/dashboard/layout?list=true')
+
+      if (res.ok) {
+        const json = await res.json()
+
+        setDashboards(json.data || [])
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    const init = async () => {
+      await refreshDashboardList()
+      await loadDashboard()
+      setLayoutLoaded(true)
     }
 
-    loadLayout()
-  }, [])
+    init()
+  }, [loadDashboard, refreshDashboardList])
 
   // Sauvegarder le layout via l'API
   const saveLayout = useCallback(async (newLayout) => {
     setLayout(newLayout)
-
-    // Sauvegarder aussi en localStorage comme backup
-    localStorage.setItem('dashboard-layout', JSON.stringify(newLayout))
-
-    // Sauvegarder en base via l'API
     setSaving(true)
 
     try {
       const res = await fetch('/api/v1/dashboard/layout', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ widgets: newLayout })
+        body: JSON.stringify({ name: currentDashboard, widgets: newLayout })
       })
 
-      if (!res.ok) {
-        throw new Error('Failed to save')
-      }
+      if (!res.ok) throw new Error('Failed to save')
     } catch (e) {
       console.error('Failed to save layout:', e)
       setSnackbar({ open: true, message: t('dashboard.saveError'), severity: 'error' })
     } finally {
       setSaving(false)
     }
-  }, [t])
+  }, [t, currentDashboard])
 
   // Compute which widgets are hidden by collapsed sections
   const hiddenBySection = useMemo(() => {
@@ -523,17 +557,118 @@ return {
   // Reset layout
   const handleResetLayout = async () => {
     try {
-      await fetch('/api/v1/dashboard/layout', { method: 'DELETE' })
-      const newLayout = DEFAULT_LAYOUT.map(w => ({ ...w, id: generateId() }))
-
-      setLayout(newLayout)
-      localStorage.removeItem('dashboard-layout')
+      await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(currentDashboard)}`, { method: 'DELETE' })
+      await refreshDashboardList()
+      await loadDashboard()
       setSnackbar({ open: true, message: t('dashboard.layoutReset'), severity: 'success' })
     } catch (e) {
       console.error('Failed to reset layout:', e)
     }
 
     setLayoutMenuAnchor(null)
+  }
+
+  // Multi-dashboard: switch
+  const handleSwitchDashboard = async (name) => {
+    if (name === currentDashboard) return
+    await loadDashboard(name)
+  }
+
+  // Multi-dashboard: create
+  const handleCreateDashboard = async (name) => {
+    if (!name) return
+    try {
+      // If this is the first dashboard, persist the current "Default" layout first
+      if (dashboards.length === 0) {
+        await fetch('/api/v1/dashboard/layout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Default', widgets: layout }),
+        })
+      }
+
+      const res = await fetch('/api/v1/dashboard/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, widgets: [] }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+
+        setSnackbar({ open: true, message: err.error || 'Error', severity: 'error' })
+
+        return
+      }
+
+      await refreshDashboardList()
+      await loadDashboard(name)
+      setSnackbar({ open: true, message: t('dashboard.dashboardCreated', { name }), severity: 'success' })
+    } catch {}
+  }
+
+  // Multi-dashboard: delete
+  const handleDeleteDashboard = async () => {
+    const name = dashTabTarget
+
+    if (!name) return
+    try {
+      await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(name)}`, { method: 'DELETE' })
+      setDeleteDashDialog(false)
+      setDashTabTarget(null)
+      await refreshDashboardList()
+      await loadDashboard()
+      setSnackbar({ open: true, message: t('dashboard.dashboardDeleted', { name }), severity: 'success' })
+    } catch {}
+  }
+
+  // Multi-dashboard: rename
+  const handleRenameDashboard = async (newName) => {
+    const oldName = dashTabTarget
+
+    if (!newName || !oldName || newName === oldName) return
+    try {
+      // Load old, create new with same widgets, delete old
+      const res = await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(oldName)}`)
+      const json = await res.json()
+      const widgets = json.data?.widgets || DEFAULT_LAYOUT
+
+      await fetch('/api/v1/dashboard/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, widgets }),
+      })
+      await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(oldName)}`, { method: 'DELETE' })
+      setDashTabTarget(null)
+      await refreshDashboardList()
+      await loadDashboard(newName)
+      setSnackbar({ open: true, message: t('dashboard.dashboardRenamed', { name: newName }), severity: 'success' })
+    } catch {}
+  }
+
+  // Multi-dashboard: duplicate
+  const handleDuplicateDashboard = async () => {
+    const srcName = dashTabTarget
+
+    if (!srcName) return
+    const dupName = `${srcName} (copy)`
+
+    try {
+      const res = await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(srcName)}`)
+      const json = await res.json()
+      const widgets = (json.data?.widgets || DEFAULT_LAYOUT).map(w => ({ ...w, id: generateId() }))
+
+      await fetch('/api/v1/dashboard/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: dupName, widgets }),
+      })
+      setDashTabAnchor(null)
+      setDashTabTarget(null)
+      await refreshDashboardList()
+      await loadDashboard(dupName)
+      setSnackbar({ open: true, message: t('dashboard.dashboardDuplicated', { name: dupName }), severity: 'success' })
+    } catch {}
   }
 
   const dashboardRef = useRef(null)
@@ -557,6 +692,27 @@ return {
 return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 
+  const dashList = dashboards.length > 0 ? dashboards : [{ name: 'Default', isActive: true }]
+
+  const handleTabDrop = useCallback((dragName, dropName) => {
+    if (!dragName || !dropName || dragName === dropName) return
+
+    setDashboards(prev => {
+      const list = prev.length > 0 ? [...prev] : [{ name: 'Default', isActive: true }]
+      const fromIdx = list.findIndex(d => d.name === dragName)
+      const toIdx = list.findIndex(d => d.name === dropName)
+
+      if (fromIdx < 0 || toIdx < 0) return prev
+      const [moved] = list.splice(fromIdx, 1)
+
+      list.splice(toIdx, 0, moved)
+
+      return list
+    })
+    setDragTabName(null)
+    setDragOverName(null)
+  }, [])
+
   if (!layoutLoaded) {
     return (
       <Box sx={{ pt: 2 }}>
@@ -567,9 +723,72 @@ return () => document.removeEventListener('fullscreenchange', handler)
 
   return (
     <Box ref={dashboardRef} sx={{
-      height: '100%', display: 'flex', flexDirection: 'row',
+      height: '100%', display: 'flex', flexDirection: 'column',
       ...(fullscreen && { bgcolor: 'background.default', overflow: 'auto', p: 1 }),
     }}>
+      {/* Dashboard tabs */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '2px', px: 0.5, py: 0.25, flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
+        {dashList.map(d => (
+          <Box
+            key={d.name}
+            draggable
+            onClick={() => handleSwitchDashboard(d.name)}
+            onContextMenu={(e) => { e.preventDefault(); setDashTabTarget(d.name); setDashTabAnchor(e.currentTarget) }}
+            onDragStart={() => setDragTabName(d.name)}
+            onDragEnd={() => { setDragTabName(null); setDragOverName(null) }}
+            onDragOver={(e) => { e.preventDefault(); setDragOverName(d.name) }}
+            onDrop={(e) => { e.preventDefault(); handleTabDrop(dragTabName, d.name) }}
+            sx={{
+              px: 1.5, py: 0.5, borderRadius: '6px 6px 0 0', cursor: 'grab',
+              fontSize: 11, fontWeight: currentDashboard === d.name ? 700 : 500,
+              color: currentDashboard === d.name ? 'primary.main' : 'text.secondary',
+              bgcolor: currentDashboard === d.name ? 'action.selected' : 'transparent',
+              borderBottom: currentDashboard === d.name ? '2px solid' : '2px solid transparent',
+              borderColor: currentDashboard === d.name ? 'primary.main' : 'transparent',
+              opacity: dragTabName === d.name ? 0.4 : 1,
+              borderLeft: dragOverName === d.name && dragTabName !== d.name ? '2px solid' : '2px solid transparent',
+              borderLeftColor: dragOverName === d.name && dragTabName !== d.name ? 'primary.main' : 'transparent',
+              '&:hover': { bgcolor: 'action.hover' },
+              userSelect: 'none', whiteSpace: 'nowrap',
+              transition: 'opacity 0.15s, border-left-color 0.15s',
+            }}
+          >
+            {d.name}
+          </Box>
+        ))}
+        <Box
+          onClick={() => setNewDashDialog(true)}
+          sx={{
+            px: 1, py: 0.5, cursor: 'pointer',
+            fontSize: 13, color: 'text.disabled',
+            '&:hover': { color: 'primary.main' },
+            userSelect: 'none',
+          }}
+        >
+          +
+        </Box>
+      </Box>
+
+      {/* Dashboard tab context menu */}
+      <Menu anchorEl={dashTabAnchor} open={Boolean(dashTabAnchor)} onClose={() => { setDashTabAnchor(null); setDashTabTarget(null) }}>
+        <MenuItem dense onClick={() => { setRenameDashDialog(true); setDashTabAnchor(null) }}>
+          <ListItemIcon><i className="ri-pencil-line" style={{ fontSize: 16 }} /></ListItemIcon>
+          <ListItemText>{t('dashboard.renameDashboard')}</ListItemText>
+        </MenuItem>
+        <MenuItem dense onClick={() => { handleDuplicateDashboard() }}>
+          <ListItemIcon><i className="ri-file-copy-line" style={{ fontSize: 16 }} /></ListItemIcon>
+          <ListItemText>{t('dashboard.duplicateDashboard')}</ListItemText>
+        </MenuItem>
+        {dashList.length > 1 && dashTabTarget !== 'Default' && <Divider />}
+        {dashList.length > 1 && dashTabTarget !== 'Default' && (
+          <MenuItem dense onClick={() => { setDeleteDashDialog(true); setDashTabAnchor(null) }} sx={{ color: 'error.main' }}>
+            <ListItemIcon><i className="ri-delete-bin-line" style={{ fontSize: 16, color: 'inherit' }} /></ListItemIcon>
+            <ListItemText>{t('dashboard.deleteDashboard')}</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
       {/* Grid avec react-grid-layout */}
       <div
         ref={containerRef}
@@ -740,6 +959,7 @@ return () => document.removeEventListener('fullscreenchange', handler)
           alignItems: 'center',
           justifyContent: 'center',
           gap: 2.5,
+          pointerEvents: 'none',
         }}>
           <Box>
             <img
@@ -758,12 +978,49 @@ return () => document.removeEventListener('fullscreenchange', handler)
             variant="outlined"
             startIcon={<i className="ri-add-line" />}
             onClick={() => { setEditMode(true); setAddDialogOpen(true) }}
-            sx={{ mt: 1 }}
+            sx={{ mt: 1, pointerEvents: 'auto' }}
           >
             {t('dashboard.addWidget')}
           </Button>
         </Box>
       )}
+
+      </Box>{/* end flex row */}
+
+      {/* New Dashboard Dialog */}
+      {newDashDialog && <NameDialog
+        open={newDashDialog}
+        title={t('dashboard.newDashboard')}
+        label={t('dashboard.dashboardName')}
+        submitLabel={t('common.create')}
+        onClose={() => setNewDashDialog(false)}
+        onSubmit={(name) => { setNewDashDialog(false); handleCreateDashboard(name) }}
+        t={t}
+      />}
+
+      {/* Rename Dashboard Dialog */}
+      {renameDashDialog && <NameDialog
+        open={renameDashDialog}
+        title={t('dashboard.renameDashboard')}
+        label={t('dashboard.dashboardName')}
+        submitLabel={t('common.save')}
+        initialValue={dashTabTarget || ''}
+        onClose={() => setRenameDashDialog(false)}
+        onSubmit={(name) => { setRenameDashDialog(false); handleRenameDashboard(name) }}
+        t={t}
+      />}
+
+      {/* Delete Dashboard Dialog */}
+      <Dialog open={deleteDashDialog} onClose={() => setDeleteDashDialog(false)} maxWidth="xs">
+        <DialogTitle>{t('dashboard.deleteDashboard')}</DialogTitle>
+        <DialogContent>
+          <Typography>{t('dashboard.deleteDashboardConfirm', { name: dashTabTarget || '' })}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDashDialog(false)}>{t('common.cancel')}</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteDashboard}>{t('common.delete')}</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Add Widget Dialog */}
       <AddWidgetDialog

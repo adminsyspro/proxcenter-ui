@@ -898,7 +898,7 @@ const EXTRA_MOCKS: MockDataMap = {
     }
   },
 
-  'GET:/api/v1/dashboard/layout': { data: { widgets: [
+  'GET:/api/v1/dashboard/layout': { data: { id: 'demo-layout', name: 'Default', isActive: true, widgets: [
     { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'General' } },
     { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 1, w: 1, h: 7 },
     { id: 'kpi-2', type: 'kpi-vms', x: 1, y: 4, w: 1, h: 4 },
@@ -2058,6 +2058,13 @@ export function demoResponse(req: Request): NextResponse | Response | null {
         { node: 'pve-node-03', ip: '10.10.10.3', connectionId: 'demo-pve-cluster-001', connectionName: 'PVE-CLUSTER-DEMO', online: true, hasOvs: true, ovsVersion: '3.1.0', sflowConfigured: true, sflowTarget: '10.10.10.254:6343', sflowSampling: 512, bridges: ['vmbr0'] },
       ],
     }, { headers: demoHeaders })
+  }
+
+  // --- Dashboard layout list ---
+  if (cleanPath === '/api/v1/dashboard/layout' && urlObj.searchParams.get('list') === 'true') {
+    return NextResponse.json({ data: [
+      { id: 'demo-layout', name: 'Default', isActive: true, updatedAt: new Date().toISOString() },
+    ] }, { headers: demoHeaders })
   }
 
   // --- PBS backups/trends ---

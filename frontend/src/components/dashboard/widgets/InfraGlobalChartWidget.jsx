@@ -122,17 +122,22 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
   const nodesByConnection = useMemo(() => {
     const nodes = data?.nodes || []
     const grouped = {}
+    const validConnIds = new Set(nodes.map(n => n.connectionId).filter(Boolean))
+
+    // If selectedConnections references IDs that don't exist, ignore the filter
+    const effectiveFilter = selectedConnections.length > 0 && selectedConnections.some(id => validConnIds.has(id))
+      ? selectedConnections : []
 
     nodes.forEach((node) => {
       const connId = node.connectionId
 
       if (!connId) return
-      if (selectedConnections.length > 0 && !selectedConnections.includes(connId)) return
+      if (effectiveFilter.length > 0 && !effectiveFilter.includes(connId)) return
       if (!grouped[connId]) grouped[connId] = []
       grouped[connId].push({ node: node.name })
     })
-    
-return grouped
+
+    return grouped
   }, [nodesStableKey, selectedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch trends

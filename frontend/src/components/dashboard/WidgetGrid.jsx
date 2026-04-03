@@ -727,8 +727,15 @@ return () => document.removeEventListener('fullscreenchange', handler)
       ...(fullscreen && { bgcolor: 'background.default', overflow: 'auto', p: 1 }),
     }}>
       {/* Dashboard tabs */}
+      {(() => {
+        const TAB_COLORS = ['#6366f1', '#f97316', '#22c55e', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#eab308', '#ef4444', '#06b6d4']
+
+        return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '2px', px: 0.5, py: 0.25, flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-        {dashList.map(d => (
+        {dashList.map((d, idx) => {
+          const tabColor = TAB_COLORS[idx % TAB_COLORS.length]
+
+          return (
           <Box
             key={d.name}
             draggable
@@ -741,13 +748,13 @@ return () => document.removeEventListener('fullscreenchange', handler)
             sx={{
               px: 1.5, py: 0.5, borderRadius: '6px 6px 0 0', cursor: 'grab',
               fontSize: 11, fontWeight: currentDashboard === d.name ? 700 : 500,
-              color: currentDashboard === d.name ? 'primary.main' : 'text.secondary',
-              bgcolor: currentDashboard === d.name ? 'action.selected' : 'transparent',
+              color: currentDashboard === d.name ? tabColor : 'text.secondary',
+              bgcolor: currentDashboard === d.name ? `${tabColor}12` : 'transparent',
               borderBottom: currentDashboard === d.name ? '2px solid' : '2px solid transparent',
-              borderColor: currentDashboard === d.name ? 'primary.main' : 'transparent',
+              borderColor: currentDashboard === d.name ? tabColor : 'transparent',
               opacity: dragTabName === d.name ? 0.4 : 1,
               borderLeft: dragOverName === d.name && dragTabName !== d.name ? '2px solid' : '2px solid transparent',
-              borderLeftColor: dragOverName === d.name && dragTabName !== d.name ? 'primary.main' : 'transparent',
+              borderLeftColor: dragOverName === d.name && dragTabName !== d.name ? tabColor : 'transparent',
               '&:hover': { bgcolor: 'action.hover' },
               userSelect: 'none', whiteSpace: 'nowrap',
               transition: 'opacity 0.15s, border-left-color 0.15s',
@@ -755,7 +762,8 @@ return () => document.removeEventListener('fullscreenchange', handler)
           >
             {d.name}
           </Box>
-        ))}
+          )
+        })}
         <Box
           onClick={() => setNewDashDialog(true)}
           sx={{
@@ -768,6 +776,8 @@ return () => document.removeEventListener('fullscreenchange', handler)
           +
         </Box>
       </Box>
+        )
+      })()}
 
       {/* Dashboard tab context menu */}
       <Menu anchorEl={dashTabAnchor} open={Boolean(dashTabAnchor)} onClose={() => { setDashTabAnchor(null); setDashTabTarget(null) }}>

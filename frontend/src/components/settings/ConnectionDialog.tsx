@@ -265,9 +265,11 @@ export default function ConnectionDialog({
     if (isExternalHypervisor && finalForm.baseUrl && !finalForm.baseUrl.match(/^https?:\/\//)) {
       finalForm.baseUrl = isXcpng ? `http://${finalForm.baseUrl}` : `https://${finalForm.baseUrl}`
     }
+    // Check if user explicitly specified a port in the raw input (e.g. :443, :8006)
+    const userSpecifiedPort = finalForm.baseUrl && /:\d+/.test(finalForm.baseUrl.replace(/^https?:\/\//, ''))
     try {
       const url = new URL(finalForm.baseUrl)
-      if (!url.port && !isExternalHypervisor) {
+      if (!url.port && !isExternalHypervisor && !userSpecifiedPort) {
         url.port = defaultPort
         finalForm.baseUrl = url.toString().replace(/\/$/, '')
       }

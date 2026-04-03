@@ -48,7 +48,7 @@ export type DashboardLayout = {
 // Layout par défaut (ROW_HEIGHT=40)
 export const DEFAULT_LAYOUT: WidgetConfig[] = [
   // Section: General
-  { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'General' } },
+  { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'General' } }, // 'Général' on user install
   { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 1, w: 1, h: 7 },
   { id: 'kpi-2', type: 'kpi-vms', x: 1, y: 4, w: 1, h: 4 },
   { id: 'kpi-3', type: 'kpi-lxc', x: 1, y: 1, w: 1, h: 3 },

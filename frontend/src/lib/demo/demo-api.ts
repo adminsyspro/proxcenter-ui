@@ -841,7 +841,20 @@ const EXTRA_MOCKS: MockDataMap = {
     }
   },
 
-  'GET:/api/v1/dashboard/layout': { data: null },
+  'GET:/api/v1/dashboard/layout': { data: { widgets: [
+    { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'General' } },
+    { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 1, w: 1, h: 7 },
+    { id: 'kpi-2', type: 'kpi-vms', x: 1, y: 4, w: 1, h: 4 },
+    { id: 'kpi-3', type: 'kpi-lxc', x: 1, y: 1, w: 1, h: 3 },
+    { id: 'kpi-4', type: 'kpi-alerts', x: 11, y: 1, w: 1, h: 7 },
+    { id: 'clusters-g', type: 'clusters-gauges', x: 2, y: 1, w: 4, h: 7 },
+    { id: 'resources-1', type: 'resources-gauges', x: 6, y: 1, w: 3, h: 7 },
+    { id: 'drs-1', type: 'drs-status', x: 9, y: 1, w: 2, h: 7 },
+    { id: 'sec-2', type: 'section-header', x: 0, y: 18, w: 12, h: 1, settings: { title: 'Cluster / Ceph' } },
+    { id: 'ceph-1', type: 'ceph-status', x: 0, y: 8, w: 3, h: 10 },
+    { id: 'infra-1', type: 'infra-global-chart', x: 3, y: 8, w: 6, h: 10 },
+    { id: 'heatmap-1', type: 'vm-heatmap', x: 9, y: 8, w: 3, h: 10 },
+  ] } },
 
   // --- Inventory (non-stream) ---
   get 'GET:/api/v1/inventory'() {

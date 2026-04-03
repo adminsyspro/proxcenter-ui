@@ -326,7 +326,12 @@
       "infraGlobalChart": "所有基础设施中每个节点的 CPU/RAM",
       "vmHeatmap": "所有客户机的 CPU/RAM 热力图",
       "drsStatus": "DRS 状态、活跃迁移和建议",
-      "siteRecovery": "虚拟机保护、RPO 合规性和复制状态"
+      "siteRecovery": "虚拟机保护、RPO 合规性和复制状态",
+      "backupCalendar": "30天备份历史",
+      "nodesGauges": "每节点环形图 (CPU, RAM, 磁盘)",
+      "clustersGauges": "每集群图表、趋势线和健康评分",
+      "clusterHealth": "关键指标健康评分",
+      "sectionHeader": "可折叠分区分隔符"
     },
     "widgetDrs": {
       "automatic": "自动",

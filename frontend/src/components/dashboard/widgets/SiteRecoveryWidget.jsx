@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, Chip, CircularProgress, Stack, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 import { useLicense } from '@/contexts/LicenseContext'
 import { useReplicationHealth } from '@/hooks/useSiteRecovery'
@@ -39,7 +41,8 @@ function ScoreRing({ score, size = 56 }) {
 function statColor(value, goodThreshold, warnThreshold) {
   if (value >= goodThreshold) return '#22c55e'
   if (value >= warnThreshold) return '#f59e0b'
-  return '#ef4444'
+  
+return '#ef4444'
 }
 
 function SiteRecoveryWidget({ data, loading, config }) {

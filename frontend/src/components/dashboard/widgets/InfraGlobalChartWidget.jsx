@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box, Checkbox, CircularProgress, IconButton, ListItemText, Menu, MenuItem,
@@ -9,7 +10,9 @@ import {
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
 } from 'recharts'
+
 import { widgetColors } from './themeColors'
+import { mapTimeRange, formatTime } from './timeRangeUtils'
 
 const NODE_COLORS = [
   '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
@@ -18,21 +21,18 @@ const NODE_COLORS = [
   '#06b6d4', '#3b82f6', '#2563eb', '#7c3aed',
 ]
 
-const TIMEFRAMES = [
-  { value: 'hour', label: '1h' },
-  { value: 'day', label: '24h' },
-  { value: 'week', label: '7d' },
-]
-
 // ─── Custom Tooltip ──────────────────────────────────────────────────────────
 function ChartTooltip({ active, payload, label, metric, isDark }) {
   if (!active || !payload?.length) return null
   const c = widgetColors(isDark)
-  return (
+  const time = formatTime(payload) || label
+
+  
+return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 100, color: c.tooltipText }}>
       <div style={{ background: metric === 'cpu' ? '#f97316' : '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className={metric === 'cpu' ? 'ri-cpu-line' : 'ri-database-2-line'} style={{ fontSize: 10 }} />
-        {metric.toUpperCase()} - {label}
+        {metric.toUpperCase()} {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
         {payload.filter(e => !e.hide).map((entry) => (
@@ -57,6 +57,7 @@ function ConnectionFilter({ connections, selected, onChange, t }) {
       onChange([id])
     } else if (selected.includes(id)) {
       const next = selected.filter(k => k !== id)
+
       onChange(next.length === 0 ? [] : next)
     } else {
       onChange([...selected, id])
@@ -77,7 +78,9 @@ function ConnectionFilter({ connections, selected, onChange, t }) {
         </MenuItem>
         {connections.map(c => {
           const checked = allSelected || selected.includes(c.id)
-          return (
+
+          
+return (
             <MenuItem key={c.id} dense onClick={() => handleToggle(c.id)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
               <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{c.name}</ListItemText>
@@ -90,12 +93,11 @@ function ConnectionFilter({ connections, selected, onChange, t }) {
 }
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
-function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpdateSettings }) {
+function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpdateSettings, timeRange }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const c = widgetColors(isDark)
-  const [timeframe, setTimeframe] = useState('hour')
   const [metric, setMetric] = useState('ram')
   const [trendsData, setTrendsData] = useState(null)
   const [nodeNames, setNodeNames] = useState([])
@@ -120,35 +122,45 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
   const nodesByConnection = useMemo(() => {
     const nodes = data?.nodes || []
     const grouped = {}
+
     nodes.forEach((node) => {
       const connId = node.connectionId
+
       if (!connId) return
       if (selectedConnections.length > 0 && !selectedConnections.includes(connId)) return
       if (!grouped[connId]) grouped[connId] = []
       grouped[connId].push({ node: node.name })
     })
-    return grouped
+    
+return grouped
   }, [nodesStableKey, selectedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch trends
   useEffect(() => {
     const fetchTrends = async () => {
       const connIds = Object.keys(nodesByConnection)
+
       if (connIds.length === 0) return
+
       // Only show full loading on first fetch, not on refresh
       if (!trendsData) setLoading(true)
+
       try {
         const results = await Promise.all(
           connIds.map(async (connId) => {
             const items = nodesByConnection[connId]
+
             const res = await fetch(`/api/v1/connections/${connId}/nodes/trends`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items, timeframe }),
+              body: JSON.stringify({ items, timeframe: mapTimeRange(timeRange).trendsTimeframe }),
             })
+
             if (!res.ok) return {}
             const json = await res.json()
-            return json.data || {}
+
+            
+return json.data || {}
           })
         )
 
@@ -158,12 +170,15 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
         results.forEach((connData) => {
           Object.entries(connData).forEach(([nodeKey, nodePoints]) => {
             const nodeName = nodeKey.replace(/^node:/, '')
+
             allNodeNames.add(nodeName)
             if (!Array.isArray(nodePoints)) return
             nodePoints.forEach((point) => {
               const key = point.ts || point.t
+
               if (!timeMap.has(key)) timeMap.set(key, { ts: point.ts || 0, t: point.t })
               const entry = timeMap.get(key)
+
               entry[`${nodeName}_cpu`] = point.cpu || 0
               entry[`${nodeName}_ram`] = point.ram || 0
             })
@@ -174,15 +189,19 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
         const sortedNames = [...allNodeNames].sort()
         const keys = sortedNames.flatMap(name => [`${name}_cpu`, `${name}_ram`])
         const lastKnown = {}
+
         for (const slot of aggregated) {
           for (const key of keys) {
             if (slot[key] != null) lastKnown[key] = slot[key]
             else if (lastKnown[key] != null) slot[key] = lastKnown[key]
           }
         }
+
         const firstKnown = {}
+
         for (let i = aggregated.length - 1; i >= 0; i--) {
           const slot = aggregated[i]
+
           for (const key of keys) {
             if (slot[key] != null) firstKnown[key] = slot[key]
             else if (firstKnown[key] != null) slot[key] = firstKnown[key]
@@ -198,8 +217,9 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
         setLoading(false)
       }
     }
+
     fetchTrends()
-  }, [nodesStableKey, selectedKey, timeframe]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodesStableKey, selectedKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (dashboardLoading || loading) {
     return (
@@ -246,20 +266,6 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
             {v.toUpperCase()}
           </Box>
         ))}
-        {TIMEFRAMES.map((tf) => (
-          <Box
-            key={tf.value}
-            onClick={() => setTimeframe(tf.value)}
-            sx={{
-              px: 1, py: 0.25, fontSize: 10, fontWeight: timeframe === tf.value ? 700 : 400, cursor: 'pointer',
-              borderRadius: 1, color: timeframe === tf.value ? '#fff' : c.textMuted,
-              bgcolor: timeframe === tf.value ? c.surfaceActive : 'transparent',
-              '&:hover': { bgcolor: c.surfaceSubtle },
-            }}
-          >
-            {tf.label}
-          </Box>
-        ))}
         {allConnections.length > 1 && (
           <ConnectionFilter connections={allConnections} selected={selectedConnections} onChange={handleFilterChange} t={t} />
         )}
@@ -272,7 +278,9 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
             <defs>
               {nodeNames.map((name, i) => {
                 const color = NODE_COLORS[i % NODE_COLORS.length]
-                return (
+
+                
+return (
                   <linearGradient key={name} id={`infra-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={color} stopOpacity={0.25} />
                     <stop offset="95%" stopColor={color} stopOpacity={0.02} />
@@ -286,7 +294,9 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
             <RTooltip content={<ChartTooltip metric={metric} isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent' }} />
             {nodeNames.map((name, i) => {
               const color = NODE_COLORS[i % NODE_COLORS.length]
-              return (
+
+              
+return (
                 <Area
                   key={name}
                   type="monotone"

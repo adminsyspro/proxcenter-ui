@@ -331,7 +331,8 @@
       "backupCalendar": "Historique backups sur 30 jours",
       "nodesGauges": "Jauges circulaires par nœud (CPU, RAM, Disk)",
       "clustersGauges": "Jauges par cluster avec sparklines et score",
-      "clusterHealth": "Score de santé avec métriques clés"
+      "clusterHealth": "Score de santé avec métriques clés",
+      "sectionHeader": "Séparateur de section pliable"
     },
     "widgetDrs": {
       "automatic": "Automatique",

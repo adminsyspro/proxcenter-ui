@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function CircularGauge({ value, max, size = 56, strokeWidth = 4.5, color, trackColor = 'rgba(255,255,255,0.08)' }) {
@@ -12,7 +14,11 @@ function CircularGauge({ value, max, size = 56, strokeWidth = 4.5, color, trackC
   const [mounted, setMounted] = useState(false)
   const offset = mounted ? circumference - pct * circumference : circumference
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ position: 'relative', width: size, height: size }}>

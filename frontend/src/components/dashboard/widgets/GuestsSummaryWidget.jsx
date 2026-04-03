@@ -1,8 +1,10 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function GuestsSummaryWidget({ data, loading }) {

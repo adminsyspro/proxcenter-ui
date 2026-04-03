@@ -1,10 +1,13 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+
 import { widgetColors } from './themeColors'
+import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
 
 // ─── Circular Gauge (animated) ───────────────────────────────────────────────
 function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublabel, isDark = true }) {
@@ -14,7 +17,11 @@ function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublab
   const [mounted, setMounted] = useState(false)
   const offset = mounted ? circumference - (value / 100) * circumference : circumference
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
@@ -39,19 +46,14 @@ function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublab
   )
 }
 
-// ─── Tooltips ────────────────────────────────────────────────────────────────
-function formatTime(payload) {
-  const t = payload?.[0]?.payload?.time || payload?.[0]?.payload?.t
-  if (!t) return null
-  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return t
-}
 
 function IoTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
   const time = formatTime(payload)
   const c = widgetColors(isDark)
-  return (
+
+  
+return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-speed-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -72,15 +74,18 @@ function IoTooltip({ active, payload, isDark }) {
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  return '#4caf50'
+  
+return '#4caf50'
 }
 
 function formatBytes(bytes) {
   if (!bytes) return '0'
   const gb = bytes / (1024 * 1024 * 1024)
+
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`
   if (gb >= 1) return `${gb.toFixed(1)} GB`
-  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
+  
+return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
 }
 
 function formatRate(bytes) {
@@ -88,7 +93,8 @@ function formatRate(bytes) {
   if (bytes < 1024) return `${Math.round(bytes)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
+  
+return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
 }
 
 // ─── PBS Server Card ─────────────────────────────────────────────────────────
@@ -196,7 +202,7 @@ function PbsCard({ server, theme, t, rrdData }) {
 }
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
-function PbsOverviewWidget({ data, loading }) {
+function PbsOverviewWidget({ data, loading, timeRange }) {
   const t = useTranslations()
   const theme = useTheme()
   const pbs = data?.pbs || {}
@@ -215,24 +221,28 @@ function PbsOverviewWidget({ data, loading }) {
       servers.map(async (server) => {
         try {
           const res = await fetch(
-            `/api/v1/pbs/${encodeURIComponent(server.id)}/rrd?timeframe=hour`,
+            `/api/v1/pbs/${encodeURIComponent(server.id)}/rrd?timeframe=${mapTimeRange(timeRange).rrdTimeframe}`,
             { cache: 'no-store', signal: controller.signal }
           )
+
           if (!res.ok) return null
           const json = await res.json()
-          const points = (json?.data || []).filter(p => p && p.time)
-          return { id: server.id, data: points }
+          const points = sliceToRange((json?.data || []).filter(p => p && p.time), timeRange)
+
+          
+return { id: server.id, data: points }
         } catch { return null }
       })
     ).then(results => {
       if (cancelled) return
       const map = {}
+
       for (const r of results) { if (r && r.data.length > 0) map[r.id] = r.data }
       setRrdByServer(map)
     })
 
     return () => { cancelled = true; controller.abort() }
-  }, [serversKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [serversKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!pbs.servers || pbs.servers === 0) {
     return (

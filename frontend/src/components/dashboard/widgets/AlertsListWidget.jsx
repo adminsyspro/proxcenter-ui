@@ -1,18 +1,22 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 import {
   Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, IconButton, Table, TableBody, TableCell, TableRow, Typography, useTheme
 } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 // ─── Entity icon with status dot ─────────────────────────────────────────────
 function EntityIcon({ entityType, severity, isDark }) {
   const dotColor = severity === 'crit' ? '#f44336' : severity === 'warn' ? '#ff9800' : '#3b82f6'
   const isNode = entityType === 'node'
+
   const icon = isNode ? null
     : entityType === 'cluster' ? 'ri-server-line'
     : entityType === 'server' ? 'ri-shield-check-line'
@@ -53,15 +57,18 @@ function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t, nodeSt
     warn: { label: 'WARNING', color: 'warning' },
     info: { label: 'INFO', color: 'info' },
   }
+
   const cfg = severityConfig[alert.severity] || severityConfig.info
 
   function getEntityLink(a) {
     if (a.entityType === 'node' && a.connId && a.entityId) return `/infrastructure/inventory?selectType=node&selectId=${a.connId}:${a.entityId}`
     if (a.entityType === 'cluster' && a.connId) return `/infrastructure/inventory?selectType=cluster&selectId=${a.connId}`
-    return null
+    
+return null
   }
 
   const entityLink = getEntityLink(alert)
+
   const sourceValue = entityLink ? (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
       <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
@@ -143,6 +150,7 @@ function AlertsListWidget({ data, loading }) {
 
   // Build node name -> online status map
   const nodeStatusMap = {}
+
   for (const n of (data?.nodes || [])) {
     nodeStatusMap[n.name] = n.status === 'online'
   }
@@ -150,23 +158,27 @@ function AlertsListWidget({ data, loading }) {
   function getAlertLink(alert) {
     if (alert.entityType === 'node' && alert.connId && alert.entityId) return `/infrastructure/inventory?selectType=node&selectId=${alert.connId}:${alert.entityId}`
     if (alert.entityType === 'cluster' && alert.entityId) return `/infrastructure/inventory?selectType=cluster&selectId=${alert.entityId}`
-    return null
+    
+return null
   }
 
   function timeAgo(date) {
     const now = new Date()
     const past = new Date(date)
     const diff = Math.floor((now - past) / 1000)
+
     if (diff < 60) return t('time.justNow')
     if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
     if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-    return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+    
+return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
 
   function getSeverityColor(severity) {
     if (severity === 'crit') return '#f44336'
     if (severity === 'warn') return '#ff9800'
-    return '#3b82f6'
+    
+return '#3b82f6'
   }
 
   const darkCard = {

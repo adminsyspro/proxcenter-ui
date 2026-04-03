@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function CircularGauge({ value, color, trackColor, size = 72, strokeWidth = 6 }) {
@@ -16,7 +18,9 @@ function CircularGauge({ value, color, trackColor, size = 72, strokeWidth = 6 })
     const timer = setTimeout(() => {
       setAnimatedValue(Math.min(value || 0, 100))
     }, 50)
-    return () => clearTimeout(timer)
+
+    
+return () => clearTimeout(timer)
   }, [value])
 
   const strokeDashoffset = circumference - (animatedValue / 100) * circumference
@@ -72,9 +76,11 @@ function CircularGauge({ value, color, trackColor, size = 72, strokeWidth = 6 })
 
 function getGaugeColor(pct) {
   const v = pct || 0
+
   if (v >= 90) return '#f44336'
   if (v >= 75) return '#ff9800'
-  return '#4caf50'
+  
+return '#4caf50'
 }
 
 function ResourcesGaugesWidget({ data, loading }) {

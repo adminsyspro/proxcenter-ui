@@ -1,21 +1,44 @@
 'use client'
 
 import React, { useMemo, useState, useCallback } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 import {
   Box, Checkbox, IconButton, ListItemText, Menu, MenuItem,
   Tooltip as MuiTooltip, Typography, useTheme,
 } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
 function getHeatColor(pct) {
   const p = Math.max(0, Math.min(100, pct))
-  if (p < 30) { const t = p / 30; return `rgb(${Math.round(34 + t * 100)},${Math.round(197 + t * 7)},${Math.round(94 - t * 72)})` }
-  if (p < 60) { const t = (p - 30) / 30; return `rgb(${Math.round(134 + t * 100)},${Math.round(204 - t * 24)},${Math.round(22 - t * 14)})` }
-  if (p < 80) { const t = (p - 60) / 20; return `rgb(${Math.round(234 + t * 5)},${Math.round(180 - t * 112)},${Math.round(8 + t * 60)})` }
-  const t = (p - 80) / 20; return `rgb(${Math.round(239 - t * 30)},${Math.round(68 - t * 40)},${Math.round(68 - t * 30)})`
+
+  if (p < 30) { const t = p / 30;
+
+ 
+
+return `rgb(${Math.round(34 + t * 100)},${Math.round(197 + t * 7)},${Math.round(94 - t * 72)})` }
+
+  if (p < 60) { const t = (p - 30) / 30;
+
+ 
+
+return `rgb(${Math.round(134 + t * 100)},${Math.round(204 - t * 24)},${Math.round(22 - t * 14)})` }
+
+  if (p < 80) { const t = (p - 60) / 20;
+
+ 
+
+return `rgb(${Math.round(234 + t * 5)},${Math.round(180 - t * 112)},${Math.round(8 + t * 60)})` }
+
+  const t = (p - 80) / 20;
+
+ 
+
+return `rgb(${Math.round(239 - t * 30)},${Math.round(68 - t * 40)},${Math.round(68 - t * 30)})`
 }
 
 const STATUS_COLORS = {
@@ -34,7 +57,9 @@ function formatBytes(bytes) {
   if (!bytes || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`
+
+  
+return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`
 }
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
@@ -43,7 +68,9 @@ function TileTooltip({ vm, mode, isDark }) {
   const c = widgetColors(isDark)
   const labelColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)'
   const footerColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'
-  return (
+
+  
+return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140, color: c.tooltipText }}>
       <div style={{ background: headerColor, color: '#fff', padding: '3px 8px', fontWeight: 700, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, textShadow: '0 0 2px rgba(0,0,0,0.4)' }}>
         <i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 11 }} />
@@ -85,7 +112,9 @@ function ConnectionFilter({ connections, selected, onChange }) {
 
   const handleToggle = (id) => {
     if (allSelected) onChange([id])
-    else if (selected.includes(id)) { const next = selected.filter(k => k !== id); onChange(next.length === 0 ? [] : next) }
+    else if (selected.includes(id)) { const next = selected.filter(k => k !== id);
+
+ onChange(next.length === 0 ? [] : next) }
     else onChange([...selected, id])
   }
 
@@ -141,7 +170,9 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
       const mem = Number(g.mem) || 0
       const maxmem = Number(g.maxmem) || 0
       const ramPct = maxmem > 0 ? Math.round((mem / maxmem) * 100) : 0
-      return { ...g, cpuPct, ramPct }
+
+      
+return { ...g, cpuPct, ramPct }
     })
 
     // In status mode: show all (running + stopped). In cpu/ram mode: only running + threshold
@@ -157,7 +188,8 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
     if (mode === 'status') {
       filtered.sort((a, b) => {
         if (a.status !== b.status) return a.status === 'running' ? -1 : 1
-        return (a.name || '').localeCompare(b.name || '')
+        
+return (a.name || '').localeCompare(b.name || '')
       })
     } else {
       filtered.sort((a, b) => (mode === 'cpu' ? b.cpuPct - a.cpuPct : b.ramPct - a.ramPct))
@@ -169,12 +201,15 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
   // Group by node
   const nodeGroups = useMemo(() => {
     const groups = {}
+
     guests.forEach((g) => {
       const key = g.node || 'unknown'
+
       if (!groups[key]) groups[key] = { node: key, connId: g.connId, vms: [] }
       groups[key].vms.push(g)
     })
-    return Object.values(groups).sort((a, b) => b.vms.length - a.vms.length)
+    
+return Object.values(groups).sort((a, b) => b.vms.length - a.vms.length)
   }, [guests])
 
   // Stats
@@ -182,9 +217,12 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
     if (guests.length === 0) return null
     const running = guests.filter(g => g.status === 'running').length
     const stopped = guests.filter(g => g.status !== 'running').length
+
     if (mode === 'status') return { total: guests.length, running, stopped }
     const vals = guests.map(g => mode === 'cpu' ? g.cpuPct : g.ramPct)
-    return { total: guests.length, avg: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length), hot: vals.filter(v => v >= 80).length }
+
+    
+return { total: guests.length, avg: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length), hot: vals.filter(v => v >= 80).length }
   }, [guests, mode])
 
   const handleClick = useCallback((vm) => { router.push(`/infrastructure/inventory?vmid=${vm.vmid}&connId=${vm.connId}&node=${vm.node}&type=${vm.type}`) }, [router])
@@ -193,13 +231,15 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
   // Tile color based on mode
   const getTileColor = (vm) => {
     if (mode === 'status') return getStatusColor(vm.status)
-    return getHeatColor(mode === 'cpu' ? vm.cpuPct : vm.ramPct)
+    
+return getHeatColor(mode === 'cpu' ? vm.cpuPct : vm.ramPct)
   }
 
   // Tile label
   const getTileLabel = (vm) => {
     if (mode === 'status') return vm.status === 'running' ? '' : ''
-    return mode === 'cpu' ? vm.cpuPct : vm.ramPct
+    
+return mode === 'cpu' ? vm.cpuPct : vm.ramPct
   }
 
   const darkCard = {
@@ -286,7 +326,9 @@ function VmHeatmapWidget({ data, loading: dashboardLoading, config, onUpdateSett
                 const tileColor = getTileColor(vm)
                 const label = getTileLabel(vm)
                 const isRunning = vm.status === 'running'
-                return (
+
+                
+return (
                   <MuiTooltip key={vm.id} title={<TileTooltip vm={vm} mode={mode} isDark={isDark} />} arrow placement="top" enterDelay={80} leaveDelay={0}
                     slotProps={{ tooltip: { sx: { bgcolor: 'transparent', p: 0, maxWidth: 'none' } }, arrow: { sx: { color: c.tooltipBg } } }}
                   >

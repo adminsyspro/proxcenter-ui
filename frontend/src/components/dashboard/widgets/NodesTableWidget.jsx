@@ -1,13 +1,16 @@
 'use client'
 
 import React from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Chip, LinearProgress,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
   useTheme
 } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function NodesTableWidget({ data, loading }) {

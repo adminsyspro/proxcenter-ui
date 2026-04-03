@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function HealthRing({ score, size = 100, strokeWidth = 8, trackColor = 'rgba(255,255,255,0.08)' }) {
@@ -13,7 +15,11 @@ function HealthRing({ score, size = 100, strokeWidth = 8, trackColor = 'rgba(255
 
   const color = score >= 80 ? '#4caf50' : score >= 50 ? '#ff9800' : '#f44336'
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 100); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 100);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ position: 'relative', width: size, height: size }}>
@@ -77,15 +83,21 @@ function ClusterHealthWidget({ data, loading }) {
   // Score calculation:
   // Start at 100, deduct for issues
   let score = 100
+
+
   // Offline nodes: -20 per offline node
   score -= (nodesTotal - nodesOnline) * 20
+
   // Critical alerts: -15 each
   score -= critAlerts * 15
+
   // Warning alerts: -5 each
   score -= warnAlerts * 5
+
   // High CPU: deduct if > 80%
   if (cpuPct > 90) score -= 15
   else if (cpuPct > 80) score -= 8
+
   // High RAM: deduct if > 80%
   if (ramPct > 90) score -= 15
   else if (ramPct > 80) score -= 8

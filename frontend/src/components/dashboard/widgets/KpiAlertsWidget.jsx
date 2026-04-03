@@ -1,12 +1,15 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 import {
   Box, Button, ButtonBase, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, IconButton, List, ListItemButton, ListItemText, Typography, useTheme
 } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
@@ -24,10 +27,13 @@ function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
     if (a.entityType === 'node' && a.connId && a.entityId) {
       return `/infrastructure/inventory?selectType=node&selectId=${a.connId}:${a.entityId}`
     }
+
     if (a.entityType === 'cluster' && a.connId) {
       return `/infrastructure/inventory?selectType=cluster&selectId=${a.connId}`
     }
-    return null
+
+    
+return null
   }
 
   const entityLink = getEntityLink(alert)
@@ -104,10 +110,13 @@ function AlertsListDialog({ alerts, open, onClose, t, router }) {
     if (alert.entityType === 'node' && alert.connId && alert.entityId) {
       return `/infrastructure/inventory?selectType=node&selectId=${alert.connId}:${alert.entityId}`
     }
+
     if (alert.entityType === 'cluster' && alert.entityId) {
       return `/infrastructure/inventory?selectType=cluster&selectId=${alert.entityId}`
     }
-    return null
+
+    
+return null
   }
 
   function timeAgo(date) {
@@ -118,7 +127,8 @@ function AlertsListDialog({ alerts, open, onClose, t, router }) {
     if (diff < 60) return t('time.justNow')
     if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
     if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-    return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+    
+return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
 
   const severityConfig = {

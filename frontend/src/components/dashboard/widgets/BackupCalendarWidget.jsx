@@ -1,16 +1,20 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, CircularProgress, Tooltip as MuiTooltip, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
+import { mapTimeRange } from './timeRangeUtils'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getCalendarColor(total, verified, unverified) {
   if (total === 0) return 'rgba(255,255,255,0.04)'
   if (unverified > 0 && verified === 0) return '#f4433690'
   if (unverified > 0) return '#ff980090'
-  return total > 10 ? '#4caf50' : total > 5 ? '#4caf50c0' : '#4caf5080'
+  
+return total > 10 ? '#4caf50' : total > 5 ? '#4caf50c0' : '#4caf5080'
 }
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -18,9 +22,11 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 function formatSize(bytes) {
   if (!bytes) return '0'
   const gb = bytes / (1024 * 1024 * 1024)
+
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`
   if (gb >= 1) return `${gb.toFixed(1)} GB`
-  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
+  
+return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
 }
 
 // ─── Day Tooltip ─────────────────────────────────────────────────────────────
@@ -74,7 +80,7 @@ function DayTooltip({ day, isDark }) {
 }
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
-function BackupCalendarWidget({ data, loading: dashboardLoading }) {
+function BackupCalendarWidget({ data, loading: dashboardLoading, timeRange }) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -94,17 +100,22 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
     Promise.all(
       pbsServers.map(async (server) => {
         try {
-          const res = await fetch(`/api/v1/pbs/${encodeURIComponent(server.id)}/backups/trends?days=30`, { cache: 'no-store', signal: controller.signal })
+          const res = await fetch(`/api/v1/pbs/${encodeURIComponent(server.id)}/backups/trends?days=${mapTimeRange(timeRange).days}`, { cache: 'no-store', signal: controller.signal })
+
           if (!res.ok) return null
           const json = await res.json()
-          return json?.data?.daily || []
+
+          
+return json?.data?.daily || []
         } catch { return null }
       })
     ).then(results => {
       if (cancelled) return
       const merged = {}
+
       for (const daily of results) {
         if (!daily) continue
+
         for (const day of daily) {
           if (!merged[day.date]) merged[day.date] = { date: day.date, total: 0, vm: 0, ct: 0, host: 0, verified: 0, unverified: 0, size: 0 }
           merged[day.date].total += day.total || 0
@@ -116,12 +127,13 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
           merged[day.date].size += day.size || 0
         }
       }
+
       setTrendData(merged)
       setLoadingTrends(false)
     })
 
     return () => { cancelled = true; controller.abort() }
-  }, [serversKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [serversKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build calendar grid organized by weeks (rows) x days (cols)
   const { weeks, stats } = useMemo(() => {
@@ -129,12 +141,15 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
 
     const days = []
     const now = new Date()
+    const numDays = mapTimeRange(timeRange).days
 
-    for (let i = 29; i >= 0; i--) {
+    for (let i = numDays - 1; i >= 0; i--) {
       const d = new Date(now)
+
       d.setDate(d.getDate() - i)
       const dateStr = d.toISOString().slice(0, 10)
       const dayOfWeek = (d.getDay() + 6) % 7 // 0=Mon, 6=Sun
+
       days.push({
         date: dateStr,
         dayOfWeek,
@@ -150,11 +165,14 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
 
     for (const day of days) {
       currentWeek[day.dayOfWeek] = day
+
       if (day.dayOfWeek === 6) {
         weeksArr.push(currentWeek)
         currentWeek = new Array(7).fill(null)
       }
     }
+
+
     // Push remaining partial week
     if (currentWeek.some(d => d !== null)) weeksArr.push(currentWeek)
 
@@ -164,7 +182,7 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
     const totalSize = days.reduce((s, d) => s + d.size, 0)
 
     return { weeks: weeksArr, stats: { total, verified, zeroDays, totalSize } }
-  }, [trendData])
+  }, [trendData, timeRange])
 
   const darkCard = {
     bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
@@ -194,7 +212,7 @@ function BackupCalendarWidget({ data, loading: dashboardLoading }) {
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           {stats && (
             <>
-              <Typography sx={{ fontSize: 10, opacity: 0.6 }}>30d</Typography>
+              <Typography sx={{ fontSize: 10, opacity: 0.6 }}>{mapTimeRange(timeRange).days}d</Typography>
               <Typography sx={{ fontSize: 10, opacity: 0.6 }}>
                 <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.total}</span> backups
               </Typography>

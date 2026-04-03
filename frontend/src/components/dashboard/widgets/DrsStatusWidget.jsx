@@ -1,21 +1,18 @@
 'use client'
 
 import React, { useEffect, useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, CircularProgress, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+
 import { widgetColors } from './themeColors'
 import { useLicense } from '@/contexts/LicenseContext'
 import { useDRSStatus, useDRSMetrics, useDRSRecommendations, useDRSAllMigrations } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
+import { mapTimeRange, formatTime } from './timeRangeUtils'
 
 // ─── Sparkline Tooltip ────────────────────────────────────────────────────────
-function formatTime(payload) {
-  const t = payload?.[0]?.payload?.t
-  if (!t) return null
-  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return t
-}
 
 function CpuRamTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
@@ -23,7 +20,9 @@ function CpuRamTooltip({ active, payload, isDark }) {
   const ram = payload.find(p => p.dataKey === 'ram')?.value
   const time = formatTime(payload)
   const c = widgetColors(isDark)
-  return (
+
+  
+return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
       <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -45,7 +44,11 @@ function ScoreRing({ score, size = 56, strokeWidth = 5, isDark = true }) {
   const offset = mounted ? circumference - (score / 100) * circumference : circumference
   const color = score >= 80 ? '#4caf50' : score >= 50 ? '#ff9800' : '#f44336'
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
@@ -74,7 +77,11 @@ function ImbalanceGauge({ value, size = 40, strokeWidth = 4, isDark = true }) {
   const offset = mounted ? circumference - (clamped / 50) * circumference : circumference
   const color = value > 20 ? '#f44336' : value > 10 ? '#ff9800' : '#4caf50'
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
@@ -94,13 +101,15 @@ function ImbalanceGauge({ value, size = 40, strokeWidth = 4, isDark = true }) {
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  return '#4caf50'
+  
+return '#4caf50'
 }
 
 function getScoreColor(score) {
   if (score >= 80) return '#4caf50'
   if (score >= 50) return '#ff9800'
-  return '#f44336'
+  
+return '#f44336'
 }
 
 function timeAgo(ts) {
@@ -108,10 +117,12 @@ function timeAgo(ts) {
   const now = Date.now()
   const past = typeof ts === 'string' ? new Date(ts).getTime() : ts * 1000
   const diff = Math.floor((now - past) / 1000)
+
   if (diff < 60) return 'now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`
-  return `${Math.floor(diff / 86400)}d`
+  
+return `${Math.floor(diff / 86400)}d`
 }
 
 // ─── DRS Cluster Card ────────────────────────────────────────────────────────
@@ -178,7 +189,9 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
         {onlineNodes.map((node, idx) => {
           const nodeCpu = Math.round(node.cpu_usage || 0)
           const nodeRam = Math.round(node.memory_usage || 0)
-          return (
+
+          
+return (
             <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', width: 55, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
                 {node.name || `n-${idx}`}
@@ -230,7 +243,9 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
           </Typography>
           {clusterMigrations.map((mig, idx) => {
             const statusColor = mig.status === 'completed' ? '#4caf50' : mig.status === 'running' ? '#3b82f6' : mig.status === 'failed' ? '#f44336' : '#9e9e9e'
-            return (
+
+            
+return (
               <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.25 }}>
                 <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: statusColor, flexShrink: 0 }} />
                 <Typography sx={{ fontSize: 9, fontWeight: 600, flexShrink: 0, maxWidth: 80 }} noWrap>
@@ -282,7 +297,7 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
 }
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
-function DrsStatusWidget({ data, loading, config }) {
+function DrsStatusWidget({ data, loading, config, timeRange }) {
   const t = useTranslations()
   const theme = useTheme()
   const { isEnterprise } = useLicense()
@@ -294,61 +309,76 @@ function DrsStatusWidget({ data, loading, config }) {
 
   const clusterMap = useMemo(() => {
     const map = {}
+
     for (const c of (data?.clusters || [])) { map[c.id] = c }
-    return map
+    
+return map
   }, [data?.clusters])
 
   // Fetch CPU/RAM trends per cluster
   const clusterIdsKey = metricsData ? Object.keys(metricsData).join(',') : ''
+
   useEffect(() => {
     if (!metricsData || !data?.nodes) return
     const controller = new AbortController()
     let cancelled = false
 
     const clusterIds = Object.keys(metricsData)
+
     Promise.all(
       clusterIds.map(async (connId) => {
         const clusterNodes = metricsData[connId]?.nodes || []
         const nodeNames = clusterNodes.filter(n => !n.status || n.status === 'online').map(n => n.name).filter(Boolean)
+
         if (nodeNames.length === 0) return null
+
         try {
           const res = await fetch(`/api/v1/connections/${connId}/nodes/trends`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: nodeNames.map(n => ({ node: n })), timeframe: 'hour' }),
+            body: JSON.stringify({ items: nodeNames.map(n => ({ node: n })), timeframe: mapTimeRange(timeRange).trendsTimeframe }),
             signal: controller.signal,
           })
+
           if (!res.ok) return null
           const json = await res.json()
           const nodeData = json.data || {}
+
           // Average all nodes per timestamp
           const timeMap = new Map()
+
           Object.values(nodeData).forEach(points => {
             if (!Array.isArray(points)) return
             points.forEach(p => {
               const key = p.ts || p.t
+
               if (!timeMap.has(key)) timeMap.set(key, { t: p.t, cpuSum: 0, ramSum: 0, count: 0 })
               const entry = timeMap.get(key)
+
               entry.cpuSum += p.cpu || 0
               entry.ramSum += p.ram || 0
               entry.count++
             })
           })
+
           const series = Array.from(timeMap.values())
             .map(e => ({ t: e.t, cpu: Math.round(e.cpuSum / e.count), ram: Math.round(e.ramSum / e.count) }))
             .sort((a, b) => (a.t > b.t ? 1 : -1))
-          return { connId, series }
+
+          
+return { connId, series }
         } catch { return null }
       })
     ).then(results => {
       if (cancelled) return
       const map = {}
+
       for (const r of results) { if (r && r.series.length > 0) map[r.connId] = r.series }
       setTrendsByCluster(map)
     })
 
     return () => { cancelled = true; controller.abort() }
-  }, [clusterIdsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clusterIdsKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isEnterprise) {
     return (
@@ -370,7 +400,9 @@ function DrsStatusWidget({ data, loading, config }) {
   const clusterIds = metricsData
     ? Object.keys(metricsData).filter(id => {
         const info = clusterMap[id]
-        return !info || info.isCluster || info.nodes > 1
+
+        
+return !info || info.isCluster || info.nodes > 1
       })
     : []
 

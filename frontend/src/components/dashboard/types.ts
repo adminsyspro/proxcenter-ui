@@ -45,61 +45,74 @@ export type DashboardLayout = {
   rowHeight?: number
 }
 
-// Layout par défaut
+// Layout par défaut (ROW_HEIGHT=40)
 export const DEFAULT_LAYOUT: WidgetConfig[] = [
-  { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-  { id: 'kpi-2', type: 'kpi-vms', x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-  { id: 'kpi-3', type: 'kpi-backups', x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-  { id: 'kpi-4', type: 'kpi-alerts', x: 9, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-  { id: 'resources-1', type: 'resources-gauges', x: 0, y: 2, w: 6, h: 4, minW: 4, minH: 3 },
-  { id: 'top-1', type: 'top-consumers', x: 6, y: 2, w: 6, h: 4, minW: 4, minH: 3 },
-  { id: 'nodes-1', type: 'nodes-table', x: 0, y: 6, w: 7, h: 6, minW: 4, minH: 4 },
-  { id: 'pbs-1', type: 'pbs-overview', x: 7, y: 6, w: 5, h: 3, minW: 3, minH: 3 },
-  { id: 'clusters-1', type: 'clusters-list', x: 7, y: 9, w: 5, h: 3, minW: 3, minH: 2 },
+  // Section: General
+  { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'General' } },
+  { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 1, w: 1, h: 7 },
+  { id: 'kpi-2', type: 'kpi-vms', x: 1, y: 4, w: 1, h: 4 },
+  { id: 'kpi-3', type: 'kpi-lxc', x: 1, y: 1, w: 1, h: 3 },
+  { id: 'kpi-4', type: 'kpi-alerts', x: 11, y: 1, w: 1, h: 7 },
+  { id: 'clusters-g', type: 'clusters-gauges', x: 2, y: 1, w: 4, h: 7 },
+  { id: 'heatmap-1', type: 'vm-heatmap', x: 6, y: 1, w: 3, h: 7 },
+  { id: 'drs-1', type: 'drs-status', x: 9, y: 1, w: 2, h: 7 },
+
+  // Section: Cluster / Ceph
+  { id: 'sec-2', type: 'section-header', x: 0, y: 8, w: 12, h: 1, settings: { title: 'Cluster / Ceph' } },
+  { id: 'ceph-1', type: 'ceph-status', x: 0, y: 9, w: 3, h: 10 },
+  { id: 'infra-1', type: 'infra-global-chart', x: 3, y: 9, w: 6, h: 10 },
+  { id: 'storage-1', type: 'storage-pools', x: 9, y: 9, w: 3, h: 10 },
 ]
 
-// Layouts prédéfinis
+// Layouts prédéfinis (ROW_HEIGHT=40)
 export const PRESET_LAYOUTS: Record<string, DashboardLayout> = {
   default: {
     id: 'default',
-    name: 'Par défaut',
+    name: 'Default',
     widgets: DEFAULT_LAYOUT,
   },
   compact: {
     id: 'compact',
     name: 'Compact',
     widgets: [
-      { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 0, w: 4, h: 2, minW: 2, minH: 2 },
-      { id: 'kpi-2', type: 'kpi-vms', x: 4, y: 0, w: 4, h: 2, minW: 2, minH: 2 },
-      { id: 'kpi-3', type: 'kpi-alerts', x: 8, y: 0, w: 4, h: 2, minW: 2, minH: 2 },
-      { id: 'resources-1', type: 'resources-gauges', x: 0, y: 2, w: 6, h: 4, minW: 3, minH: 3 },
-      { id: 'nodes-1', type: 'nodes-table', x: 6, y: 2, w: 6, h: 4, minW: 4, minH: 3 },
+      { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 0, w: 3, h: 3 },
+      { id: 'kpi-2', type: 'kpi-vms', x: 3, y: 0, w: 3, h: 3 },
+      { id: 'kpi-3', type: 'kpi-alerts', x: 6, y: 0, w: 3, h: 3 },
+      { id: 'kpi-4', type: 'kpi-backups', x: 9, y: 0, w: 3, h: 3 },
+      { id: 'resources-1', type: 'resources-gauges', x: 0, y: 3, w: 6, h: 6 },
+      { id: 'nodes-1', type: 'nodes-table', x: 6, y: 3, w: 6, h: 6 },
     ],
   },
   storage: {
     id: 'storage',
-    name: 'Stockage',
+    name: 'Storage',
     widgets: [
-      { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-      { id: 'kpi-3', type: 'kpi-backups', x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-      { id: 'kpi-4', type: 'kpi-alerts', x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-      { id: 'resources-1', type: 'resources-gauges', x: 9, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
-      { id: 'pbs-1', type: 'pbs-overview', x: 0, y: 2, w: 6, h: 5, minW: 4, minH: 4 },
-      { id: 'ceph-1', type: 'ceph-status', x: 6, y: 2, w: 3, h: 5, minW: 3, minH: 3 },
-      { id: 'nodes-1', type: 'nodes-table', x: 0, y: 7, w: 12, h: 5, minW: 6, minH: 4 },
+      { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'Overview' } },
+      { id: 'kpi-1', type: 'kpi-clusters', x: 0, y: 1, w: 3, h: 3 },
+      { id: 'kpi-3', type: 'kpi-backups', x: 3, y: 1, w: 3, h: 3 },
+      { id: 'resources-1', type: 'resources-gauges', x: 6, y: 1, w: 6, h: 6 },
+      { id: 'sec-2', type: 'section-header', x: 0, y: 7, w: 12, h: 1, settings: { title: 'Backup & Storage' } },
+      { id: 'pbs-1', type: 'pbs-overview', x: 0, y: 8, w: 6, h: 8 },
+      { id: 'ceph-1', type: 'ceph-status', x: 6, y: 8, w: 6, h: 8 },
+      { id: 'storage-1', type: 'storage-pools', x: 0, y: 16, w: 6, h: 6 },
+      { id: 'calendar-1', type: 'backup-calendar', x: 6, y: 16, w: 6, h: 6 },
     ],
   },
   monitoring: {
     id: 'monitoring',
     name: 'Monitoring',
     widgets: [
-      { id: 'kpi-4', type: 'kpi-alerts', x: 0, y: 0, w: 4, h: 2, minW: 2, minH: 2 },
-      { id: 'kpi-2', type: 'kpi-vms', x: 4, y: 0, w: 4, h: 2, minW: 2, minH: 2 },
-      { id: 'kpi-3', type: 'kpi-backups', x: 8, y: 0, w: 4, h: 2, minW: 2, minH: 2 },
-      { id: 'alerts-1', type: 'alerts-list', x: 0, y: 2, w: 6, h: 6, minW: 4, minH: 4 },
-      { id: 'top-1', type: 'top-consumers', x: 6, y: 2, w: 6, h: 6, minW: 4, minH: 4 },
-      { id: 'activity-1', type: 'activity-feed', x: 0, y: 8, w: 6, h: 4, minW: 4, minH: 3 },
-      { id: 'nodes-1', type: 'nodes-table', x: 6, y: 8, w: 6, h: 4, minW: 4, minH: 3 },
+      { id: 'sec-1', type: 'section-header', x: 0, y: 0, w: 12, h: 1, settings: { title: 'Alerts & Activity' } },
+      { id: 'kpi-4', type: 'kpi-alerts', x: 0, y: 1, w: 3, h: 3 },
+      { id: 'kpi-2', type: 'kpi-vms', x: 3, y: 1, w: 3, h: 3 },
+      { id: 'kpi-3', type: 'kpi-backups', x: 6, y: 1, w: 3, h: 3 },
+      { id: 'kpi-1', type: 'kpi-clusters', x: 9, y: 1, w: 3, h: 3 },
+      { id: 'alerts-1', type: 'alerts-list', x: 0, y: 4, w: 6, h: 8 },
+      { id: 'activity-1', type: 'activity-feed', x: 6, y: 4, w: 6, h: 8 },
+      { id: 'sec-2', type: 'section-header', x: 0, y: 12, w: 12, h: 1, settings: { title: 'Performance' } },
+      { id: 'infra-1', type: 'infra-global-chart', x: 0, y: 13, w: 8, h: 8 },
+      { id: 'top-1', type: 'top-consumers', x: 8, y: 13, w: 4, h: 8 },
+      { id: 'heatmap-1', type: 'vm-heatmap', x: 0, y: 21, w: 12, h: 6 },
     ],
   },
 }

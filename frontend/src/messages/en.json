@@ -331,7 +331,8 @@
       "backupCalendar": "Backup history over 30 days",
       "nodesGauges": "Per-node circular gauges (CPU, RAM, Disk)",
       "clustersGauges": "Per-cluster gauges, sparklines and health score",
-      "clusterHealth": "Health score with key metrics"
+      "clusterHealth": "Health score with key metrics",
+      "sectionHeader": "Collapsible section separator"
     },
     "widgetDrs": {
       "automatic": "Automatic",

@@ -1,11 +1,13 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box, Chip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Divider, IconButton, Typography, useTheme
 } from '@mui/material'
+
 import { useTaskEvents } from '@/hooks/useTaskEvents'
 import { widgetColors } from './themeColors'
 
@@ -118,15 +120,18 @@ function ActivityFeedWidget({ data, loading, config }) {
 
   // Build node -> online status map
   const nodeStatusMap = {}
+
   for (const n of (data?.nodes || [])) {
     nodeStatusMap[n.name] = n.status === 'online'
   }
 
   // Build vmid -> guest info map from dashboard data
   const guestMap = {}
+
   for (const vm of (data?.vmList || [])) {
     guestMap[String(vm.vmid)] = { name: vm.name, type: 'qemu', status: vm.status }
   }
+
   for (const lxc of (data?.lxcList || [])) {
     guestMap[String(lxc.vmid)] = { name: lxc.name, type: 'lxc', status: lxc.status }
   }
@@ -151,10 +156,12 @@ function ActivityFeedWidget({ data, loading, config }) {
     if (!ts) return ''
     const now = Date.now() / 1000
     const diff = Math.floor(now - ts)
+
     if (diff < 60) return t('time.justNow')
     if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
     if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-    return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+    
+return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
 
   function getTaskStatusColor(event) {
@@ -162,7 +169,8 @@ function ActivityFeedWidget({ data, loading, config }) {
     if (event.status === 'OK') return '#4caf50'
     if (event.status?.includes('WARNINGS')) return '#ff9800'
     if (event.level === 'error') return '#f44336'
-    return '#4caf50'
+    
+return '#4caf50'
   }
 
   const darkCard = {

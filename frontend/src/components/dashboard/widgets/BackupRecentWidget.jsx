@@ -1,8 +1,10 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Chip, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function BackupRecentWidget({ data, loading }) {
@@ -23,6 +25,7 @@ function BackupRecentWidget({ data, loading }) {
 
     return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
+
   const recentErrors = pbs.recentErrors || []
   const backups24h = pbs.backups24h || {}
 

@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Checkbox, Chip, IconButton, ListItemText, Menu, MenuItem, Tooltip, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+
+import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
 
 // ─── Circular Gauge (animated on mount) ──────────────────────────────────────
 function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme }) {
@@ -14,7 +17,11 @@ function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme 
   const isDark = theme?.palette?.mode === 'dark'
   const trackColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
@@ -42,7 +49,8 @@ function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme 
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  return '#4caf50'
+  
+return '#4caf50'
 }
 
 function formatRate(bytes) {
@@ -50,62 +58,72 @@ function formatRate(bytes) {
   if (bytes < 1024) return `${Math.round(bytes)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
+  
+return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
 }
 
 function getScoreColor(score) {
   if (score >= 80) return '#4caf50'
   if (score >= 50) return '#ff9800'
-  return '#f44336'
+  
+return '#f44336'
 }
 
 function buildSeries(raw) {
   const out = []
+
   for (const p of (raw || [])) {
     const t = p.time || p.t || p.timestamp
+
     if (!t) continue
     const cpuRaw = p.cpu ?? p.cpu_avg
     const cpu = cpuRaw != null ? Math.max(0, Math.min(100, Math.round(cpuRaw <= 1.5 ? cpuRaw * 100 : cpuRaw))) : 0
     const memRaw = p.mem ?? p.memused
     const maxMem = p.maxmem ?? p.memtotal
     let ram = 0
+
     if (memRaw != null) {
       if (memRaw <= 1.5) ram = Math.round(memRaw * 100)
       else if (maxMem > 0) ram = Math.round((memRaw / maxMem) * 100)
     }
+
     out.push({ t, cpu, ram, net: (p.netin ?? 0) + (p.netout ?? 0), diskio: (p.diskread ?? 0) + (p.diskwrite ?? 0) })
   }
-  return out.sort((a, b) => a.t - b.t)
+
+  
+return out.sort((a, b) => a.t - b.t)
 }
 
 function mergeNodeTrends(nodeKeys, allTrends) {
   const allSeries = nodeKeys.map(k => allTrends[k] || []).filter(s => s.length > 0)
+
   if (allSeries.length === 0) return []
   const base = allSeries.reduce((longest, s) => s.length > longest.length ? s : longest, [])
-  return base.map((point, i) => {
+
+  
+return base.map((point, i) => {
     let cpu = 0, ram = 0, net = 0, diskio = 0, count = 0
+
     for (const s of allSeries) {
       if (s[i]) { cpu += s[i].cpu || 0; ram += s[i].ram || 0; net += s[i].net || 0; diskio += s[i].diskio || 0; count++ }
     }
+
     if (count === 0) return { t: point.t, cpu: 0, ram: 0, net: 0, diskio: 0 }
-    return { t: point.t, cpu: Math.round(cpu / count), ram: Math.round(ram / count), net: Math.round(net / count), diskio: Math.round(diskio / count) }
+    
+return { t: point.t, cpu: Math.round(cpu / count), ram: Math.round(ram / count), net: Math.round(net / count), diskio: Math.round(diskio / count) }
   })
 }
 
 // ─── Sparkline Tooltips ──────────────────────────────────────────────────────
-function formatTime(payload) {
-  const t = payload?.[0]?.payload?.t
-  if (!t) return null
-  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return t
-}
 
 function CpuRamTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const cpu = payload.find(p => p.dataKey === 'cpu')?.value
   const ram = payload.find(p => p.dataKey === 'ram')?.value
   const time = formatTime(payload)
-  return (
+
+  
+return (
     <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
       <div style={{ background: 'var(--mui-palette-warning-main)', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -123,7 +141,9 @@ function IoNetTooltip({ active, payload }) {
   const diskio = payload.find(p => p.dataKey === 'diskio')?.value
   const net = payload.find(p => p.dataKey === 'net')?.value
   const time = formatTime(payload)
-  return (
+
+  
+return (
     <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
       <div style={{ background: '#ab47bc', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-exchange-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -144,8 +164,10 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
 
   const cpuPct = onlineNodes.length > 0
     ? Math.round(onlineNodes.reduce((s, n) => s + (n.cpuPct || 0), 0) / onlineNodes.length * 10) / 10 : 0
+
   const memPct = onlineNodes.length > 0
     ? Math.round(onlineNodes.reduce((s, n) => s + (n.memPct || 0), 0) / onlineNodes.length * 10) / 10 : 0
+
   const storageUsed = clusterNodes.reduce((s, n) => s + (n._storageUsed || 0), 0)
   const storageMax = clusterNodes.reduce((s, n) => s + (n._storageMax || 0), 0)
   const storagePct = storageMax > 0 ? Math.round((storageUsed / storageMax) * 1000) / 10 : 0
@@ -155,6 +177,7 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
   const lxcRunning = (lxcList || []).filter(v => v.connId === connId && !v.template && v.status === 'running').length
 
   let score = 100
+
   score -= (totalNodes - onlineNodes.length) * 20
   if (cpuPct > 90) score -= 15; else if (cpuPct > 80) score -= 8
   if (memPct > 90) score -= 15; else if (memPct > 80) score -= 8
@@ -244,7 +267,9 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
           {cluster.cephHealth && cluster.cephHealth !== 'UNKNOWN' && (() => {
             const cephColor = cluster.cephHealth === 'HEALTH_OK' ? '#4caf50' : cluster.cephHealth === 'HEALTH_WARN' ? '#ff9800' : '#f44336'
-            return (
+
+            
+return (
               <span title={`Ceph: ${cluster.cephHealth}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'default' }}>
                 <i className='ri-database-2-line' style={{ fontSize: 11, color: cephColor }} />
                 <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: cephColor }}>
@@ -255,7 +280,9 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
           })()}
           {cluster.quorum && cluster.quorum.expected_votes > 0 && (() => {
             const qColor = cluster.quorum.quorate ? '#4caf50' : '#f44336'
-            return (
+
+            
+return (
               <span title={`Quorum: ${cluster.quorum.votes}/${cluster.quorum.expected_votes} votes${cluster.quorum.quorate ? '' : ' (NOT QUORATE)'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'default' }}>
                 <i className='ri-shield-check-line' style={{ fontSize: 11, color: qColor }} />
                 <span style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: qColor }}>
@@ -281,6 +308,7 @@ function ClusterFilter({ clusters, selected, onChange }) {
       onChange([id])
     } else if (selected.includes(id)) {
       const next = selected.filter(k => k !== id)
+
       onChange(next.length === 0 ? [] : next)
     } else {
       onChange([...selected, id])
@@ -304,7 +332,9 @@ function ClusterFilter({ clusters, selected, onChange }) {
         </MenuItem>
         {clusters.map(c => {
           const checked = allSelected || selected.includes(c.id)
-          return (
+
+          
+return (
             <MenuItem key={c.id} dense onClick={() => handleToggle(c.id)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
               <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{c.name}</ListItemText>
@@ -318,7 +348,7 @@ function ClusterFilter({ clusters, selected, onChange }) {
 }
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
-function ClustersGaugesWidget({ data, loading, config, onUpdateSettings }) {
+function ClustersGaugesWidget({ data, loading, config, onUpdateSettings, timeRange }) {
   const t = useTranslations()
   const theme = useTheme()
   const allClusters = data?.clusters || []
@@ -348,11 +378,13 @@ function ClustersGaugesWidget({ data, loading, config, onUpdateSettings }) {
     if (!relevantNodes.length) return
 
     const grouped = {}
+
     for (const n of relevantNodes) {
       if (n.status !== 'online') continue
       if (!grouped[n.connId]) grouped[n.connId] = []
       grouped[n.connId].push(n.node || n.name)
     }
+
     if (Object.keys(grouped).length === 0) return
 
     const controller = new AbortController()
@@ -363,28 +395,32 @@ function ClustersGaugesWidget({ data, loading, config, onUpdateSettings }) {
         nodeNames.map(async (name) => {
           try {
             const res = await fetch(
-              `/api/v1/connections/${encodeURIComponent(connId)}/rrd?path=${encodeURIComponent(`/nodes/${name}`)}&timeframe=hour`,
+              `/api/v1/connections/${encodeURIComponent(connId)}/rrd?path=${encodeURIComponent(`/nodes/${name}`)}&timeframe=${mapTimeRange(timeRange).rrdTimeframe}`,
               { cache: 'no-store', signal: controller.signal }
             )
+
             if (!res.ok) return null
             const json = await res.json()
             let raw = []
+
             if (Array.isArray(json)) raw = json
             else if (Array.isArray(json?.data)) raw = json.data
             else if (json?.data && typeof json.data === 'object') raw = Object.values(json.data)
-            return { key: `${connId}:${name}`, series: buildSeries(raw) }
+            
+return { key: `${connId}:${name}`, series: sliceToRange(buildSeries(raw), timeRange) }
           } catch { return null }
         })
       )
     ).then(results => {
       if (cancelled) return
       const map = {}
+
       for (const r of results) { if (r && r.series.length > 0) map[r.key] = r.series }
       setTrends(map)
     })
 
     return () => { cancelled = true; controller.abort() }
-  }, [nodesKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodesKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (allClusters.length === 0) {
     return (

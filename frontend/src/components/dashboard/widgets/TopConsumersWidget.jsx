@@ -1,15 +1,19 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Typography, useTheme } from '@mui/material'
+
 import { widgetColors } from './themeColors'
 
 function getBarColor(value) {
   if (value >= 80) return '#ef4444'
   if (value >= 50) return '#f59e0b'
-  return '#22c55e'
+  
+return '#22c55e'
 }
 
 function TopConsumersWidget({ data, loading }) {

@@ -1,10 +1,13 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+
 import { widgetColors } from './themeColors'
+import { formatTime } from './timeRangeUtils'
 
 // ─── Animated Circular Gauge ─────────────────────────────────────────────────
 function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, sublabel, isDark = true }) {
@@ -14,7 +17,11 @@ function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, subl
   const [mounted, setMounted] = useState(false)
   const offset = mounted ? circumference - (value / 100) * circumference : circumference
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
@@ -44,18 +51,14 @@ function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, subl
 }
 
 // ─── Sparkline Tooltips ──────────────────────────────────────────────────────
-function formatTime(payload) {
-  const t = payload?.[0]?.payload?.t
-  if (!t) return null
-  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return t
-}
 
 function ThroughputTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
   const time = formatTime(payload)
   const c = widgetColors(isDark)
-  return (
+
+  
+return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-speed-line' style={{ fontSize: 10 }} /> Throughput {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -76,7 +79,9 @@ function IopsTooltip({ active, payload, isDark }) {
   if (!active || !payload?.length) return null
   const time = formatTime(payload)
   const c = widgetColors(isDark)
-  return (
+
+  
+return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#8b5cf6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-flashlight-line' style={{ fontSize: 10 }} /> IOPS {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -97,15 +102,18 @@ function IopsTooltip({ active, payload, isDark }) {
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  return '#4caf50'
+  
+return '#4caf50'
 }
 
 function formatBytes(bytes) {
   if (!bytes) return '0'
   const gb = bytes / (1024 * 1024 * 1024)
+
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`
   if (gb >= 1) return `${gb.toFixed(1)} GB`
-  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
+  
+return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
 }
 
 function formatBps(bps) {
@@ -113,7 +121,9 @@ function formatBps(bps) {
   const k = 1024
   const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
   const i = Math.floor(Math.log(bps) / Math.log(k))
-  return Number.parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+
+  
+return Number.parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 // ─── Ceph Cluster Card ───────────────────────────────────────────────────────
@@ -173,7 +183,9 @@ function CephClusterCard({ cluster, isDark, perfData }) {
             const isIn = i < (cluster.osdsIn || cluster.osdsUp)
             const color = !isUp ? '#ef4444' : !isIn ? '#ff9800' : '#4caf50'
             const status = !isUp ? 'Down' : !isIn ? 'Up / Out' : 'Up / In'
-            return (
+
+            
+return (
               <span key={i} title={`OSD.${i} - ${status}`}
                 style={{ fontSize: 12, color, opacity: isUp && isIn ? 0.6 : 1, cursor: 'default', lineHeight: 1 }}>
                 <i className="ri-hard-drive-3-fill" />
@@ -284,6 +296,8 @@ function CephStatusWidget({ data, loading }) {
     for (const cluster of clusters) {
       if (cluster.readBps > 0 || cluster.writeBps > 0) {
         const now = Date.now()
+
+
         // Create a few seed points with slight time offsets so the chart renders
         historyRef[cluster.connId] = Array.from({ length: 5 }, (_, i) => ({
           t: now - (4 - i) * 10000,
@@ -294,6 +308,7 @@ function CephStatusWidget({ data, loading }) {
         }))
       }
     }
+
     setPerfByCluster({ ...historyRef })
 
     const fetchAll = async () => {
@@ -304,11 +319,14 @@ function CephStatusWidget({ data, loading }) {
               `/api/v1/connections/${encodeURIComponent(cluster.connId)}/ceph/status`,
               { cache: 'no-store' }
             )
+
             if (!res.ok) return null
             const json = await res.json()
             const pgmap = json?.data?.pgmap
+
             if (!pgmap) return null
-            return {
+            
+return {
               connId: cluster.connId,
               point: {
                 t: Date.now(),
@@ -325,13 +343,16 @@ function CephStatusWidget({ data, loading }) {
       if (cancelled) return
 
       const newMap = {}
+
       for (const r of results) {
         if (!r) continue
         const prev = historyRef[r.connId] || []
         const updated = [...prev, r.point].slice(-MAX_POINTS)
+
         historyRef[r.connId] = updated
         newMap[r.connId] = updated
       }
+
       setPerfByCluster({ ...newMap })
     }
 

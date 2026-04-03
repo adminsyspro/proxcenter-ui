@@ -1,9 +1,12 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Checkbox, Chip, IconButton, ListItemText, Menu, MenuItem, Tooltip, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+
+import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
 
 // ─── Circular Gauge (animated on mount) ──────────────────────────────────────
 function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme }) {
@@ -14,7 +17,11 @@ function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme 
   const isDark = theme?.palette?.mode === 'dark'
   const trackColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
+
+ 
+
+return () => clearTimeout(t) }, [])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
@@ -42,35 +49,44 @@ function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme 
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  return '#4caf50'
+  
+return '#4caf50'
 }
 
 function formatBytes(bytes) {
   if (!bytes) return '0'
   const gb = bytes / (1024 * 1024 * 1024)
+
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)}T`
   if (gb >= 1) return `${gb.toFixed(1)}G`
-  return `${(bytes / (1024 * 1024)).toFixed(0)}M`
+  
+return `${(bytes / (1024 * 1024)).toFixed(0)}M`
 }
 
 function formatUptime(seconds) {
   if (!seconds) return '-'
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)
+
   if (days > 0) return `${days}d ${hours}h`
-  return `${hours}h`
+  
+return `${hours}h`
 }
 
 function computeNodeScore(node) {
   let score = 100
+
   if (node.status !== 'online') return 0
   const cpu = node.cpuPct || 0
   const mem = node.memPct || 0
+
   if (cpu > 90) score -= 20; else if (cpu > 80) score -= 10; else if (cpu > 70) score -= 5
   if (mem > 90) score -= 20; else if (mem > 80) score -= 10; else if (mem > 70) score -= 5
   const storagePct = node._storageMax > 0 ? (node._storageUsed / node._storageMax) * 100 : 0
+
   if (storagePct > 90) score -= 15; else if (storagePct > 80) score -= 8
-  return Math.max(0, Math.min(100, score))
+  
+return Math.max(0, Math.min(100, score))
 }
 
 function formatRate(bytes) {
@@ -78,48 +94,52 @@ function formatRate(bytes) {
   if (bytes < 1024) return `${Math.round(bytes)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
+  
+return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
 }
 
 function getScoreColor(score) {
   if (score >= 80) return '#4caf50'
   if (score >= 50) return '#ff9800'
-  return '#f44336'
+  
+return '#f44336'
 }
 
 function buildSeries(raw) {
   const out = []
+
   for (const p of (raw || [])) {
     const t = p.time || p.t || p.timestamp
+
     if (!t) continue
     const cpuRaw = p.cpu ?? p.cpu_avg
     const cpu = cpuRaw != null ? Math.max(0, Math.min(100, Math.round(cpuRaw <= 1.5 ? cpuRaw * 100 : cpuRaw))) : 0
     const memRaw = p.mem ?? p.memused
     const maxMem = p.maxmem ?? p.memtotal
     let ram = 0
+
     if (memRaw != null) {
       if (memRaw <= 1.5) ram = Math.round(memRaw * 100)
       else if (maxMem > 0) ram = Math.round((memRaw / maxMem) * 100)
     }
+
     out.push({ t, cpu, ram, net: (p.netin ?? 0) + (p.netout ?? 0), diskio: (p.diskread ?? 0) + (p.diskwrite ?? 0) })
   }
-  return out.sort((a, b) => a.t - b.t)
+
+  
+return out.sort((a, b) => a.t - b.t)
 }
 
 // ─── Sparkline Tooltips ──────────────────────────────────────────────────────
-function formatTime(payload) {
-  const t = payload?.[0]?.payload?.t
-  if (!t) return null
-  if (typeof t === 'number') return new Date(t > 1e12 ? t : t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return t
-}
 
 function CpuRamTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const cpu = payload.find(p => p.dataKey === 'cpu')?.value
   const ram = payload.find(p => p.dataKey === 'ram')?.value
   const time = formatTime(payload)
-  return (
+
+  
+return (
     <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
       <div style={{ background: 'var(--mui-palette-warning-main)', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -137,7 +157,9 @@ function IoNetTooltip({ active, payload }) {
   const diskio = payload.find(p => p.dataKey === 'diskio')?.value
   const net = payload.find(p => p.dataKey === 'net')?.value
   const time = formatTime(payload)
-  return (
+
+  
+return (
     <div style={{ background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-divider)', borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80 }}>
       <div style={{ background: '#ab47bc', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
         <i className='ri-exchange-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
@@ -252,6 +274,7 @@ function NodeFilter({ nodes, selected, onChange }) {
       onChange([nodeKey])
     } else if (selected.includes(nodeKey)) {
       const next = selected.filter(k => k !== nodeKey)
+
       onChange(next.length === 0 ? [] : next) // empty = all
     } else {
       onChange([...selected, nodeKey])
@@ -276,7 +299,9 @@ function NodeFilter({ nodes, selected, onChange }) {
         {nodes.map(n => {
           const key = `${n.connId}:${n.node || n.name}`
           const checked = allSelected || selected.includes(key)
-          return (
+
+          
+return (
             <MenuItem key={key} dense onClick={() => handleToggle(key)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
               <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: n.status === 'online' ? '#4caf50' : '#f44336', mr: 0.75 }} />
@@ -291,7 +316,7 @@ function NodeFilter({ nodes, selected, onChange }) {
 }
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
-function NodesGaugesWidget({ data, loading, config, onUpdateSettings }) {
+function NodesGaugesWidget({ data, loading, config, onUpdateSettings, timeRange }) {
   const t = useTranslations()
   const theme = useTheme()
   const allNodes = data?.nodes || []
@@ -316,11 +341,13 @@ function NodesGaugesWidget({ data, loading, config, onUpdateSettings }) {
     if (!nodes.length) return
 
     const grouped = {}
+
     for (const n of nodes) {
       if (n.status !== 'online') continue
       if (!grouped[n.connId]) grouped[n.connId] = []
       grouped[n.connId].push(n.node || n.name)
     }
+
     if (Object.keys(grouped).length === 0) return
 
     const controller = new AbortController()
@@ -331,28 +358,32 @@ function NodesGaugesWidget({ data, loading, config, onUpdateSettings }) {
         nodeNames.map(async (name) => {
           try {
             const res = await fetch(
-              `/api/v1/connections/${encodeURIComponent(connId)}/rrd?path=${encodeURIComponent(`/nodes/${name}`)}&timeframe=hour`,
+              `/api/v1/connections/${encodeURIComponent(connId)}/rrd?path=${encodeURIComponent(`/nodes/${name}`)}&timeframe=${mapTimeRange(timeRange).rrdTimeframe}`,
               { cache: 'no-store', signal: controller.signal }
             )
+
             if (!res.ok) return null
             const json = await res.json()
             let raw = []
+
             if (Array.isArray(json)) raw = json
             else if (Array.isArray(json?.data)) raw = json.data
             else if (json?.data && typeof json.data === 'object') raw = Object.values(json.data)
-            return { key: `${connId}:${name}`, series: buildSeries(raw) }
+            
+return { key: `${connId}:${name}`, series: sliceToRange(buildSeries(raw), timeRange) }
           } catch { return null }
         })
       )
     ).then(results => {
       if (cancelled) return
       const map = {}
+
       for (const r of results) { if (r && r.series.length > 0) map[r.key] = r.series }
       setTrends(map)
     })
 
     return () => { cancelled = true; controller.abort() }
-  }, [nodesKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodesKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (allNodes.length === 0) {
     return (

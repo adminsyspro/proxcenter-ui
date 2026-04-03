@@ -19,6 +19,14 @@ const GRID_COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const ROW_HEIGHT = 40
 const MARGIN = [6, 4]
 
+const TIME_RANGES = [
+  { value: 'hour', label: '1h' },
+  { value: '6h', label: '6h' },
+  { value: 'day', label: '24h' },
+  { value: 'week', label: '7d' },
+  { value: 'month', label: '30d' },
+]
+
 // Génère un ID unique
 function generateId() {
   return `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -26,7 +34,7 @@ function generateId() {
 
 // Composant Widget Container
 // No-container wrapper
-function NoContainerWrapper({ config, data, loading, editMode, onRemove, onUpdateSettings, widgetDef, widgetName, WidgetComponent, t }) {
+function NoContainerWrapper({ config, data, loading, editMode, onRemove, onUpdateSettings, widgetDef, widgetName, WidgetComponent, timeRange, t }) {
   return (
     <Box sx={{
       height: '100%', position: 'relative', overflow: 'hidden',
@@ -67,7 +75,7 @@ function NoContainerWrapper({ config, data, loading, editMode, onRemove, onUpdat
             <Skeleton variant="rounded" width="100%" height="100%" sx={{ borderRadius: 0.5 }} />
           </Box>
         ) : (
-          <WidgetComponent config={config} data={data} loading={loading} onUpdateSettings={onUpdateSettings} />
+          <WidgetComponent config={config} data={data} loading={loading} onUpdateSettings={onUpdateSettings} timeRange={timeRange} />
         )}
       </Box>
     </Box>
@@ -81,6 +89,7 @@ function WidgetContainer({
   editMode,
   onRemove,
   onUpdateSettings,
+  timeRange,
   t,
 }) {
   const widgetDef = WIDGET_REGISTRY[config.type]
@@ -114,6 +123,7 @@ function WidgetContainer({
         widgetDef={widgetDef}
         widgetName={widgetName}
         WidgetComponent={WidgetComponent}
+        timeRange={timeRange}
         t={t}
       />
     )
@@ -174,7 +184,7 @@ function WidgetContainer({
             <Skeleton variant="rounded" width="100%" height="100%" sx={{ borderRadius: 0.5 }} />
           </Box>
         ) : (
-          <WidgetComponent config={config} data={data} loading={loading} onUpdateSettings={onUpdateSettings} />
+          <WidgetComponent config={config} data={data} loading={loading} onUpdateSettings={onUpdateSettings} timeRange={timeRange} />
         )}
       </CardContent>
     </Card>
@@ -279,6 +289,17 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [layoutLoaded, setLayoutLoaded] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
 
+  const [timeRange, setTimeRange] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('dashboard-timerange') || 'hour'
+    
+return 'hour'
+  })
+
+  const handleTimeRangeChange = useCallback((value) => {
+    setTimeRange(value)
+    localStorage.setItem('dashboard-timerange', value)
+  }, [])
+
   // Mesure de la largeur du conteneur (requis par react-grid-layout v2.x)
   const [containerWidth, setContainerWidth] = useState(1200) // Largeur par défaut
   const resizeObserverRef = useRef(null)
@@ -320,7 +341,10 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
           const json = await res.json()
 
           if (json.data?.widgets && Array.isArray(json.data.widgets)) {
-            setLayout(json.data.widgets)
+            // Filter out widgets whose type no longer exists in the registry
+            const cleaned = json.data.widgets.filter(w => WIDGET_REGISTRY[w.type])
+
+            setLayout(cleaned.length > 0 ? cleaned : DEFAULT_LAYOUT.map(w => ({ ...w, id: generateId() })))
           }
         }
       } catch (e) {
@@ -331,7 +355,10 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
 
         if (saved) {
           try {
-            setLayout(JSON.parse(saved))
+            const parsed = JSON.parse(saved)
+            const cleaned = parsed.filter(w => WIDGET_REGISTRY[w.type])
+
+            setLayout(cleaned.length > 0 ? cleaned : DEFAULT_LAYOUT.map(w => ({ ...w, id: generateId() })))
           } catch {}
         }
       } finally {
@@ -373,19 +400,23 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   // Compute which widgets are hidden by collapsed sections
   const hiddenBySection = useMemo(() => {
     const hidden = new Set()
+
     // Sort by y position to process in order
     const sorted = [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
     let currentCollapsed = false
 
     for (const w of sorted) {
       const def = WIDGET_REGISTRY[w.type]
+
       if (def?.isSection) {
         currentCollapsed = w.settings?.collapsed || false
       } else if (currentCollapsed) {
         hidden.add(w.id)
       }
     }
-    return hidden
+
+    
+return hidden
   }, [layout])
 
   // Visible layout (hide widgets in collapsed sections, unless in edit mode)
@@ -394,12 +425,14 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   // Convertir notre layout en format react-grid-layout (registry overrides saved min/max)
   const gridLayout = visibleLayout.map(w => {
     const def = WIDGET_REGISTRY[w.type]
-    return {
+
+    
+return {
       i: w.id,
       x: w.x,
       y: w.y,
       w: w.w,
-      h: def?.isSection ? 0.5 : w.h,
+      h: def?.isSection ? (editMode ? 1 : 0.5) : w.h,
       minW: def?.minSize?.w ?? w.minW ?? 2,
       minH: def?.isSection ? 0.5 : (def?.minSize?.h ?? w.minH ?? 2),
       maxW: def?.maxSize?.w ?? w.maxW ?? 12,
@@ -469,6 +502,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   // Update widget settings
   const handleUpdateSettings = useCallback((id, newSettings) => {
     const updated = layout.map(w => w.id === id ? { ...w, settings: { ...w.settings, ...newSettings } } : w)
+
     saveLayout(updated)
   }, [layout, saveLayout])
 
@@ -517,8 +551,10 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   // Listen for fullscreen exit via Escape
   useEffect(() => {
     const handler = () => setFullscreen(!!document.fullscreenElement)
+
     document.addEventListener('fullscreenchange', handler)
-    return () => document.removeEventListener('fullscreenchange', handler)
+    
+return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 
   if (!layoutLoaded) {
@@ -586,6 +622,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
                 editMode={editMode}
                 onRemove={() => handleRemoveWidget(config.id)}
                 onUpdateSettings={(settings) => handleUpdateSettings(config.id, settings)}
+                timeRange={timeRange}
                 t={t}
               />
             </div>
@@ -603,6 +640,30 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
         pl: 0.5,
         flexShrink: 0,
       }}>
+        {/* Time range picker */}
+        <Box sx={{
+          display: 'flex', flexDirection: 'column', gap: '2px',
+          mb: 0.75, pb: 0.75, borderBottom: '1px solid', borderColor: 'divider',
+        }}>
+          {TIME_RANGES.map(tr => (
+            <Box
+              key={tr.value}
+              onClick={() => handleTimeRangeChange(tr.value)}
+              sx={{
+                px: 0.75, py: 0.25, borderRadius: 0.75, cursor: 'pointer',
+                fontSize: 10, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace',
+                textAlign: 'center', userSelect: 'none', lineHeight: 1.4,
+                color: timeRange === tr.value ? 'primary.contrastText' : 'text.secondary',
+                bgcolor: timeRange === tr.value ? 'primary.main' : 'transparent',
+                '&:hover': {
+                  bgcolor: timeRange === tr.value ? 'primary.dark' : 'action.hover',
+                },
+              }}
+            >
+              {tr.label}
+            </Box>
+          ))}
+        </Box>
         {saving && (
           <CircularProgress size={14} sx={{ mb: 0.5 }} />
         )}

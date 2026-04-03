@@ -322,7 +322,12 @@
       "infraGlobalChart": "CPU/RAM pro Node über die gesamte Infrastruktur",
       "vmHeatmap": "CPU/RAM-Heatmap aller Guests",
       "drsStatus": "DRS-Status, aktive Migrationen und Empfehlungen",
-      "siteRecovery": "VM-Schutz, RPO-Compliance und Replikationsstatus"
+      "siteRecovery": "VM-Schutz, RPO-Compliance und Replikationsstatus",
+      "backupCalendar": "Backup-Verlauf über 30 Tage",
+      "nodesGauges": "Kreisdiagramme pro Node (CPU, RAM, Disk)",
+      "clustersGauges": "Diagramme pro Cluster mit Sparklines und Score",
+      "clusterHealth": "Gesundheitsbewertung mit wichtigen Metriken",
+      "sectionHeader": "Einklappbarer Abschnittsseparator"
     },
     "widgetDrs": {
       "automatic": "Automatisch",

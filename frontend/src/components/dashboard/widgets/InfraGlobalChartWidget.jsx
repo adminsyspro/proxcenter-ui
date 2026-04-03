@@ -186,7 +186,7 @@ return json.data || {}
         })
 
         const aggregated = Array.from(timeMap.values()).sort((a, b) => a.ts - b.ts)
-        const sortedNames = [...allNodeNames].sort()
+        const sortedNames = [...allNodeNames].sort((a, b) => a.localeCompare(b))
         const keys = sortedNames.flatMap(name => [`${name}_cpu`, `${name}_ram`])
         const lastKnown = {}
 

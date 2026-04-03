@@ -237,7 +237,7 @@ return getHeatColor(mode === 'cpu' ? vm.cpuPct : vm.ramPct)
 
   // Tile label
   const getTileLabel = (vm) => {
-    if (mode === 'status') return vm.status === 'running' ? '' : ''
+    if (mode === 'status') return ''
     
 return mode === 'cpu' ? vm.cpuPct : vm.ramPct
   }

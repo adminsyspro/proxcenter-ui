@@ -1899,6 +1899,30 @@ function AITab() {
           </Card>
         </>
       )}
+
+      {/* Save button always visible (even when AI is disabled) */}
+      {!settings.enabled && (
+        <Card variant='outlined' sx={{ mt: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant='contained'
+                onClick={saveSettings}
+                disabled={saving}
+                startIcon={<i className='ri-save-line' />}
+              >
+                {t('common.save')}
+              </Button>
+            </Box>
+
+            {testResult && (
+              <Alert severity={testResult.type} sx={{ mt: 2 }}>
+                {testResult.message}
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </Box>
   )
 }

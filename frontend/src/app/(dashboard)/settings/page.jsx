@@ -1652,6 +1652,38 @@ function AITab() {
         </CardContent>
       </Card>
 
+      {/* Data Disclosure Notice */}
+      {settings.enabled && (
+        <Alert
+          severity={settings.provider === 'ollama' ? 'success' : 'warning'}
+          icon={<i className={settings.provider === 'ollama' ? 'ri-shield-check-line' : 'ri-error-warning-line'} />}
+          sx={{ mb: 3 }}
+        >
+          <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 0.5 }}>
+            {t('settings.aiDataDisclosureTitle')}
+          </Typography>
+          {settings.provider === 'ollama' ? (
+            <Typography variant='body2'>
+              {t('settings.aiDataDisclosureLocal')}
+            </Typography>
+          ) : (
+            <>
+              <Typography variant='body2' sx={{ mb: 1 }}>
+                {t('settings.aiDataDisclosureCloud')}
+              </Typography>
+              <Box component='ul' sx={{ m: 0, pl: 2 }}>
+                {t('settings.aiDataDisclosureItems').split(';').map((item, i) => (
+                  <li key={i}><Typography variant='body2'>{item}</Typography></li>
+                ))}
+              </Box>
+              <Typography variant='body2' sx={{ mt: 1, fontStyle: 'italic' }}>
+                {t('settings.aiDataDisclosureRecommendation')}
+              </Typography>
+            </>
+          )}
+        </Alert>
+      )}
+
       {/* Provider Selection */}
       {settings.enabled && (
         <>

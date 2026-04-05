@@ -66,7 +66,7 @@ type ConnectionDialogProps = {
   open: boolean
   onClose: () => void
   onSave: (data: ConnectionFormData) => Promise<void>
-  type: 'pve' | 'pbs' | 'vmware' | 'xcpng'
+  type: 'pve' | 'pbs' | 'vmware' | 'xcpng' | 'hyperv' | 'nutanix'
   initialData?: Partial<ConnectionFormData> & { 
     id?: string
     sshKeyConfigured?: boolean
@@ -150,7 +150,7 @@ export default function ConnectionDialog({
       } else {
         setForm({
           ...defaultFormData,
-          vmwareUser: type === 'xcpng' ? 'admin@admin.net' : 'root',
+          vmwareUser: type === 'xcpng' ? 'admin@admin.net' : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root',
         })
       }
       setError(null)
@@ -274,6 +274,20 @@ export default function ConnectionDialog({
     if (isExternalHypervisor && finalForm.baseUrl && !finalForm.baseUrl.match(/^https?:\/\//)) {
       finalForm.baseUrl = isXcpng ? `http://${finalForm.baseUrl}` : `https://${finalForm.baseUrl}`
     }
+    // Hyper-V: strip https:// prefix since we store just the hostname for virt-v2v
+    if (isHyperv && finalForm.baseUrl) {
+      finalForm.baseUrl = finalForm.baseUrl.replace(/^https?:\/\//, '')
+    }
+    // Nutanix: auto-append :9440 if no port specified
+    if (isNutanix && finalForm.baseUrl && !finalForm.baseUrl.replace(/^https?:\/\//, '').match(/:\d+/)) {
+      try {
+        const url = new URL(finalForm.baseUrl)
+        url.port = '9440'
+        finalForm.baseUrl = url.toString().replace(/\/$/, '')
+      } catch {
+        finalForm.baseUrl = finalForm.baseUrl.replace(/\/$/, '') + ':9440'
+      }
+    }
     // Check if user explicitly specified a port in the raw input (e.g. :443, :8006)
     const userSpecifiedPort = finalForm.baseUrl && /:\d+/.test(finalForm.baseUrl.replace(/^https?:\/\//, ''))
     try {
@@ -304,14 +318,20 @@ export default function ConnectionDialog({
   const isPbs = type === 'pbs'
   const isVmware = type === 'vmware'
   const isXcpng = type === 'xcpng'
-  const isExternalHypervisor = isVmware || isXcpng
+  const isHyperv = type === 'hyperv'
+  const isNutanix = type === 'nutanix'
+  const isExternalHypervisor = isVmware || isXcpng || isHyperv || isNutanix
   const port = isExternalHypervisor ? '443' : isPbs ? '8007' : '8006'
   const isEdit = mode === 'edit'
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        {isXcpng ? (
+        {isNutanix ? (
+          <><img src="/images/nutanix-logo.svg" alt="" width={20} height={20} /> {isEdit ? 'Edit Nutanix Connection' : 'Add Nutanix Connection'}</>
+        ) : isHyperv ? (
+          <><i className="ri-microsoft-line" style={{ color: '#0078d4' }} /> {isEdit ? 'Edit Hyper-V Server' : 'Add Hyper-V Server'}</>
+        ) : isXcpng ? (
           <><img src="/images/xcpng-logo.svg" alt="" width={20} height={20} /> {isEdit ? t('settings.editXcpngServer') : t('settings.addXcpngServer')}</>
         ) : isVmware ? (
           <><i className="ri-cloud-line" style={{ color: '#638C1C' }} /> {isEdit ? t('settings.editVmwareServer') : t('settings.addVmwareServer')}</>
@@ -341,6 +361,18 @@ export default function ConnectionDialog({
               ? t.rich('settings.xcpngPortInfo', { b: (chunks: any) => <b>{chunks}</b> })
               : t.rich('settings.vmwarePortInfo', { b: (chunks: any) => <b>{chunks}</b> })
             }
+          </Alert>
+        )}
+
+        {isHyperv && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Enter the Hyper-V server hostname or IP. For disk-based migration, you can provide VHDX paths during the migration wizard.
+          </Alert>
+        )}
+
+        {isNutanix && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Nutanix Prism Central hostname or IP (port 9440). Disks will be exported as images and converted via virt-v2v with automatic virtio driver injection.
           </Alert>
         )}
 
@@ -391,15 +423,19 @@ export default function ConnectionDialog({
         <TextField
           fullWidth
           label={isExternalHypervisor
-            ? (isXcpng
+            ? (isNutanix
+              ? 'Prism Central URL'
+              : isHyperv
+              ? 'Hyper-V Host'
+              : isXcpng
               ? t('settings.xcpngHostLabel')
               : (form.subType === 'vcenter' ? 'vCenter URL' : t('settings.esxiHostLabel')))
             : t('settings.baseUrlLabel', { port })
           }
           value={form.baseUrl}
           onChange={e => handleChange('baseUrl', e.target.value)}
-          placeholder={isXcpng ? 'http://10.99.99.196' : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : '192.168.1.100') : t('settings.baseUrlPlaceholder', { port })}
-          helperText={isXcpng ? t('settings.xcpngHostHelper') : isVmware ? (form.subType === 'vcenter' ? 'vCenter server hostname or IP' : t('settings.esxiHostHelper')) : undefined}
+          placeholder={isNutanix ? 'prism-central.example.com' : isHyperv ? 'hyperv-host.local' : isXcpng ? 'http://10.99.99.196' : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : '192.168.1.100') : t('settings.baseUrlPlaceholder', { port })}
+          helperText={isNutanix ? 'Nutanix Prism Central hostname or IP (port 9440)' : isHyperv ? 'Hyper-V server hostname or IP' : isXcpng ? t('settings.xcpngHostHelper') : isVmware ? (form.subType === 'vcenter' ? 'vCenter server hostname or IP' : t('settings.esxiHostHelper')) : undefined}
           sx={{ mt: 2 }}
           required
         />
@@ -450,27 +486,27 @@ export default function ConnectionDialog({
         {/* Section: Authentication */}
         <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className="ri-key-2-line" />
-          {isExternalHypervisor ? (isXcpng ? t('settings.xcpngAuthentication') : t('settings.vmwareAuthentication')) : t('settings.apiAuthentication')}
+          {isExternalHypervisor ? (isNutanix ? 'Prism Central Authentication' : isHyperv ? 'Hyper-V Authentication' : isXcpng ? t('settings.xcpngAuthentication') : t('settings.vmwareAuthentication')) : t('settings.apiAuthentication')}
         </Typography>
 
         {isExternalHypervisor ? (
           <>
             <TextField
               fullWidth
-              label={isXcpng ? t('settings.xcpngUsername') : t('settings.vmwareUsername')}
+              label={isHyperv ? 'Username' : isXcpng ? t('settings.xcpngUsername') : t('settings.vmwareUsername')}
               value={form.vmwareUser}
               onChange={e => handleChange('vmwareUser', e.target.value)}
-              placeholder={isXcpng ? 'admin@admin.net' : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
+              placeholder={isHyperv ? 'Administrator' : isXcpng ? 'admin@admin.net' : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
               sx={{ mt: 1 }}
               required
             />
             <TextField
               fullWidth
-              label={isXcpng ? t('settings.xcpngPasswordLabel') : t('settings.vmwarePasswordLabel')}
+              label={isHyperv ? 'Password' : isXcpng ? t('settings.xcpngPasswordLabel') : t('settings.vmwarePasswordLabel')}
               value={form.vmwarePassword}
               onChange={e => handleChange('vmwarePassword', e.target.value)}
               type={showPassword ? 'text' : 'password'}
-              helperText={isEdit ? t('settings.vmwarePasswordHelperEdit') : (isXcpng ? t('settings.xcpngPasswordHelper') : t('settings.vmwarePasswordHelper'))}
+              helperText={isEdit ? t('settings.vmwarePasswordHelperEdit') : (isHyperv ? 'Hyper-V administrator password' : isXcpng ? t('settings.xcpngPasswordHelper') : t('settings.vmwarePasswordHelper'))}
               sx={{ mt: 1.5 }}
               required={!isEdit}
               slotProps={{
@@ -614,7 +650,7 @@ export default function ConnectionDialog({
           </>
         )}
 
-        {!isPbs && !isXcpng && !(isVmware && form.subType === 'vcenter') && (
+        {!isPbs && !isXcpng && !isHyperv && !(isVmware && form.subType === 'vcenter') && (
           <>
         <Divider sx={{ my: 3 }} />
 

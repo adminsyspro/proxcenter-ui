@@ -138,6 +138,8 @@ function ConnectionStatus({ connection, autoTest = false, onNodesLoaded }) {
         ? `/api/v1/vmware/${connection.id}/status`
         : connection.type === 'xcpng'
         ? `/api/v1/xcpng/${connection.id}/status`
+        : connection.type === 'hyperv'
+        ? `/api/v1/hyperv/${connection.id}/status`
         : `/api/v1/connections/${connection.id}/nodes`
 
       const res = await fetch(endpoint)
@@ -291,18 +293,22 @@ function ConnectionsTab() {
     pbsConnections,
     vmwareConnections,
     xcpngConnections,
+    hypervConnections,
     pveLoading,
     pbsLoading,
     vmwareLoading,
     xcpngLoading,
+    hypervLoading,
     pveError,
     pbsError,
     vmwareError,
     xcpngError,
+    hypervError,
     loadPveConnections,
     loadPbsConnections,
     loadVmwareConnections,
     loadXcpngConnections,
+    loadHypervConnections,
   } = useConnectionsManagement()
 
   // Dialog
@@ -333,7 +339,7 @@ function ConnectionsTab() {
   }
 
   const handleSaveConnection = async (formData) => {
-    const isExtHypervisor = addConnType === 'vmware' || addConnType === 'xcpng'
+    const isExtHypervisor = addConnType === 'vmware' || addConnType === 'xcpng' || addConnType === 'hyperv'
     const payload = {
       name: formData.name.trim(),
       type: addConnType,
@@ -347,13 +353,13 @@ function ConnectionsTab() {
       // PVE/PBS: API token
       ...(!isExtHypervisor && formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),
       // VMware/XCP-ng: username + password
-      ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : 'root') }),
+      ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : addConnType === 'hyperv' ? 'Administrator' : 'root') }),
       ...(isExtHypervisor && formData.vmwarePassword && { vmwarePassword: formData.vmwarePassword }),
       // VMware sub-type and datacenter
       ...(addConnType === 'vmware' && { subType: formData.subType || 'esxi' }),
       ...(addConnType === 'vmware' && formData.vmwareDatacenter?.trim() && { vmwareDatacenter: formData.vmwareDatacenter.trim() }),
       // SSH fields (PVE + VMware — not XCP-ng)
-      ...(addConnType !== 'xcpng' && {
+      ...(addConnType !== 'xcpng' && addConnType !== 'hyperv' && {
         sshEnabled: formData.sshEnabled,
         sshPort: formData.sshPort,
         sshUser: formData.sshUser,
@@ -393,6 +399,8 @@ function ConnectionsTab() {
       loadVmwareConnections()
     } else if (addConnType === 'xcpng') {
       loadXcpngConnections()
+    } else if (addConnType === 'hyperv') {
+      loadHypervConnections()
     }
 
     // En mode onboarding, rediriger vers la page d'accueil après création
@@ -430,7 +438,7 @@ function ConnectionsTab() {
   }
 
   const deleteConnection = async (id, type) => {
-    const typeName = type === 'pbs' ? 'PBS' : type === 'vmware' ? 'VMware ESXi' : type === 'xcpng' ? 'XCP-ng' : 'PVE'
+    const typeName = type === 'pbs' ? 'PBS' : type === 'vmware' ? 'VMware ESXi' : type === 'xcpng' ? 'XCP-ng' : type === 'hyperv' ? 'Hyper-V' : 'PVE'
     const ok = window.confirm(t('settings.deleteConnectionConfirm', { type: typeName }))
 
     if (!ok) return
@@ -444,6 +452,8 @@ function ConnectionsTab() {
       await loadVmwareConnections()
     } else if (type === 'xcpng') {
       await loadXcpngConnections()
+    } else if (type === 'hyperv') {
+      await loadHypervConnections()
     }
   }
 
@@ -879,6 +889,66 @@ function ConnectionsTab() {
     [t]
   )
 
+  // Hyper-V columns
+  const hypervColumns = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: t('common.name'),
+        flex: 1,
+        minWidth: 180,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
+            <i className='ri-microsoft-line' style={{ fontSize: 18, color: '#0078d4', opacity: 0.8 }} />
+            <Typography variant='body2' sx={{ fontWeight: 600 }}>{params.value}</Typography>
+          </Box>
+        )
+      },
+      {
+        field: 'baseUrl',
+        headerName: 'Hyper-V Host',
+        flex: 1.2,
+        minWidth: 200,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <Typography variant='body2' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem', opacity: 0.8 }}>
+              {params.value}
+            </Typography>
+          </Box>
+        )
+      },
+      {
+        field: 'status',
+        headerName: t('common.status'),
+        width: 160,
+        renderCell: params => (
+          <ConnectionStatus connection={params.row} autoTest={true} />
+        )
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        width: 100,
+        sortable: false,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
+            <Tooltip title={t('common.edit')}>
+              <IconButton size='small' onClick={() => openEditDialog(params.row)}>
+                <i className='ri-pencil-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('common.delete')}>
+              <IconButton size='small' color='error' onClick={() => deleteConnection(params.row.id, 'hyperv')}>
+                <i className='ri-delete-bin-6-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )
+      }
+    ],
+    [t]
+  )
+
   return (
     <>
       {/* Sub-tabs PVE / PBS / VMware */}
@@ -959,10 +1029,10 @@ function ConnectionsTab() {
             label={
               <Tooltip title={!migrationAvailable ? 'Enterprise' : ''} placement='top'>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: migrationAvailable ? 1 : 0.4 }}>
-                  <img src='/images/hyperv-logo.svg' alt='' width={18} height={18} />
-                  <span>Microsoft Hyper-V</span>
+                  <i className='ri-microsoft-line' style={{ fontSize: 18, color: '#0078d4' }} />
+                  <span>Hyper-V</span>
                   {migrationAvailable ? (
-                    <Chip size='small' label='Soon' sx={{ height: 18, fontSize: 10, ml: 0.5, bgcolor: '#00B9E6', color: '#fff' }} />
+                    <Chip size='small' label={hypervConnections.length} sx={{ height: 18, fontSize: 10, ml: 0.5, bgcolor: '#0078d4', color: '#fff' }} />
                   ) : (
                     <i className='ri-lock-line' style={{ fontSize: 14, opacity: 0.5 }} />
                   )}
@@ -1157,15 +1227,45 @@ function ConnectionsTab() {
         </Box>
       </SubTabPanel>
 
-      {/* Microsoft Hyper-V Tab - Coming Soon */}
+      {/* Hyper-V Tab */}
       <SubTabPanel value={connTab} index={5}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2 }}>
-          <img src='/images/hyperv-logo.svg' alt='Hyper-V' width={64} height={64} style={{ opacity: 0.5 }} />
-          <Typography variant='h6' sx={{ opacity: 0.7 }}>Microsoft Hyper-V</Typography>
-          <Chip label='Coming Soon' color='info' />
-          <Typography variant='body2' sx={{ opacity: 0.5, maxWidth: 400, textAlign: 'center' }}>
-            {t('settings.hypervComingSoonDesc')}
+        {hypervError && <Alert severity='error' sx={{ mb: 2 }}>{t('common.error')}: {hypervError}</Alert>}
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant='body2' sx={{ opacity: 0.7 }}>
+            Hyper-V Servers
           </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button variant='outlined' size='small' onClick={loadHypervConnections} disabled={hypervLoading} startIcon={<i className='ri-refresh-line' />}>
+              {t('common.refresh')}
+            </Button>
+            <Button variant='contained' size='small' sx={{ bgcolor: '#0078d4', '&:hover': { bgcolor: '#005a9e' } }} onClick={() => openAddDialog('hyperv')} startIcon={<i className='ri-add-line' />}>
+              {t('common.add')} Hyper-V
+            </Button>
+          </Box>
+        </Box>
+
+        <Box sx={{ height: 'calc(100vh - 380px)', minHeight: 300 }}>
+          {!hypervLoading && hypervConnections.length === 0 ? (
+            <EmptyState
+              icon="ri-microsoft-line"
+              title="No Hyper-V connections"
+              description="Add a Hyper-V server to start migrating VMs to Proxmox."
+              action={{ label: `${t('common.add')} Hyper-V`, onClick: () => openAddDialog('hyperv'), icon: 'ri-add-line' }}
+              size="large"
+            />
+          ) : (
+            <DataGrid
+              rows={hypervConnections}
+              columns={hypervColumns}
+              loading={hypervLoading}
+              getRowId={r => r.id}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              disableRowSelectionOnClick
+              sx={{ '& .MuiDataGrid-row:hover': { backgroundColor: 'action.hover' } }}
+            />
+          )}
         </Box>
       </SubTabPanel>
 

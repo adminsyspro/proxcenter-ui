@@ -46,6 +46,11 @@ export function useConnectionsManagement() {
   const [xcpngLoading, setXcpngLoading] = useState(true)
   const [xcpngError, setXcpngError] = useState<string | null>(null)
 
+  // Hyper-V Connections
+  const [hypervConnections, setHypervConnections] = useState<any[]>([])
+  const [hypervLoading, setHypervLoading] = useState(true)
+  const [hypervError, setHypervError] = useState<string | null>(null)
+
   const loadPveConnections = useCallback(async () => {
     setPveLoading(true)
     setPveError(null)
@@ -106,29 +111,49 @@ export function useConnectionsManagement() {
     }
   }, [])
 
+  const loadHypervConnections = useCallback(async () => {
+    setHypervLoading(true)
+    setHypervError(null)
+
+    try {
+      const json = await fetchJson('/api/v1/connections?type=hyperv')
+      setHypervConnections(Array.isArray(json?.data) ? json.data : [])
+    } catch (e: any) {
+      setHypervError(e?.message || String(e))
+      setHypervConnections([])
+    } finally {
+      setHypervLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadPveConnections()
     loadPbsConnections()
     loadVmwareConnections()
     loadXcpngConnections()
-  }, [loadPveConnections, loadPbsConnections, loadVmwareConnections, loadXcpngConnections])
+    loadHypervConnections()
+  }, [loadPveConnections, loadPbsConnections, loadVmwareConnections, loadXcpngConnections, loadHypervConnections])
 
   return {
     pveConnections,
     pbsConnections,
     vmwareConnections,
     xcpngConnections,
+    hypervConnections,
     pveLoading,
     pbsLoading,
     vmwareLoading,
     xcpngLoading,
+    hypervLoading,
     pveError,
     pbsError,
     vmwareError,
     xcpngError,
+    hypervError,
     loadPveConnections,
     loadPbsConnections,
     loadVmwareConnections,
     loadXcpngConnections,
+    loadHypervConnections,
   }
 }

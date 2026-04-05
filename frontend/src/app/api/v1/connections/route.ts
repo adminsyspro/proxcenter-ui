@@ -123,14 +123,15 @@ export async function POST(req: Request) {
       locationLabel: locationLabel ?? null,
     }
 
-    if (type === 'vmware' || type === 'xcpng') {
-      // VMware/XCP-ng: store "user:password" in apiTokenEnc
-      data.apiTokenEnc = encryptSecret(`${vmwareUser || (type === 'xcpng' ? 'admin@admin.net' : 'root')}:${vmwarePassword || ''}`)
+    if (type === 'vmware' || type === 'xcpng' || type === 'hyperv') {
+      // VMware/XCP-ng/Hyper-V: store "user:password" in apiTokenEnc
+      const defaultUser = type === 'xcpng' ? 'admin@admin.net' : type === 'hyperv' ? 'Administrator' : 'root'
+      data.apiTokenEnc = encryptSecret(`${vmwareUser || defaultUser}:${vmwarePassword || ''}`)
       if (type === 'vmware') {
         data.subType = subType || 'esxi'
         data.vmwareDatacenter = vmwareDatacenter || null
       }
-      if (type === 'xcpng') {
+      if (type === 'xcpng' || type === 'hyperv') {
         data.sshEnabled = false
       }
     } else {
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
     }
 
     // SSH config (PVE + VMware)
-    if (type !== 'xcpng') {
+    if (type !== 'xcpng' && type !== 'hyperv') {
       data.sshEnabled = sshEnabled
       data.sshPort = sshPort
       data.sshUser = sshUser

@@ -8,7 +8,7 @@ import { z } from 'zod'
 /** POST /api/v1/connections — create a Proxmox connection */
 export const createConnectionSchema = z.object({
   name: z.string().min(1, 'name is required').transform(s => s.trim()),
-  type: z.enum(['pve', 'pbs', 'vmware', 'xcpng']).default('pve'),
+  type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv']).default('pve'),
   baseUrl: z.string().min(1, 'baseUrl is required').transform(s => s.trim().replace(/\/+$/, '')),
   behindProxy: z.boolean().default(false),
   insecureTLS: z.boolean().default(false),
@@ -51,6 +51,15 @@ export const createConnectionSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'vmwarePassword is required', path: ['vmwarePassword'] })
     }
   }
+  // Hyper-V requires username + password
+  if (data.type === 'hyperv') {
+    if (!data.vmwareUser) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Hyper-V username is required', path: ['vmwareUser'] })
+    }
+    if (!data.vmwarePassword) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Hyper-V password is required', path: ['vmwarePassword'] })
+    }
+  }
   // XCP-ng (XO) requires username + password
   if (data.type === 'xcpng') {
     if (!data.vmwareUser) {
@@ -88,7 +97,7 @@ export const createConnectionSchema = z.object({
 /** PATCH /api/v1/connections/[id] — update a connection (all fields optional) */
 export const updateConnectionSchema = z.object({
   name: z.string().min(1).transform(s => s.trim()).optional(),
-  type: z.enum(['pve', 'pbs', 'vmware', 'xcpng']).optional(),
+  type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv']).optional(),
   baseUrl: z.string().min(1).transform(s => s.trim().replace(/\/+$/, '')).optional(),
   behindProxy: z.boolean().optional(),
   insecureTLS: z.boolean().optional(),

@@ -509,6 +509,7 @@ return () => setPageInfo('', '', '')
   return (
     <Box
       ref={containerRef}
+      className="ts-layout-content-height-fixed"
       sx={{
         // IMPORTANT: permettre aux enfants de scroller
         minHeight: 0,

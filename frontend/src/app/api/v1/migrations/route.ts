@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
+import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 
 export const runtime = "nodejs"
 
@@ -41,18 +42,23 @@ export async function POST(req: Request) {
 
     // Verify connections exist
     const [sourceConn, pveConn] = await Promise.all([
-      prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { id: true, type: true, name: true, baseUrl: true } }),
+      prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { id: true, type: true, subType: true, name: true, baseUrl: true } }),
       prisma.connection.findUnique({ where: { id: targetConnectionId }, select: { id: true, type: true, name: true } }),
     ])
 
-    if (!sourceConn || (sourceConn.type !== "vmware" && sourceConn.type !== "xcpng")) {
-      return NextResponse.json({ error: "Source hypervisor connection not found (must be vmware or xcpng)" }, { status: 404 })
+    const validSourceTypes = ["vmware", "xcpng", "hyperv", "nutanix"]
+    if (!sourceConn || !validSourceTypes.includes(sourceConn.type)) {
+      return NextResponse.json({ error: "Source hypervisor connection not found (must be vmware, xcpng, hyperv, or nutanix)" }, { status: 404 })
     }
     if (!pveConn || pveConn.type !== "pve") {
       return NextResponse.json({ error: "Proxmox connection not found" }, { status: 404 })
     }
 
-    const sourceType = sourceConn.type as "vmware" | "xcpng"
+    // Detect effective source type: vmware with subType "vcenter" routes to v2v pipeline
+    let effectiveSourceType: string = sourceConn.type
+    if (sourceConn.type === "vmware" && sourceConn.subType === "vcenter") {
+      effectiveSourceType = "vcenter"
+    }
 
     // Create job record
     const job = await prisma.migrationJob.create({
@@ -63,7 +69,7 @@ export async function POST(req: Request) {
         targetConnectionId,
         targetNode,
         targetStorage,
-        config: JSON.stringify({ sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration, migrationType, transferMode, sourceType }),
+        config: JSON.stringify({ sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration, migrationType, transferMode, sourceType: effectiveSourceType }),
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -86,7 +92,15 @@ export async function POST(req: Request) {
     // Run appropriate pipeline in background after response (pass tenantId for scoped DB access)
     const tenantId = await getCurrentTenantId()
     after(async () => {
-      if (sourceType === "xcpng") {
+      if (effectiveSourceType === "vcenter" || effectiveSourceType === "hyperv" || effectiveSourceType === "nutanix") {
+        const { sourceVmName = "", vcenterDatacenter, vcenterHost, diskPaths } = body
+        await runV2vMigrationPipeline(job.id, {
+          sourceConnectionId, sourceVmId, sourceVmName,
+          sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
+          targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration,
+          vcenterDatacenter, vcenterHost, diskPaths,
+        }, tenantId)
+      } else if (effectiveSourceType === "xcpng") {
         await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: (migrationType === "sshfs_boot" ? "cold" : migrationType) as "cold" | "live" }, tenantId)
       } else {
         await runMigrationPipeline(job.id, migrationConfig, tenantId)

@@ -253,6 +253,7 @@ type Props = {
   onSelect: (sel: InventorySelection | null) => void
   onRefreshRef?: (refresh: () => void) => void  // callback pour exposer la fonction refresh
   onOptimisticVmStatusRef?: (fn: (connId: string, vmid: string, status: string) => void) => void
+  onOptimisticVmTagsRef?: (fn: (connId: string, vmid: string, tags: string[]) => void) => void
   viewMode?: ViewMode  // viewMode contrôlé depuis le parent
   onViewModeChange?: (mode: ViewMode) => void  // callback quand le mode change
   onAllVmsChange?: (vms: AllVmItem[]) => void  // callback pour passer toutes les VMs
@@ -468,11 +469,13 @@ type VmItemProps = {
   onContextMenu: (e: React.MouseEvent) => void
   variant: VmItemVariant
   t: ReturnType<typeof useTranslations>
+  tags?: string[]
 }
 
 const VmItem = React.memo(function VmItem(props: VmItemProps) {
   const {
     vmKey,
+    connId,
     vmType,
     name,
     status,
@@ -489,7 +492,48 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
     onContextMenu,
     variant,
     t,
+    tags,
   } = props
+  const { getColor, getShape } = useTagColors(connId)
+  const shape = getShape(connId)
+
+  // Render tags according to PVE shape setting
+  const validTags = tags?.filter(t => t && t.trim()) || []
+  const tagElements = (validTags.length > 0 && shape !== 'none') ? validTags.map(tag => {
+    const { bg, fg } = getColor(tag)
+    if (shape === 'circle') {
+      return (
+        <Tooltip key={tag} title={tag}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: bg, flexShrink: 0 }} />
+        </Tooltip>
+      )
+    }
+    if (shape === 'dense') {
+      return (
+        <Tooltip key={tag} title={tag}>
+          <Box sx={{ width: 12, height: 8, borderRadius: 0, bgcolor: bg, flexShrink: 0 }} />
+        </Tooltip>
+      )
+    }
+    // shape === 'full'
+    return (
+      <Chip
+        key={tag}
+        label={tag}
+        size="small"
+        sx={{
+          height: 16,
+          fontSize: 9,
+          borderRadius: 0.5,
+          bgcolor: bg,
+          color: fg,
+          fontWeight: 600,
+          flexShrink: 0,
+          '& .MuiChip-label': { px: 0.5 }
+        }}
+      />
+    )
+  }) : null
 
   if (variant === 'tree') {
     return (
@@ -527,6 +571,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
             <i className="ri-ram-line" style={{ fontSize: 14, color: '#ed6c02' }} />
           </Tooltip>
         )}
+        {tagElements}
       </Box>
     )
   }
@@ -690,6 +735,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
               <i className="ri-ram-line" style={{ fontSize: 14, color: '#ed6c02' }} />
             </Tooltip>
           )}
+          {tagElements}
         </>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
@@ -709,6 +755,7 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
               <i className="ri-ram-line" style={{ fontSize: 14, color: '#ed6c02', flexShrink: 0 }} />
             </Tooltip>
           )}
+          {tagElements}
         </Box>
       )}
     </Box>
@@ -726,7 +773,8 @@ const VmItem = React.memo(function VmItem(props: VmItemProps) {
   prev.maxmem === next.maxmem &&
   prev.name === next.name &&
   prev.variant === next.variant &&
-  prev.template === next.template
+  prev.template === next.template &&
+  prev.tags?.join(';') === next.tags?.join(';')
 )
 
 function itemKey(sel: InventorySelection) {
@@ -760,7 +808,7 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange }: Props) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange }: Props) {
   const t = useTranslations()
   const theme = useTheme()
   const router = useRouter()
@@ -969,6 +1017,28 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       })
     }
   }, [onOptimisticVmStatusRef])
+
+  // Expose optimistic VM tags update function to parent
+  useEffect(() => {
+    if (onOptimisticVmTagsRef) {
+      onOptimisticVmTagsRef((connId: string, vmid: string, tags: string[]) => {
+        const tagsStr = tags.join(';')
+        setClusters(prev => prev.map(clu => {
+          if (clu.connId !== connId) return clu
+          let changed = false
+          const nodes = clu.nodes.map(n => {
+            const vms = n.vms.map(vm => {
+              if (String(vm.vmid) !== String(vmid)) return vm
+              changed = true
+              return { ...vm, tags: tagsStr }
+            })
+            return changed ? { ...n, vms } : n
+          })
+          return changed ? { ...clu, nodes } : clu
+        }))
+      })
+    }
+  }, [onOptimisticVmTagsRef])
 
   // Menu contextuel VM
   const [contextMenu, setContextMenu] = useState<VmContextMenu>(null)
@@ -2931,6 +3001,7 @@ return favorites.has(vmKey)
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="flat"
                       t={t}
+                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                     />
                   </Box>
                 )
@@ -2993,6 +3064,7 @@ return favorites.has(vmKey)
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="favorite"
                       t={t}
+                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                     />
                   </Box>
                 )
@@ -3071,6 +3143,7 @@ return (
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="grouped"
                       t={t}
+                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                     />
                   )
                 })}
@@ -3148,6 +3221,7 @@ return (
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="grouped"
                       t={t}
+                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                     />
                   )
                 })}
@@ -3266,6 +3340,7 @@ return (
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="grouped"
                       t={t}
+                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                     />
                   )
                 })}
@@ -3322,6 +3397,7 @@ return (
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="template"
                       t={t}
+                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                     />
                   </Box>
                 )
@@ -3483,6 +3559,7 @@ return (
                         onContextMenu={() => {}}
                         variant="tree"
                         t={t}
+                        tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       />
                     }
                   />
@@ -3576,6 +3653,7 @@ return (
                           onContextMenu={() => {}}
                           variant="tree"
                           t={t}
+                          tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                         />
                       }
                     />

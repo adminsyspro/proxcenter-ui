@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useCallback, useRef } from 
 /* ------------------------------------------------------------------ */
 
 export type TagColorOverride = { bg: string; fg: string }
+export type TagShape = 'circle' | 'dense' | 'full' | 'none'
 
 /**
  * Parse PVE datacenter.cfg `tag-style` color-map string.
@@ -59,6 +60,29 @@ function extractColorMap(tagStyle: any): string {
   return ''
 }
 
+/**
+ * Extract shape from PVE tag-style property.
+ * Valid values: circle (default), dense, full, none.
+ */
+function extractShape(tagStyle: any): TagShape {
+  if (!tagStyle) return 'full'
+
+  if (typeof tagStyle === 'object' && tagStyle.shape) {
+    const s = tagStyle.shape
+    if (s === 'circle' || s === 'dense' || s === 'full' || s === 'none') return s
+  }
+
+  if (typeof tagStyle === 'string') {
+    const match = tagStyle.match(/shape=(\w+)/)
+    if (match) {
+      const s = match[1]
+      if (s === 'circle' || s === 'dense' || s === 'full' || s === 'none') return s as TagShape
+    }
+  }
+
+  return 'full'
+}
+
 /* ------------------------------------------------------------------ */
 /* Context                                                            */
 /* ------------------------------------------------------------------ */
@@ -68,6 +92,8 @@ type TagColorMap = Record<string, TagColorOverride>
 type TagColorContextValue = {
   /** Get PVE color override for a tag on a specific connection */
   getOverride: (connId: string, tag: string) => TagColorOverride | undefined
+  /** Get PVE tag shape for a specific connection */
+  getShape: (connId: string) => TagShape
   /** Load color map for a connection (idempotent, fetches once) */
   loadConnection: (connId: string) => void
   /** Check if a connection's colors have been loaded */
@@ -76,12 +102,14 @@ type TagColorContextValue = {
 
 const TagColorContext = createContext<TagColorContextValue>({
   getOverride: () => undefined,
+  getShape: () => 'full',
   loadConnection: () => {},
   isLoaded: () => false,
 })
 
 export function TagColorProvider({ children }: { children: React.ReactNode }) {
   const [colorMaps, setColorMaps] = useState<Record<string, TagColorMap>>({})
+  const [shapes, setShapes] = useState<Record<string, TagShape>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
   const loadedRef = useRef<Set<string>>(new Set())
 
@@ -98,8 +126,10 @@ export function TagColorProvider({ children }: { children: React.ReactNode }) {
         const tagStyle = data['tag-style']
         const colorMapStr = extractColorMap(tagStyle)
         const parsed = parseColorMap(colorMapStr)
+        const shape = extractShape(tagStyle)
 
         loadedRef.current.add(connId)
+        setShapes(prev => ({ ...prev, [connId]: shape }))
         if (Object.keys(parsed).length > 0) {
           setColorMaps(prev => ({ ...prev, [connId]: parsed }))
         }
@@ -117,10 +147,14 @@ export function TagColorProvider({ children }: { children: React.ReactNode }) {
     return colorMaps[connId]?.[tag]
   }, [colorMaps])
 
+  const getShape = useCallback((connId: string): TagShape => {
+    return shapes[connId] || 'full'
+  }, [shapes])
+
   const isLoaded = useCallback((connId: string) => loadedRef.current.has(connId), [])
 
   return (
-    <TagColorContext.Provider value={{ getOverride, loadConnection, isLoaded }}>
+    <TagColorContext.Provider value={{ getOverride, getShape, loadConnection, isLoaded }}>
       {children}
     </TagColorContext.Provider>
   )
@@ -148,7 +182,7 @@ export function useTagColors(connId?: string) {
     return { bg: tagColorFallback(tag), fg: '#ffffff' }
   }, [connId, ctx])
 
-  return { getColor, getOverride: ctx.getOverride, loadConnection: ctx.loadConnection }
+  return { getColor, getOverride: ctx.getOverride, getShape: ctx.getShape, loadConnection: ctx.loadConnection }
 }
 
 /* ------------------------------------------------------------------ */

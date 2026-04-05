@@ -614,6 +614,15 @@ return `${mins}m`
                     </Box>
                   </Box>
                 ) : null}
+                {hostInfo.uptime ? (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('inventory.uptime')}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{formatUptime(hostInfo.uptime)}</Typography>
+                    </Box>
+                  </Box>
+                ) : null}
               </Stack>
             </Box>
 

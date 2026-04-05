@@ -158,6 +158,7 @@ export default function InventoryDetails({
   onVmActionStart,
   onVmActionEnd,
   onOptimisticVmStatus,
+  onVmTagsChange,
   clusterStorages = [],
   externalHypervisors = [],
   externalDialogRequest,
@@ -186,6 +187,7 @@ export default function InventoryDetails({
   onVmActionStart?: (connId: string, vmid: string) => void
   onVmActionEnd?: (connId: string, vmid: string) => void
   onOptimisticVmStatus?: (connId: string, vmid: string, status: string) => void
+  onVmTagsChange?: (connId: string, vmid: string, tags: string[]) => void
   clusterStorages?: import('./InventoryTree').TreeClusterStorage[]
   externalHypervisors?: { id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string }[] }[]
   externalDialogRequest?: { type: 'createVm' | 'createLxc'; connId: string; node: string; ts: number } | null
@@ -2767,7 +2769,10 @@ return vm?.isCluster ?? false
                     node={node}
                     type={type}
                     vmid={vmid}
-                    onTagsChange={setLocalTags}
+                    onTagsChange={(newTags) => {
+                      setLocalTags(newTags)
+                      onVmTagsChange?.(connId, vmid, newTags)
+                    }}
                   />
 
                   {/* Refresh + Actions — poussées à droite */}
@@ -2878,16 +2883,6 @@ return vm?.isCluster ?? false
                 </MuiTooltip>
               )}
 
-              {/* Uptime en haut à droite (HOST uniquement) */}
-              {data.hostInfo?.uptime ? (
-                <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <i className="ri-time-line" style={{ fontSize: 14, color: primaryColor }} />
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Uptime: {formatUptime(data.hostInfo.uptime)}
-                  </Typography>
-                </Box>
-              ) : null}
-
               {/* Refresh button for storage */}
               {selection?.type === 'storage' && (
                 <Box sx={{ ml: 'auto' }}>
@@ -2901,7 +2896,7 @@ return vm?.isCluster ?? false
 
               {/* Refresh + Boutons Create VM/LXC pour clusters et hosts (hidden when node offline) */}
               {(selection?.type === 'cluster' || (selection?.type === 'node' && data.status !== 'crit')) && (
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: data.hostInfo?.uptime ? 2 : 'auto' }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 'auto' }}>
                   <MuiTooltip title={t('common.refresh')}>
                     <IconButton size="small" onClick={refreshData} disabled={refreshing} sx={{ bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' }, '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }, ...(refreshing && { '& i': { animation: 'spin 1s linear infinite' } }) }}>
                       <i className="ri-refresh-line" style={{ fontSize: 18 }} />

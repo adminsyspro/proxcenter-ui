@@ -299,6 +299,7 @@ return () => setPageInfo('', '', '')
   }, [])
 
   const [treeOptimisticVmStatus, setTreeOptimisticVmStatus] = useState<((connId: string, vmid: string, status: string) => void) | null>(null)
+  const treeOptimisticVmTagsRef = useRef<((connId: string, vmid: string, tags: string[]) => void) | null>(null)
 
   // Optimistic update: immediately reflect expected VM status in rawVms + tree clusters
   const onOptimisticVmStatus = useCallback((connId: string, vmid: string, status: string) => {
@@ -307,6 +308,14 @@ return () => setPageInfo('', '', '')
     ))
     treeOptimisticVmStatus?.(connId, vmid, status)
   }, [treeOptimisticVmStatus])
+
+  // Optimistic update: immediately reflect expected VM tags in rawVms + tree clusters
+  const onVmTagsChange = useCallback((connId: string, vmid: string, tags: string[]) => {
+    setRawVms(prev => prev.map(vm =>
+      vm.connId === connId && String(vm.vmid) === String(vmid) ? { ...vm, tags } : vm
+    ))
+    treeOptimisticVmTagsRef.current?.(connId, vmid, tags)
+  }, [])
 
   // Charger les favoris
   const loadFavorites = useCallback(async () => {
@@ -575,6 +584,7 @@ return () => setPageInfo('', '', '')
               onSelect={(sel) => setSelection(sel)}
               onRefreshRef={handleRefreshRef}
               onOptimisticVmStatusRef={handleOptimisticRef}
+              onOptimisticVmTagsRef={(fn) => { treeOptimisticVmTagsRef.current = fn }}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               onAllVmsChange={setRawVms}
@@ -672,6 +682,7 @@ return () => setPageInfo('', '', '')
             onVmActionStart={onVmActionStart}
             onVmActionEnd={onVmActionEnd}
             onOptimisticVmStatus={onOptimisticVmStatus}
+            onVmTagsChange={onVmTagsChange}
             clusterStorages={clusterStorages}
             externalHypervisors={externalHypervisors}
             externalDialogRequest={createDialogRequest}

@@ -7,6 +7,48 @@ export interface SoapSession {
   baseUrl: string
   cookie: string
   insecureTLS: boolean
+  // Dynamic MORs from ServiceContent (discovered via RetrieveServiceContent)
+  sessionManager: string    // "ha-sessionmgr" on ESXi, "SessionManager" on vCenter
+  propertyCollector: string  // "ha-property-collector" on ESXi, "propertyCollector" on vCenter
+  rootFolder: string         // "ha-folder-root" on ESXi, "group-d1" on vCenter
+  isVcenter: boolean         // true if connected to vCenter
+  datacenterPath?: string    // datacenter name for vCenter (used in dcPath for file downloads)
+}
+
+/** Discover service MORs via RetrieveServiceContent (works on both ESXi and vCenter) */
+export async function soapRetrieveServiceContent(
+  baseUrl: string,
+  insecureTLS: boolean
+): Promise<{
+  sessionManager: string
+  propertyCollector: string
+  rootFolder: string
+  isVcenter: boolean
+  apiVersion: string
+}> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrieveServiceContent>
+      <urn:_this type="ServiceInstance">ServiceInstance</urn:_this>
+    </urn:RetrieveServiceContent>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(baseUrl, body, "", insecureTLS)
+  if (result.text.includes("faultstring") && !result.text.includes("returnval")) {
+    const fault = result.text.match(/<faultstring>([^<]*)<\/faultstring>/)?.[1] || "Unknown error"
+    throw new Error(`RetrieveServiceContent failed: ${fault}`)
+  }
+
+  const sessionManager = result.text.match(/<sessionManager[^>]*>([^<]+)<\/sessionManager>/)?.[1] || "ha-sessionmgr"
+  const propertyCollector = result.text.match(/<propertyCollector[^>]*>([^<]+)<\/propertyCollector>/)?.[1] || "ha-property-collector"
+  const rootFolder = result.text.match(/<rootFolder[^>]*>([^<]+)<\/rootFolder>/)?.[1] || "ha-folder-root"
+  const apiType = result.text.match(/<apiType>([^<]+)<\/apiType>/)?.[1] || "HostAgent"
+  const apiVersion = result.text.match(/<version>([^<]+)<\/version>/)?.[1] || ""
+  const isVcenter = apiType === "VirtualCenter"
+
+  return { sessionManager, propertyCollector, rootFolder, isVcenter, apiVersion }
 }
 
 /** Send a SOAP request to the ESXi /sdk endpoint */
@@ -47,6 +89,10 @@ export async function soapLogin(
   password: string,
   insecureTLS: boolean
 ): Promise<SoapSession> {
+  // Step 1: Discover MORs via RetrieveServiceContent (no auth needed)
+  const serviceContent = await soapRetrieveServiceContent(baseUrl, insecureTLS)
+
+  // Step 2: Login using the discovered SessionManager MOR
   const escUser = username.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   const escPass = password.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
@@ -54,7 +100,7 @@ export async function soapLogin(
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:Login>
-      <urn:_this type="SessionManager">ha-sessionmgr</urn:_this>
+      <urn:_this type="SessionManager">${serviceContent.sessionManager}</urn:_this>
       <urn:userName>${escUser}</urn:userName>
       <urn:password>${escPass}</urn:password>
     </urn:Login>
@@ -64,16 +110,24 @@ export async function soapLogin(
   const result = await soapRequest(baseUrl, loginBody, "", insecureTLS)
   if (result.text.includes("InvalidLogin") || (result.text.includes("faultstring") && !result.text.includes("returnval"))) {
     const fault = result.text.match(/<faultstring>([^<]*)<\/faultstring>/)?.[1] || "Authentication failed"
-    throw new Error(`ESXi login failed: ${fault}`)
+    throw new Error(`VMware login failed: ${fault}`)
   }
-  return { baseUrl, cookie: result.cookie || "", insecureTLS }
+  return {
+    baseUrl,
+    cookie: result.cookie || "",
+    insecureTLS,
+    sessionManager: serviceContent.sessionManager,
+    propertyCollector: serviceContent.propertyCollector,
+    rootFolder: serviceContent.rootFolder,
+    isVcenter: serviceContent.isVcenter,
+  }
 }
 
 /** Logout the SOAP session */
 export async function soapLogout(session: SoapSession): Promise<void> {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
-  <soapenv:Body><urn:Logout><urn:_this type="SessionManager">ha-sessionmgr</urn:_this></urn:Logout></soapenv:Body>
+  <soapenv:Body><urn:Logout><urn:_this type="SessionManager">${session.sessionManager}</urn:_this></urn:Logout></soapenv:Body>
 </soapenv:Envelope>`
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
@@ -92,7 +146,7 @@ export async function soapGetVmConfig(session: SoapSession, vmid: string): Promi
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
       <urn:specSet>
         <urn:propSet>
           <urn:type>VirtualMachine</urn:type>
@@ -184,7 +238,7 @@ export async function soapCreateSnapshot(session: SoapSession, vmid: string, nam
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
       <urn:specSet>
         <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet><urn:pathSet>info.error</urn:pathSet><urn:pathSet>info.result</urn:pathSet></urn:propSet>
         <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
@@ -235,7 +289,7 @@ export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string)
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
       <urn:specSet>
         <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet></urn:propSet>
         <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
@@ -290,7 +344,7 @@ export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
       <urn:specSet>
         <urn:propSet>
           <urn:type>HttpNfcLease</urn:type>
@@ -521,20 +575,174 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
 }
 
 /**
- * Build HTTPS URLs to download a VMDK from ESXi datastore browser.
+ * Build HTTPS URLs to download a VMDK from ESXi/vCenter datastore browser.
  * ESXi exposes files at: https://host/folder/<path>?dcPath=ha-datacenter&dsName=<datastore>
+ * vCenter uses the actual datacenter name for dcPath.
  *
- * Returns [flatUrl, descriptorUrl]:
- * - flatUrl: the -flat.vmdk file (raw disk data, standard for split VMDK)
- * - descriptorUrl: the .vmdk descriptor itself (works for monolithic thick disks)
+ * The dcPath parameter defaults to "ha-datacenter" (ESXi) but can be overridden
+ * via session.datacenterPath for vCenter connections.
+ *
+ * Returns the -flat.vmdk URL (raw disk data, standard for split VMDK).
  */
-export function buildVmdkDownloadUrl(esxiBaseUrl: string, disk: EsxiDiskInfo): string {
+export function buildVmdkDownloadUrl(esxiBaseUrl: string, disk: EsxiDiskInfo, dcPath = "ha-datacenter"): string {
   const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
   const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
-  return `https://${host}/folder/${encodeURIComponent(flatPath).replace(/%2F/g, "/")}?dcPath=ha-datacenter&dsName=${encodeURIComponent(disk.datastoreName)}`
+  return `https://${host}/folder/${encodeURIComponent(flatPath).replace(/%2F/g, "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
 }
 
-export function buildVmdkDescriptorUrl(esxiBaseUrl: string, disk: EsxiDiskInfo): string {
+export function buildVmdkDescriptorUrl(esxiBaseUrl: string, disk: EsxiDiskInfo, dcPath = "ha-datacenter"): string {
   const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-  return `https://${host}/folder/${encodeURIComponent(disk.relativePath).replace(/%2F/g, "/")}?dcPath=ha-datacenter&dsName=${encodeURIComponent(disk.datastoreName)}`
+  return `https://${host}/folder/${encodeURIComponent(disk.relativePath).replace(/%2F/g, "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
+}
+
+// -- VM listing via SOAP (works on both ESXi and vCenter) --
+
+export interface VmwareVmSummary {
+  moId: string
+  name: string
+  powerState: string
+  guestId: string
+  guestOS: string
+  cpu: number
+  memoryMB: number
+  committedStorage: number
+  uncommittedStorage: number
+  template: boolean
+}
+
+/**
+ * List all VMs using CreateContainerView + RetrievePropertiesEx.
+ * Works on both ESXi (rootFolder = ha-folder-root) and vCenter (rootFolder = group-d1).
+ * Optionally accepts a rootFolder override for datacenter-specific queries on vCenter.
+ */
+export async function soapListVMs(
+  session: SoapSession,
+  rootFolder?: string
+): Promise<VmwareVmSummary[]> {
+  const folder = rootFolder || session.rootFolder
+
+  // Step 1: CreateContainerView for all VirtualMachine objects
+  const createViewBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:CreateContainerView>
+      <urn:_this type="ViewManager">ViewManager</urn:_this>
+      <urn:container type="Folder">${folder}</urn:container>
+      <urn:type>VirtualMachine</urn:type>
+      <urn:recursive>true</urn:recursive>
+    </urn:CreateContainerView>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const viewResult = await soapRequest(session.baseUrl, createViewBody, session.cookie, session.insecureTLS)
+  const viewRef = viewResult.text.match(/<returnval type="ContainerView">([^<]+)<\/returnval>/)?.[1]
+  if (!viewRef) return []
+
+  // Step 2: RetrievePropertiesEx with TraversalSpec through the ContainerView
+  const retrieveBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet>
+          <urn:type>VirtualMachine</urn:type>
+          <urn:pathSet>name</urn:pathSet>
+          <urn:pathSet>runtime.powerState</urn:pathSet>
+          <urn:pathSet>config.guestId</urn:pathSet>
+          <urn:pathSet>config.guestFullName</urn:pathSet>
+          <urn:pathSet>config.hardware.numCPU</urn:pathSet>
+          <urn:pathSet>config.hardware.memoryMB</urn:pathSet>
+          <urn:pathSet>config.template</urn:pathSet>
+          <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
+        </urn:propSet>
+        <urn:objectSet>
+          <urn:obj type="ContainerView">${viewRef}</urn:obj>
+          <urn:skip>true</urn:skip>
+          <urn:selectSet xsi:type="urn:TraversalSpec" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <urn:name>traverseEntities</urn:name>
+            <urn:type>ContainerView</urn:type>
+            <urn:path>view</urn:path>
+            <urn:skip>false</urn:skip>
+          </urn:selectSet>
+        </urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const propsResult = await soapRequest(session.baseUrl, retrieveBody, session.cookie, session.insecureTLS)
+
+  // Destroy the ContainerView (fire and forget)
+  const destroyBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:DestroyView>
+      <urn:_this type="ContainerView">${viewRef}</urn:_this>
+    </urn:DestroyView>
+  </soapenv:Body>
+</soapenv:Envelope>`
+  soapRequest(session.baseUrl, destroyBody, session.cookie, session.insecureTLS).catch(() => {})
+
+  // Step 3: Parse the response into VM summaries
+  const vms: VmwareVmSummary[] = []
+  const objRegex = /<objects>([\s\S]*?)<\/objects>/g
+  let match: RegExpExecArray | null
+
+  while ((match = objRegex.exec(propsResult.text)) !== null) {
+    const block = match[1]
+    const moId = block.match(/<obj type="VirtualMachine">([^<]+)<\/obj>/)?.[1] || ""
+    if (!moId) continue
+
+    let name = ""
+    let powerState = ""
+    let guestId = ""
+    let guestOS = ""
+    let cpu = 0
+    let memoryMB = 0
+    let template = false
+    let committedStorage = 0
+    let uncommittedStorage = 0
+
+    const propRegex = /<propSet>\s*<name>([^<]+)<\/name>\s*<val[^>]*>([\s\S]*?)<\/val>\s*<\/propSet>/g
+    let propMatch: RegExpExecArray | null
+
+    while ((propMatch = propRegex.exec(block)) !== null) {
+      const propName = propMatch[1]
+      const propVal = propMatch[2]
+
+      switch (propName) {
+        case "name": name = propVal; break
+        case "runtime.powerState": powerState = propVal; break
+        case "config.guestId": guestId = propVal; break
+        case "config.guestFullName": guestOS = propVal; break
+        case "config.hardware.numCPU": cpu = Number.parseInt(propVal, 10) || 0; break
+        case "config.hardware.memoryMB": memoryMB = Number.parseInt(propVal, 10) || 0; break
+        case "config.template": template = propVal === "true"; break
+        case "storage.perDatastoreUsage": {
+          const c = propVal.match(/<committed>(\d+)<\/committed>/)
+          const u = propVal.match(/<uncommitted>(\d+)<\/uncommitted>/)
+          if (c) committedStorage += Number.parseInt(c[1], 10) || 0
+          if (u) uncommittedStorage += Number.parseInt(u[1], 10) || 0
+          break
+        }
+      }
+    }
+
+    vms.push({
+      moId,
+      name: name || moId,
+      powerState,
+      guestId,
+      guestOS,
+      cpu,
+      memoryMB,
+      committedStorage,
+      uncommittedStorage,
+      template,
+    })
+  }
+
+  return vms
 }

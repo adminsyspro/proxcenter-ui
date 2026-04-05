@@ -601,7 +601,7 @@ export async function GET(request: NextRequest) {
             select: { id: true, name: true, type: true },
           }),
           prisma.connection.findMany({
-            where: { type: { in: ['vmware', 'hyperv', 'xcpng'] } },
+            where: { type: { in: ['vmware', 'hyperv', 'xcpng', 'nutanix'] } },
             orderBy: { createdAt: 'desc' },
             select: { id: true, name: true, type: true },
           }),

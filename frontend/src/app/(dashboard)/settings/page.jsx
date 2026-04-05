@@ -138,6 +138,8 @@ function ConnectionStatus({ connection, autoTest = false, onNodesLoaded }) {
         ? `/api/v1/vmware/${connection.id}/status`
         : connection.type === 'xcpng'
         ? `/api/v1/xcpng/${connection.id}/status`
+        : connection.type === 'nutanix'
+        ? `/api/v1/nutanix/${connection.id}/status`
         : connection.type === 'hyperv'
         ? `/api/v1/hyperv/${connection.id}/status`
         : `/api/v1/connections/${connection.id}/nodes`
@@ -293,21 +295,25 @@ function ConnectionsTab() {
     pbsConnections,
     vmwareConnections,
     xcpngConnections,
+    nutanixConnections,
     hypervConnections,
     pveLoading,
     pbsLoading,
     vmwareLoading,
     xcpngLoading,
+    nutanixLoading,
     hypervLoading,
     pveError,
     pbsError,
     vmwareError,
     xcpngError,
+    nutanixError,
     hypervError,
     loadPveConnections,
     loadPbsConnections,
     loadVmwareConnections,
     loadXcpngConnections,
+    loadNutanixConnections,
     loadHypervConnections,
   } = useConnectionsManagement()
 
@@ -339,7 +345,7 @@ function ConnectionsTab() {
   }
 
   const handleSaveConnection = async (formData) => {
-    const isExtHypervisor = addConnType === 'vmware' || addConnType === 'xcpng' || addConnType === 'hyperv'
+    const isExtHypervisor = addConnType === 'vmware' || addConnType === 'xcpng' || addConnType === 'nutanix' || addConnType === 'hyperv'
     const payload = {
       name: formData.name.trim(),
       type: addConnType,
@@ -353,13 +359,13 @@ function ConnectionsTab() {
       // PVE/PBS: API token
       ...(!isExtHypervisor && formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),
       // VMware/XCP-ng: username + password
-      ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : addConnType === 'hyperv' ? 'Administrator' : 'root') }),
+      ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : addConnType === 'hyperv' ? 'Administrator' : addConnType === 'nutanix' ? 'admin' : 'root') }),
       ...(isExtHypervisor && formData.vmwarePassword && { vmwarePassword: formData.vmwarePassword }),
       // VMware sub-type and datacenter
       ...(addConnType === 'vmware' && { subType: formData.subType || 'esxi' }),
       ...(addConnType === 'vmware' && formData.vmwareDatacenter?.trim() && { vmwareDatacenter: formData.vmwareDatacenter.trim() }),
       // SSH fields (PVE + VMware — not XCP-ng)
-      ...(addConnType !== 'xcpng' && addConnType !== 'hyperv' && {
+      ...(addConnType !== 'xcpng' && addConnType !== 'hyperv' && addConnType !== 'nutanix' && {
         sshEnabled: formData.sshEnabled,
         sshPort: formData.sshPort,
         sshUser: formData.sshUser,
@@ -399,6 +405,8 @@ function ConnectionsTab() {
       loadVmwareConnections()
     } else if (addConnType === 'xcpng') {
       loadXcpngConnections()
+    } else if (addConnType === 'nutanix') {
+      loadNutanixConnections()
     } else if (addConnType === 'hyperv') {
       loadHypervConnections()
     }
@@ -438,7 +446,7 @@ function ConnectionsTab() {
   }
 
   const deleteConnection = async (id, type) => {
-    const typeName = type === 'pbs' ? 'PBS' : type === 'vmware' ? 'VMware ESXi' : type === 'xcpng' ? 'XCP-ng' : type === 'hyperv' ? 'Hyper-V' : 'PVE'
+    const typeName = type === 'pbs' ? 'PBS' : type === 'vmware' ? 'VMware ESXi' : type === 'xcpng' ? 'XCP-ng' : type === 'nutanix' ? 'Nutanix' : type === 'hyperv' ? 'Hyper-V' : 'PVE'
     const ok = window.confirm(t('settings.deleteConnectionConfirm', { type: typeName }))
 
     if (!ok) return
@@ -452,6 +460,8 @@ function ConnectionsTab() {
       await loadVmwareConnections()
     } else if (type === 'xcpng') {
       await loadXcpngConnections()
+    } else if (type === 'nutanix') {
+      await loadNutanixConnections()
     } else if (type === 'hyperv') {
       await loadHypervConnections()
     }
@@ -889,6 +899,66 @@ function ConnectionsTab() {
     [t]
   )
 
+  // Nutanix columns
+  const nutanixColumns = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: t('common.name'),
+        flex: 1,
+        minWidth: 180,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
+            <img src='/images/nutanix-logo.svg' alt='' width={18} height={18} style={{ opacity: 0.8 }} />
+            <Typography variant='body2' sx={{ fontWeight: 600 }}>{params.value}</Typography>
+          </Box>
+        )
+      },
+      {
+        field: 'baseUrl',
+        headerName: 'Prism Central',
+        flex: 1.2,
+        minWidth: 200,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <Typography variant='body2' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem', opacity: 0.8 }}>
+              {params.value}
+            </Typography>
+          </Box>
+        )
+      },
+      {
+        field: 'status',
+        headerName: t('common.status'),
+        width: 160,
+        renderCell: params => (
+          <ConnectionStatus connection={params.row} autoTest={true} />
+        )
+      },
+      {
+        field: 'actions',
+        headerName: '',
+        width: 100,
+        sortable: false,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
+            <Tooltip title={t('common.edit')}>
+              <IconButton size='small' onClick={() => openEditDialog(params.row)}>
+                <i className='ri-pencil-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('common.delete')}>
+              <IconButton size='small' color='error' onClick={() => deleteConnection(params.row.id, 'nutanix')}>
+                <i className='ri-delete-bin-6-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )
+      }
+    ],
+    [t]
+  )
+
   // Hyper-V columns
   const hypervColumns = useMemo(
     () => [
@@ -1016,7 +1086,7 @@ function ConnectionsTab() {
                   <img src='/images/nutanix-logo.svg' alt='' width={18} height={18} />
                   <span>Nutanix</span>
                   {migrationAvailable ? (
-                    <Chip size='small' label='Soon' sx={{ height: 18, fontSize: 10, ml: 0.5, bgcolor: '#00B9E6', color: '#fff' }} />
+                    <Chip size='small' label={nutanixConnections.length} sx={{ height: 18, fontSize: 10, ml: 0.5, bgcolor: '#24B47E', color: '#fff' }} />
                   ) : (
                     <i className='ri-lock-line' style={{ fontSize: 14, opacity: 0.5 }} />
                   )}
@@ -1215,15 +1285,45 @@ function ConnectionsTab() {
         </Box>
       </SubTabPanel>
 
-      {/* Nutanix Tab - Coming Soon */}
+      {/* Nutanix Tab */}
       <SubTabPanel value={connTab} index={4}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2 }}>
-          <img src='/images/nutanix-logo.svg' alt='Nutanix' width={64} height={64} style={{ opacity: 0.5 }} />
-          <Typography variant='h6' sx={{ opacity: 0.7 }}>Nutanix</Typography>
-          <Chip label='Coming Soon' color='info' />
-          <Typography variant='body2' sx={{ opacity: 0.5, maxWidth: 400, textAlign: 'center' }}>
-            {t('settings.nutanixComingSoonDesc')}
+        {nutanixError && <Alert severity='error' sx={{ mb: 2 }}>{t('common.error')}: {nutanixError}</Alert>}
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant='body2' sx={{ opacity: 0.7 }}>
+            Nutanix Prism Central Connections
           </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button variant='outlined' size='small' onClick={loadNutanixConnections} disabled={nutanixLoading} startIcon={<i className='ri-refresh-line' />}>
+              {t('common.refresh')}
+            </Button>
+            <Button variant='contained' size='small' sx={{ bgcolor: '#24B47E', '&:hover': { bgcolor: '#1a8f63' } }} onClick={() => openAddDialog('nutanix')} startIcon={<i className='ri-add-line' />}>
+              {t('common.add')} Nutanix
+            </Button>
+          </Box>
+        </Box>
+
+        <Box sx={{ height: 'calc(100vh - 380px)', minHeight: 300 }}>
+          {!nutanixLoading && nutanixConnections.length === 0 ? (
+            <EmptyState
+              icon="ri-database-2-line"
+              title="No Nutanix connections"
+              description="Add a Nutanix Prism Central connection to migrate VMs to Proxmox VE."
+              action={{ label: `${t('common.add')} Nutanix`, onClick: () => openAddDialog('nutanix'), icon: 'ri-add-line' }}
+              size="large"
+            />
+          ) : (
+            <DataGrid
+              rows={nutanixConnections}
+              columns={nutanixColumns}
+              loading={nutanixLoading}
+              getRowId={r => r.id}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              disableRowSelectionOnClick
+              sx={{ '& .MuiDataGrid-row:hover': { backgroundColor: 'action.hover' } }}
+            />
+          )}
         </Box>
       </SubTabPanel>
 

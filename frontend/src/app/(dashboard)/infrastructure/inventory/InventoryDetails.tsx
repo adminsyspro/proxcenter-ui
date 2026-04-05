@@ -5914,7 +5914,7 @@ return
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {esxiMigrateVm?.hostType === 'hyperv'
             ? <i className="ri-microsoft-line" style={{ fontSize: 22, color: '#0078d4' }} />
-            : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
+            : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           }
           {t('inventoryPage.esxiMigration.migrateToProxmox')}
         </DialogTitle>
@@ -6251,7 +6251,9 @@ return
               <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', border: '1px solid', borderColor: 'primary.main', borderOpacity: 0.2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-information-line" style={{ fontSize: 18, color: theme.palette.primary.main }} />
                 <Typography variant="caption" color="primary">
-                  {esxiMigrateVm?.hostType === 'hyperv'
+                  {esxiMigrateVm?.hostType === 'nutanix'
+                    ? 'Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.'
+                    : esxiMigrateVm?.hostType === 'hyperv'
                     ? 'Cold migration only. Export VMs as VHDX to an NFS share accessible from the Proxmox node, then provide the disk paths.'
                     : esxiMigrateVm?.hostType === 'vcenter'
                     ? 'Cold migration only. virt-v2v will handle disk conversion and virtio driver injection automatically.'
@@ -6278,7 +6280,7 @@ return
                 }}>
                   {esxiMigrateVm?.hostType === 'hyperv'
                     ? <i className="ri-microsoft-line" style={{ fontSize: 28, color: '#0078d4', opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
-                    : <img src={esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt={esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : 'VMware'} width={28} height={28} style={{ opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
+                    : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt={esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : 'VMware'} width={28} height={28} style={{ opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
                   }
                 </Box>
 
@@ -6523,7 +6525,7 @@ return
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {bulkMigHostInfo?.hostType === 'hyperv'
             ? <i className="ri-microsoft-line" style={{ fontSize: 22, color: '#0078d4' }} />
-            : <img src={bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
+            : <img src={bulkMigHostInfo?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           }
           {t('inventoryPage.esxiMigration.bulkMigration')} ({bulkMigSelected.size} VMs)
         </DialogTitle>
@@ -6735,7 +6737,7 @@ return
                 </Box>
 
                 {/* Migration type — hidden for vCenter (cold only) */}
-                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && (
+                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t('inventoryPage.esxiMigration.migrationType')}
@@ -6769,7 +6771,7 @@ return
                 )}
 
                 {/* Transfer mode — hidden for vCenter (virt-v2v handles transfer) */}
-                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && (
+                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t('inventoryPage.esxiMigration.transferMode')}
@@ -6802,7 +6804,7 @@ return
                 )}
 
                 {/* sshfs not installed warning */}
-                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
+                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
                   <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-folder-shared-line" style={{ fontSize: 18 }} />}>
                     {t('inventoryPage.esxiMigration.sshfsNotInstalled')}
                   </Alert>
@@ -6819,9 +6821,14 @@ return
                     Cold migration only. Export VMs as VHDX to an NFS share accessible from the Proxmox node, then provide the disk paths.
                   </Alert>
                 )}
+                {bulkMigHostInfo?.hostType === 'nutanix' && (
+                  <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-information-line" style={{ fontSize: 18 }} />}>
+                    Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.
+                  </Alert>
+                )}
 
-                {/* vCenter/Hyper-V preflight warning for bulk */}
-                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv') && vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled && (
+                {/* vCenter/Hyper-V/Nutanix preflight warning for bulk */}
+                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled && (
                   <Alert
                     severity="warning"
                     sx={{ fontSize: 12 }}
@@ -6869,7 +6876,7 @@ return
                 />
 
                 {/* SSH warning — not needed for vCenter */}
-                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
+                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
                   <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>{t('inventoryPage.esxiMigration.sshRequired')}</Alert>
                 )}
 
@@ -7021,7 +7028,7 @@ return
               <Button onClick={() => setBulkMigOpen(false)} disabled={bulkMigStarting}>{t('common.cancel')}</Button>
               <Button
                 variant="outlined"
-                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting || ((bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv') ? (vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled) : ((migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')))) || (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status === 'running'))}
+                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting || ((bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') ? (vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled) : ((migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')))) || (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status === 'running'))}
                 sx={{ textTransform: 'none' }}
                 startIcon={bulkMigStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
                 onClick={async () => {
@@ -7044,7 +7051,8 @@ return
                   // Start the first batch
                   const isVcenterBulk = bulkMigHostInfo.hostType === 'vcenter'
                   const isHypervBulk = bulkMigHostInfo.hostType === 'hyperv'
-                  const sourceType = bulkMigHostInfo.hostType === 'xcpng' ? 'XCP-ng' : isVcenterBulk ? 'vCenter' : isHypervBulk ? 'Hyper-V' : 'ESXi'
+                  const isNutanixBulk = bulkMigHostInfo.hostType === 'nutanix'
+                  const sourceType = bulkMigHostInfo.hostType === 'xcpng' ? 'XCP-ng' : isVcenterBulk ? 'vCenter' : isHypervBulk ? 'Hyper-V' : isNutanixBulk ? 'Nutanix' : 'ESXi'
                   for (let idx = 0; idx < Math.min(BULK_MIG_CONCURRENCY, jobs.length); idx++) {
                     const job = jobs[idx]
                     try {
@@ -7059,8 +7067,8 @@ return
                           targetNode: job.targetNode,
                           targetStorage: migTargetStorage,
                           networkBridge: migNetworkBridge,
-                          migrationType: (isVcenterBulk || isHypervBulk) ? 'cold' : migType,
-                          transferMode: (isVcenterBulk || isHypervBulk) ? 'v2v' : migTransferMode,
+                          migrationType: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'cold' : migType,
+                          transferMode: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'v2v' : migTransferMode,
                           startAfterMigration: migStartAfter,
                         }),
                       })
@@ -7140,12 +7148,12 @@ return
           </Typography>
           <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 1.5 }}>
-              <img src={esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={24} height={24} />
+              <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={24} height={24} />
               <i className="ri-arrow-right-line" style={{ fontSize: 20, opacity: 0.4 }} />
               <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={24} height={24} />
             </Box>
             <Box>
-              <Typography variant="body2" fontWeight={700}>{esxiMigrateVm?.hostType === 'hyperv' ? 'Hyper-V' : esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm?.hostType === 'vcenter' ? 'vCenter' : 'VMware'} → Proxmox VE</Typography>
+              <Typography variant="body2" fontWeight={700}>{esxiMigrateVm?.hostType === 'nutanix' ? 'Nutanix' : esxiMigrateVm?.hostType === 'hyperv' ? 'Hyper-V' : esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm?.hostType === 'vcenter' ? 'vCenter' : 'VMware'} → Proxmox VE</Typography>
               <Typography variant="caption" sx={{ opacity: 0.6 }}>Enterprise / Enterprise+</Typography>
             </Box>
           </Box>

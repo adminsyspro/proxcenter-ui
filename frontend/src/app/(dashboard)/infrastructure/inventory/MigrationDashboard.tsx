@@ -19,12 +19,14 @@ const TYPE_COLORS: Record<string, string> = {
   vmware: '#78B83B',
   hyperv: '#00A4EF',
   xcpng: '#017EC1',
+  nutanix: '#24B47E',
 }
 
 const TYPE_LABELS: Record<string, string> = {
   vmware: 'VMware ESXi',
   hyperv: 'Hyper-V',
   xcpng: 'XCP-ng',
+  nutanix: 'Nutanix AHV',
 }
 
 function isRunning(status: string): boolean {

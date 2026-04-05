@@ -159,6 +159,7 @@ export default function VmDetailTabs(props: any) {
     localTags,
     memory,
     memoryModified,
+    swap,
     navigateToBreadcrumb,
     navigateToFolder,
     navigateUp,
@@ -234,6 +235,7 @@ export default function VmDetailTabs(props: any) {
     setHaMaxRestart,
     setHaState,
     setMemory,
+    setSwap,
     setNewSnapshotDesc,
     setNewSnapshotName,
     setNewSnapshotRam,
@@ -631,7 +633,7 @@ export default function VmDetailTabs(props: any) {
                     const cpuInfo = data.cpuInfo
                     const memoryInfo = data.memoryInfo
                     const disksInfo = data.disksInfo || []
-                    const bootDisk = disksInfo.find((d: any) => d.id === 'scsi0' || d.id === 'virtio0' || d.id === 'sata0' || d.id === 'ide0')
+                    const bootDisk = disksInfo.find((d: any) => d.id === 'rootfs' || d.id === 'scsi0' || d.id === 'virtio0' || d.id === 'sata0' || d.id === 'ide0')
                     const totalCores = (cpuInfo?.sockets ?? 1) * (cpuInfo?.cores ?? 1)
                     const ramMB = memoryInfo?.memory ?? 0
                     const ramDisplay = ramMB >= 1024 ? `${(ramMB / 1024).toFixed(2)} GiB` : `${ramMB} MiB`
@@ -1055,6 +1057,9 @@ export default function VmDetailTabs(props: any) {
                               <i className="ri-database-2-line" style={{ fontSize: 20 }} />
                               {t('inventory.memory')}
                               <Chip label={`${((data?.memoryInfo?.memory || memory) / 1024).toFixed(0)} GB`} size="small" sx={{ height: 22, fontSize: 11 }} />
+                              {data?.vmType === 'lxc' && (data?.memoryInfo?.swap ?? 0) > 0 && (
+                                <Chip label={`Swap: ${data.memoryInfo.swap} MB`} size="small" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
+                              )}
                             </Typography>
                             <i className={hwSections.has('memory') ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 22, opacity: 0.5 }} />
                           </Box>
@@ -1128,7 +1133,8 @@ export default function VmDetailTabs(props: any) {
                             })()}
                           </Box>
 
-                          {/* Ballooning */}
+                          {/* Ballooning (QEMU only) */}
+                          {data?.vmType !== 'lxc' && (
                           <Box sx={{ mb: 3 }}>
                             <FormControlLabel
                               control={
@@ -1170,12 +1176,57 @@ export default function VmDetailTabs(props: any) {
                               </Box>
                             )}
                           </Box>
+                          )}
 
+                          {data?.vmType !== 'lxc' && (
                           <Alert severity="info" sx={{ mb: 2 }}>
                             <Typography variant="caption">
                               {t('inventory.balloonInfo')}
                             </Typography>
                           </Alert>
+                          )}
+
+                          {/* Swap (LXC only) */}
+                          {data?.vmType === 'lxc' && (
+                          <Box sx={{ mb: 3 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                              <Typography variant="body2" fontWeight={600}>
+                                <i className="ri-swap-line" style={{ marginRight: 4 }} />
+                                {t('inventory.swap')}
+                              </Typography>
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={swap}
+                                onChange={(e) => setSwap(Math.max(0, Number(e.target.value)))}
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end">MB</InputAdornment>,
+                                }}
+                                sx={{ width: 170 }}
+                                inputProps={{ min: 0 }}
+                              />
+                            </Box>
+                            <Slider
+                              value={swap}
+                              onChange={(_, val) => setSwap(val as number)}
+                              min={0}
+                              max={8192}
+                              step={128}
+                              marks={[
+                                { value: 0, label: '0' },
+                                { value: 512, label: '512' },
+                                { value: 2048, label: '2048' },
+                                { value: 4096, label: '4096' },
+                                { value: 8192, label: '8192' },
+                              ]}
+                              valueLabelDisplay="auto"
+                              valueLabelFormat={(v) => `${v} MB`}
+                            />
+                            <Typography variant="caption" color="text.secondary">
+                              {t('inventory.swapHint')}
+                            </Typography>
+                          </Box>
+                          )}
 
                           {/* Bouton Sauvegarder */}
                           <Button
@@ -1245,7 +1296,7 @@ export default function VmDetailTabs(props: any) {
                                   }}
                                 >
                                   <ListItemIcon sx={{ minWidth: 40 }}>
-                                    <i className={disk.isUnused ? "ri-delete-bin-line" : disk.isCdrom ? "ri-disc-fill" : disk.isEfi ? "ri-shield-keyhole-line" : disk.isTpm ? "ri-key-2-line" : "ri-hard-drive-2-fill"} style={{ fontSize: 24, opacity: disk.isUnused ? 0.5 : disk.isCdrom || disk.isEfi || disk.isTpm ? 1 : 0.7, color: disk.isUnused ? 'var(--mui-palette-warning-main)' : disk.isCdrom ? 'var(--mui-palette-secondary-main)' : disk.isEfi || disk.isTpm ? 'var(--mui-palette-info-main)' : undefined }} />
+                                    <i className={disk.isUnused ? "ri-delete-bin-line" : disk.isCdrom ? "ri-disc-fill" : disk.isEfi ? "ri-shield-keyhole-line" : disk.isTpm ? "ri-key-2-line" : disk.mountpoint ? "ri-folder-3-fill" : "ri-hard-drive-2-fill"} style={{ fontSize: 24, opacity: disk.isUnused ? 0.5 : disk.isCdrom || disk.isEfi || disk.isTpm ? 1 : 0.7, color: disk.isUnused ? 'var(--mui-palette-warning-main)' : disk.isCdrom ? 'var(--mui-palette-secondary-main)' : disk.isEfi || disk.isTpm ? 'var(--mui-palette-info-main)' : disk.id === 'rootfs' ? 'var(--mui-palette-success-main)' : undefined }} />
                                   </ListItemIcon>
                                   <ListItemText
                                     primary={
@@ -1262,7 +1313,15 @@ export default function VmDetailTabs(props: any) {
                                         ) : disk.isTpm ? (
                                           <Chip label={disk.format || 'TPM'} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
                                         ) : (
-                                          <Chip label={disk.size} size="small" sx={{ height: 20, fontSize: 11 }} />
+                                          <>
+                                            <Chip label={disk.size} size="small" sx={{ height: 20, fontSize: 11 }} />
+                                            {disk.id === 'rootfs' && (
+                                              <Chip label="rootfs" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                                            )}
+                                            {disk.mountpoint && disk.id !== 'rootfs' && (
+                                              <Chip label={disk.mountpoint} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                                            )}
+                                          </>
                                         )}
                                       </Box>
                                     }

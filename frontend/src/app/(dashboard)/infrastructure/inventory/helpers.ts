@@ -885,9 +885,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           memory: config.memory || 512,
           balloon: config.balloon !== undefined ? config.balloon : config.memory,
           shares: config.shares,
-          pending: (pending.memory !== undefined || pending.balloon !== undefined) ? {
+          swap: config.swap ?? 0,
+          pending: (pending.memory !== undefined || pending.balloon !== undefined || pending.swap !== undefined) ? {
             memory: pending.memory,
             balloon: pending.balloon,
+            swap: pending.swap,
           } : undefined,
         }
 
@@ -899,7 +901,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         }
 
         Object.keys(config).forEach(key => {
-          if (key.match(/^(scsi|ide|sata|virtio)\d+$/)) {
+          if (key.match(/^(scsi|ide|sata|virtio)\d+$/) || key === 'rootfs' || key.match(/^mp\d+$/)) {
             const diskStr = config[key]
 
             const parts = String(diskStr).split(',')
@@ -907,6 +909,8 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             const sizeMatch = diskStr.match(/size=(\d+[GMT]?)/i)
 
             const isCdrom = diskStr.includes('media=cdrom') || storagePart[0] === 'none' || String(diskStr) === 'cdrom'
+            const isMountpoint = key === 'rootfs' || key.match(/^mp\d+$/)
+            const mountpointMatch = isMountpoint ? diskStr.match(/mp=([^,]+)/) : null
 
             disksInfo.push({
               id: key,
@@ -926,6 +930,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
               iops_rd: diskStr.match(/iops_rd=(\d+)/)?.[1] ? Number(diskStr.match(/iops_rd=(\d+)/)?.[1]) : undefined,
               iops_wr: diskStr.match(/iops_wr=(\d+)/)?.[1] ? Number(diskStr.match(/iops_wr=(\d+)/)?.[1]) : undefined,
               isCdrom,
+              mountpoint: mountpointMatch?.[1] || (key === 'rootfs' ? '/' : undefined),
               rawValue: String(diskStr),
             })
           }

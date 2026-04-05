@@ -237,6 +237,7 @@ export default function InventoryDetails({
   const [memory, setMemory] = useState(2048) // en MB
   const [balloon, setBalloon] = useState(0) // en MB
   const [balloonEnabled, setBalloonEnabled] = useState(false)
+  const [swap, setSwap] = useState(512) // en MB (LXC only)
   const [savingCpu, setSavingCpu] = useState(false)
   const [savingMemory, setSavingMemory] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
@@ -1272,6 +1273,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
       setMemory(data.memoryInfo.memory || 2048)
       setBalloon(data.memoryInfo.balloon || 0)
       setBalloonEnabled(data.memoryInfo.balloon !== 0 && data.memoryInfo.balloon !== undefined)
+      setSwap(data.memoryInfo.swap ?? 512)
     }
   }, [data?.cpuInfo, data?.memoryInfo])
 
@@ -1895,13 +1897,17 @@ return (
   // Détecter si les valeurs RAM ont été modifiées
   const memoryModified = useMemo(() => {
     if (!data?.memoryInfo) return false
-    
-return (
-      memory !== (data.memoryInfo.memory || 2048) ||
+
+    const changed = memory !== (data.memoryInfo.memory || 2048) ||
       balloon !== (data.memoryInfo.balloon || 0) ||
       balloonEnabled !== (data.memoryInfo.balloon !== 0 && data.memoryInfo.balloon !== undefined)
-    )
-  }, [data?.memoryInfo, memory, balloon, balloonEnabled])
+
+    if (data?.vmType === 'lxc') {
+      return changed || swap !== (data.memoryInfo.swap ?? 512)
+    }
+
+    return changed
+  }, [data?.memoryInfo, data?.vmType, memory, balloon, balloonEnabled, swap])
 
   // Sauvegarder la configuration CPU
   const saveCpuConfig = async () => {
@@ -1998,11 +2004,15 @@ return (
       const configUpdate: any = {
         memory: memory,
       }
-      
-      if (balloonEnabled) {
-        configUpdate.balloon = balloon
+
+      if (type === 'lxc') {
+        configUpdate.swap = swap
       } else {
-        configUpdate.balloon = 0
+        if (balloonEnabled) {
+          configUpdate.balloon = balloon
+        } else {
+          configUpdate.balloon = 0
+        }
       }
       
       const res = await fetch(
@@ -2026,8 +2036,8 @@ return (
       setData(payload)
       setLocalTags(payload.tags || [])
       
-      // Message de succès avec avertissement si VM était running
-      if (wasRunning) {
+      // Message de succès avec avertissement si VM était running (LXC applique les changements immédiatement)
+      if (wasRunning && type !== 'lxc') {
         setConfirmAction({
           action: 'info',
           title: t('inventoryPage.ramConfigSaved'),
@@ -3129,6 +3139,7 @@ return vm?.isCluster ?? false
                 setEditOptionDialog, setEditScsiControllerDialogOpen, setExplorerArchive, setExplorerArchives, setExplorerFiles,
                 setExplorerSearch, setHaComment, setHaEditing, setHaGroup, setHaMaxRelocate,
                 setHaMaxRestart, setHaState, setMemory, setNewSnapshotDesc, setNewSnapshotName,
+                setSwap, swap,
                 setNewSnapshotRam, setNotesEditing, setNumaEnabled, setReplicationComment, setReplicationLoaded, setReplicationRateLimit,
                 setReplicationSchedule, setReplicationTargetNode, setSavingReplication, setSelectedBackup, setSelectedCephCluster,
                 setSelectedDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,

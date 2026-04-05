@@ -572,6 +572,8 @@
     "minMemoryBalloon": "minimal memory (balloon)",
     "balloonMinHint": "Proxmox kann ungenutzten Speicher bis zu diesem Minimalwert zurückfordern.",
     "balloonInfo": "Ballooning ermöglicht Proxmox, ungenutzten Speicher der VM dynamisch zurückzufordern. Deaktivieren Sie es (balloon=0) bei Leistungsproblemen.",
+    "swap": "Swap",
+    "swapHint": "Swap-Speicher in MB für diesen Container. Auf 0 setzen, um Swap zu deaktivieren.",
     "startupOrder": "Startreihenfolge",
     "osType": "Betriebssystemtyp",
     "freezeCpuOnStartup": "CPU beim Start einfrieren",

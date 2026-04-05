@@ -576,6 +576,8 @@
     "minMemoryBalloon": "最小内存（气球）",
     "balloonMinHint": "Proxmox 可以回收未使用的内存，直到降至此最小值。",
     "balloonInfo": "内存气球允许 Proxmox 动态回收虚拟机中未使用的内存。如果遇到性能问题，请禁用它（balloon=0）。",
+    "swap": "交换空间",
+    "swapHint": "分配给此容器的交换空间大小（MB）。设置为 0 以禁用交换。",
     "startupOrder": "启动顺序",
     "osType": "操作系统类型",
     "freezeCpuOnStartup": "启动时冻结 CPU",

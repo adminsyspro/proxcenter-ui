@@ -56,6 +56,8 @@ import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
+import MetricServerTab from '@/components/MetricServerTab'
+import NotificationsTab from '@/components/NotificationsTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
@@ -863,6 +865,22 @@ export default function ClusterTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabDatacenterSettings')}
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-bar-chart-2-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabMetricServer')}
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-notification-3-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabNotifications')}
                     </Box>
                   }
                 />
@@ -4089,6 +4107,20 @@ export default function ClusterTabs(props: any) {
                 {/* Onglet Datacenter Settings - Index 15 */}
                 {clusterTab === 15 && (
                   <DatacenterSettingsTab
+                    connectionId={selection?.id || ''}
+                  />
+                )}
+
+                {/* Onglet Metric Server - Index 16 */}
+                {clusterTab === 16 && (
+                  <MetricServerTab
+                    connectionId={selection?.id || ''}
+                  />
+                )}
+
+                {/* Onglet Notifications - Index 17 */}
+                {clusterTab === 17 && (
+                  <NotificationsTab
                     connectionId={selection?.id || ''}
                   />
                 )}

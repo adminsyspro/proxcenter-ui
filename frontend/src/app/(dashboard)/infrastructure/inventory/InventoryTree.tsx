@@ -1952,16 +1952,18 @@ return next
           const externalData = JSON.parse(e.data)
           setExternalHypervisors(externalData)
 
-          // Fetch external hypervisor VMs in parallel (VMware + XCP-ng)
-          const extConns = (externalData || []).filter((h: any) => h.type === 'vmware' || h.type === 'xcpng')
+          // Fetch external hypervisor VMs in parallel (VMware + XCP-ng + Hyper-V + Nutanix)
+          const extConns = (externalData || []).filter((h: any) => h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix')
           if (extConns.length > 0) {
             Promise.all(extConns.map(async (conn: any) => {
               try {
-                const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : 'vmware'
+                const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
                 const vmRes = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`)
                 if (vmRes.ok) {
                   const vmJson = await vmRes.json()
-                  return { id: conn.id, vms: vmJson?.data?.vms || [] }
+                  // Hyper-V returns data as array directly (no .vms wrapper)
+                  const vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
+                  return { id: conn.id, vms }
                 }
               } catch { /* ignore */ }
               return { id: conn.id, vms: [] }
@@ -1969,7 +1971,7 @@ return next
               if (!alive) return
               const vmMap = new Map(vmResults.map(r => [r.id, r.vms]))
               setExternalHypervisors((prev: any[]) =>
-                prev.map((h: any) => (h.type === 'vmware' || h.type === 'xcpng') && vmMap.has(h.id) ? { ...h, vms: vmMap.get(h.id) } : h)
+                prev.map((h: any) => (h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix') && vmMap.has(h.id) ? { ...h, vms: vmMap.get(h.id) } : h)
               )
             })
           }
@@ -4079,6 +4081,7 @@ return (
           vmware: { label: 'VMware ESXi', icon: 'ri-cloud-line', svgIcon: '/images/esxi-logo.svg', vmIcon: '/images/esxi-vm.svg', color: '#638C1C' },
           hyperv: { label: 'Microsoft Hyper-V', icon: 'ri-microsoft-line', svgIcon: '/images/hyperv-logo.svg', color: '#00BCF2' },
           xcpng: { label: 'XCP-NG', icon: 'ri-server-line', svgIcon: '/images/xcpng-logo.svg', color: '#00ADB5' },
+          nutanix: { label: 'Nutanix AHV', icon: 'ri-database-2-line', svgIcon: '/images/nutanix-logo.svg', color: '#24B47E' },
         }
 
         const grouped = externalHypervisors.reduce<Record<string, typeof externalHypervisors>>((acc, h) => {

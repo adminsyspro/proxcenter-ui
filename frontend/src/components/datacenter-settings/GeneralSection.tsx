@@ -62,6 +62,14 @@ const MIGRATION_TYPES = [
   { value: 'insecure', label: 'insecure' },
 ]
 
+interface NetworkInterface {
+  iface: string
+  type: string
+  active: number
+  cidr?: string
+  comments?: string
+}
+
 interface Props {
   consoleType: string
   keyboard: string
@@ -73,6 +81,9 @@ interface Props {
   migrationType: string
   migrationNetwork: string
   haShutdownPolicy: string
+  replicationType: string
+  replicationNetwork: string
+  networkInterfaces: NetworkInterface[]
   onChange: (field: string, value: string) => void
   t: (key: string) => string
 }
@@ -80,6 +91,7 @@ interface Props {
 export default function GeneralSection({
   consoleType, keyboard, language, httpProxy, emailFrom, macPrefix, maxWorkers,
   migrationType, migrationNetwork, haShutdownPolicy,
+  replicationType, replicationNetwork, networkInterfaces,
   onChange, t,
 }: Props) {
   const theme = useTheme()
@@ -127,12 +139,41 @@ export default function GeneralSection({
             </Select>
           </FormControl>
 
-          <TextField size="small" label={t('dcSettingsMigrationNetwork')} value={migrationNetwork} onChange={e => onChange('migrationNetwork', e.target.value)} placeholder="10.0.0.0/24" fullWidth />
+          <FormControl size="small" fullWidth>
+            <InputLabel>{t('dcSettingsMigrationNetwork')}</InputLabel>
+            <Select value={migrationNetwork} label={t('dcSettingsMigrationNetwork')} onChange={e => onChange('migrationNetwork', e.target.value)}>
+              <MenuItem value="">{t('dcSettingsDefault')}</MenuItem>
+              {networkInterfaces.map(n => (
+                <MenuItem key={n.iface} value={n.cidr || n.iface}>
+                  {n.iface}{n.cidr ? ` (${n.cidr})` : ''}{n.comments ? ` - ${n.comments}` : ''}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <FormControl size="small" fullWidth>
             <InputLabel>{t('dcSettingsHaShutdownPolicy')}</InputLabel>
             <Select value={haShutdownPolicy} label={t('dcSettingsHaShutdownPolicy')} onChange={e => onChange('haShutdownPolicy', e.target.value)}>
               {HA_SHUTDOWN_POLICIES.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" fullWidth>
+            <InputLabel>{t('dcSettingsReplicationType')}</InputLabel>
+            <Select value={replicationType} label={t('dcSettingsReplicationType')} onChange={e => onChange('replicationType', e.target.value)}>
+              {MIGRATION_TYPES.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" fullWidth>
+            <InputLabel>{t('dcSettingsReplicationNetwork')}</InputLabel>
+            <Select value={replicationNetwork} label={t('dcSettingsReplicationNetwork')} onChange={e => onChange('replicationNetwork', e.target.value)}>
+              <MenuItem value="">{t('dcSettingsDefault')}</MenuItem>
+              {networkInterfaces.map(n => (
+                <MenuItem key={n.iface} value={n.cidr || n.iface}>
+                  {n.iface}{n.cidr ? ` (${n.cidr})` : ''}{n.comments ? ` - ${n.comments}` : ''}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Box>

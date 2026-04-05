@@ -48,7 +48,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
     const ALLOWED_KEYS = [
       'description', 'keyboard', 'language', 'console', 'email_from',
       'http_proxy', 'max_workers', 'migration', 'migration_unsecure',
-      'ha', 'mac_prefix', 'bwlimit', 'tag-style', 'u2f', 'webauthn',
+      'ha', 'mac_prefix', 'bwlimit', 'tag-style', 'u2f', 'webauthn', 'replication',
       'crs', 'notify', 'next-id', 'registered-tags', 'user-tag-access',
       'consent-text',
     ]

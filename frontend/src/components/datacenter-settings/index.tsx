@@ -166,6 +166,9 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
   const [migrationType, setMigrationType] = useState('')
   const [migrationNetwork, setMigrationNetwork] = useState('')
   const [haShutdownPolicy, setHaShutdownPolicy] = useState('conditional')
+  const [replicationType, setReplicationType] = useState('')
+  const [replicationNetwork, setReplicationNetwork] = useState('')
+  const [networkInterfaces, setNetworkInterfaces] = useState<Array<{ iface: string; type: string; active: number; cidr?: string; comments?: string }>>([])
 
   // CRS
   const [crsHaScheduling, setCrsHaScheduling] = useState('basic')
@@ -199,6 +202,7 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
     httpProxy: setHttpProxy, emailFrom: setEmailFrom, macPrefix: setMacPrefix,
     maxWorkers: setMaxWorkers, migrationType: setMigrationType,
     migrationNetwork: setMigrationNetwork, haShutdownPolicy: setHaShutdownPolicy,
+    replicationType: setReplicationType, replicationNetwork: setReplicationNetwork,
   }
 
   const securitySetters: Record<string, (v: string) => void> = {
@@ -257,6 +261,28 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
       const mig = parseKV(data.migration, ['type', 'network'])
       setMigrationType(mig.type)
       setMigrationNetwork(mig.network)
+
+      // Replication
+      const rep = parseKV(data.replication, ['type', 'network'])
+      setReplicationType(rep.type)
+      setReplicationNetwork(rep.network)
+
+      // Fetch network interfaces from first node
+      try {
+        const nodesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`, { cache: 'no-store' })
+        if (nodesRes.ok) {
+          const nodesJson = await nodesRes.json()
+          const nodes = nodesJson?.data || []
+          if (nodes.length > 0) {
+            const firstNode = nodes[0].node
+            const netRes = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(firstNode)}/network`, { cache: 'no-store' })
+            if (netRes.ok) {
+              const netJson = await netRes.json()
+              setNetworkInterfaces(netJson?.data || [])
+            }
+          }
+        }
+      } catch { /* network interfaces are optional */ }
 
       // HA
       const ha = parseKV(data.ha, ['shutdown_policy'])
@@ -340,6 +366,11 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
       const migStr = buildKV({ type: migrationType, network: migrationNetwork })
       if (migStr) body.migration = migStr
       else if (rawOptions.migration) deleteKeys.push('migration')
+
+      // Replication
+      const repStr = buildKV({ type: replicationType, network: replicationNetwork })
+      if (repStr) body.replication = repStr
+      else if (rawOptions.replication) deleteKeys.push('replication')
 
       // HA
       const haStr = buildKV({ shutdown_policy: haShutdownPolicy })
@@ -429,6 +460,8 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
           httpProxy={httpProxy} emailFrom={emailFrom} macPrefix={macPrefix}
           maxWorkers={maxWorkers} migrationType={migrationType}
           migrationNetwork={migrationNetwork} haShutdownPolicy={haShutdownPolicy}
+          replicationType={replicationType} replicationNetwork={replicationNetwork}
+          networkInterfaces={networkInterfaces}
           onChange={makeOnChange(generalSetters)} t={t}
         />
 

@@ -98,6 +98,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // Tags are handled separately via raw SQL to avoid Prisma client cache issues
     const tagsUpdate = body.tags !== undefined ? body.tags || null : undefined
 
+    if (body.subType !== undefined) data.subType = body.subType
+    if (body.vmwareDatacenter !== undefined) data.vmwareDatacenter = body.vmwareDatacenter || null
+
     if (body.apiToken !== undefined && body.apiToken) {
       data.apiTokenEnc = encryptSecret(body.apiToken)
     }

@@ -104,7 +104,7 @@ export async function POST(req: Request) {
 
     const {
       name, type, baseUrl, behindProxy, insecureTLS, hasCeph, apiToken,
-      vmwareUser, vmwarePassword,
+      subType, vmwareUser, vmwarePassword, vmwareDatacenter,
       latitude, longitude, locationLabel,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
       sshKey, sshPassphrase, sshPassword, sshUseSudo,
@@ -126,6 +126,10 @@ export async function POST(req: Request) {
     if (type === 'vmware' || type === 'xcpng') {
       // VMware/XCP-ng: store "user:password" in apiTokenEnc
       data.apiTokenEnc = encryptSecret(`${vmwareUser || (type === 'xcpng' ? 'admin@admin.net' : 'root')}:${vmwarePassword || ''}`)
+      if (type === 'vmware') {
+        data.subType = subType || 'esxi'
+        data.vmwareDatacenter = vmwareDatacenter || null
+      }
       if (type === 'xcpng') {
         data.sshEnabled = false
       }

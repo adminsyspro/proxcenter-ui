@@ -88,6 +88,7 @@ export function getDb() {
   const prismaMigrations: [string, string, string][] = [
     ['Connection', 'tags', 'TEXT'],
     ['Connection', 'sub_type', 'TEXT'],
+    ['Connection', 'vmware_datacenter', 'TEXT'],
     ['ManagedHost', 'tags', 'TEXT'],
     ['custom_images', 'tags', 'TEXT'],
     ['blueprints', 'tags', 'TEXT'],

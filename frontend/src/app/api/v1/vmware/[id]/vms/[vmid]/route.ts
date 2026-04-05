@@ -3,65 +3,13 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { soapLogin, soapLogout, soapRequest, extractProp } from "@/lib/vmware/soap"
 
 export const runtime = "nodejs"
 
-async function soapRequest(baseUrl: string, body: string, cookie: string, insecureTLS: boolean): Promise<{ text: string; cookie?: string }> {
-  const opts: any = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml; charset=utf-8',
-      'SOAPAction': '"urn:vim25/8.0"',
-      ...(cookie ? { Cookie: cookie } : {}),
-    },
-    body,
-    signal: AbortSignal.timeout(30000),
-  }
-  if (insecureTLS) {
-    opts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
-  }
-  const res = await fetch(`${baseUrl}/sdk`, opts)
-  const text = await res.text()
-  const rawCookie = res.headers.get('set-cookie') || ''
-  return { text, cookie: rawCookie.split(';')[0] || '' }
-}
-
-async function soapLogin(baseUrl: string, username: string, password: string, insecureTLS: boolean): Promise<string> {
-  const escUser = username.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;')
-  const escPass = password.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;')
-
-  const result = await soapRequest(baseUrl, `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
-  <soapenv:Body>
-    <urn:Login>
-      <urn:_this type="SessionManager">ha-sessionmgr</urn:_this>
-      <urn:userName>${escUser}</urn:userName>
-      <urn:password>${escPass}</urn:password>
-    </urn:Login>
-  </soapenv:Body>
-</soapenv:Envelope>`, '', insecureTLS)
-
-  if (result.text.includes('InvalidLogin') || (result.text.includes('faultstring') && !result.text.includes('returnval'))) {
-    throw new Error('ESXi login failed')
-  }
-  return result.cookie || ''
-}
-
-async function soapLogout(baseUrl: string, cookie: string, insecureTLS: boolean): Promise<void> {
-  await soapRequest(baseUrl, `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
-  <soapenv:Body><urn:Logout><urn:_this type="SessionManager">ha-sessionmgr</urn:_this></urn:Logout></soapenv:Body>
-</soapenv:Envelope>`, cookie, insecureTLS).catch(() => {})
-}
-
-function extractProp(xml: string, propName: string): string {
-  const regex = new RegExp(`<propSet>\\s*<name>${propName.replaceAll('.', '\\.')}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>\\s*</propSet>`)
-  return regex.exec(xml)?.[1] || ''
-}
-
 /**
  * GET /api/v1/vmware/[id]/vms/[vmid]
- * Get detailed info for a single VM on an ESXi host
+ * Get detailed info for a single VM on a VMware ESXi host or vCenter
  */
 export async function GET(
   _req: Request,
@@ -75,7 +23,7 @@ export async function GET(
     const { id, vmid } = await params
     const conn = await prisma.connection.findUnique({
       where: { id },
-      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
+      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true, subType: true, vmwareDatacenter: true },
     })
 
     if (!conn || conn.type !== 'vmware') {
@@ -86,16 +34,22 @@ export async function GET(
     const colonIdx = creds.indexOf(':')
     const username = colonIdx > 0 ? creds.substring(0, colonIdx) : 'root'
     const password = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
-    const esxiUrl = conn.baseUrl.replace(/\/$/, '')
+    const vmwareUrl = conn.baseUrl.replace(/\/$/, '')
 
-    const cookie = await soapLogin(esxiUrl, username, password, conn.insecureTLS)
+    // Login via shared SOAP client (auto-discovers MORs for ESXi or vCenter)
+    const session = await soapLogin(vmwareUrl, username, password, conn.insecureTLS)
+
+    if (conn.vmwareDatacenter) {
+      session.datacenterPath = conn.vmwareDatacenter
+    }
 
     try {
+      // Use session.propertyCollector for dynamic MOR (works on both ESXi and vCenter)
       const retrieveBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">ha-property-collector</urn:_this>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
       <urn:specSet>
         <urn:propSet>
           <urn:type>VirtualMachine</urn:type>
@@ -131,7 +85,7 @@ export async function GET(
   </soapenv:Body>
 </soapenv:Envelope>`
 
-      const result = await soapRequest(esxiUrl, retrieveBody, cookie, conn.insecureTLS)
+      const result = await soapRequest(session.baseUrl, retrieveBody, session.cookie, session.insecureTLS)
       const xml = result.text
 
       if (xml.includes('ManagedObjectNotFound')) {
@@ -235,7 +189,7 @@ export async function GET(
         }
       })
     } finally {
-      soapLogout(esxiUrl, cookie, conn.insecureTLS)
+      soapLogout(session)
     }
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

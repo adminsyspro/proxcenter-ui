@@ -349,6 +349,9 @@ function ConnectionsTab() {
       // VMware/XCP-ng: username + password
       ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : 'root') }),
       ...(isExtHypervisor && formData.vmwarePassword && { vmwarePassword: formData.vmwarePassword }),
+      // VMware sub-type and datacenter
+      ...(addConnType === 'vmware' && { subType: formData.subType || 'esxi' }),
+      ...(addConnType === 'vmware' && formData.vmwareDatacenter?.trim() && { vmwareDatacenter: formData.vmwareDatacenter.trim() }),
       // SSH fields (PVE + VMware — not XCP-ng)
       ...(addConnType !== 'xcpng' && {
         sshEnabled: formData.sshEnabled,

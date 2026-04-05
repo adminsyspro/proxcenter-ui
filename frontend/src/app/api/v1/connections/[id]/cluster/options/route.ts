@@ -49,7 +49,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
       'description', 'keyboard', 'language', 'console', 'email_from',
       'http_proxy', 'max_workers', 'migration', 'migration_unsecure',
       'ha', 'mac_prefix', 'bwlimit', 'tag-style', 'u2f', 'webauthn',
-      'crs', 'notify', 'next-id',
+      'crs', 'notify', 'next-id', 'registered-tags', 'user-tag-access',
+      'consent-text',
     ]
 
     const updateParams = new URLSearchParams()

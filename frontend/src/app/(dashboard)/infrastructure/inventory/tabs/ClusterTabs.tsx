@@ -55,7 +55,7 @@ import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import ComplianceTab from '@/components/ComplianceTab'
-import DatacenterSettingsTab from '@/components/DatacenterSettingsTab'
+import DatacenterSettingsTab from '@/components/datacenter-settings'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 

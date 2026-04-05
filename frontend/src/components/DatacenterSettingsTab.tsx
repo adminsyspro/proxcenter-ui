@@ -273,7 +273,7 @@ interface Props {
 export default function DatacenterSettingsTab({ connectionId }: Props) {
   const t = useTranslations('inventory')
   const theme = useTheme()
-  const { showToast } = useToast()
+  const toast = useToast()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -417,11 +417,11 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
         throw new Error(errData.error || `HTTP ${res.status}`)
       }
 
-      showToast(t('dcSettingsSaveSuccess'), 'success')
+      toast.success(t('dcSettingsSaveSuccess'))
       // Reload to get fresh state
       await fetchOptions()
     } catch (e: any) {
-      showToast(t('dcSettingsSaveError') + ': ' + (e?.message || String(e)), 'error')
+      toast.error(t('dcSettingsSaveError') + ': ' + (e?.message || String(e)))
     } finally {
       setSaving(false)
     }

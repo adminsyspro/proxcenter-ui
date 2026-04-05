@@ -5914,7 +5914,7 @@ return
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {esxiMigrateVm?.hostType === 'hyperv'
             ? <i className="ri-microsoft-line" style={{ fontSize: 22, color: '#0078d4' }} />
-            : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
+            : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           }
           {t('inventoryPage.esxiMigration.migrateToProxmox')}
         </DialogTitle>

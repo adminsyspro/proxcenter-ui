@@ -17,6 +17,7 @@ model Connection {
   tenantId    String  @default("default") @map("tenant_id")
   name        String
   type        String  @default("pve")
+  subType     String? @map("sub_type")
   baseUrl      String
   behindProxy  Boolean @default(false)
   insecureTLS  Boolean @default(false)

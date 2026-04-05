@@ -87,6 +87,7 @@ export function getDb() {
   // Migration: add missing columns to Prisma-managed tables
   const prismaMigrations: [string, string, string][] = [
     ['Connection', 'tags', 'TEXT'],
+    ['Connection', 'sub_type', 'TEXT'],
     ['ManagedHost', 'tags', 'TEXT'],
     ['custom_images', 'tags', 'TEXT'],
     ['blueprints', 'tags', 'TEXT'],

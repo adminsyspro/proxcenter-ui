@@ -10,7 +10,7 @@ import {
   TextField, ToggleButton, ToggleButtonGroup, Typography
 } from '@mui/material'
 
-import { tagColor } from '@/app/(dashboard)/infrastructure/inventory/helpers'
+import { useTagColors } from '@/contexts/TagColorContext'
 import type { CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -51,8 +51,8 @@ const fetcher = (url: string) => fetch(url).then(res => {
 
 export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs }: CreateJobDialogProps) {
   const t = useTranslations()
-
   const [sourceCluster, setSourceCluster] = useState('')
+  const { getColor: getTagColor } = useTagColors(sourceCluster || undefined)
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
   const [targetCluster, setTargetCluster] = useState('')
   const [targetPool, setTargetPool] = useState('')
@@ -353,7 +353,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                                   <Chip label={`${diskGb} GB`} size='small' variant='outlined' sx={{ height: 18, fontSize: '0.6rem' }} />
                                 )}
                                 {vm.tags?.map(tag => (
-                                  <Chip key={tag} label={tag} size='small' sx={{ height: 18, fontSize: '0.6rem', bgcolor: tagColor(tag), color: '#fff' }} />
+                                  <Chip key={tag} label={tag} size='small' sx={{ height: 18, fontSize: '0.6rem', bgcolor: getTagColor(tag).bg, color: '#fff' }} />
                                 ))}
                               </Box>
                             }
@@ -410,7 +410,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                               <Chip
                                 label={tag}
                                 size='small'
-                                sx={{ bgcolor: tagColor(tag), color: '#fff', fontWeight: 500, fontSize: '0.7rem', height: 22 }}
+                                sx={{ bgcolor: getTagColor(tag).bg, color: '#fff', fontWeight: 500, fontSize: '0.7rem', height: 22 }}
                               />
                               <Typography variant='caption' sx={{ color: 'text.secondary' }}>
                                 ({tagVMCounts[tag]} VMs)

@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material'
 
-import { tagColor } from '../helpers'
+import { tagColorFallback } from '@/contexts/TagColorContext'
 
 /**
  * Tag manager for ProxCenter entities (clusters / nodes).
@@ -126,7 +126,7 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
   return (
     <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
       {tags.map(tag => {
-        const c = tagColor(tag)
+        const c = tagColorFallback(tag)
         return (
           <Chip
             key={tag}
@@ -225,7 +225,7 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
           ) : (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxHeight: 150, overflow: 'auto' }}>
               {suggestedTags.map(tag => {
-                const c = tagColor(tag)
+                const c = tagColorFallback(tag)
                 return (
                   <Chip
                     key={tag}

@@ -62,7 +62,7 @@ import ComplianceTab from '@/components/ComplianceTab'
 import NetworkInterfaceDialog from '@/components/network/NetworkInterfaceDialog'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
+import { formatBps, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import EntityTagManager from '../components/EntityTagManager'

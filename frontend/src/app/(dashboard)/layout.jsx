@@ -18,6 +18,7 @@ import DemoBanner from '@components/DemoBanner'
 import DemoInterceptor from '@components/DemoInterceptor'
 import { ProxCenterTasksProvider } from '@/contexts/ProxCenterTasksContext'
 import { RollingUpdateProvider } from '@/contexts/RollingUpdateContext'
+import { TagColorProvider } from '@/contexts/TagColorContext'
 
 // Util Imports
 import { getMode, getSystemMode } from '@core/utils/serverHelpers'
@@ -35,6 +36,7 @@ const Layout = async props => {
     <Providers direction={direction}>
       <DemoBanner />
       <DemoInterceptor />
+      <TagColorProvider>
       <ProxCenterTasksProvider>
       <RollingUpdateProvider>
       <LayoutWrapper
@@ -53,6 +55,7 @@ const Layout = async props => {
       <TasksFooter />
       </RollingUpdateProvider>
       </ProxCenterTasksProvider>
+      </TagColorProvider>
       <ScrollToTop className='mui-fixed'>
         <Button variant='contained' className='is-10 bs-10 rounded-full p-0 min-is-0 flex items-center justify-center'>
           <i className='ri-arrow-up-line' />

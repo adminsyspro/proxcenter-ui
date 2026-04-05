@@ -69,7 +69,8 @@ const EditNetworkDialog = dynamic(() => import('@/components/HardwareModals').th
 const EditScsiControllerDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditScsiControllerDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatOsType, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
+import { formatBps, formatOsType, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
+import { useTagColors } from '@/contexts/TagColorContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
@@ -78,6 +79,8 @@ export default function VmDetailTabs(props: any) {
   const t = useTranslations()
   const locale = useLocale()
   const theme = useTheme()
+  const vmConnId = props.selection?.id ? parseVmId(props.selection.id).connId : undefined
+  const { getColor: getTagColor } = useTagColors(vmConnId)
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
   const [cpuFlagsOpen, setCpuFlagsOpen] = useState(false)
   const [hwSections, setHwSections] = useState<Set<string>>(new Set(['cpu', 'memory', 'system', 'disks', 'network', 'other']))
@@ -1741,7 +1744,7 @@ export default function VmDetailTabs(props: any) {
                                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                                     {localTags && localTags.length > 0 ? (
                                       localTags.map(tag => {
-                                        const c = tagColor(tag)
+                                        const c = getTagColor(tag).bg
 
                                         
 return (

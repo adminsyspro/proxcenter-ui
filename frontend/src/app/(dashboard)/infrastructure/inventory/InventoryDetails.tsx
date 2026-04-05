@@ -94,7 +94,8 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, RrdTimeframe, SeriesPoint, ActiveDialog } from './types'
-import { TAG_PALETTE, hashStringToInt, tagColor, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails } from './helpers'
+import { TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails } from './helpers'
+import { useTagColors } from '@/contexts/TagColorContext'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import CreateVmDialog from './CreateVmDialog'
 import CreateLxcDialog from './CreateLxcDialog'
@@ -195,6 +196,14 @@ export default function InventoryDetails({
   const t = useTranslations()
   const dateLocale = getDateLocale(useLocale())
   const theme = useTheme()
+  const detailConnId = selection?.type === 'cluster' ? selection.id : selection?.type === 'node' ? parseNodeId(selection.id).connId : selection?.type === 'vm' ? parseVmId(selection.id).connId : undefined
+  const { getColor: getTagColor, loadConnection } = useTagColors(detailConnId)
+
+  // Load PVE tag color overrides for all connections present in allVms
+  React.useEffect(() => {
+    const connIds = new Set(allVms.map((vm: any) => vm.connId).filter(Boolean))
+    connIds.forEach(id => loadConnection(id))
+  }, [allVms, loadConnection])
   const { hasFeature, loading: licenseLoading } = useLicense()
   const toast = useToast()
   const { trackTask } = useTaskTracker()
@@ -2522,7 +2531,7 @@ return vm?.isCluster ?? false
             groups={tags.map(t => ({
               key: t.tag,
               label: t.tag,
-              color: tagColor(t.tag),
+              color: getTagColor(t.tag, t.vms[0]?.connId).bg,
               vms: t.vms
             }))}
             allVms={displayVms}

@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material'
 
-import { tagColor } from '../helpers'
+import { useTagColors } from '@/contexts/TagColorContext'
 
 const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CloseIcon = ({ fontSize, sx, style, className, ...rest }: any) => <i className={`ri-close-line${className ? ` ${className}` : ''}`} style={{ fontSize: fontSize === 'small' ? 18 : 20, color: sx?.color, ...style }} {...rest} />
@@ -32,6 +32,7 @@ type TagManagerProps = {
 
 function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManagerProps) {
   const t = useTranslations()
+  const { getColor } = useTagColors(connId)
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null)
   const [availableTags, setAvailableTags] = useState<string[]>([])
   const [loadingTags, setLoadingTags] = useState(false)
@@ -158,7 +159,7 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
     <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
       {/* Tags existants avec bouton × */}
       {tags.map(t => {
-        const c = tagColor(t)
+        const c = getColor(t).bg
 
         
 return (
@@ -269,7 +270,7 @@ return (
           ) : (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxHeight: 150, overflow: 'auto' }}>
               {suggestedTags.map(t => {
-                const c = tagColor(t)
+                const c = getColor(t).bg
 
                 
 return (

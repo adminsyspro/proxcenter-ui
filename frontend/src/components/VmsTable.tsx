@@ -3,6 +3,7 @@
 import React, { useMemo, useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
+import { useTagColors } from '@/contexts/TagColorContext'
 
 import { createPortal } from 'react-dom'
 import {
@@ -77,36 +78,8 @@ return `${m}m`
 }
 
 /* -----------------------------
-  Tag Colors
+  Tag Colors (via context)
 ------------------------------ */
-
-const TAG_PALETTE = [
-  '#e57000',
-  '#2e7d32',
-  '#1565c0',
-  '#6a1b9a',
-  '#00838f',
-  '#c62828',
-  '#ad1457',
-  '#4e342e',
-  '#455a64',
-  '#7a7a00',
-]
-
-function hashStringToInt(str: string) {
-  let h = 0
-
-  for (let i = 0; i < str.length; i++) h = Math.trunc(h * 31 + str.codePointAt(i)!)
-  
-return Math.abs(h)
-}
-
-function tagColor(tag: string) {
-  const idx = hashStringToInt(tag.toLowerCase()) % TAG_PALETTE.length
-
-  
-return TAG_PALETTE[idx]
-}
 
 /* -----------------------------
   Sub-components
@@ -171,19 +144,19 @@ const MetricBar = ({ value }: { value: number }) => {
   )
 }
 
-const TagsCell = ({ tags }: { tags: string[] }) => {
+const TagsCell = ({ tags, getTagBg }: { tags: string[]; getTagBg: (tag: string) => string }) => {
   // Filtrer les tags vides ou null
   const validTags = (tags || []).filter(tag => tag && tag.trim().length > 0)
-  
+
   if (validTags.length === 0) return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
-  
+
   // Afficher seulement le premier tag, puis +N pour le reste
   const displayTag = validTags[0]
   const remaining = validTags.length - 1
 
   return (
-    <Box 
-      sx={{ 
+    <Box
+      sx={{
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
@@ -197,7 +170,7 @@ const TagsCell = ({ tags }: { tags: string[] }) => {
         sx={{
           height: 18,
           fontSize: '0.65rem',
-          bgcolor: tagColor(displayTag),
+          bgcolor: getTagBg(displayTag),
           color: 'white',
           borderRadius: 0.5,
           minWidth: 0,
@@ -468,8 +441,20 @@ function VmsTable({
 }: VmsTableProps) {
   const theme = useTheme()
   const t = useTranslations()
+  const { getColor, loadConnection } = useTagColors()
   const primaryColor = theme.palette.primary.main
   
+  // Load tag color overrides for all connections in the table
+  useEffect(() => {
+    const connIds = new Set(vms.map(vm => vm.connId))
+    connIds.forEach(id => loadConnection(id))
+  }, [vms, loadConnection])
+
+  // Helper to get tag bg color for a specific connection's tag
+  const getTagBg = useCallback((tag: string, connId?: string) => {
+    return getColor(tag, connId).bg
+  }, [getColor])
+
   // Helper pour vérifier si une VM est en migration
   const isVmMigrating = useCallback((connId: string, vmid: string | number) => {
     if (!migratingVmIds) return false
@@ -998,7 +983,7 @@ return (
         width: 80,
         minWidth: 60,
         renderHeader: headerIconOnly('ri-price-tag-3-line'),
-        renderCell: (params) => <TagsCell tags={params.row.tags || []} />
+        renderCell: (params) => <TagsCell tags={params.row.tags || []} getTagBg={(tag) => getTagBg(tag, params.row.connId)} />
       })
     }
 

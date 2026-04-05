@@ -7,11 +7,12 @@ import type { NodeProps } from '@xyflow/react'
 import { Box, Typography } from '@mui/material'
 
 import type { TagGroupNodeData } from '../../types'
-import { tagColor } from '../../../inventory/helpers'
+import { useTagColors } from '@/contexts/TagColorContext'
 
 function TagGroupNodeComponent({ data }: NodeProps) {
   const d = data as unknown as TagGroupNodeData
-  const color = d.tag === '__none__' ? '#9e9e9e' : tagColor(d.tag)
+  const { getColor } = useTagColors(d.connectionId)
+  const color = d.tag === '__none__' ? '#9e9e9e' : getColor(d.tag).bg
 
   return (
     <Box

@@ -55,11 +55,12 @@ import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import ComplianceTab from '@/components/ComplianceTab'
+import DatacenterSettingsTab from '@/components/DatacenterSettingsTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, tagColor } from '../helpers'
+import { formatBps, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import HaGroupDialog from '../HaGroupDialog'
@@ -854,6 +855,14 @@ export default function ClusterTabs(props: any) {
                           }}
                         />
                       )}
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
+                      {t('inventory.tabDatacenterSettings')}
                     </Box>
                   }
                 />
@@ -4073,6 +4082,13 @@ export default function ClusterTabs(props: any) {
                 {/* Onglet Compliance - Index 14 */}
                 {clusterTab === 14 && (
                   <ComplianceTab
+                    connectionId={selection?.id || ''}
+                  />
+                )}
+
+                {/* Onglet Datacenter Settings - Index 15 */}
+                {clusterTab === 15 && (
+                  <DatacenterSettingsTab
                     connectionId={selection?.id || ''}
                   />
                 )}

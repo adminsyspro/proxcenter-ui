@@ -53,6 +53,7 @@ const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={
 const DescriptionIcon = (props: any) => <i className="ri-file-text-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 import EntityTagManager from './components/EntityTagManager'
+import { tagColorFallback, useTagColors } from '@/contexts/TagColorContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
@@ -407,50 +408,23 @@ function getVmIcon(type: string, isTemplate?: boolean, filled = true): string {
   return filled ? 'ri-computer-fill' : 'ri-computer-line'
 }
 
-// Génère une couleur à partir d'un string (tag)
-function getTagColor(tag: string): { bg: string; color: string } {
-  // Liste de couleurs prédéfinies
-  const colors = [
-    { bg: '#e3f2fd', color: '#1565c0' }, // blue
-    { bg: '#f3e5f5', color: '#7b1fa2' }, // purple
-    { bg: '#e8f5e9', color: '#2e7d32' }, // green
-    { bg: '#fff3e0', color: '#e65100' }, // orange
-    { bg: '#fce4ec', color: '#c2185b' }, // pink
-    { bg: '#e0f2f1', color: '#00695c' }, // teal
-    { bg: '#fff8e1', color: '#ff8f00' }, // amber
-    { bg: '#f1f8e9', color: '#558b2f' }, // light green
-    { bg: '#e8eaf6', color: '#3949ab' }, // indigo
-    { bg: '#efebe9', color: '#5d4037' }, // brown
-  ]
-  
-  // Hash simple du tag pour obtenir un index
-  let hash = 0
+// Composant Tag réutilisable - uses tagColorFallback for tree sidebar
+function TagChip({ tag, connId }: { tag: string; connId?: string }) {
+  const { getColor } = useTagColors(connId)
+  const c = getColor(tag).bg
 
-  for (let i = 0; i < tag.length; i++) {
-    hash = ((hash << 5) - hash) + tag.codePointAt(i)!
-    hash = Math.trunc(hash)
-  }
-  
-  return colors[Math.abs(hash) % colors.length]
-}
-
-// Composant Tag réutilisable
-function TagChip({ tag }: { tag: string }) {
-  const { bg, color } = getTagColor(tag)
-
-  
-return (
-    <Chip 
-      label={tag} 
-      size="small" 
-      sx={{ 
-        height: 16, 
+  return (
+    <Chip
+      label={tag}
+      size="small"
+      sx={{
+        height: 16,
         fontSize: 9,
-        bgcolor: bg,
-        color: color,
+        bgcolor: `${c}18`,
+        color: c,
         fontWeight: 600,
         '& .MuiChip-label': { px: 0.75 }
-      }} 
+      }}
     />
   )
 }
@@ -791,6 +765,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   const theme = useTheme()
   const router = useRouter()
   const { trackTask } = useTaskTracker()
+  const { getColor: getTagColor, loadConnection } = useTagColors()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
@@ -798,6 +773,11 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   const [externalHypervisors, setExternalHypervisors] = useState<{ id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string }[] }[]>([])
   const [clusterStorages, setClusterStorages] = useState<TreeClusterStorage[]>([])
   const [reloadTick, setReloadTick] = useState(0)
+
+  // Load PVE tag color overrides for all connections
+  useEffect(() => {
+    clusters.forEach(c => loadConnection(c.connId))
+  }, [clusters, loadConnection])
 
   // ProxCenter entity tags (clusters + nodes) loaded from DB
   const [entityTagsMap, setEntityTagsMap] = useState<Map<string, { tags: string[]; type: 'cluster' | 'node'; connId: string; name: string; node?: string }>>(new Map())
@@ -3187,6 +3167,8 @@ return (
             tagsList.map(({ tag, vms, entities }) => {
               const isCollapsed = collapsedSections.has(`tag:${tag}`)
               const totalCount = vms.length + entities.length
+              const tagConnId = vms[0]?.connId || entities[0]?.connId
+              const tc = getTagColor(tag, tagConnId).bg
 
 
 return (
@@ -3214,8 +3196,8 @@ return (
                     '&:hover': { bgcolor: 'action.hover' }
                   }}>
                   <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
-                  <i className="ri-price-tag-3-fill" style={{ fontSize: 14, opacity: 0.7 }} />
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{tag}</Typography>
+                  <i className="ri-price-tag-3-fill" style={{ fontSize: 14, color: tc }} />
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: tc }}>{tag}</Typography>
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>({totalCount})</Typography>
                 </Box>
                 {/* Entities (clusters/nodes) avec ce tag */}

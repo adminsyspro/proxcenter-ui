@@ -275,6 +275,7 @@ export default function InventoryDetails({
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
+  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
@@ -639,9 +640,18 @@ export default function InventoryDetails({
     if (!fetchNode || fetchNode === '__auto__') return
     // Check sshfs availability on target node
     setMigSshfsAvailable(null)
+    setVcenterPreflight(null)
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/check-sshfs`).then(r => r.json()).then(d => {
       setMigSshfsAvailable(d.data?.installed ?? false)
     }).catch(() => setMigSshfsAvailable(false))
+    // Run vCenter (virt-v2v) preflight check for the target node
+    fetch('/api/v1/migrations/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode }),
+    }).then(r => r.json()).then(d => {
+      setVcenterPreflight({ checked: true, ok: !d.errors?.length, installing: false, errors: d.errors || [], virtV2vInstalled: d.virtV2vInstalled ?? false })
+    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false }))
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
       const storages = (d.data || d || []).filter((s: any) => {
         const content = s.content || ''
@@ -763,6 +773,7 @@ export default function InventoryDetails({
                 body: JSON.stringify({
                   sourceConnectionId: cfg.sourceConnectionId,
                   sourceVmId: job.vmid,
+                  sourceVmName: job.name,
                   targetConnectionId: cfg.targetConnectionId,
                   targetNode: job.targetNode,
                   targetStorage: cfg.targetStorage,
@@ -2846,7 +2857,7 @@ return vm?.isCluster ?? false
                   label={data.kindLabel}
                   variant="filled"
                   icon={
-                    data.kindLabel === 'VMWARE ESXI' || data.kindLabel === 'VMWARE VM' ? (
+                    data.kindLabel === 'VMWARE ESXI' || data.kindLabel === 'VMWARE VM' || data.kindLabel === 'VCENTER' ? (
                       <img src="/images/esxi-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
                     ) : data.kindLabel === 'XCP-NG' ? (
                       <img src="/images/xcpng-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
@@ -4151,7 +4162,8 @@ return vm?.isCluster ?? false
           {/* External Host — Dashboard */}
           {selection?.type === 'ext' && data.esxiHostInfo && (() => {
             const isXcpng = data.esxiHostInfo.hostType === 'xcpng'
-            const hostLabel = isXcpng ? 'XCP-ng' : 'VMware ESXi'
+            const isVcenter = data.esxiHostInfo.hostType === 'vcenter'
+            const hostLabel = isXcpng ? 'XCP-ng' : isVcenter ? 'vCenter' : 'VMware ESXi'
             const vms = data.esxiHostInfo.vms
             const runningVms = vms.filter((v: any) => v.status === 'running')
             const stoppedVms = vms.filter((v: any) => v.status !== 'running')
@@ -4265,6 +4277,7 @@ return vm?.isCluster ?? false
           {/* External Host — VM List with Migrate buttons */}
           {selection?.type === 'ext' && data.esxiHostInfo && (() => {
             const isXcpng = data.esxiHostInfo.hostType === 'xcpng'
+            const isVcenter = data.esxiHostInfo.hostType === 'vcenter'
             const extVmIcon = isXcpng ? '/images/xcpng-logo.svg' : '/images/esxi-vm.svg'
             return (
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
@@ -4394,11 +4407,13 @@ return vm?.isCluster ?? false
                                 startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} />}
                                 onClick={() => {
                                   if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
+                                  const ht = data.esxiHostInfo!.hostType
+                                  if (ht === 'vcenter') setMigType('cold')
                                   setEsxiMigrateVm({
                                     vmid: vm.vmid, name: vm.name || vm.vmid, connId: data.esxiHostInfo!.connectionId,
                                     connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
                                     committed: vm.committed, guestOS: vm.guest_OS, licenseFull: data.esxiHostInfo!.licenseFull,
-                                    hostType: data.esxiHostInfo!.hostType,
+                                    hostType: ht,
                                   })
                                 }}
                               >
@@ -4464,8 +4479,9 @@ return vm?.isCluster ?? false
           {selection?.type === 'extvm' && data.esxiVmInfo && (() => {
             const vm = data.esxiVmInfo
             const isXcpngVm = vm.hostType === 'xcpng'
+            const isVcenterVm = vm.hostType === 'vcenter'
             const extSourceIcon = isXcpngVm ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'
-            const extSourceLabel = isXcpngVm ? 'XCP-ng' : 'ESXi'
+            const extSourceLabel = isXcpngVm ? 'XCP-ng' : isVcenterVm ? 'vCenter' : 'ESXi'
             const memGB = vm.memoryMB ? (vm.memoryMB / 1024).toFixed(1) : '0'
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
 
@@ -4501,11 +4517,13 @@ return vm?.isCluster ?? false
                         startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />}
                         onClick={() => {
                           if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
+                          const ht = vm.hostType || data.esxiVmInfo?.hostType
+                          if (ht === 'vcenter') setMigType('cold')
                           setEsxiMigrateVm({
                             vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
-                            hostType: vm.hostType || data.esxiVmInfo?.hostType,
+                            hostType: ht,
                           })
                         }}
                       >
@@ -6065,7 +6083,8 @@ return
                       ))}
                     </Select>
                   </FormControl>
-                  {/* Migration type selector — compact with tooltip */}
+                  {/* Migration type selector — hidden for vCenter (cold only) */}
+                  {esxiMigrateVm?.hostType !== 'vcenter' && (
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       {t('inventoryPage.esxiMigration.migrationType')}
@@ -6096,8 +6115,10 @@ return
                       ))}
                     </Stack>
                   </Box>
+                  )}
 
-                  {/* Transfer mode selector — compact with tooltip */}
+                  {/* Transfer mode selector — hidden for vCenter (virt-v2v handles transfer) */}
+                  {esxiMigrateVm?.hostType !== 'vcenter' && (
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       {t('inventoryPage.esxiMigration.transferMode')}
@@ -6127,11 +6148,56 @@ return
                       ))}
                     </Stack>
                   </Box>
+                  )}
 
                   {/* sshfs not installed warning */}
-                  {migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
+                  {esxiMigrateVm?.hostType !== 'vcenter' && migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
                     <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-folder-shared-line" style={{ fontSize: 18 }} />}>
                       {t('inventoryPage.esxiMigration.sshfsNotInstalled')}
+                    </Alert>
+                  )}
+
+                  {/* vCenter preflight warning */}
+                  {esxiMigrateVm?.hostType === 'vcenter' && vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled && (
+                    <Alert
+                      severity="warning"
+                      sx={{ fontSize: 12 }}
+                      icon={<i className="ri-tools-line" style={{ fontSize: 18 }} />}
+                      action={
+                        <Button
+                          size="small"
+                          color="warning"
+                          disabled={vcenterPreflight.installing}
+                          startIcon={vcenterPreflight.installing ? <CircularProgress size={14} color="inherit" /> : <i className="ri-download-line" />}
+                          onClick={async () => {
+                            setVcenterPreflight(prev => prev ? { ...prev, installing: true } : prev)
+                            try {
+                              const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
+                              const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
+                              await fetch('/api/v1/migrations/preflight', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode, action: 'install' }),
+                              })
+                              // Re-check after install
+                              const r2 = await fetch('/api/v1/migrations/preflight', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode }),
+                              })
+                              const d2 = await r2.json()
+                              setVcenterPreflight({ checked: true, ok: !d2.errors?.length, installing: false, errors: d2.errors || [], virtV2vInstalled: d2.virtV2vInstalled ?? false })
+                            } catch {
+                              setVcenterPreflight(prev => prev ? { ...prev, installing: false } : prev)
+                            }
+                          }}
+                          sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
+                        >
+                          {vcenterPreflight.installing ? 'Installing...' : 'Install'}
+                        </Button>
+                      }
+                    >
+                      virt-v2v is not installed on the target node. It is required for vCenter migrations.
                     </Alert>
                   )}
 
@@ -6142,8 +6208,8 @@ return
                 </Stack>
               </Box>
 
-              {/* SSH warning */}
-              {migTargetConn && (() => {
+              {/* SSH warning — not needed for vCenter (virt-v2v handles connection) */}
+              {esxiMigrateVm?.hostType !== 'vcenter' && migTargetConn && (() => {
                 const selectedConn = migPveConnections.find((c: any) => c.id === migTargetConn)
                 return selectedConn && !selectedConn.sshEnabled ? (
                   <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>
@@ -6156,9 +6222,12 @@ return
               <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', border: '1px solid', borderColor: 'primary.main', borderOpacity: 0.2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-information-line" style={{ fontSize: 18, color: theme.palette.primary.main }} />
                 <Typography variant="caption" color="primary">
-                  {migType === 'cold' && t('inventoryPage.esxiMigration.coldMigrationInfo')}
-                  {migType === 'live' && t('inventoryPage.esxiMigration.liveMigrationInfo')}
-                  {migType === 'sshfs_boot' && t('inventoryPage.esxiMigration.sshfsBootMigrationInfo')}
+                  {esxiMigrateVm?.hostType === 'vcenter'
+                    ? 'Cold migration only. virt-v2v will handle disk conversion and virtio driver injection automatically.'
+                    : migType === 'cold' ? t('inventoryPage.esxiMigration.coldMigrationInfo')
+                    : migType === 'live' ? t('inventoryPage.esxiMigration.liveMigrationInfo')
+                    : t('inventoryPage.esxiMigration.sshfsBootMigrationInfo')
+                  }
                 </Typography>
               </Box>
             </Stack>
@@ -6309,7 +6378,7 @@ return
               <Button onClick={() => setEsxiMigrateVm(null)} disabled={migStarting}>{t('common.cancel')}</Button>
               <Button
                 variant="outlined"
-                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || migStarting || (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot'))}
+                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || migStarting || (esxiMigrateVm?.hostType === 'vcenter' ? (vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled) : ((migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot'))))}
                 sx={{ textTransform: 'none' }}
                 startIcon={migStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
                 onClick={async () => {
@@ -6322,12 +6391,13 @@ return
                       body: JSON.stringify({
                         sourceConnectionId: esxiMigrateVm.connId,
                         sourceVmId: esxiMigrateVm.vmid,
+                        sourceVmName: esxiMigrateVm.name,
                         targetConnectionId: migTargetConn,
                         targetNode: migTargetNode,
                         targetStorage: migTargetStorage,
                         networkBridge: migNetworkBridge,
-                        migrationType: migType,
-                        transferMode: migTransferMode,
+                        migrationType: esxiMigrateVm.hostType === 'vcenter' ? 'cold' : migType,
+                        transferMode: esxiMigrateVm.hostType === 'vcenter' ? 'v2v' : migTransferMode,
                         startAfterMigration: migStartAfter,
                       }),
                     })
@@ -6338,7 +6408,7 @@ return
                       // Add task to ProxCenter TasksBar
                       const taskId = `migration-${jobId}`
                       const vmLabel = esxiMigrateVm.name || esxiMigrateVm.vmid
-                      const sourceType = esxiMigrateVm.hostType === 'xcpng' ? 'XCP-ng' : 'ESXi'
+                      const sourceType = esxiMigrateVm.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm.hostType === 'vcenter' ? 'vCenter' : 'ESXi'
                       addPCTask({
                         id: taskId,
                         type: 'generic',
@@ -6624,7 +6694,8 @@ return
                   </Stack>
                 </Box>
 
-                {/* Migration type — compact with tooltip */}
+                {/* Migration type — hidden for vCenter (cold only) */}
+                {bulkMigHostInfo?.hostType !== 'vcenter' && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t('inventoryPage.esxiMigration.migrationType')}
@@ -6655,8 +6726,10 @@ return
                     ))}
                   </Stack>
                 </Box>
+                )}
 
-                {/* Transfer mode — compact with tooltip */}
+                {/* Transfer mode — hidden for vCenter (virt-v2v handles transfer) */}
+                {bulkMigHostInfo?.hostType !== 'vcenter' && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t('inventoryPage.esxiMigration.transferMode')}
@@ -6686,11 +6759,62 @@ return
                     ))}
                   </Stack>
                 </Box>
+                )}
 
                 {/* sshfs not installed warning */}
-                {migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
+                {bulkMigHostInfo?.hostType !== 'vcenter' && migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
                   <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-folder-shared-line" style={{ fontSize: 18 }} />}>
                     {t('inventoryPage.esxiMigration.sshfsNotInstalled')}
+                  </Alert>
+                )}
+
+                {/* vCenter info banner for bulk */}
+                {bulkMigHostInfo?.hostType === 'vcenter' && (
+                  <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-information-line" style={{ fontSize: 18 }} />}>
+                    Cold migration only. virt-v2v will handle disk conversion and virtio driver injection automatically.
+                  </Alert>
+                )}
+
+                {/* vCenter preflight warning for bulk */}
+                {bulkMigHostInfo?.hostType === 'vcenter' && vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled && (
+                  <Alert
+                    severity="warning"
+                    sx={{ fontSize: 12 }}
+                    icon={<i className="ri-tools-line" style={{ fontSize: 18 }} />}
+                    action={
+                      <Button
+                        size="small"
+                        color="warning"
+                        disabled={vcenterPreflight.installing}
+                        startIcon={vcenterPreflight.installing ? <CircularProgress size={14} color="inherit" /> : <i className="ri-download-line" />}
+                        onClick={async () => {
+                          setVcenterPreflight(prev => prev ? { ...prev, installing: true } : prev)
+                          try {
+                            const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
+                            const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
+                            await fetch('/api/v1/migrations/preflight', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode, action: 'install' }),
+                            })
+                            const r2 = await fetch('/api/v1/migrations/preflight', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode }),
+                            })
+                            const d2 = await r2.json()
+                            setVcenterPreflight({ checked: true, ok: !d2.errors?.length, installing: false, errors: d2.errors || [], virtV2vInstalled: d2.virtV2vInstalled ?? false })
+                          } catch {
+                            setVcenterPreflight(prev => prev ? { ...prev, installing: false } : prev)
+                          }
+                        }}
+                        sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
+                      >
+                        {vcenterPreflight.installing ? 'Installing...' : 'Install'}
+                      </Button>
+                    }
+                  >
+                    virt-v2v is not installed on the target node. It is required for vCenter migrations.
                   </Alert>
                 )}
 
@@ -6699,7 +6823,8 @@ return
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
                 />
 
-                {migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
+                {/* SSH warning — not needed for vCenter */}
+                {bulkMigHostInfo?.hostType !== 'vcenter' && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
                   <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>{t('inventoryPage.esxiMigration.sshRequired')}</Alert>
                 )}
 
@@ -6851,7 +6976,7 @@ return
               <Button onClick={() => setBulkMigOpen(false)} disabled={bulkMigStarting}>{t('common.cancel')}</Button>
               <Button
                 variant="outlined"
-                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting || (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) || (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status === 'running'))}
+                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting || (bulkMigHostInfo?.hostType === 'vcenter' ? (vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled) : ((migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')))) || (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status === 'running'))}
                 sx={{ textTransform: 'none' }}
                 startIcon={bulkMigStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
                 onClick={async () => {
@@ -6872,7 +6997,8 @@ return
                   }))
 
                   // Start the first batch
-                  const sourceType = bulkMigHostInfo.hostType === 'xcpng' ? 'XCP-ng' : 'ESXi'
+                  const isVcenterBulk = bulkMigHostInfo.hostType === 'vcenter'
+                  const sourceType = bulkMigHostInfo.hostType === 'xcpng' ? 'XCP-ng' : isVcenterBulk ? 'vCenter' : 'ESXi'
                   for (let idx = 0; idx < Math.min(BULK_MIG_CONCURRENCY, jobs.length); idx++) {
                     const job = jobs[idx]
                     try {
@@ -6882,12 +7008,13 @@ return
                         body: JSON.stringify({
                           sourceConnectionId: bulkMigHostInfo.connectionId,
                           sourceVmId: job.vmid,
+                          sourceVmName: job.name,
                           targetConnectionId: migTargetConn,
                           targetNode: job.targetNode,
                           targetStorage: migTargetStorage,
                           networkBridge: migNetworkBridge,
-                          migrationType: migType,
-                          transferMode: migTransferMode,
+                          migrationType: isVcenterBulk ? 'cold' : migType,
+                          transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
                           startAfterMigration: migStartAfter,
                         }),
                       })
@@ -6919,8 +7046,8 @@ return
                     targetConnectionId: migTargetConn,
                     targetStorage: migTargetStorage,
                     networkBridge: migNetworkBridge,
-                    migrationType: migType,
-                    transferMode: migTransferMode,
+                    migrationType: isVcenterBulk ? 'cold' : migType,
+                    transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
                     startAfterMigration: migStartAfter,
                     sourceType,
                   }
@@ -6972,7 +7099,7 @@ return
               <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={24} height={24} />
             </Box>
             <Box>
-              <Typography variant="body2" fontWeight={700}>{esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : 'VMware'} → Proxmox VE</Typography>
+              <Typography variant="body2" fontWeight={700}>{esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm?.hostType === 'vcenter' ? 'vCenter' : 'VMware'} → Proxmox VE</Typography>
               <Typography variant="caption" sx={{ opacity: 0.6 }}>Enterprise / Enterprise+</Typography>
             </Box>
           </Box>

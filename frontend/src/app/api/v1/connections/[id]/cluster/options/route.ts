@@ -30,7 +30,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
   }
 }
 
-// PUT - Mettre à jour les options du datacenter (notes/description)
+// PUT - Mettre a jour les options du datacenter
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
@@ -44,14 +44,31 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
     const body = await req.json()
     const conn = await getConnectionById(id)
 
-    // Construire les paramètres à envoyer
+    // Whitelist of accepted PVE datacenter option keys
+    const ALLOWED_KEYS = [
+      'description', 'keyboard', 'language', 'console', 'email_from',
+      'http_proxy', 'max_workers', 'migration', 'migration_unsecure',
+      'ha', 'mac_prefix', 'bwlimit', 'tag-style', 'u2f', 'webauthn',
+      'crs', 'notify', 'next-id',
+    ]
+
     const updateParams = new URLSearchParams()
-    
-    if (body.description !== undefined) {
-      updateParams.set('description', body.description)
+
+    for (const key of ALLOWED_KEYS) {
+      if (body[key] !== undefined) {
+        updateParams.set(key, String(body[key]))
+      }
     }
 
-    // Mettre à jour les options via PUT
+    // Handle delete operations - PVE uses 'delete' param with comma-separated key names
+    if (body.delete) {
+      updateParams.set('delete', String(body.delete))
+    }
+
+    if (updateParams.toString() === '') {
+      return NextResponse.json({ error: "No valid fields provided" }, { status: 400 })
+    }
+
     await pveFetch<any>(conn, "/cluster/options", {
       method: 'PUT',
       headers: {

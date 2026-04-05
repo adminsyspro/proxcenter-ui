@@ -493,10 +493,10 @@ export default function ConnectionDialog({
           <>
             <TextField
               fullWidth
-              label={isHyperv ? 'Username' : isXcpng ? t('settings.xcpngUsername') : t('settings.vmwareUsername')}
+              label={isNutanix ? 'Username' : isHyperv ? 'Username' : isXcpng ? t('settings.xcpngUsername') : t('settings.vmwareUsername')}
               value={form.vmwareUser}
               onChange={e => handleChange('vmwareUser', e.target.value)}
-              placeholder={isHyperv ? 'Administrator' : isXcpng ? 'admin@admin.net' : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
+              placeholder={isNutanix ? 'admin' : isHyperv ? 'Administrator' : isXcpng ? 'admin@admin.net' : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
               sx={{ mt: 1 }}
               required
             />
@@ -650,7 +650,7 @@ export default function ConnectionDialog({
           </>
         )}
 
-        {!isPbs && !isXcpng && !isHyperv && !(isVmware && form.subType === 'vcenter') && (
+        {!isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter') && (
           <>
         <Divider sx={{ my: 3 }} />
 

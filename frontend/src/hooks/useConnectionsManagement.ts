@@ -46,6 +46,11 @@ export function useConnectionsManagement() {
   const [xcpngLoading, setXcpngLoading] = useState(true)
   const [xcpngError, setXcpngError] = useState<string | null>(null)
 
+  // Nutanix Connections
+  const [nutanixConnections, setNutanixConnections] = useState<any[]>([])
+  const [nutanixLoading, setNutanixLoading] = useState(true)
+  const [nutanixError, setNutanixError] = useState<string | null>(null)
+
   // Hyper-V Connections
   const [hypervConnections, setHypervConnections] = useState<any[]>([])
   const [hypervLoading, setHypervLoading] = useState(true)
@@ -111,6 +116,21 @@ export function useConnectionsManagement() {
     }
   }, [])
 
+  const loadNutanixConnections = useCallback(async () => {
+    setNutanixLoading(true)
+    setNutanixError(null)
+
+    try {
+      const json = await fetchJson('/api/v1/connections?type=nutanix')
+      setNutanixConnections(Array.isArray(json?.data) ? json.data : [])
+    } catch (e: any) {
+      setNutanixError(e?.message || String(e))
+      setNutanixConnections([])
+    } finally {
+      setNutanixLoading(false)
+    }
+  }, [])
+
   const loadHypervConnections = useCallback(async () => {
     setHypervLoading(true)
     setHypervError(null)
@@ -131,29 +151,34 @@ export function useConnectionsManagement() {
     loadPbsConnections()
     loadVmwareConnections()
     loadXcpngConnections()
+    loadNutanixConnections()
     loadHypervConnections()
-  }, [loadPveConnections, loadPbsConnections, loadVmwareConnections, loadXcpngConnections, loadHypervConnections])
+  }, [loadPveConnections, loadPbsConnections, loadVmwareConnections, loadXcpngConnections, loadNutanixConnections, loadHypervConnections])
 
   return {
     pveConnections,
     pbsConnections,
     vmwareConnections,
     xcpngConnections,
+    nutanixConnections,
     hypervConnections,
     pveLoading,
     pbsLoading,
     vmwareLoading,
     xcpngLoading,
+    nutanixLoading,
     hypervLoading,
     pveError,
     pbsError,
     vmwareError,
     xcpngError,
+    nutanixError,
     hypervError,
     loadPveConnections,
     loadPbsConnections,
     loadVmwareConnections,
     loadXcpngConnections,
+    loadNutanixConnections,
     loadHypervConnections,
   }
 }

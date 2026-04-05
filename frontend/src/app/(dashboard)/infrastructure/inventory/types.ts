@@ -75,9 +75,11 @@ export type DetailsPayload = {
     memory: number
     balloon?: number
     shares?: number
+    swap?: number
     pending?: {
       memory?: number
       balloon?: number
+      swap?: number
     }
   }
   disksInfo?: Array<{
@@ -87,6 +89,7 @@ export type DetailsPayload = {
     format?: string
     cache?: string
     iothread?: boolean
+    mountpoint?: string
   }>
   networkInfo?: Array<{
     id: string

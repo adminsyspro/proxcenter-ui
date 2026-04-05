@@ -59,6 +59,9 @@ import NodeFirewallTab from '@/components/NodeFirewallTab'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import ComplianceTab from '@/components/ComplianceTab'
+import DatacenterSettingsTab from '@/components/datacenter-settings'
+import MetricServerTab from '@/components/MetricServerTab'
+import NotificationsTab from '@/components/NotificationsTab'
 import NetworkInterfaceDialog from '@/components/network/NetworkInterfaceDialog'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
@@ -519,6 +522,37 @@ export default function NodeTabs(props: any) {
                     </Box>
                   }
                 />
+                {/* Onglets datacenter pour les hosts standalone (pas de ClusterTabs) */}
+                {!data.clusterName && (
+                  <Tab
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <i className="ri-settings-4-line" style={{ fontSize: 16 }} />
+                        {t('inventory.tabDatacenterSettings')}
+                      </Box>
+                    }
+                  />
+                )}
+                {!data.clusterName && (
+                  <Tab
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <i className="ri-bar-chart-box-line" style={{ fontSize: 16 }} />
+                        {t('inventory.tabMetricServer')}
+                      </Box>
+                    }
+                  />
+                )}
+                {!data.clusterName && (
+                  <Tab
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <i className="ri-notification-3-line" style={{ fontSize: 16 }} />
+                        {t('inventory.tabNotifications')}
+                      </Box>
+                    }
+                  />
+                )}
               </Tabs>
 
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
@@ -4123,6 +4157,21 @@ export default function NodeTabs(props: any) {
                     connectionId={parseNodeId(selection?.id || '').connId}
                     node={parseNodeId(selection?.id || '').node}
                   />
+                )}
+
+                {/* Onglet Settings - Index 16 pour standalone uniquement */}
+                {nodeTab === 16 && !data.clusterName && (
+                  <DatacenterSettingsTab connectionId={parseNodeId(selection?.id || '').connId} />
+                )}
+
+                {/* Onglet Metric Server - Index 17 pour standalone uniquement */}
+                {nodeTab === 17 && !data.clusterName && (
+                  <MetricServerTab connectionId={parseNodeId(selection?.id || '').connId} />
+                )}
+
+                {/* Onglet Notifications - Index 18 pour standalone uniquement */}
+                {nodeTab === 18 && !data.clusterName && (
+                  <NotificationsTab connectionId={parseNodeId(selection?.id || '').connId} />
                 )}
               </CardContent>
             </Card>

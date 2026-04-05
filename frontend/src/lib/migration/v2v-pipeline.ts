@@ -191,6 +191,7 @@ export async function runV2vMigrationPipeline(
   let targetVmid: number | null = null
   const outputDir = `/tmp/v2v-${jobId}`
   const pwFile = `/tmp/v2v-pwfile-${jobId}`
+  let nutanixImageUuids: string[] = []  // Track Nutanix images for cleanup
 
   try {
     // ── PHASE 1: Preflight ──
@@ -253,6 +254,99 @@ export async function runV2vMigrationPipeline(
         throw new Error(`Failed to write password file: ${writeResult.error}`)
       }
       await appendLog(jobId, "Credentials prepared on target node", "success")
+    }
+
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+
+    // ── PHASE 2.5: Nutanix disk download ──
+    // If sourceType is nutanix and no diskPaths provided, download disks from Prism API
+    if (config.sourceType === "nutanix" && (!config.diskPaths || config.diskPaths.length === 0)) {
+      await appendLog(jobId, "Downloading disks from Nutanix Prism Central...")
+
+      const sourceConn = await prisma.connection.findUnique({
+        where: { id: config.sourceConnectionId },
+        select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+      })
+      if (!sourceConn?.apiTokenEnc) {
+        throw new Error("Nutanix source connection credentials not found")
+      }
+
+      const creds = decryptSecret(sourceConn.apiTokenEnc)
+      const colonIdx = creds.indexOf(":")
+      const ntxUser = colonIdx > 0 ? creds.substring(0, colonIdx) : "admin"
+      const ntxPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
+
+      const { NutanixClient } = await import("@/lib/nutanix/client")
+      const ntxClient = new NutanixClient({
+        baseUrl: sourceConn.baseUrl,
+        username: ntxUser,
+        password: ntxPass,
+        insecureTLS: sourceConn.insecureTLS,
+      })
+
+      // List disks for this VM
+      const disks = await ntxClient.listDisks(config.sourceVmId)
+      if (disks.length === 0) {
+        throw new Error("No disks found on Nutanix VM")
+      }
+      await appendLog(jobId, `Found ${disks.length} disk(s) to download`)
+
+      // Prepare download directory on target node
+      const downloadDir = `/tmp/nutanix-${jobId}`
+      await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(downloadDir)}`)
+
+      const diskPaths: string[] = []
+
+      for (let i = 0; i < disks.length; i++) {
+        const disk = disks[i]
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+
+        const imageName = `proxcenter-mig-${jobId}-disk${i}`
+        await appendLog(jobId, `Creating image from disk ${i} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
+
+        // Create image from disk via Prism API
+        const { imageUuid, taskUuid } = await ntxClient.createDiskImage(
+          config.sourceVmId,
+          disk.uuid,
+          imageName
+        )
+        nutanixImageUuids.push(imageUuid)
+
+        // Wait for image creation task to complete
+        if (taskUuid) {
+          await appendLog(jobId, `Waiting for image creation task ${taskUuid}...`)
+          await ntxClient.waitForTask(taskUuid)
+        }
+        await appendLog(jobId, `Image created: ${imageUuid}`, "success")
+
+        // Download the image to the target Proxmox node via curl
+        const downloadUrl = ntxClient.getDiskDownloadUrl(imageUuid)
+        const authHeader = ntxClient.getAuthHeader()
+        const diskPath = `${downloadDir}/disk-${i}.raw`
+        const insecureFlag = sourceConn.insecureTLS ? "-k" : ""
+
+        const curlCmd = `curl -s ${insecureFlag} -H ${shellEscape(`Authorization: ${authHeader}`)} -o ${shellEscape(diskPath)} ${shellEscape(downloadUrl)}`
+        await appendLog(jobId, `Downloading disk ${i} to ${diskPath}...`)
+
+        const dlResult = await executeSSH(config.targetConnectionId, nodeIp, curlCmd)
+        if (!dlResult.success) {
+          throw new Error(`Failed to download disk ${i}: ${dlResult.error || dlResult.output?.substring(0, 500)}`)
+        }
+
+        // Verify file was downloaded
+        const statResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c '%s' ${shellEscape(diskPath)}`)
+        if (!statResult.success || !statResult.output?.trim() || statResult.output.trim() === "0") {
+          throw new Error(`Downloaded disk file is empty or missing: ${diskPath}`)
+        }
+        const fileSize = Number(statResult.output.trim())
+        await appendLog(jobId, `Disk ${i} downloaded: ${(fileSize / 1073741824).toFixed(1)} GB`, "success")
+
+        diskPaths.push(diskPath)
+      }
+
+      // Set diskPaths on config for the virt-v2v step
+      config.diskPaths = diskPaths
+      await appendLog(jobId, `All ${diskPaths.length} disk(s) downloaded from Nutanix`, "success")
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -619,6 +713,38 @@ export async function runV2vMigrationPipeline(
       },
       status: "success",
     })
+
+    // Cleanup: Nutanix images + downloaded disks (on success)
+    if (nutanixImageUuids.length > 0) {
+      try {
+        const sourceConn = await prisma.connection.findUnique({
+          where: { id: config.sourceConnectionId },
+          select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+        })
+        if (sourceConn?.apiTokenEnc) {
+          const creds = decryptSecret(sourceConn.apiTokenEnc)
+          const colonIdx = creds.indexOf(":")
+          const { NutanixClient } = await import("@/lib/nutanix/client")
+          const ntxClient = new NutanixClient({
+            baseUrl: sourceConn.baseUrl,
+            username: colonIdx > 0 ? creds.substring(0, colonIdx) : "admin",
+            password: colonIdx > 0 ? creds.substring(colonIdx + 1) : creds,
+            insecureTLS: sourceConn.insecureTLS,
+          })
+          for (const imageUuid of nutanixImageUuids) {
+            await ntxClient.deleteImage(imageUuid).catch(() => {})
+          }
+          await appendLog(jobId, `Cleaned up ${nutanixImageUuids.length} Nutanix image(s)`, "info")
+        }
+      } catch { /* best effort */ }
+    }
+    // Clean up downloaded disk files
+    try {
+      const pveConn = await getConnectionById(config.targetConnectionId)
+      const nodeIp = await getNodeIp(pveConn, config.targetNode)
+      const nutanixDownloadDir = `/tmp/nutanix-${jobId}`
+      await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
+    } catch { /* best effort */ }
   } catch (err: any) {
     const errorMsg = err?.message || String(err)
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
@@ -630,8 +756,38 @@ export async function runV2vMigrationPipeline(
       const nodeIp = await getNodeIp(pveConn, config.targetNode)
       await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`).catch(() => {})
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`).catch(() => {})
+      // Clean up Nutanix downloaded disks
+      const nutanixDownloadDir = `/tmp/nutanix-${jobId}`
+      await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
     } catch {
       // Best effort cleanup
+    }
+
+    // Cleanup: Nutanix images created for disk export
+    if (nutanixImageUuids.length > 0) {
+      try {
+        const sourceConn = await prisma.connection.findUnique({
+          where: { id: config.sourceConnectionId },
+          select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+        })
+        if (sourceConn?.apiTokenEnc) {
+          const creds = decryptSecret(sourceConn.apiTokenEnc)
+          const colonIdx = creds.indexOf(":")
+          const { NutanixClient } = await import("@/lib/nutanix/client")
+          const ntxClient = new NutanixClient({
+            baseUrl: sourceConn.baseUrl,
+            username: colonIdx > 0 ? creds.substring(0, colonIdx) : "admin",
+            password: colonIdx > 0 ? creds.substring(colonIdx + 1) : creds,
+            insecureTLS: sourceConn.insecureTLS,
+          })
+          for (const imageUuid of nutanixImageUuids) {
+            await ntxClient.deleteImage(imageUuid).catch(() => {})
+          }
+          await appendLog(jobId, `Cleaned up ${nutanixImageUuids.length} Nutanix image(s)`, "info")
+        }
+      } catch {
+        // Best effort cleanup
+      }
     }
 
     // Cleanup: if we created a VM, try to destroy it

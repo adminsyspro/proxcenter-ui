@@ -44,11 +44,14 @@ export function RollingUpdateProvider({ children }: { children: React.ReactNode 
   const [monitorId, setMonitorId] = useState<string | null>(null)
   const [monitorConnectionId, setMonitorConnectionId] = useState<string>('')
 
-  // Poll for active rolling updates
+  // Poll for active rolling updates (15s when active, 60s when idle)
+  const activeCountRef = useRef(0)
+
   useEffect(() => {
     if (!rollingUpdatesAvailable) return
 
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
 
     const check = async () => {
       try {
@@ -57,15 +60,19 @@ export function RollingUpdateProvider({ children }: { children: React.ReactNode 
         if (cancelled || !res.ok) return
         const items: any[] = Array.isArray(json.data) ? json.data : []
         const active = items.filter((ru: any) => ['running', 'paused', 'pending'].includes(ru.status))
+        activeCountRef.current = active.length
         setActiveUpdates(active)
       } catch {
         // orchestrator unavailable
       }
+
+      if (!cancelled) {
+        timer = setTimeout(check, activeCountRef.current > 0 ? 15_000 : 60_000)
+      }
     }
 
     check()
-    const interval = setInterval(check, 15_000)
-    return () => { cancelled = true; clearInterval(interval) }
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [rollingUpdatesAvailable])
 
   const openMonitor = useCallback((rollingUpdateId: string, connectionId: string) => {

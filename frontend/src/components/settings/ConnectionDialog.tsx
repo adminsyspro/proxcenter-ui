@@ -29,6 +29,8 @@ import {
   Select,
   Switch,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -41,8 +43,10 @@ export type ConnectionFormData = {
   hasCeph: boolean
   apiToken: string
   // VMware fields
+  subType: string
   vmwareUser: string
   vmwarePassword: string
+  vmwareDatacenter: string
   // Location fields
   latitude: string
   longitude: string
@@ -78,8 +82,10 @@ const defaultFormData: ConnectionFormData = {
   insecureTLS: true,
   hasCeph: false,
   apiToken: '',
+  subType: '',
   vmwareUser: 'root',
   vmwarePassword: '',
+  vmwareDatacenter: '',
   latitude: '',
   longitude: '',
   locationLabel: '',
@@ -133,6 +139,9 @@ export default function ConnectionDialog({
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
+          // VMware sub-type
+          subType: (initialData as any).subType || '',
+          vmwareDatacenter: (initialData as any).vmwareDatacenter || '',
           // Location: convert numbers to strings for text fields
           latitude: initialData.latitude != null ? String(initialData.latitude) : '',
           longitude: initialData.longitude != null ? String(initialData.longitude) : '',
@@ -335,6 +344,41 @@ export default function ConnectionDialog({
           </Alert>
         )}
 
+        {isVmware && (
+          <ToggleButtonGroup
+            value={form.subType}
+            exclusive
+            size="small"
+            onChange={(_e, value) => {
+              if (value !== null) {
+                handleChange('subType', value)
+                // Adjust defaults based on sub-type
+                if (value === 'vcenter') {
+                  if (form.vmwareUser === 'root') {
+                    handleChange('vmwareUser', 'administrator@vsphere.local')
+                  }
+                  // Disable SSH for vCenter
+                  handleSshEnabledChange(false)
+                } else if (value === 'esxi') {
+                  if (form.vmwareUser === 'administrator@vsphere.local') {
+                    handleChange('vmwareUser', 'root')
+                  }
+                }
+              }
+            }}
+            sx={{ mt: 1, mb: 1, width: '100%' }}
+          >
+            <ToggleButton value="esxi" sx={{ flex: 1, gap: 1 }}>
+              <i className="ri-server-line" />
+              ESXi (Direct)
+            </ToggleButton>
+            <ToggleButton value="vcenter" sx={{ flex: 1, gap: 1 }}>
+              <i className="ri-cloud-line" />
+              vCenter
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
+
         <TextField
           fullWidth
           label={t('settings.connectionNameLabel')}
@@ -346,14 +390,31 @@ export default function ConnectionDialog({
 
         <TextField
           fullWidth
-          label={isExternalHypervisor ? (isXcpng ? t('settings.xcpngHostLabel') : t('settings.esxiHostLabel')) : t('settings.baseUrlLabel', { port })}
+          label={isExternalHypervisor
+            ? (isXcpng
+              ? t('settings.xcpngHostLabel')
+              : (form.subType === 'vcenter' ? 'vCenter URL' : t('settings.esxiHostLabel')))
+            : t('settings.baseUrlLabel', { port })
+          }
           value={form.baseUrl}
           onChange={e => handleChange('baseUrl', e.target.value)}
-          placeholder={isXcpng ? 'http://10.99.99.196' : isVmware ? '192.168.1.100' : t('settings.baseUrlPlaceholder', { port })}
-          helperText={isXcpng ? t('settings.xcpngHostHelper') : isVmware ? t('settings.esxiHostHelper') : undefined}
+          placeholder={isXcpng ? 'http://10.99.99.196' : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : '192.168.1.100') : t('settings.baseUrlPlaceholder', { port })}
+          helperText={isXcpng ? t('settings.xcpngHostHelper') : isVmware ? (form.subType === 'vcenter' ? 'vCenter server hostname or IP' : t('settings.esxiHostHelper')) : undefined}
           sx={{ mt: 2 }}
           required
         />
+
+        {isVmware && form.subType === 'vcenter' && (
+          <TextField
+            fullWidth
+            label="Datacenter"
+            value={form.vmwareDatacenter}
+            onChange={e => handleChange('vmwareDatacenter', e.target.value)}
+            placeholder="Datacenter1"
+            helperText="vCenter datacenter name"
+            sx={{ mt: 2 }}
+          />
+        )}
 
         <FormControlLabel
           sx={{ mt: 2 }}
@@ -399,7 +460,7 @@ export default function ConnectionDialog({
               label={isXcpng ? t('settings.xcpngUsername') : t('settings.vmwareUsername')}
               value={form.vmwareUser}
               onChange={e => handleChange('vmwareUser', e.target.value)}
-              placeholder={isXcpng ? 'admin@admin.net' : 'root'}
+              placeholder={isXcpng ? 'admin@admin.net' : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
               sx={{ mt: 1 }}
               required
             />
@@ -553,7 +614,7 @@ export default function ConnectionDialog({
           </>
         )}
 
-        {!isPbs && !isXcpng && (
+        {!isPbs && !isXcpng && !(isVmware && form.subType === 'vcenter') && (
           <>
         <Divider sx={{ my: 3 }} />
 

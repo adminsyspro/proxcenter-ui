@@ -1099,7 +1099,7 @@ function ConnectionsTab() {
             label={
               <Tooltip title={!migrationAvailable ? 'Enterprise' : ''} placement='top'>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: migrationAvailable ? 1 : 0.4 }}>
-                  <i className='ri-microsoft-line' style={{ fontSize: 18, color: '#0078d4' }} />
+                  <img src='/images/hyperv-logo.svg' alt='' width={18} height={18} />
                   <span>Hyper-V</span>
                   {migrationAvailable ? (
                     <Chip size='small' label={hypervConnections.length} sx={{ height: 18, fontSize: 10, ml: 0.5, bgcolor: '#0078d4', color: '#fff' }} />

@@ -65,11 +65,12 @@ export async function POST(req: Request) {
       data: {
         sourceConnectionId,
         sourceVmId,
+        sourceVmName: body.sourceVmName || null,
         sourceHost: sourceConn.baseUrl,
         targetConnectionId,
         targetNode,
         targetStorage,
-        config: JSON.stringify({ sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration, migrationType, transferMode, sourceType: effectiveSourceType }),
+        config: JSON.stringify({ sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration, migrationType, transferMode, sourceType: effectiveSourceType }),
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),

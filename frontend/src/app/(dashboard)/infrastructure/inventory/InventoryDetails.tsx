@@ -262,7 +262,7 @@ export default function InventoryDetails({
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)
   const [nodeActionShutdownLocal, setNodeActionShutdownLocal] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[] } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
@@ -270,13 +270,14 @@ export default function InventoryDetails({
   const [migBridges, setMigBridges] = useState<any[]>([])
   const [migStartAfter, setMigStartAfter] = useState(false)
   const [migDiskPaths, setMigDiskPaths] = useState('')
+  const [migTempStorage, setMigTempStorage] = useState('/tmp')
   const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot'>('cold')
   const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs'>('sshfs')
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
-  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean } | null>(null)
+  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
@@ -649,10 +650,14 @@ export default function InventoryDetails({
     fetch('/api/v1/migrations/preflight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode }),
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode, vmName: esxiMigrateVm?.name, sourceType: esxiMigrateVm?.hostType }),
     }).then(r => r.json()).then(d => {
-      setVcenterPreflight({ checked: true, ok: !d.errors?.length, installing: false, errors: d.errors || [], virtV2vInstalled: d.virtV2vInstalled ?? false })
-    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false }))
+      setVcenterPreflight({ checked: true, ok: !d.errors?.length, installing: false, errors: d.errors || [], virtV2vInstalled: d.virtV2vInstalled ?? false, virtioWinInstalled: d.virtioWinInstalled ?? false, detectedDisks: d.detectedDisks || [], tempStorages: d.tempStorages || [] })
+      // Auto-populate disk paths if disks were detected
+      if (d.detectedDisks?.length > 0) {
+        setMigDiskPaths(d.detectedDisks.join('\n'))
+      }
+    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, detectedDisks: [], tempStorages: [] }))
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
       const storages = (d.data || d || []).filter((s: any) => {
         const content = s.content || ''
@@ -2852,7 +2857,14 @@ return vm?.isCluster ?? false
                 <NodeIcon status={data.status === 'crit' ? 'offline' : 'online'} maintenance={data.hostInfo?.maintenance} size={22} />
               ) : data.kindLabel === 'CLUSTER' ? (
                 <ClusterIcon nodes={data.nodesData?.map((n: any) => ({ status: n.status })) || []} size={22} />
-              ) : (
+              ) : selection?.type === 'extvm' ? (
+                <img src={
+                  data.esxiVmInfo?.hostType === 'hyperv' ? '/images/hyperv-logo.svg'
+                  : data.esxiVmInfo?.hostType === 'nutanix' ? '/images/nutanix-logo.svg'
+                  : data.esxiVmInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg'
+                  : '/images/esxi-logo.svg'
+                } alt="" width={22} height={22} />
+              ) : data.kindLabel ? (
                 <Chip
                   size="small"
                   label={data.kindLabel}
@@ -2860,12 +2872,12 @@ return vm?.isCluster ?? false
                   icon={
                     data.kindLabel === 'VMWARE ESXI' || data.kindLabel === 'VMWARE VM' || data.kindLabel === 'VCENTER' ? (
                       <img src="/images/esxi-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
-                    ) : data.kindLabel === 'XCP-NG' ? (
+                    ) : data.kindLabel === 'XCP-NG' || data.kindLabel === 'XCP-NG VM' ? (
                       <img src="/images/xcpng-logo.svg" alt="" style={{ width: 14, height: 14, marginLeft: 8 }} />
                     ) : undefined
                   }
                 />
-              )}
+              ) : null}
 
               <Typography variant="subtitle1" fontWeight={900}>
                 {data.title}
@@ -4122,8 +4134,8 @@ return vm?.isCluster ?? false
                           sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' }, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, borderRadius: 1, px: 0.5 }}
                         >
                           {info.hypervisorType === 'hyperv'
-                            ? <i className="ri-microsoft-line" style={{ fontSize: 16, color: '#0078d4', opacity: 0.7 }} />
-                            : <img src={info.hypervisorType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.7 }} />
+                            ? <img src="/images/hyperv-logo.svg" alt="" width={16} height={16} style={{ opacity: 0.7 }} />
+                            : <img src={info.hypervisorType === 'xcpng' ? '/images/xcpng-logo.svg' : info.hypervisorType === 'hyperv' ? '/images/hyperv-logo.svg' : info.hypervisorType === 'nutanix' ? '/images/nutanix-logo.svg' : '/images/esxi-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.7 }} />
                           }
                           <Typography variant="body2" fontSize={12} fontWeight={600} sx={{ flex: 1 }} noWrap>{host.connectionName}</Typography>
                           <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap' }}>
@@ -4490,7 +4502,7 @@ return vm?.isCluster ?? false
             const isVcenterVm = vm.hostType === 'vcenter'
             const isHypervVm = vm.hostType === 'hyperv'
             const isNutanixVm = vm.hostType === 'nutanix'
-            const extSourceIcon = isNutanixVm ? '/images/nutanix-logo.svg' : isXcpngVm ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'
+            const extSourceIcon = isNutanixVm ? '/images/nutanix-logo.svg' : isHypervVm ? '/images/hyperv-logo.svg' : isXcpngVm ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'
             const extSourceLabel = isNutanixVm ? 'Nutanix AHV' : isHypervVm ? 'Hyper-V' : isXcpngVm ? 'XCP-ng' : isVcenterVm ? 'vCenter' : 'ESXi'
             const memGB = vm.memoryMB ? (vm.memoryMB / 1024).toFixed(1) : '0'
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
@@ -4529,11 +4541,20 @@ return vm?.isCluster ?? false
                           if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
                           const ht = vm.hostType || data.esxiVmInfo?.hostType
                           if (ht === 'vcenter' || ht === 'hyperv' || ht === 'nutanix') setMigType('cold')
+                          // Pre-fill disk paths for Hyper-V (convert Windows paths to /mnt/hyperv/ linux paths)
+                          if (ht === 'hyperv' && (vm as any).diskPaths?.length > 0) {
+                            const linuxPaths = ((vm as any).diskPaths as string[]).map((p: string) => {
+                              // "C:\VMs\TestVM.vhdx" -> "/mnt/hyperv/TestVM.vhdx"
+                              const fileName = p.split('\\').pop() || p.split('/').pop() || p
+                              return `/mnt/hyperv/${fileName}`
+                            })
+                            setMigDiskPaths(linuxPaths.join('\n'))
+                          }
                           setEsxiMigrateVm({
                             vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
-                            hostType: ht,
+                            hostType: ht, diskPaths: (vm as any).diskPaths,
                           })
                         }}
                       >
@@ -5912,10 +5933,7 @@ return
       {/* ESXi / XCP-ng Migration Dialog */}
       <Dialog open={!!esxiMigrateVm} onClose={() => { if (!migStarting) setEsxiMigrateVm(null) }} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {esxiMigrateVm?.hostType === 'hyperv'
-            ? <i className="ri-microsoft-line" style={{ fontSize: 22, color: '#0078d4' }} />
-            : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
-          }
+          <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           {t('inventoryPage.esxiMigration.migrateToProxmox')}
         </DialogTitle>
         <DialogContent>
@@ -6199,7 +6217,7 @@ return
                                 body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode }),
                               })
                               const d2 = await r2.json()
-                              setVcenterPreflight({ checked: true, ok: !d2.errors?.length, installing: false, errors: d2.errors || [], virtV2vInstalled: d2.virtV2vInstalled ?? false })
+                              setVcenterPreflight({ checked: true, ok: !d2.errors?.length, installing: false, errors: d2.errors || [], virtV2vInstalled: d2.virtV2vInstalled ?? false, virtioWinInstalled: d2.virtioWinInstalled ?? false, detectedDisks: d2.detectedDisks || [], tempStorages: d2.tempStorages || [] })
                             } catch {
                               setVcenterPreflight(prev => prev ? { ...prev, installing: false } : prev)
                             }
@@ -6210,24 +6228,119 @@ return
                         </Button>
                       }
                     >
-                      virt-v2v is not installed on the target node. It is required for vCenter and Hyper-V migrations.
+                      virt-v2v is not installed on the target node. It is required for migrations.
                     </Alert>
                   )}
 
-                  {/* Disk paths field for Hyper-V */}
+                  {/* virtio-win warning for Windows VMs */}
+                  {(esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix') && vcenterPreflight?.checked && !vcenterPreflight.virtioWinInstalled && esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && (
+                    <Alert severity="warning" sx={{ fontSize: 11 }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
+                      virtio-win drivers not found on the target node. Windows VMs will boot without optimized disk and network drivers. Download the ISO and place it at <code>/usr/share/virtio-win/virtio-win.iso</code> on the Proxmox node.
+                    </Alert>
+                  )}
+
+                  {/* Temporary storage for virt-v2v */}
+                  {(esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix') && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
+                    <Box>
+                      <TextField
+                        select
+                        fullWidth
+                        size="small"
+                        label="Temporary Storage"
+                        value={migTempStorage}
+                        onChange={(e) => setMigTempStorage(e.target.value)}
+                        helperText={(() => {
+                          const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
+                          const vmDiskBytes = esxiMigrateVm?.committed || 0
+                          const requiredBytes = vmDiskBytes * 2 // source + converted
+                          if (!sel) return 'Select where virt-v2v writes temporary files during conversion'
+                          const availGB = (sel.availableBytes / 1073741824).toFixed(1)
+                          const reqGB = (requiredBytes / 1073741824).toFixed(1)
+                          if (sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required`
+                          return `${availGB} GB available (${sel.filesystem})`
+                        })()}
+                        error={(() => {
+                          const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
+                          const vmDiskBytes = esxiMigrateVm?.committed || 0
+                          return sel ? sel.availableBytes < vmDiskBytes * 2 : false
+                        })()}
+                      >
+                        {vcenterPreflight.tempStorages.map(s => {
+                          const usedPct = Math.round(((s.totalBytes - s.availableBytes) / s.totalBytes) * 100)
+                          const availGB = (s.availableBytes / 1073741824).toFixed(1)
+                          const totalGB = (s.totalBytes / 1073741824).toFixed(1)
+                          return (
+                            <MenuItem key={s.path} value={s.path}>
+                              <Box sx={{ width: '100%' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                  <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                                  <Typography variant="body2" sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>{s.path}</Typography>
+                                  <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>
+                                    {availGB} / {totalGB} GB free
+                                  </Typography>
+                                </Box>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={usedPct}
+                                  sx={{
+                                    height: 4,
+                                    borderRadius: 2,
+                                    bgcolor: 'action.hover',
+                                    '& .MuiLinearProgress-bar': {
+                                      bgcolor: usedPct > 90 ? 'error.main' : usedPct > 70 ? 'warning.main' : 'success.main',
+                                      borderRadius: 2,
+                                    }
+                                  }}
+                                />
+                              </Box>
+                            </MenuItem>
+                          )
+                        })}
+                      </TextField>
+                    </Box>
+                  )}
+
+                  {/* Disk paths for Hyper-V */}
                   {esxiMigrateVm?.hostType === 'hyperv' && (
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="VHDX Disk Paths"
-                      value={migDiskPaths}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMigDiskPaths(e.target.value)}
-                      multiline
-                      rows={3}
-                      placeholder={"/mnt/nfs/vm-disk1.vhdx\n/mnt/nfs/vm-disk2.vhdx"}
-                      helperText="One path per line. Paths must be accessible from the target Proxmox node (e.g. NFS mount)."
-                      slotProps={{ input: { sx: { fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem' } } }}
-                    />
+                    <Box>
+                      <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>VHDX Disks</Typography>
+                      {esxiMigrateVm.diskPaths && esxiMigrateVm.diskPaths.length > 0 ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          {esxiMigrateVm.diskPaths.map((disk: string) => {
+                            const fileName = disk.split('\\').pop() || disk.split('/').pop() || disk
+                            return (
+                              <Box key={disk} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 0.75, borderRadius: 1, bgcolor: 'action.hover' }}>
+                                <i className="ri-checkbox-circle-fill" style={{ fontSize: 16, color: theme.palette.success.main }} />
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, wordBreak: 'break-all' }}>
+                                    /mnt/hyperv/{fileName}
+                                  </Typography>
+                                  <Typography variant="caption" sx={{ opacity: 0.4, fontSize: 10 }}>
+                                    {disk}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            )
+                          })}
+                          <Typography variant="caption" sx={{ opacity: 0.5, mt: 0.25 }}>
+                            SMB share will be mounted automatically during migration
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="VHDX Disk Paths"
+                          value={migDiskPaths}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMigDiskPaths(e.target.value)}
+                          multiline
+                          rows={3}
+                          placeholder={"/mnt/hyperv/vm-disk1.vhdx"}
+                          helperText="One path per line. SMB share will be mounted automatically."
+                          slotProps={{ input: { sx: { fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem' } } }}
+                        />
+                      )}
+                    </Box>
                   )}
 
                   <FormControlLabel
@@ -6254,7 +6367,7 @@ return
                   {esxiMigrateVm?.hostType === 'nutanix'
                     ? 'Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.'
                     : esxiMigrateVm?.hostType === 'hyperv'
-                    ? 'Cold migration only. Export VMs as VHDX to an NFS share accessible from the Proxmox node, then provide the disk paths.'
+                    ? 'Cold migration only. Mount your Hyper-V share at /mnt/hyperv/ on the target Proxmox node. Disks are detected automatically.'
                     : esxiMigrateVm?.hostType === 'vcenter'
                     ? 'Cold migration only. virt-v2v will handle disk conversion and virtio driver injection automatically.'
                     : migType === 'cold' ? t('inventoryPage.esxiMigration.coldMigrationInfo')
@@ -6279,8 +6392,8 @@ return
                   transition: 'border-color 0.3s',
                 }}>
                   {esxiMigrateVm?.hostType === 'hyperv'
-                    ? <i className="ri-microsoft-line" style={{ fontSize: 28, color: '#0078d4', opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
-                    : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt={esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : 'VMware'} width={28} height={28} style={{ opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
+                    ? <img src="/images/hyperv-logo.svg" alt="" width={28} height={28} style={{ opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
+                    : <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt={esxiMigrateVm?.hostType === 'xcpng' ? 'XCP-ng' : 'VMware'} width={28} height={28} style={{ opacity: migJob.status === 'completed' ? 0.4 : 1 }} />
                   }
                 </Box>
 
@@ -6414,7 +6527,7 @@ return
               <Button onClick={() => setEsxiMigrateVm(null)} disabled={migStarting}>{t('common.cancel')}</Button>
               <Button
                 variant="outlined"
-                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || migStarting || ((esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix') ? (vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled) : ((migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot'))))}
+                disabled={!migTargetConn || !migTargetNode || !migTargetStorage || migStarting || ((esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix') ? ((vcenterPreflight?.checked && !vcenterPreflight.virtV2vInstalled) || !migTempStorage || (() => { const sel = vcenterPreflight?.tempStorages?.find(s => s.path === migTempStorage); return sel ? sel.availableBytes < (esxiMigrateVm?.committed || 0) * 2 : true })()) : ((migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) || (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot'))))}
                 sx={{ textTransform: 'none' }}
                 startIcon={migStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
                 onClick={async () => {
@@ -6435,6 +6548,9 @@ return
                         migrationType: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'cold' : migType,
                         transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
                         startAfterMigration: migStartAfter,
+                        ...((esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') && migTempStorage !== '/tmp' && {
+                          tempStorage: migTempStorage,
+                        }),
                         ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
                           diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
                         }),
@@ -6524,8 +6640,8 @@ return
       <Dialog open={bulkMigOpen} onClose={() => { if (!bulkMigStarting && bulkMigJobs.length === 0) setBulkMigOpen(false) }} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {bulkMigHostInfo?.hostType === 'hyperv'
-            ? <i className="ri-microsoft-line" style={{ fontSize: 22, color: '#0078d4' }} />
-            : <img src={bulkMigHostInfo?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
+            ? <img src="/images/hyperv-logo.svg" alt="" width={22} height={22} />
+            : <img src={bulkMigHostInfo?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : bulkMigHostInfo?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           }
           {t('inventoryPage.esxiMigration.bulkMigration')} ({bulkMigSelected.size} VMs)
         </DialogTitle>
@@ -6818,7 +6934,7 @@ return
                 )}
                 {bulkMigHostInfo?.hostType === 'hyperv' && (
                   <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-information-line" style={{ fontSize: 18 }} />}>
-                    Cold migration only. Export VMs as VHDX to an NFS share accessible from the Proxmox node, then provide the disk paths.
+                    Cold migration only. Mount your Hyper-V share at /mnt/hyperv/ on the target Proxmox node. Disks are detected automatically.
                   </Alert>
                 )}
                 {bulkMigHostInfo?.hostType === 'nutanix' && (
@@ -6855,7 +6971,7 @@ return
                               body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode }),
                             })
                             const d2 = await r2.json()
-                            setVcenterPreflight({ checked: true, ok: !d2.errors?.length, installing: false, errors: d2.errors || [], virtV2vInstalled: d2.virtV2vInstalled ?? false })
+                            setVcenterPreflight({ checked: true, ok: !d2.errors?.length, installing: false, errors: d2.errors || [], virtV2vInstalled: d2.virtV2vInstalled ?? false, virtioWinInstalled: d2.virtioWinInstalled ?? false, detectedDisks: d2.detectedDisks || [], tempStorages: d2.tempStorages || [] })
                           } catch {
                             setVcenterPreflight(prev => prev ? { ...prev, installing: false } : prev)
                           }
@@ -6866,7 +6982,7 @@ return
                       </Button>
                     }
                   >
-                    virt-v2v is not installed on the target node. It is required for vCenter and Hyper-V migrations.
+                    virt-v2v is not installed on the target node. It is required for migrations.
                   </Alert>
                 )}
 
@@ -7148,7 +7264,7 @@ return
           </Typography>
           <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 1.5 }}>
-              <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={24} height={24} />
+              <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={24} height={24} />
               <i className="ri-arrow-right-line" style={{ fontSize: 20, opacity: 0.4 }} />
               <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={24} height={24} />
             </Box>

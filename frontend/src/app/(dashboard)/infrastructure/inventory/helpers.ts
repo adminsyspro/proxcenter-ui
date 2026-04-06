@@ -1327,7 +1327,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
   // External hypervisor type category (VMware ESXi, XCP-ng)
   if (sel.type === 'ext-type') {
     const hypervisorType = sel.id // 'vmware' or 'xcpng'
-    const label = hypervisorType === 'vmware' ? 'VMware ESXi' : hypervisorType === 'xcpng' ? 'XCP-ng' : hypervisorType === 'nutanix' ? 'Nutanix AHV' : hypervisorType.toUpperCase()
+    const label = hypervisorType === 'vmware' ? 'VMware ESXi' : hypervisorType === 'xcpng' ? 'XCP-ng' : hypervisorType === 'nutanix' ? 'Nutanix AHV' : hypervisorType === 'hyperv' ? 'Microsoft Hyper-V' : hypervisorType.toUpperCase()
     const apiPrefix = hypervisorType === 'xcpng' ? 'xcpng' : hypervisorType === 'nutanix' ? 'nutanix' : 'vmware'
 
     // Fetch all connections of this type
@@ -1446,7 +1446,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const connTypeR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' }).catch(() => null)
     const connTypeData = connTypeR?.ok ? await connTypeR.json().catch(() => ({})) : {}
     const connType = connTypeData?.data?.type || connTypeData?.type || 'vmware'
-    const apiPrefix = connType === 'xcpng' ? 'xcpng' : connType === 'nutanix' ? 'nutanix' : 'vmware'
+    const apiPrefix = connType === 'xcpng' ? 'xcpng' : connType === 'nutanix' ? 'nutanix' : connType === 'hyperv' ? 'hyperv' : 'vmware'
 
     const [vmR, statusR] = await Promise.all([
       fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store' }),
@@ -1476,7 +1476,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const provisionedGB = vm.provisioned ? (vm.provisioned / 1073741824).toFixed(1) : '0'
 
     return {
-      kindLabel: connType === 'xcpng' ? 'XCP-NG VM' : connType === 'nutanix' ? 'NUTANIX VM' : 'VMWARE VM',
+      kindLabel: connType === 'xcpng' ? '' : connType === 'nutanix' ? '' : connType === 'hyperv' ? '' : '',
       title: vm.name || vmid,
       subtitle: vm.guestOS || '',
       breadcrumb: ['Infrastructure', 'Inventaire', vm.connectionName || '', vm.name || vmid],

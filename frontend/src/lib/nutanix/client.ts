@@ -40,6 +40,7 @@ export interface NutanixDisk {
   sizeBytes: number
   storageContainerUuid?: string
   deviceBus: string // "SCSI", "IDE", "SATA"
+  volumeGroupUuid?: string // Set when disk is from a Volume Group
 }
 
 export class NutanixClient {
@@ -178,28 +179,57 @@ export class NutanixClient {
 
   /**
    * List disks attached to a VM.
-   * Falls back to reading disk_list from the VM detail endpoint
-   * if the dedicated disk_list endpoint is unavailable.
+   * Checks both direct disk_list on the VM AND Volume Groups attached to the VM.
    */
   async listDisks(vmUuid: string): Promise<NutanixDisk[]> {
-    // Try the dedicated disk_list endpoint first
+    const disks: NutanixDisk[] = []
+
+    // Get VM details to inspect disk_list
+    let vmDiskList: any[] = []
     try {
-      const data = await this.get<any>(`/vms/${vmUuid}/disk_list`)
-      const diskList: any[] = data.entities || data.disk_list || data || []
-      if (Array.isArray(diskList) && diskList.length > 0) {
-        return diskList.map((d: any, i: number) => this.parseDisk(d, i))
-      }
-    } catch {
-      // Fallback: extract disk_list from VM detail
+      const vm = await this.get<any>(`/vms/${vmUuid}`)
+      vmDiskList = vm.status?.resources?.disk_list || vm.spec?.resources?.disk_list || []
+    } catch {}
+
+    // Pre-fetch Volume Groups (needed if any disk is type VOLUME_GROUP)
+    let vgMap = new Map<string, any>() // vgUuid -> vg entity
+    const hasVgDisks = vmDiskList.some((d: any) => d.device_properties?.device_type === "VOLUME_GROUP")
+    if (hasVgDisks) {
+      try {
+        const vgData = await this.post<any>("/volume_groups/list", { kind: "volume_group", length: 100 })
+        for (const vg of (vgData.entities || [])) {
+          vgMap.set(vg.metadata?.uuid, vg)
+        }
+      } catch {}
     }
 
-    // Fallback: get VM details and extract disk_list from resources
-    const vm = await this.get<any>(`/vms/${vmUuid}`)
-    const diskList: any[] = vm.status?.resources?.disk_list || vm.spec?.resources?.disk_list || []
+    for (const disk of vmDiskList) {
+      const deviceType = disk.device_properties?.device_type
+      if (deviceType === "CDROM") continue
 
-    return diskList
-      .filter((d: any) => d.device_properties?.device_type !== "CDROM")
-      .map((d: any, i: number) => this.parseDisk(d, i))
+      if (deviceType === "VOLUME_GROUP" && disk.volume_group_reference?.uuid) {
+        // Resolve actual disks from the Volume Group
+        const vg = vgMap.get(disk.volume_group_reference.uuid)
+        if (vg) {
+          const vgDisks: any[] = vg.status?.resources?.disk_list || vg.spec?.resources?.disk_list || []
+          for (const vgDisk of vgDisks) {
+            disks.push({
+              uuid: vgDisk.uuid || "",
+              deviceIndex: vgDisk.index ?? disks.length,
+              sizeBytes: vgDisk.disk_size_bytes || (vgDisk.disk_size_mib ? vgDisk.disk_size_mib * 1048576 : 0),
+              storageContainerUuid: vgDisk.storage_container_uuid || undefined,
+              deviceBus: "SCSI",
+              volumeGroupUuid: vg.metadata?.uuid,
+            })
+          }
+        }
+      } else {
+        // Direct disk (not VG, not CDROM)
+        disks.push(this.parseDisk(disk, disks.length))
+      }
+    }
+
+    return disks
   }
 
   /**
@@ -223,8 +253,10 @@ export class NutanixClient {
   async createDiskImage(
     vmUuid: string,
     diskUuid: string,
-    imageName: string
+    imageName: string,
+    _isVolumeGroupDisk?: boolean
   ): Promise<{ imageUuid: string; taskUuid: string }> {
+    console.log(`[nutanix] createDiskImage: vmUuid=${vmUuid}, diskUuid=${diskUuid}, imageName=${imageName}`)
     const body = {
       spec: {
         name: imageName,
@@ -234,9 +266,7 @@ export class NutanixClient {
             kind: "vm_disk",
             uuid: diskUuid,
           },
-          source_uri: undefined as undefined,
         },
-        description: `ProxCenter migration export from VM ${vmUuid}`,
       },
       metadata: {
         kind: "image",
@@ -362,8 +392,15 @@ export class NutanixClient {
     const props = disk.device_properties || {}
     const diskAddress = props.disk_address || {}
 
+    // The UUID for image creation must be the data_source_reference UUID (vmdisk UUID),
+    // not the disk entry UUID or device_uuid
+    const vmdiskUuid = disk.data_source_reference?.uuid
+      || disk.uuid
+      || diskAddress.device_uuid
+      || ""
+
     return {
-      uuid: disk.uuid || diskAddress.device_uuid || "",
+      uuid: vmdiskUuid,
       deviceIndex: diskAddress.device_index ?? fallbackIndex,
       sizeBytes: disk.disk_size_bytes || (disk.disk_size_mib ? disk.disk_size_mib * 1048576 : 0),
       storageContainerUuid: disk.storage_config?.storage_container_reference?.uuid || undefined,

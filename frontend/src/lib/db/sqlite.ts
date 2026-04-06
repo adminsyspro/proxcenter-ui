@@ -89,6 +89,7 @@ export function getDb() {
     ['Connection', 'tags', 'TEXT'],
     ['Connection', 'sub_type', 'TEXT'],
     ['Connection', 'vmware_datacenter', 'TEXT'],
+    ['Connection', 'hyperv_share_name', 'TEXT'],
     ['ManagedHost', 'tags', 'TEXT'],
     ['custom_images', 'tags', 'TEXT'],
     ['blueprints', 'tags', 'TEXT'],

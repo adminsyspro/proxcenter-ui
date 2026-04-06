@@ -47,6 +47,7 @@ export type ConnectionFormData = {
   vmwareUser: string
   vmwarePassword: string
   vmwareDatacenter: string
+  hypervShareName: string
   // Location fields
   latitude: string
   longitude: string
@@ -86,6 +87,7 @@ const defaultFormData: ConnectionFormData = {
   vmwareUser: 'root',
   vmwarePassword: '',
   vmwareDatacenter: '',
+  hypervShareName: 'VMs',
   latitude: '',
   longitude: '',
   locationLabel: '',
@@ -142,6 +144,7 @@ export default function ConnectionDialog({
           // VMware sub-type
           subType: (initialData as any).subType || '',
           vmwareDatacenter: (initialData as any).vmwareDatacenter || '',
+          hypervShareName: (initialData as any).hypervShareName || 'VMs',
           // Location: convert numbers to strings for text fields
           latitude: initialData.latitude != null ? String(initialData.latitude) : '',
           longitude: initialData.longitude != null ? String(initialData.longitude) : '',
@@ -366,9 +369,9 @@ export default function ConnectionDialog({
 
         {isHyperv && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            Enter the Hyper-V server hostname or IP. WinRM must be enabled on the server. Run these commands in PowerShell as Administrator:
-            <Box component="pre" sx={{ mt: 1, mb: 0, p: 1, bgcolor: 'action.hover', borderRadius: 1, fontSize: 11, overflow: 'auto' }}>
-              {`Enable-PSRemoting -Force\nSet-Item -Path WSMan:\\localhost\\Service\\Auth\\Basic -Value $true\nSet-Item -Path WSMan:\\localhost\\Service\\AllowUnencrypted -Value $true`}
+            Run these commands in PowerShell as Administrator on the Hyper-V server:
+            <Box component="pre" sx={{ mt: 1, mb: 0, p: 1, bgcolor: 'action.hover', borderRadius: 1, fontSize: 11, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+              {`# Enable WinRM remote management\nEnable-PSRemoting -Force\nSet-Item -Path WSMan:\\localhost\\Service\\Auth\\Basic -Value $true\nSet-Item -Path WSMan:\\localhost\\Service\\AllowUnencrypted -Value $true\n\n# Share the VM disks folder (works in any language)\n$everyone = New-Object Security.Principal.SecurityIdentifier("S-1-1-0")\n$account = $everyone.Translate([Security.Principal.NTAccount]).Value\nNew-SmbShare -Name "${form.hypervShareName || 'VMs'}" -Path "C:\\Path\\To\\Your\\VMs" -FullAccess $account`}
             </Box>
           </Alert>
         )}
@@ -509,7 +512,7 @@ export default function ConnectionDialog({
               value={form.vmwarePassword}
               onChange={e => handleChange('vmwarePassword', e.target.value)}
               type={showPassword ? 'text' : 'password'}
-              helperText={isEdit ? t('settings.vmwarePasswordHelperEdit') : (isHyperv ? 'Hyper-V administrator password' : isXcpng ? t('settings.xcpngPasswordHelper') : t('settings.vmwarePasswordHelper'))}
+              helperText={isEdit ? t('settings.vmwarePasswordHelperEdit') : (isHyperv ? 'Hyper-V administrator password' : isNutanix ? 'Nutanix Prism password' : isXcpng ? t('settings.xcpngPasswordHelper') : t('settings.vmwarePasswordHelper'))}
               sx={{ mt: 1.5 }}
               required={!isEdit}
               slotProps={{
@@ -524,6 +527,18 @@ export default function ConnectionDialog({
                 }
               }}
             />
+            {isHyperv && (
+              <TextField
+                fullWidth
+                size="small"
+                label="SMB Share Name"
+                value={form.hypervShareName}
+                onChange={e => setForm(f => ({ ...f, hypervShareName: e.target.value }))}
+                placeholder="VMs"
+                helperText="Name of the shared folder on the Hyper-V server containing VHDX files (New-SmbShare -Name 'VMs' -Path 'D:\VMs')"
+                sx={{ mt: 1.5 }}
+              />
+            )}
           </>
         ) : (
           <>

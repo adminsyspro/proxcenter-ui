@@ -8,20 +8,19 @@ import { HyperVClient } from "@/lib/hyperv/client"
 export const runtime = "nodejs"
 
 /**
- * GET /api/v1/hyperv/[id]/status
- * Test Hyper-V host connectivity via WinRM.
- * Returns hostname, Windows version, and connection status.
+ * GET /api/v1/hyperv/[id]/vms/[vmid]
+ * Get a single VM detail from a Hyper-V host via WinRM.
  */
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string; vmid: string }> }
 ) {
   try {
+    const { id, vmid } = await params
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
-    const { id } = await params
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
@@ -40,36 +39,25 @@ export async function GET(
     const useSSL = conn.insecureTLS ? false : conn.baseUrl.startsWith("https")
 
     const client = new HyperVClient({ host, username, password, useSSL })
+    const vm = await client.getVM(vmid)
 
-    try {
-      const { hostname, version } = await client.testConnection()
-
-      return NextResponse.json({
-        data: {
-          connected: true,
-          status: 'online',
-          type: 'hyperv',
-          name: conn.name,
-          host: conn.baseUrl,
-          hostname,
-          version,
-        }
-      })
-    } catch (connErr: any) {
-      const msg = connErr?.message || String(connErr)
-
-      if (msg.includes("401") || msg.includes("Unauthorized") || msg.includes("credentials")) {
-        return NextResponse.json({
-          data: { status: 'auth_error', host: conn.baseUrl, warning: 'Invalid credentials or Basic auth not enabled on WinRM' }
-        })
+    return NextResponse.json({
+      data: {
+        vmid: vm.vmId,
+        name: vm.name,
+        status: vm.state === 'Running' ? 'running' : vm.state === 'Paused' ? 'suspended' : 'stopped',
+        powerState: vm.state,
+        numCPU: vm.cpuCount,
+        memoryMB: vm.memoryMB,
+        committed: vm.diskSizeBytes,
+        guestOS: `Hyper-V Gen ${vm.generation}`,
+        firmware: vm.generation === 2 ? 'efi' : 'bios',
+        diskPaths: vm.diskPaths,
+        connectionId: conn.id,
+        connectionName: conn.name,
       }
-
-      return NextResponse.json({ error: `Hyper-V host unreachable: ${msg}` }, { status: 502 })
-    }
+    })
   } catch (e: any) {
-    if (e.name === 'AbortError') {
-      return NextResponse.json({ error: "Connection timeout" }, { status: 504 })
-    }
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

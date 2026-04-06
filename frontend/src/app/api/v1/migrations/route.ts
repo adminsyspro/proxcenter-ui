@@ -93,12 +93,12 @@ export async function POST(req: Request) {
     const tenantId = await getCurrentTenantId()
     after(async () => {
       if (effectiveSourceType === "vcenter" || effectiveSourceType === "hyperv" || effectiveSourceType === "nutanix") {
-        const { sourceVmName = "", vcenterDatacenter, vcenterHost, diskPaths } = body
+        const { sourceVmName = "", vcenterDatacenter, vcenterHost, diskPaths, tempStorage } = body
         await runV2vMigrationPipeline(job.id, {
           sourceConnectionId, sourceVmId, sourceVmName,
           sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
           targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration,
-          vcenterDatacenter, vcenterHost, diskPaths,
+          vcenterDatacenter, vcenterHost, diskPaths, tempStorage,
         }, tenantId)
       } else if (effectiveSourceType === "xcpng") {
         await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: (migrationType === "sshfs_boot" ? "cold" : migrationType) as "cold" | "live" }, tenantId)

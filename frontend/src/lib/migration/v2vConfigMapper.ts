@@ -24,6 +24,7 @@ export interface V2vVmConfig {
  */
 function sanitizeName(raw: string): string {
   let name = raw
+    .replace(/\.(vhdx|vhd|vmdk|qcow2|raw|img|vdi)$/i, '') // strip disk extensions
     .replace(/[^a-zA-Z0-9.\-]/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^[.\-]+|[.\-]+$/g, '')

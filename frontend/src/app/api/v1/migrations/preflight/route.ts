@@ -14,6 +14,8 @@ export async function POST(req: Request) {
     targetNode?: string
     requiredDiskBytes?: number
     action?: string
+    vmName?: string
+    sourceType?: string
   }
 
   try {
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { targetConnectionId, targetNode, requiredDiskBytes, action } = body
+  const { targetConnectionId, targetNode, requiredDiskBytes, action, vmName, sourceType } = body
 
   if (!targetConnectionId || !targetNode) {
     return NextResponse.json(
@@ -40,7 +42,9 @@ export async function POST(req: Request) {
     const result = await runV2vPreflight(
       targetConnectionId,
       targetNode,
-      requiredDiskBytes ?? 0
+      requiredDiskBytes ?? 0,
+      vmName,
+      sourceType
     )
     return NextResponse.json(result)
   } catch (err: unknown) {

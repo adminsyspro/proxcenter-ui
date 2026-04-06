@@ -19,6 +19,7 @@ model Connection {
   type        String  @default("pve")
   subType          String? @map("sub_type")
   vmwareDatacenter String? @map("vmware_datacenter")
+  hypervShareName  String? @map("hyperv_share_name")
   baseUrl      String
   behindProxy  Boolean @default(false)
   insecureTLS  Boolean @default(false)

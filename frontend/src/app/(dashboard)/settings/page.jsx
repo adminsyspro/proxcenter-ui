@@ -364,6 +364,8 @@ function ConnectionsTab() {
       // VMware sub-type and datacenter
       ...(addConnType === 'vmware' && { subType: formData.subType || 'esxi' }),
       ...(addConnType === 'vmware' && formData.vmwareDatacenter?.trim() && { vmwareDatacenter: formData.vmwareDatacenter.trim() }),
+      // Hyper-V SMB share name
+      ...(addConnType === 'hyperv' && { hypervShareName: formData.hypervShareName?.trim() || 'VMs' }),
       // SSH fields (PVE + VMware — not XCP-ng)
       ...(addConnType !== 'xcpng' && addConnType !== 'hyperv' && addConnType !== 'nutanix' && {
         sshEnabled: formData.sshEnabled,

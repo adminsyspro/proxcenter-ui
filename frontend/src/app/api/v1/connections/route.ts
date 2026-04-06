@@ -104,7 +104,7 @@ export async function POST(req: Request) {
 
     const {
       name, type, baseUrl, behindProxy, insecureTLS, hasCeph, apiToken,
-      subType, vmwareUser, vmwarePassword, vmwareDatacenter,
+      subType, vmwareUser, vmwarePassword, vmwareDatacenter, hypervShareName,
       latitude, longitude, locationLabel,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
       sshKey, sshPassphrase, sshPassword, sshUseSudo,
@@ -130,6 +130,9 @@ export async function POST(req: Request) {
       if (type === 'vmware') {
         data.subType = subType || 'esxi'
         data.vmwareDatacenter = vmwareDatacenter || null
+      }
+      if (type === 'hyperv') {
+        data.hypervShareName = hypervShareName || 'VMs'
       }
       if (type === 'xcpng' || type === 'hyperv' || type === 'nutanix') {
         data.sshEnabled = false

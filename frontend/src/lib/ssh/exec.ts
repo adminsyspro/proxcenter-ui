@@ -27,7 +27,8 @@ export interface SSHResult {
 export async function executeSSH(
   connectionId: string,
   nodeIp: string,
-  command: string
+  command: string,
+  timeoutMs: number = 30_000
 ): Promise<SSHResult> {
   const prisma = await getSessionPrisma()
   const connection = await prisma.connection.findUnique({

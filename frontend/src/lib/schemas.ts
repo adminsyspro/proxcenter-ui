@@ -24,6 +24,9 @@ export const createConnectionSchema = z.object({
   vmwarePassword: z.string().optional().default(''),
   vmwareDatacenter: z.string().transform(s => s.trim()).optional().default(''),
 
+  // Hyper-V fields
+  hypervShareName: z.string().transform(s => s.trim()).optional().default('VMs'),
+
   // SSH fields
   sshEnabled: z.boolean().default(false),
   sshPort: z.number().int().min(1).max(65535).default(22),

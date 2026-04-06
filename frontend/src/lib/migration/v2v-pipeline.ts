@@ -40,6 +40,7 @@ export interface V2vMigrationConfig {
   vcenterDatacenter?: string
   vcenterHost?: string
   diskPaths?: string[]  // For Nutanix/Hyper-V disk-based mode
+  tempStorage?: string  // Custom temp directory for virt-v2v output (default: /tmp)
 }
 
 interface LogEntry {
@@ -113,8 +114,9 @@ function buildV2vCommand(
   username: string,
   host: string,
 ): string {
-  const outputDir = `/tmp/v2v-${jobId}`
-  const pwFile = `/tmp/v2v-pwfile-${jobId}`
+  const tempBase = config.tempStorage || '/tmp'
+  const outputDir = `${tempBase}/v2v-${jobId}`
+  const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
   const vmNameEsc = shellEscape(config.sourceVmName)
 
   let v2vCmd: string
@@ -162,7 +164,7 @@ function buildV2vCommand(
 /**
  * Parse virt-v2v output lines and update job progress.
  */
-async function processV2vOutput(jobId: string, output: string): Promise<void> {
+async function processV2vOutput(jobId: string, output: string, progressOffset: number = 0, progressScale: number = 100): Promise<void> {
   const lines = output.split("\n")
   for (const line of lines) {
     const trimmed = line.trim()
@@ -170,8 +172,10 @@ async function processV2vOutput(jobId: string, output: string): Promise<void> {
 
     const progress = parseV2vLine(trimmed)
     if (progress) {
-      const overall = calculateOverallProgress(progress)
-      await updateJob(jobId, "transferring", { progress: overall })
+      const v2vPct = calculateOverallProgress(progress)
+      // Scale to the allocated progress range: offset + (v2vPct / 100) * scale
+      const globalPct = Math.round(progressOffset + (v2vPct / 100) * progressScale)
+      await updateJob(jobId, "transferring", { progress: Math.min(globalPct, 100) })
     }
   }
 }
@@ -189,9 +193,11 @@ export async function runV2vMigrationPipeline(
   jobPrisma.set(jobId, prisma)
 
   let targetVmid: number | null = null
-  const outputDir = `/tmp/v2v-${jobId}`
-  const pwFile = `/tmp/v2v-pwfile-${jobId}`
+  const tempBase = config.tempStorage || '/tmp'
+  const outputDir = `${tempBase}/v2v-${jobId}`
+  const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
   let nutanixImageUuids: string[] = []  // Track Nutanix images for cleanup
+  let hypervMounted = false  // Track CIFS mount for cleanup
 
   try {
     // ── PHASE 1: Preflight ──
@@ -209,6 +215,62 @@ export async function runV2vMigrationPipeline(
       throw new Error("virt-v2v is not installed on the target node. Install it with: apt-get install virt-v2v")
     }
     await appendLog(jobId, "virt-v2v is available on target node", "success")
+
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+
+    // ── PHASE 1.5: Auto-mount Hyper-V SMB share ──
+    if (config.sourceType === "hyperv") {
+      const sourceConn = await prisma.connection.findUnique({
+        where: { id: config.sourceConnectionId },
+        select: { baseUrl: true, apiTokenEnc: true, hypervShareName: true },
+      })
+      if (sourceConn?.apiTokenEnc) {
+        const creds = decryptSecret(sourceConn.apiTokenEnc)
+        const colonIdx = creds.indexOf(":")
+        const smbUser = colonIdx > 0 ? creds.substring(0, colonIdx) : "Administrator"
+        const smbPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
+        const smbHost = (sourceConn.baseUrl || "").replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").replace(/\/.*$/, "")
+        const shareName = (sourceConn as any).hypervShareName || "VMs"
+
+        // Check if already mounted
+        const mountCheck = await executeSSH(config.targetConnectionId, nodeIp, "mountpoint -q /mnt/hyperv && echo mounted || echo not_mounted")
+        if (mountCheck.output?.trim() !== "mounted") {
+          await appendLog(jobId, `Mounting Hyper-V SMB share //${smbHost}/${shareName}...`)
+
+          // Ensure cifs-utils is installed
+          const cifsCheck = await executeSSH(config.targetConnectionId, nodeIp, "which mount.cifs")
+          if (!cifsCheck.success || !cifsCheck.output?.trim()) {
+            await appendLog(jobId, "Installing cifs-utils...")
+            await executeSSH(config.targetConnectionId, nodeIp, "apt-get update -qq && apt-get install -y cifs-utils")
+          }
+
+          // Mount the share
+          const mountCmd = `mkdir -p /mnt/hyperv && mount -t cifs //${shellEscape(smbHost)}/${shellEscape(shareName)} /mnt/hyperv -o username=${shellEscape(smbUser)},password=${shellEscape(smbPass)},file_mode=0777,dir_mode=0777`
+          const mountResult = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
+          if (!mountResult.success) {
+            throw new Error(`Failed to mount Hyper-V share: ${mountResult.error || mountResult.output}`)
+          }
+          hypervMounted = true
+          await appendLog(jobId, "Hyper-V SMB share mounted at /mnt/hyperv", "success")
+        } else {
+          await appendLog(jobId, "Hyper-V SMB share already mounted at /mnt/hyperv")
+        }
+
+        // Auto-detect disk paths if not provided
+        if (!config.diskPaths || config.diskPaths.length === 0) {
+          const vmName = config.sourceVmName.replace(/[^a-zA-Z0-9._-]/g, "*")
+          const findResult = await executeSSH(config.targetConnectionId, nodeIp,
+            `find /mnt/hyperv -iname "*${vmName}*" \\( -iname "*.vhdx" -o -iname "*.vhd" \\) 2>/dev/null || true`)
+          const detected = (findResult.output || "").split("\n").map(l => l.trim()).filter(l => l && l.startsWith("/"))
+          if (detected.length > 0) {
+            config.diskPaths = detected
+            await appendLog(jobId, `Auto-detected ${detected.length} disk(s): ${detected.join(", ")}`)
+          } else {
+            throw new Error("No VHDX/VHD files found for this VM in /mnt/hyperv/. Ensure the Hyper-V SMB share contains the VM disks.")
+          }
+        }
+      }
+    }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
@@ -289,10 +351,10 @@ export async function runV2vMigrationPipeline(
       if (disks.length === 0) {
         throw new Error("No disks found on Nutanix VM")
       }
-      await appendLog(jobId, `Found ${disks.length} disk(s) to download`)
+      await appendLog(jobId, `Found ${disks.length} disk(s) to download: ${disks.map(d => `${d.uuid} (${d.volumeGroupUuid ? 'VG' : 'direct'}, ${(d.sizeBytes / 1073741824).toFixed(1)} GB)`).join(', ')}`)
 
       // Prepare download directory on target node
-      const downloadDir = `/tmp/nutanix-${jobId}`
+      const downloadDir = `${tempBase}/nutanix-${jobId}`
       await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(downloadDir)}`)
 
       const diskPaths: string[] = []
@@ -308,7 +370,8 @@ export async function runV2vMigrationPipeline(
         const { imageUuid, taskUuid } = await ntxClient.createDiskImage(
           config.sourceVmId,
           disk.uuid,
-          imageName
+          imageName,
+          !!disk.volumeGroupUuid
         )
         nutanixImageUuids.push(imageUuid)
 
@@ -325,21 +388,82 @@ export async function runV2vMigrationPipeline(
         const diskPath = `${downloadDir}/disk-${i}.raw`
         const insecureFlag = sourceConn.insecureTLS ? "-k" : ""
 
-        const curlCmd = `curl -s ${insecureFlag} -H ${shellEscape(`Authorization: ${authHeader}`)} -o ${shellEscape(diskPath)} ${shellEscape(downloadUrl)}`
-        await appendLog(jobId, `Downloading disk ${i} to ${diskPath}...`)
+        // Launch curl in background via nohup
+        // Credentials stored in a curl config file (chmod 600), deleted after download
+        const pidFile = `${downloadDir}/curl-${i}.pid`
+        const curlCfg = `${downloadDir}/.curlcfg-${i}`
+        await appendLog(jobId, `Downloading disk ${i} to ${diskPath} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
-        const dlResult = await executeSSH(config.targetConnectionId, nodeIp, curlCmd)
-        if (!dlResult.success) {
-          throw new Error(`Failed to download disk ${i}: ${dlResult.error || dlResult.output?.substring(0, 500)}`)
+        // Write curl config file with auth header (restricted permissions)
+        const cfgContent = `header = "Authorization: ${authHeader}"\noutput = "${diskPath}"\nurl = "${downloadUrl}"\nsilent\n${sourceConn.insecureTLS ? "insecure" : ""}`
+        const writeCfg = await executeSSH(config.targetConnectionId, nodeIp,
+          `printf '%s' ${shellEscape(cfgContent)} > ${shellEscape(curlCfg)} && chmod 600 ${shellEscape(curlCfg)}`)
+        if (!writeCfg.success) {
+          throw new Error(`Failed to write curl config: ${writeCfg.error}`)
         }
 
-        // Verify file was downloaded
+        // Launch curl in background, delete config file after completion
+        const launchResult = await executeSSH(config.targetConnectionId, nodeIp,
+          `nohup bash -c "curl -K ${shellEscape(curlCfg)} && rm -f ${shellEscape(curlCfg)} && echo done > ${shellEscape(diskPath)}.complete" > /dev/null 2>&1 & echo $! > ${shellEscape(pidFile)}`)
+        if (!launchResult.success) {
+          throw new Error(`Failed to start disk ${i} download: ${launchResult.error}`)
+        }
+
+        // Poll download progress until complete
+        const expectedSize = disk.sizeBytes
+        let lastLoggedPct = -1
+        let lastSize = 0
+        let stallCount = 0
+        const maxStallChecks = 60 // 60 * 5s = 5 minutes without progress = stalled
+        while (true) {
+          if (isCancelled(jobId)) throw new Error("Migration cancelled")
+          await new Promise(r => setTimeout(r, 5000))
+
+          // Check if download completed
+          const completeCheck = await executeSSH(config.targetConnectionId, nodeIp,
+            `test -f ${shellEscape(diskPath)}.complete && echo yes || echo no`)
+          if (completeCheck.output?.trim() === "yes") break
+
+          // Check file size progress
+          const statResult = await executeSSH(config.targetConnectionId, nodeIp,
+            `stat -c '%s' ${shellEscape(diskPath)} 2>/dev/null || echo 0`)
+          const currentSize = Number(statResult.output?.trim() || "0")
+
+          // Detect stalled download
+          if (currentSize === lastSize) {
+            stallCount++
+            if (stallCount >= maxStallChecks) {
+              throw new Error(`Disk ${i} download stalled: no progress for 5 minutes at ${(currentSize / 1073741824).toFixed(1)} GB`)
+            }
+          } else {
+            stallCount = 0
+            lastSize = currentSize
+          }
+
+          // Log progress and update global progress bar
+          // Download phase = first 50% of total progress, split across disks
+          if (expectedSize > 0) {
+            const diskPct = Math.round((currentSize / expectedSize) * 100)
+            if (diskPct > lastLoggedPct + 9) {
+              await appendLog(jobId, `Disk ${i} download: ${diskPct}% (${(currentSize / 1073741824).toFixed(1)} GB)`)
+              lastLoggedPct = diskPct
+            }
+            const totalDisks = disks.length
+            const perDiskWeight = 50 / totalDisks
+            const globalPct = Math.round((i * perDiskWeight) + (diskPct / 100) * perDiskWeight)
+            await prisma.migrationJob.update({ where: { id: jobId }, data: { progress: globalPct } })
+          }
+        }
+
+        // Verify file size
         const statResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c '%s' ${shellEscape(diskPath)}`)
         if (!statResult.success || !statResult.output?.trim() || statResult.output.trim() === "0") {
           throw new Error(`Downloaded disk file is empty or missing: ${diskPath}`)
         }
         const fileSize = Number(statResult.output.trim())
         await appendLog(jobId, `Disk ${i} downloaded: ${(fileSize / 1073741824).toFixed(1)} GB`, "success")
+
+        // pid and complete files cleaned up with the nutanix download dir at end of pipeline
 
         diskPaths.push(diskPath)
       }
@@ -362,7 +486,10 @@ export async function runV2vMigrationPipeline(
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // ── PHASE 4: Execute virt-v2v ──
-    await updateJob(jobId, "transferring", { progress: 0 })
+    // Don't reset progress for Nutanix (download phase already at 50%)
+    if (config.sourceType !== "nutanix") {
+      await updateJob(jobId, "transferring", { progress: 0 })
+    }
     await appendLog(jobId, `Starting virt-v2v conversion (source: ${config.sourceType}, VM: "${config.sourceVmName}")...`)
 
     const v2vCommand = buildV2vCommand(jobId, config, username, host)
@@ -372,7 +499,10 @@ export async function runV2vMigrationPipeline(
 
     // Parse progress from output
     if (v2vResult.output) {
-      await processV2vOutput(jobId, v2vResult.output)
+      // For Nutanix: download was 0-50%, virt-v2v is 50-100%
+      // For vCenter/Hyper-V: virt-v2v is 0-100% (no prior download)
+      const hasDownloadPhase = config.sourceType === "nutanix"
+      await processV2vOutput(jobId, v2vResult.output, hasDownloadPhase ? 50 : 0, hasDownloadPhase ? 50 : 100)
     }
 
     // Clean up password file regardless of result
@@ -417,6 +547,8 @@ export async function runV2vMigrationPipeline(
     let createParams: Record<string, any>
 
     if (vmConfig) {
+      // Override name from source VM (virt-v2v may use disk filename as name in -i disk mode)
+      vmConfig.name = config.sourceVmName.replace(/[^a-zA-Z0-9.\-]/g, "-").replace(/-{2,}/g, "-").replace(/^-|-$/g, "").substring(0, 63) || vmConfig.name
       createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge)
     } else {
       // Fallback config
@@ -686,6 +818,12 @@ export async function runV2vMigrationPipeline(
     await appendLog(jobId, "Cleaning up temporary files...")
     await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`).catch(() => {})
 
+    // Unmount Hyper-V share if we mounted it
+    if (hypervMounted) {
+      await appendLog(jobId, "Unmounting Hyper-V SMB share...")
+      await executeSSH(config.targetConnectionId, nodeIp, "umount /mnt/hyperv").catch(() => {})
+    }
+
     if (config.startAfterMigration) {
       await appendLog(jobId, "Starting VM on Proxmox...")
       await pveFetch<any>(
@@ -742,7 +880,7 @@ export async function runV2vMigrationPipeline(
     try {
       const pveConn = await getConnectionById(config.targetConnectionId)
       const nodeIp = await getNodeIp(pveConn, config.targetNode)
-      const nutanixDownloadDir = `/tmp/nutanix-${jobId}`
+      const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
       await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
     } catch { /* best effort */ }
   } catch (err: any) {
@@ -757,8 +895,12 @@ export async function runV2vMigrationPipeline(
       await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`).catch(() => {})
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`).catch(() => {})
       // Clean up Nutanix downloaded disks
-      const nutanixDownloadDir = `/tmp/nutanix-${jobId}`
+      const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
       await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
+      // Unmount Hyper-V share if we mounted it
+      if (hypervMounted) {
+        await executeSSH(config.targetConnectionId, nodeIp, "umount /mnt/hyperv").catch(() => {})
+      }
     } catch {
       // Best effort cleanup
     }

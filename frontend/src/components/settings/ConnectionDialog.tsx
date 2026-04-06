@@ -366,7 +366,10 @@ export default function ConnectionDialog({
 
         {isHyperv && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            Enter the Hyper-V server hostname or IP. For disk-based migration, you can provide VHDX paths during the migration wizard.
+            Enter the Hyper-V server hostname or IP. WinRM must be enabled on the server. Run these commands in PowerShell as Administrator:
+            <Box component="pre" sx={{ mt: 1, mb: 0, p: 1, bgcolor: 'action.hover', borderRadius: 1, fontSize: 11, overflow: 'auto' }}>
+              {`Enable-PSRemoting -Force\nSet-Item -Path WSMan:\\localhost\\Service\\Auth\\Basic -Value $true\nSet-Item -Path WSMan:\\localhost\\Service\\AllowUnencrypted -Value $true`}
+            </Box>
           </Alert>
         )}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { getDateLocale } from '@/lib/i18n/date'
 
@@ -15,6 +15,8 @@ import {
   Tooltip,
   Typography,
   alpha,
+  createTheme,
+  ThemeProvider,
   useTheme
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
@@ -257,12 +259,24 @@ export default function TasksFooter({
   const runningCount = tasks.filter(t => t.status === 'running').length
   const errorCount = tasks.filter(t => t.status && t.status !== 'running' && t.status !== 'OK' && !t.status.includes('WARNINGS')).length
 
+  // Always-dark theme for the taskbar (must stay dark even in light mode)
+  // Inherit typography from the current theme so fonts match the rest of the app
+  const darkTaskbarTheme = useMemo(() => createTheme({
+    palette: {
+      mode: 'dark',
+      background: { paper: '#1e1e2d', default: '#151521' },
+      text: { primary: 'rgba(231,227,252,0.9)', secondary: 'rgba(231,227,252,0.7)' },
+      divider: 'rgba(231,227,252,0.12)',
+    },
+    typography: theme.typography,
+  }), [theme.typography])
+
   // Columns
   const columns: GridColDef[] = [
     {
       field: 'startTime',
       headerName: t('tasks.columns.start'),
-      width: 90,
+      width: 110,
       renderCell: (params) => (
         <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
           {formatTime(params.value, dateLocale)}
@@ -272,7 +286,7 @@ export default function TasksFooter({
     {
       field: 'endTime',
       headerName: t('tasks.columns.end'),
-      width: 90,
+      width: 110,
       renderCell: (params) => (
         <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
           {formatTime(params.value, dateLocale)}
@@ -282,11 +296,14 @@ export default function TasksFooter({
     {
       field: 'node',
       headerName: t('tasks.columns.node'),
-      width: 120,
+      width: 140,
       renderCell: (params) => (
-        <Typography variant="caption" noWrap title={params.value}>
-          {params.value}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <img src="/images/proxmox-logo-dark.svg" alt="" style={{ width: 14, height: 14, opacity: 0.7, flexShrink: 0 }} />
+          <Typography variant="caption" noWrap title={params.value}>
+            {params.value}
+          </Typography>
+        </Box>
       )
     },
     {
@@ -311,7 +328,7 @@ export default function TasksFooter({
     {
       field: 'user',
       headerName: t('tasks.columns.user'),
-      width: 120,
+      width: 150,
       renderCell: (params) => (
         <Typography variant="caption" noWrap title={params.value}>
           {params.value}
@@ -420,7 +437,7 @@ export default function TasksFooter({
   }
 
   return (
-    <>
+    <ThemeProvider theme={darkTaskbarTheme}>
       <Paper
         elevation={0}
         sx={{
@@ -435,16 +452,6 @@ export default function TasksFooter({
           backgroundImage: 'none',
           color: 'rgba(231,227,252,0.9)',
           colorScheme: 'dark',
-          // Override MUI CSS vars so child components (IconButton, Chip, DataGrid) render dark
-          '--mui-palette-text-primary': 'rgba(231,227,252,0.9)',
-          '--mui-palette-text-secondary': 'rgba(231,227,252,0.7)',
-          '--mui-palette-text-disabled': 'rgba(231,227,252,0.4)',
-          '--mui-palette-divider': 'rgba(231,227,252,0.12)',
-          '--mui-palette-action-active': 'rgba(231,227,252,0.6)',
-          '--mui-palette-action-hover': 'rgba(231,227,252,0.06)',
-          '--mui-palette-action-selected': 'rgba(231,227,252,0.08)',
-          '--mui-palette-background-paper': '#1e1e2d',
-          '--mui-palette-background-default': '#151521',
         }}
       >
         {/* Header */}
@@ -589,7 +596,7 @@ export default function TasksFooter({
         <Collapse in={expanded}>
           {/* ProxCenter tasks tab */}
           {activeTab === 'proxcenter' && (
-            <Box sx={{ height: maxHeight, overflow: 'auto' }}>
+            <Box sx={{ height: maxHeight, overflow: 'auto', bgcolor: '#1e1e2d' }}>
               {pcTasks.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4 }}>
                   <Typography variant="body2">No ProxCenter tasks</Typography>
@@ -674,7 +681,7 @@ export default function TasksFooter({
             </Box>
           )}
           {/* Proxmox tasks tab */}
-          <Box sx={{ height: maxHeight, display: activeTab === 'proxmox' ? 'block' : 'none' }}>
+          <Box sx={{ height: maxHeight, display: activeTab === 'proxmox' ? 'block' : 'none', bgcolor: '#1e1e2d' }}>
             {loading ? (
               <Box sx={{ p: 2 }}>
                 {[...new Array(5)].map((_, i) => (
@@ -703,18 +710,15 @@ return ''
                 sx={{
                   border: 'none',
                   '--DataGrid-rowBorderColor': 'rgba(231,227,252,0.08)',
-                  '--DataGrid-containerBackground': '#12121f',
+                  '--DataGrid-containerBackground': '#1e1e2d',
                   '& .MuiDataGrid-columnHeaders': {
-                    bgcolor: '#12121f',
+                    bgcolor: '#151521',
                     borderBottom: '1px solid rgba(231,227,252,0.08)',
                     minHeight: '36px !important',
                     maxHeight: '36px !important',
                   },
                   '& .MuiDataGrid-columnSeparator': {
                     display: 'none',
-                  },
-                  '& .MuiDataGrid-columnHeader': {
-                    py: 0.5
                   },
                   '& .MuiDataGrid-columnHeaderTitle': {
                     fontSize: '0.75rem',
@@ -785,6 +789,6 @@ return ''
           to { transform: rotate(360deg); }
         }
       `}</style>
-    </>
+    </ThemeProvider>
   )
 }

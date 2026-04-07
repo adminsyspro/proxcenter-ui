@@ -145,68 +145,68 @@ const MetricBar = ({ value }: { value: number }) => {
 }
 
 const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (tag: string) => { bg: string; fg: string }; shape: string }) => {
-  const validTags = (tags || []).filter(tag => tag && tag.trim().length > 0)
+  const validTags = useMemo(() => (tags || []).filter(tag => tag && tag.trim().length > 0), [tags])
   const containerRef = useRef<HTMLDivElement>(null)
-  const [visibleCount, setVisibleCount] = useState(validTags.length)
-  const [measured, setMeasured] = useState(false)
+  const badgeRef = useRef<HTMLSpanElement>(null)
 
-  // Measure which tags fit after first paint
-  useLayoutEffect(() => {
+  // DOM-only measurement: hide overflowing tags and show "+N" badge, no React state
+  const measure = useCallback(() => {
     const container = containerRef.current
-    if (!container || validTags.length === 0) return
+    const badge = badgeRef.current
+    if (!container || !badge) return
 
-    const children = Array.from(container.children) as HTMLElement[]
-    const tagChildren = children.filter(c => c.dataset.tag !== undefined)
+    const tagEls = Array.from(container.querySelectorAll('[data-tag]')) as HTMLElement[]
+    if (tagEls.length === 0) return
     const containerRight = container.getBoundingClientRect().right
-    const reservedWidth = 24 // space for "+N" label
-    let fitCount = 0
 
-    for (let i = 0; i < tagChildren.length; i++) {
-      const childRight = tagChildren[i].getBoundingClientRect().right
-      const needsReserve = i < validTags.length - 1
-      if (childRight > containerRight - (needsReserve ? reservedWidth : 0)) break
+    // Reset: show all tags, hide badge
+    tagEls.forEach(el => { el.style.display = '' })
+    badge.style.display = 'none'
+
+    // Check if all tags fit
+    const lastEl = tagEls[tagEls.length - 1]
+    if (lastEl && lastEl.getBoundingClientRect().right <= containerRight) return
+
+    // Not all fit - find how many fit with space for the badge
+    badge.textContent = `+${tagEls.length}`
+    badge.style.display = ''
+    const badgeWidth = badge.getBoundingClientRect().width + 4 // +4 for gap
+
+    let fitCount = 0
+    for (let i = 0; i < tagEls.length; i++) {
+      if (tagEls[i].getBoundingClientRect().right > containerRight - badgeWidth) break
       fitCount++
     }
+    fitCount = Math.max(1, fitCount)
 
-    setVisibleCount(Math.max(1, fitCount))
-    setMeasured(true)
-  }, [validTags])
+    // Hide overflow tags, update badge
+    for (let i = fitCount; i < tagEls.length; i++) {
+      tagEls[i].style.display = 'none'
+    }
+    const hiddenCount = tagEls.length - fitCount
+    if (hiddenCount > 0) {
+      badge.textContent = `+${hiddenCount}`
+    } else {
+      badge.style.display = 'none'
+    }
+  }, [])
+
+  useLayoutEffect(measure)
+
+  // Re-measure on column resize — observe the DataGrid cell wrapper
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    // The DataGrid cell element that actually resizes
+    const cell = container.closest('.MuiDataGrid-cell') || container.parentElement || container
+    const ro = new ResizeObserver(measure)
+    ro.observe(cell)
+
+    return () => ro.disconnect()
+  }, [measure])
 
   if (validTags.length === 0 || shape === 'none') return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
-
-  const renderTag = (tag: string, color: { bg: string; fg: string }, hidden = false) => {
-    const hiddenSx = hidden ? { opacity: 0 } as const : {}
-
-    if (shape === 'circle') {
-      return <Box data-tag="" sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color.bg, flexShrink: 0, ...hiddenSx }} />
-    }
-
-    if (shape === 'dense') {
-      return <Box data-tag="" sx={{ width: 14, height: 10, borderRadius: 0, bgcolor: color.bg, flexShrink: 0, ...hiddenSx }} />
-    }
-
-    return (
-      <Chip
-        data-tag=""
-        label={tag}
-        size='small'
-        sx={{
-          height: 18,
-          fontSize: '0.65rem',
-          bgcolor: color.bg,
-          color: color.fg,
-          borderRadius: 0.5,
-          minWidth: 0,
-          maxWidth: 80,
-          flexShrink: 0,
-          '& .MuiChip-label': { px: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-          ...hiddenSx
-        }}
-      />
-    )
-  }
-
-  const hiddenCount = validTags.length - visibleCount
 
   // Tooltip: all tags with colored dots
   const tooltipContent = (
@@ -226,23 +226,49 @@ const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (
 
   return (
     <Tooltip title={tooltipContent}>
-      <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5, overflow: 'hidden', width: '100%', position: 'relative' }}>
-        {/* First pass: render all tags for measurement (hidden until measured) */}
-        {/* After measurement: render only visible tags + "+N" */}
-        {validTags.map((tag, i) => {
-          const c = getTagColor(tag)
-          const isOverflow = measured && i >= visibleCount
+      <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5, overflow: 'hidden', width: '100%' }}>
+        {validTags.map(tag => {
+          const { bg, fg } = getTagColor(tag)
 
-          // Before measurement, render all but invisible; after, hide overflow ones
-          if (isOverflow) return null
+          if (shape === 'circle') {
+            return (
+              <Box key={tag} data-tag="" sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: bg, flexShrink: 0 }} />
+            )
+          }
 
-          return <React.Fragment key={tag}>{renderTag(tag, c, !measured)}</React.Fragment>
+          if (shape === 'dense') {
+            return (
+              <Box key={tag} data-tag="" sx={{ width: 14, height: 10, borderRadius: 0, bgcolor: bg, flexShrink: 0 }} />
+            )
+          }
+
+          return (
+            <Chip
+              key={tag}
+              data-tag=""
+              label={tag}
+              size='small'
+              sx={{
+                height: 18,
+                fontSize: '0.65rem',
+                bgcolor: bg,
+                color: fg,
+                borderRadius: 0.5,
+                minWidth: 0,
+                maxWidth: 80,
+                flexShrink: 0,
+                '& .MuiChip-label': { px: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+              }}
+            />
+          )
         })}
-        {measured && hiddenCount > 0 && (
-          <Typography variant='caption' sx={{ fontSize: '0.65rem', opacity: 0.7, flexShrink: 0, whiteSpace: 'nowrap' }}>
-            +{hiddenCount}
-          </Typography>
-        )}
+        <Typography
+          ref={badgeRef}
+          component="span"
+          variant='caption'
+          style={{ display: 'none' }}
+          sx={{ fontSize: '0.65rem', opacity: 0.7, flexShrink: 0, whiteSpace: 'nowrap' }}
+        />
       </Box>
     </Tooltip>
   )

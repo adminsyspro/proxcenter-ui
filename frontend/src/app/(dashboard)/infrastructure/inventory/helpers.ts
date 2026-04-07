@@ -524,7 +524,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
       disk: Number(g.disk ?? 0),
       maxdisk: Number(g.maxdisk ?? 0),
       uptime: Number(g.uptime ?? 0),
-      tags: g.tags ? String(g.tags).split(';').filter(Boolean) : [],
+      tags: parseTags(g.tags),
     }))
 
     return {

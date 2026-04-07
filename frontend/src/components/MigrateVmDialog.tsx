@@ -329,11 +329,23 @@ export function MigrateVmDialog({
           ? /^(scsi|virtio|ide|sata|efidisk|tpmstate)\d+$/
           : /^(rootfs|mp\d+)$/
         
+        // Load source node storages to determine which are shared
+        const sharedStorages = new Set<string>()
+        try {
+          const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(currentNode)}/storages`)
+          if (storagesRes.ok) {
+            const storagesJson = await storagesRes.json()
+            for (const s of (storagesJson.data || [])) {
+              if (s.shared) sharedStorages.add(s.storage)
+            }
+          }
+        } catch {}
+
         for (const [key, value] of Object.entries(config)) {
           if (diskPatterns.test(key) && typeof value === 'string') {
             const diskStr = value as string
             const storageMatch = diskStr.match(/^([^:]+):/)
-            
+
             if (storageMatch) {
               const storageName = storageMatch[1]
               const sizeMatch = diskStr.match(/size=(\d+(?:\.\d+)?)(G|T|M)?/)
@@ -343,10 +355,10 @@ export function MigrateVmDialog({
                 if (sizeMatch[2] === 'T') sizeGB *= 1024
                 else if (sizeMatch[2] === 'M') sizeGB /= 1024
               }
-              
+
               const formatMatch = diskStr.match(/\.(qcow2|raw|vmdk)/)
-              const isLocal = storageName.startsWith('local')
-              
+              const isLocal = !sharedStorages.has(storageName)
+
               foundDisks.push({
                 id: key,
                 storage: storageName,

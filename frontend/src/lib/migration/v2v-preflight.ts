@@ -19,6 +19,8 @@ export interface PreflightResult {
   diskSpaceSufficient: boolean
   errors: string[]
   detectedDisks?: string[]
+  ntfsFixAvailable?: boolean
+  virtCustomizeAvailable?: boolean
   tempStorages?: TempStorageOption[]
 }
 
@@ -60,11 +62,13 @@ export async function runV2vPreflight(
   result.ssh = true
 
   // 2-4: Run remaining checks in parallel
-  const [v2vCheck, pvCheck, dfCheck, virtioWinCheck] = await Promise.all([
+  const [v2vCheck, pvCheck, dfCheck, virtioWinCheck, ntfsFixCheck, virtCustomizeCheck] = await Promise.all([
     executeSSH(targetConnectionId, nodeIp, "which virt-v2v"),
     executeSSH(targetConnectionId, nodeIp, "which pv"),
     executeSSH(targetConnectionId, nodeIp, "df -B1 /tmp | tail -1 | awk '{print $4}'"),
     executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/virtio-win/virtio-win.iso && echo yes || echo no"),
+    executeSSH(targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo yes || echo no"),
+    executeSSH(targetConnectionId, nodeIp, "which virt-customize && echo yes || echo no"),
   ])
 
   // 2. Check virt-v2v installed
@@ -85,6 +89,12 @@ export async function runV2vPreflight(
   if (virtioWinCheck.success && virtioWinCheck.output?.trim() === 'yes') {
     result.virtioWinInstalled = true
   }
+
+  // 4b. Check ntfsfix + qemu-nbd (for NTFS dirty flag recovery on Windows VMs)
+  result.ntfsFixAvailable = ntfsFixCheck.success && ntfsFixCheck.output?.trim().endsWith('yes')
+
+  // 4c. Check virt-customize (for guest tools injection)
+  result.virtCustomizeAvailable = virtCustomizeCheck.success && virtCustomizeCheck.output?.trim().endsWith('yes')
 
   // 5. Check disk space on /tmp
   if (dfCheck.success && dfCheck.output?.trim()) {

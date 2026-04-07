@@ -120,6 +120,7 @@ function buildV2vCommand(
   const vmNameEsc = shellEscape(config.sourceVmName)
 
   let v2vCmd: string
+  const v2vOpts = `--block-driver virtio-scsi -o local -os ${shellEscape(outputDir)} --machine-readable 2>&1`
 
   switch (config.sourceType) {
     case "vcenter": {
@@ -129,20 +130,20 @@ function buildV2vCommand(
       const userEsc = shellEscape(username)
       const hostEsc = shellEscape(host)
       const uri = `vpx://${userEsc}@${hostEsc}/${dc}/host/${esxiHost}?no_verify=1`
-      v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} -o local -os ${shellEscape(outputDir)} --machine-readable 2>&1`
+      v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} ${v2vOpts}`
       break
     }
     case "hyperv": {
       if (config.diskPaths && config.diskPaths.length > 0) {
         // Disk-based mode: no credentials needed
         const diskArgs = config.diskPaths.map(p => shellEscape(p)).join(" ")
-        v2vCmd = `virt-v2v -i disk ${diskArgs} -o local -os ${shellEscape(outputDir)} --machine-readable 2>&1`
+        v2vCmd = `virt-v2v -i disk ${diskArgs} ${v2vOpts}`
       } else {
         // Network mode: connect to Hyper-V host
         const userEsc = shellEscape(username)
         const hostEsc = shellEscape(host)
         const uri = `hyperv://${userEsc}@${hostEsc}`
-        v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} -o local -os ${shellEscape(outputDir)} --machine-readable 2>&1`
+        v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} ${v2vOpts}`
       }
       break
     }
@@ -151,7 +152,7 @@ function buildV2vCommand(
         throw new Error("Nutanix migrations require diskPaths to be specified")
       }
       const diskArgs = config.diskPaths.map(p => shellEscape(p)).join(" ")
-      v2vCmd = `virt-v2v -i disk ${diskArgs} -o local -os ${shellEscape(outputDir)} --machine-readable 2>&1`
+      v2vCmd = `virt-v2v -i disk ${diskArgs} ${v2vOpts}`
       break
     }
     default:
@@ -495,14 +496,61 @@ export async function runV2vMigrationPipeline(
     const v2vCommand = buildV2vCommand(jobId, config, username, host)
     await appendLog(jobId, `Running virt-v2v on ${config.targetNode}...`)
 
-    const v2vResult = await executeSSH(config.targetConnectionId, nodeIp, v2vCommand)
+    let v2vResult = await executeSSH(config.targetConnectionId, nodeIp, v2vCommand)
 
     // Parse progress from output
+    const hasDownloadPhase = config.sourceType === "nutanix"
     if (v2vResult.output) {
-      // For Nutanix: download was 0-50%, virt-v2v is 50-100%
-      // For vCenter/Hyper-V: virt-v2v is 0-100% (no prior download)
-      const hasDownloadPhase = config.sourceType === "nutanix"
       await processV2vOutput(jobId, v2vResult.output, hasDownloadPhase ? 50 : 0, hasDownloadPhase ? 50 : 100)
+    }
+
+    // NTFS dirty flag recovery: if virt-v2v failed with NTFS errors and we're in disk mode, try ntfsfix
+    const isDiskMode = config.diskPaths && config.diskPaths.length > 0
+    const isNtfsError = !v2vResult.success && v2vResult.output &&
+      /read.only|not cleanly unmounted|ntfs.*dirty|mounted read.only|windows hibernat/i.test(v2vResult.output)
+
+    if (isNtfsError && isDiskMode) {
+      await appendLog(jobId, "NTFS dirty flag detected, attempting ntfsfix recovery...", "warn")
+
+      // Check if ntfsfix + qemu-nbd are available
+      const toolCheck = await executeSSH(config.targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo ok")
+      if (toolCheck.success && toolCheck.output?.trim().endsWith("ok")) {
+        for (const diskPath of config.diskPaths!) {
+          await appendLog(jobId, `Running ntfsfix on ${diskPath}...`)
+          // Use qemu-nbd to expose disk, find NTFS partition, run ntfsfix
+          const ntfsFixCmd = [
+            "modprobe nbd max_part=8",
+            // Find a free nbd device
+            'NBD_DEV=$(for i in $(seq 0 15); do [ ! -e /sys/block/nbd${i}/pid ] && echo /dev/nbd${i} && break; done)',
+            '[ -z "$NBD_DEV" ] && echo "no free nbd device" && exit 1',
+            `qemu-nbd --connect="$NBD_DEV" ${shellEscape(diskPath)}`,
+            "sleep 2",
+            // Find NTFS partitions and run ntfsfix on each
+            `for PART in $(fdisk -l "$NBD_DEV" 2>/dev/null | grep -i "Microsoft basic data\\|NTFS\\|HPFS" | awk '{print $1}'); do ntfsfix "$PART" 2>&1 || true; done`,
+            `qemu-nbd --disconnect="$NBD_DEV"`,
+            "sleep 1",
+          ].join(" && ")
+
+          const fixResult = await executeSSH(config.targetConnectionId, nodeIp, ntfsFixCmd)
+          if (fixResult.success) {
+            await appendLog(jobId, `ntfsfix completed on ${diskPath}`, "success")
+          } else {
+            await appendLog(jobId, `ntfsfix failed on ${diskPath}: ${fixResult.error || fixResult.output}`, "warn")
+          }
+        }
+
+        // Retry virt-v2v
+        await appendLog(jobId, "Retrying virt-v2v after ntfsfix...")
+        // Clean output dir from failed attempt
+        await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)} && mkdir -p ${shellEscape(outputDir)}`).catch(() => {})
+
+        v2vResult = await executeSSH(config.targetConnectionId, nodeIp, v2vCommand)
+        if (v2vResult.output) {
+          await processV2vOutput(jobId, v2vResult.output, hasDownloadPhase ? 50 : 0, hasDownloadPhase ? 50 : 100)
+        }
+      } else {
+        await appendLog(jobId, "ntfsfix/qemu-nbd not available on target node. Install ntfs-3g and qemu-utils for NTFS recovery.", "warn")
+      }
     }
 
     // Clean up password file regardless of result
@@ -514,6 +562,57 @@ export async function runV2vMigrationPipeline(
       throw new Error(`virt-v2v failed: ${v2vResult.error || v2vResult.output?.substring(0, 500)}`)
     }
     await appendLog(jobId, "virt-v2v conversion completed", "success")
+
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+
+    // ── PHASE 4.5: Inject virtio-win-guest-tools for Windows VMs ──
+    // Detect Windows from virt-v2v output (looks for "Windows" in inspection output)
+    const isWindowsVm = v2vResult.output && /windows/i.test(v2vResult.output)
+
+    if (isWindowsVm) {
+      await appendLog(jobId, "Windows VM detected, checking for guest tools injection...")
+
+      // Find the converted disk (the main -sda file)
+      const findDiskResult = await executeSSH(config.targetConnectionId, nodeIp,
+        `find ${shellEscape(outputDir)} -name "*-sda" -type f | head -1`)
+      const convertedDisk = findDiskResult.output?.trim()
+
+      if (convertedDisk) {
+        // Check virt-customize + virtio-win ISO availability
+        const toolsCheck = await executeSSH(config.targetConnectionId, nodeIp,
+          `which virt-customize && test -f /usr/share/virtio-win/virtio-win.iso && echo ok`)
+
+        if (toolsCheck.success && toolsCheck.output?.trim().endsWith("ok")) {
+          await appendLog(jobId, "Injecting virtio-win-guest-tools.exe for firstboot installation...")
+
+          // Mount ISO, extract guest tools, inject with virt-customize
+          const mountDir = `${tempBase}/virtio-mount-${jobId}`
+          const injectCmd = [
+            `mkdir -p ${shellEscape(mountDir)}`,
+            `mount -o loop,ro /usr/share/virtio-win/virtio-win.iso ${shellEscape(mountDir)}`,
+            // Check if guest tools exe exists on the ISO
+            `test -f ${shellEscape(mountDir)}/virtio-win-guest-tools.exe`,
+            // Inject the exe into the disk and schedule silent install at firstboot
+            `virt-customize -a ${shellEscape(convertedDisk)}` +
+              ` --copy-in ${shellEscape(mountDir)}/virtio-win-guest-tools.exe:/Windows/Temp/` +
+              ` --firstboot-command 'C:\\Windows\\Temp\\virtio-win-guest-tools.exe /S /v"/qn REBOOT=ReallySuppress"'`,
+            `umount ${shellEscape(mountDir)}`,
+            `rmdir ${shellEscape(mountDir)}`,
+          ].join(" && ")
+
+          const injectResult = await executeSSH(config.targetConnectionId, nodeIp, injectCmd)
+          if (injectResult.success) {
+            await appendLog(jobId, "Guest tools injected (will install silently on first boot)", "success")
+          } else {
+            // Non-blocking: clean up mount and continue
+            await executeSSH(config.targetConnectionId, nodeIp, `umount ${shellEscape(mountDir)} 2>/dev/null; rmdir ${shellEscape(mountDir)} 2>/dev/null`).catch(() => {})
+            await appendLog(jobId, `Guest tools injection failed (non-blocking): ${injectResult.error || injectResult.output?.substring(0, 200)}`, "warn")
+          }
+        } else {
+          await appendLog(jobId, "virt-customize or virtio-win ISO not available, skipping guest tools injection", "warn")
+        }
+      }
+    }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 

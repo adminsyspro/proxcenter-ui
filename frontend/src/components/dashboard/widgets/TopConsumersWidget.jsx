@@ -22,7 +22,16 @@ function TopConsumersWidget({ data, loading }) {
   const router = useRouter()
   const isDark = theme.palette.mode === 'dark'
   const c = widgetColors(isDark)
-  const [mode, setMode] = useState('cpu')
+  const [mode, setMode] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('dashboard-top-consumers-mode') || 'cpu'
+
+    return 'cpu'
+  })
+
+  const handleModeChange = (m) => {
+    setMode(m)
+    localStorage.setItem('dashboard-top-consumers-mode', m)
+  }
 
   const topCpu = data?.topCpu || []
   const topRam = data?.topRam || []
@@ -59,7 +68,7 @@ function TopConsumersWidget({ data, loading }) {
         {['cpu', 'ram'].map(m => (
           <Box
             key={m}
-            onClick={() => setMode(m)}
+            onClick={() => handleModeChange(m)}
             sx={{
               px: 1.5,
               py: 0.5,

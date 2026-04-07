@@ -10,14 +10,6 @@ export function useActiveAlerts(isEnterprise: boolean) {
   )
 }
 
-export function useDRSRecommendations(isEnterprise: boolean, hasDRS: boolean) {
-  const refreshInterval = useRefreshInterval(30000)
-  return useSWRFetch(
-    isEnterprise && hasDRS ? '/api/v1/orchestrator/drs/recommendations' : null,
-    { refreshInterval }
-  )
-}
-
 export function useVersionCheck(refreshInterval = 3600000) {
   return useSWRFetch('/api/v1/version/check', { refreshInterval })
 }

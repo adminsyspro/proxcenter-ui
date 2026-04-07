@@ -60,8 +60,8 @@ import { useRBAC } from '@/contexts/RBACContext'
 // Tenant Context
 import { useTenant } from '@/contexts/TenantContext'
 
-import { useActiveAlerts, useDRSRecommendations, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
-import { useDRSSettings } from '@/hooks/useDRS'
+import { useActiveAlerts, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
+import { useDRSRecommendations, useDRSSettings } from '@/hooks/useDRS'
 
 // Version config
 import { APP_VERSION } from '@/config/version'
@@ -210,7 +210,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
 
   // SWR hooks for notifications — gated by permissions to avoid unnecessary fetches
   const { data: alertsResponse, mutate: mutateAlerts } = useActiveAlerts(isEnterprise && canViewAlerts)
-  const { data: drsRecsResponse, mutate: mutateDrsRecs } = useDRSRecommendations(isEnterprise && canViewDrs, hasFeature(Features.DRS))
+  const { data: drsRecsResponse, mutate: mutateDrsRecs } = useDRSRecommendations(isEnterprise && canViewDrs && hasFeature(Features.DRS))
   const { data: drsSettingsData } = useDRSSettings(isEnterprise && canViewDrs)
   const maxPendingRecs = drsSettingsData?.max_pending_recommendations || 10
   const { data: updateInfoData } = useVersionCheck(3600000)

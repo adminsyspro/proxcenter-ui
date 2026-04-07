@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useEffect, useState, useCallback } from 'react'
+import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { useTagColors } from '@/contexts/TagColorContext'
@@ -144,61 +144,107 @@ const MetricBar = ({ value }: { value: number }) => {
   )
 }
 
-const TagsCell = ({ tags, getTagBg }: { tags: string[]; getTagBg: (tag: string) => string }) => {
-  // Filtrer les tags vides ou null
+const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (tag: string) => { bg: string; fg: string }; shape: string }) => {
   const validTags = (tags || []).filter(tag => tag && tag.trim().length > 0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [visibleCount, setVisibleCount] = useState(validTags.length)
+  const [measured, setMeasured] = useState(false)
 
-  if (validTags.length === 0) return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
+  // Measure which tags fit after first paint
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container || validTags.length === 0) return
 
-  // Afficher seulement le premier tag, puis +N pour le reste
-  const displayTag = validTags[0]
-  const remaining = validTags.length - 1
+    const children = Array.from(container.children) as HTMLElement[]
+    const tagChildren = children.filter(c => c.dataset.tag !== undefined)
+    const containerRight = container.getBoundingClientRect().right
+    const reservedWidth = 24 // space for "+N" label
+    let fitCount = 0
 
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 0.5,
-        overflow: 'hidden',
-      }}
-    >
+    for (let i = 0; i < tagChildren.length; i++) {
+      const childRight = tagChildren[i].getBoundingClientRect().right
+      const needsReserve = i < validTags.length - 1
+      if (childRight > containerRight - (needsReserve ? reservedWidth : 0)) break
+      fitCount++
+    }
+
+    setVisibleCount(Math.max(1, fitCount))
+    setMeasured(true)
+  }, [validTags])
+
+  if (validTags.length === 0 || shape === 'none') return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
+
+  const renderTag = (tag: string, color: { bg: string; fg: string }, hidden = false) => {
+    const hiddenSx = hidden ? { opacity: 0 } as const : {}
+
+    if (shape === 'circle') {
+      return <Box data-tag="" sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color.bg, flexShrink: 0, ...hiddenSx }} />
+    }
+
+    if (shape === 'dense') {
+      return <Box data-tag="" sx={{ width: 14, height: 10, borderRadius: 0, bgcolor: color.bg, flexShrink: 0, ...hiddenSx }} />
+    }
+
+    return (
       <Chip
-        label={displayTag}
+        data-tag=""
+        label={tag}
         size='small'
         sx={{
           height: 18,
           fontSize: '0.65rem',
-          bgcolor: getTagBg(displayTag),
-          color: 'white',
+          bgcolor: color.bg,
+          color: color.fg,
           borderRadius: 0.5,
           minWidth: 0,
           maxWidth: 80,
-          '& .MuiChip-label': { 
-            px: 0.75,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }
+          flexShrink: 0,
+          '& .MuiChip-label': { px: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+          ...hiddenSx
         }}
       />
-      {remaining > 0 && (
-        <Tooltip title={validTags.slice(1).join(', ')}>
-          <Typography 
-            variant='caption' 
-            sx={{ 
-              fontSize: '0.65rem', 
-              opacity: 0.7,
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            +{remaining}
-          </Typography>
-        </Tooltip>
-      )}
+    )
+  }
+
+  const hiddenCount = validTags.length - visibleCount
+
+  // Tooltip: all tags with colored dots
+  const tooltipContent = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}>
+      {validTags.map(tag => {
+        const c = getTagColor(tag)
+
+        return (
+          <Box key={tag} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.bg, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.7rem', color: 'inherit' }}>{tag}</Typography>
+          </Box>
+        )
+      })}
     </Box>
+  )
+
+  return (
+    <Tooltip title={tooltipContent}>
+      <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5, overflow: 'hidden', width: '100%', position: 'relative' }}>
+        {/* First pass: render all tags for measurement (hidden until measured) */}
+        {/* After measurement: render only visible tags + "+N" */}
+        {validTags.map((tag, i) => {
+          const c = getTagColor(tag)
+          const isOverflow = measured && i >= visibleCount
+
+          // Before measurement, render all but invisible; after, hide overflow ones
+          if (isOverflow) return null
+
+          return <React.Fragment key={tag}>{renderTag(tag, c, !measured)}</React.Fragment>
+        })}
+        {measured && hiddenCount > 0 && (
+          <Typography variant='caption' sx={{ fontSize: '0.65rem', opacity: 0.7, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            +{hiddenCount}
+          </Typography>
+        )}
+      </Box>
+    </Tooltip>
   )
 }
 
@@ -441,7 +487,7 @@ function VmsTable({
 }: VmsTableProps) {
   const theme = useTheme()
   const t = useTranslations()
-  const { getColor, loadConnection } = useTagColors()
+  const { getColor, getShape, loadConnection } = useTagColors()
   const primaryColor = theme.palette.primary.main
   
   // Load tag color overrides for all connections in the table
@@ -450,9 +496,9 @@ function VmsTable({
     connIds.forEach(id => loadConnection(id))
   }, [vms, loadConnection])
 
-  // Helper to get tag bg color for a specific connection's tag
-  const getTagBg = useCallback((tag: string, connId?: string) => {
-    return getColor(tag, connId).bg
+  // Helper to get tag color (bg + fg) for a specific connection's tag
+  const getTagColor = useCallback((tag: string, connId?: string) => {
+    return getColor(tag, connId)
   }, [getColor])
 
   // Helper pour vérifier si une VM est en migration
@@ -980,10 +1026,10 @@ return (
       cols.push({
         field: 'tags',
         headerName: 'Tags',
-        width: 80,
+        width: 120,
         minWidth: 60,
         renderHeader: headerIconOnly('ri-price-tag-3-line'),
-        renderCell: (params) => <TagsCell tags={params.row.tags || []} getTagBg={(tag) => getTagBg(tag, params.row.connId)} />
+        renderCell: (params) => <TagsCell tags={params.row.tags || []} getTagColor={(tag) => getTagColor(tag, params.row.connId)} shape={getShape(params.row.connId)} />
       })
     }
 

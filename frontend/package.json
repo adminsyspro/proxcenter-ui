@@ -76,7 +76,7 @@
     "@iconify/json": "2.2.408",
     "@iconify/tools": "4.2.0",
     "@iconify/utils": "3.1.0",
-    "@tailwindcss/postcss": "4.1.17",
+    "@tailwindcss/postcss": "4.2.2",
     "@types/d3-sankey": "^0.12.5",
     "@types/node": "^22.19.15",
     "@types/react": "^19.2.14",

@@ -814,12 +814,7 @@ export function MigrateVmDialog({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <AppDialogTitle onClose={onClose} icon={<i className="ri-swap-box-line" style={{ fontSize: 22 }} />}>
-        <Typography variant="h6" component="span" sx={{ fontSize: '1rem' }}>
-          {t('hardware.migrateTitle', { vmName, vmid })}
-        </Typography>
-        <Typography variant="caption" sx={{ display: 'block', opacity: 0.7 }}>
-          {currentNode} • {vmType.toUpperCase()} • {vmStatus}
-        </Typography>
+        {t('hardware.migrateTitle', { vmName, vmid })}
       </AppDialogTitle>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
@@ -1009,9 +1004,9 @@ export function MigrateVmDialog({
                     </Typography>
                   </Box>
                 ) : (
-                  <FormControl fullWidth size="small" disabled={!hasLocalDisks}>
+                  <FormControl fullWidth size="small">
                     <Select
-                      value={hasLocalDisks ? selectedStorage : '__current__'}
+                      value={selectedStorage}
                       onChange={(e) => setSelectedStorage(e.target.value)}
                     >
                       <MenuItem value="__current__">
@@ -1023,24 +1018,49 @@ export function MigrateVmDialog({
                         </Box>
                       </MenuItem>
                       
-                      {hasLocalDisks && storages.length > 0 && <Divider sx={{ my: 0.5 }} />}
-                      
-                      {hasLocalDisks && storages.map((storage) => (
+                      {storages.length > 0 && <Divider sx={{ my: 0.5 }} />}
+
+                      {storages.map((storage) => {
+                        const usedBytes = (storage.total || 0) - (storage.avail || 0)
+                        const usagePercent = storage.total ? (usedBytes / storage.total) * 100 : 0
+                        const usageColor = usagePercent > 90 ? '#ef4444' : usagePercent > 70 ? '#eab308' : '#22c55e'
+                        const isCurrent = currentStorageNames.includes(storage.storage)
+
+                        return (
                         <MenuItem key={storage.storage} value={storage.storage}>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 2 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <i className="ri-hard-drive-2-line" style={{ fontSize: 16, opacity: 0.7 }} />
                               <Typography variant="body2">{storage.storage}</Typography>
+                              {isCurrent && (
+                                <Chip
+                                  label={t('hardware.currentLabel')}
+                                  size="small"
+                                  color="info"
+                                  variant="outlined"
+                                  sx={{ height: 16, fontSize: '0.6rem' }}
+                                />
+                              )}
+                              {!storage.shared && (
+                                <Chip
+                                  label="local"
+                                  size="small"
+                                  sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'action.hover' }}
+                                />
+                              )}
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Chip label={storage.type} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
-                              <Typography variant="caption" color="text.secondary">
-                                {formatBytes(storage.avail)}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                              <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5, minWidth: 70, textAlign: 'right' }}>
+                                {formatBytes(storage.avail)} free
                               </Typography>
+                              <Box sx={{ width: 48, height: 4, bgcolor: 'action.hover', borderRadius: 0.5, overflow: 'hidden' }}>
+                                <Box sx={{ height: '100%', width: `${usagePercent}%`, bgcolor: usageColor, borderRadius: 0.5 }} />
+                              </Box>
+                              <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.5, minWidth: 22, textAlign: 'right' }}>{Math.round(usagePercent)}%</Typography>
                             </Box>
                           </Box>
                         </MenuItem>
-                      ))}
+                      )})}
                     </Select>
                   </FormControl>
                 )}

@@ -84,7 +84,7 @@
     "@types/ssh2": "^1.15.5",
     "autoprefixer": "10.4.27",
     "concurrently": "^9.2.1",
-    "esbuild": "^0.27.2",
+    "esbuild": "^0.28.0",
     "eslint": "8.57.1",
     "eslint-config-next": "15.1.2",
     "eslint-config-prettier": "^10.1.8",

@@ -1476,7 +1476,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const provisionedGB = vm.provisioned ? (vm.provisioned / 1073741824).toFixed(1) : '0'
 
     return {
-      kindLabel: connType === 'xcpng' ? '' : connType === 'nutanix' ? '' : connType === 'hyperv' ? '' : '',
+      kindLabel: connType === 'xcpng' ? 'XCP-NG VM' : connType === 'nutanix' ? 'NUTANIX VM' : connType === 'hyperv' ? 'HYPER-V VM' : 'VM',
       title: vm.name || vmid,
       subtitle: vm.guestOS || '',
       breadcrumb: ['Infrastructure', 'Inventaire', vm.connectionName || '', vm.name || vmid],

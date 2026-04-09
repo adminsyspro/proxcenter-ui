@@ -493,7 +493,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const statsFile = `${tmpFile}.stats`
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
-        `nohup bash -c 'curl -s --fail -H "Authorization: Basic ${curlAuth}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+        `nohup bash -c 'curl -s --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
       )
       if (!startDl.success || !startDl.output?.trim()) {
         throw new Error(`Failed to start download: ${startDl.error}`)

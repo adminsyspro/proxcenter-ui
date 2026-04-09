@@ -671,6 +671,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       // ── Live mode: snapshot → download snapshot VDIs → delete snapshot → shut down → convert/import ──
       let snapshotUuid: string | null = null
 
+      let downloadSucceeded = false
       try {
         // Phase 1: Create snapshot (VM keeps running — no downtime)
         const snapName = `proxcenter-mig-${jobId.substring(0, 8)}`
@@ -692,9 +693,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         }
 
         await appendLog(jobId, "All snapshot disks downloaded", "success")
+        downloadSucceeded = true
       } finally {
-        // Always clean up snapshot, even on error
-        if (snapshotUuid) {
+        // Only delete snapshot if downloads succeeded — deleting a snapshot triggers
+        // VHD chain coalescing on XCP-ng which can cause SR_BACKEND_FAILURE if the
+        // storage is in a bad state. On failure, leave it for the user to clean up safely.
+        if (snapshotUuid && downloadSucceeded) {
           try {
             await appendLog(jobId, "Deleting migration snapshot...")
             await xoDeleteSnapshot(xo, snapshotUuid)
@@ -702,6 +706,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           } catch (snapErr: any) {
             await appendLog(jobId, `Warning: failed to delete snapshot ${snapshotUuid}: ${snapErr?.message}. Please delete it manually in XO.`, "warn")
           }
+        } else if (snapshotUuid) {
+          await appendLog(jobId, `Migration snapshot ${snapshotUuid} was NOT deleted to protect the source VM. Please delete it manually in XO once the VM is stable.`, "warn")
         }
       }
 

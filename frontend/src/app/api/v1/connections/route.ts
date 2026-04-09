@@ -8,6 +8,7 @@ import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
+import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 
 export const runtime = "nodejs"
 
@@ -317,6 +318,14 @@ export async function POST(req: Request) {
     // Notify orchestrator to reload connections immediately
     if (type === 'pve') {
       orchestratorFetch('/connections/reload', { method: 'POST' }).catch(() => {})
+    }
+
+    // Discover node IPs for failover (non-blocking, after connection is saved)
+    if (type === 'pve') {
+      discoverNodeIps(
+        { baseUrl, apiToken, insecureDev: insecureTLS, id: created.id },
+        created.id
+      ).catch(() => {})
     }
 
     return NextResponse.json({

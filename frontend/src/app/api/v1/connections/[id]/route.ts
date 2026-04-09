@@ -9,6 +9,7 @@ import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { pveFetch } from "@/lib/proxmox/client"
+import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 
 export const runtime = "nodejs"
 
@@ -205,6 +206,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         } catch {
           // If probe fails, don't change hasCeph
         }
+
+        // Re-discover node IPs for failover (non-blocking)
+        discoverNodeIps(
+          { baseUrl, apiToken, insecureDev: insecureTLS, id },
+          id
+        ).catch(() => {})
       }
     }
 

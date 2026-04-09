@@ -309,7 +309,8 @@ export default function TasksFooter({
     {
       field: 'entity',
       headerName: t('tasks.columns.target'),
-      width: 150,
+      flex: 1,
+      minWidth: 150,
       renderCell: (params) => {
         const name = params.row.entityName
         const vmid = params.value
@@ -338,7 +339,7 @@ export default function TasksFooter({
     {
       field: 'description',
       headerName: t('tasks.columns.description'),
-      flex: 1,
+      flex: 2,
       minWidth: 200,
       renderCell: (params) => (
         <Typography variant="caption" noWrap title={params.value}>
@@ -698,7 +699,7 @@ export default function TasksFooter({
                 columns={columns}
                 density="compact"
                 disableRowSelectionOnClick
-                disableColumnMenu
+                disableColumnMenu={false}
                 hideFooter
                 onRowDoubleClick={handleRowDoubleClick}
                 getRowClassName={(params) => {
@@ -718,7 +719,7 @@ return ''
                     maxHeight: '36px !important',
                   },
                   '& .MuiDataGrid-columnSeparator': {
-                    display: 'none',
+                    opacity: 0.3,
                   },
                   '& .MuiDataGrid-columnHeaderTitle': {
                     fontSize: '0.75rem',

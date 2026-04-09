@@ -2,7 +2,7 @@
 import { Agent, request } from "undici"
 
 import { extractHostFromUrl, extractPortFromUrl, replaceHostInUrl } from "./urlUtils"
-import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock } from "../cache/nodeIpCache"
+import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock, incrementFailures, resetFailures, getFailureCount } from "../cache/nodeIpCache"
 import { invalidateConnectionCache } from "../connections/getConnection"
 
 let insecureAgent: Agent | null = null
@@ -21,16 +21,29 @@ export type ProxmoxClientOptions = {
   id?: string
 }
 
-/** Check whether an error is a network-level failure (connection refused, timeout, etc.) */
-function isNetworkError(err: unknown): boolean {
+/** Hard network failures that indicate the host is truly unreachable */
+function isHardNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
-  // AbortSignal.timeout() throws a DOMException with name "TimeoutError"
-  if (err.name === "TimeoutError") return true
-  const codes = ["ECONNREFUSED", "ETIMEDOUT", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND", "UND_ERR_CONNECT_TIMEOUT"]
+  const codes = ["ECONNREFUSED", "EHOSTUNREACH", "ECONNRESET", "ENETUNREACH", "ENOTFOUND"]
   const msg = err.message || ""
   const cause = (err as any).cause
   const causeCode = cause?.code || cause?.message || ""
   return codes.some(c => msg.includes(c) || causeCode.includes(c))
+}
+
+/** Timeout errors - node may just be slow, not dead */
+function isTimeoutError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  if (err.name === "TimeoutError") return true
+  const msg = err.message || ""
+  const cause = (err as any).cause
+  const causeCode = cause?.code || cause?.message || ""
+  return ["ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].some(c => msg.includes(c) || causeCode.includes(c))
+}
+
+/** Any network-level error (hard + timeout) */
+function isNetworkError(err: unknown): boolean {
+  return isHardNetworkError(err) || isTimeoutError(err)
 }
 
 /**
@@ -100,7 +113,7 @@ export async function pveFetch<T>(
   }
 
   /** Core request logic against a specific baseUrl */
-  async function doRequest(baseUrl: string, timeoutMs = 15_000, ignoreCallerSignal = false): Promise<T> {
+  async function doRequest(baseUrl: string, timeoutMs = 8_000, ignoreCallerSignal = false): Promise<T> {
     const url = `${baseUrl.replace(/\/$/, "")}/api2/json${path}`
 
     // Use caller signal if provided, otherwise create a timeout signal.
@@ -147,7 +160,9 @@ export async function pveFetch<T>(
 
   if (cachedFailoverUrl) {
     try {
-      return await doRequest(cachedFailoverUrl)
+      const result = await doRequest(cachedFailoverUrl)
+      if (opts.id) resetFailures(opts.id)
+      return result
     } catch (cachedErr) {
       // Cached failover failed — try the original (maybe it recovered)
       // Use ignoreCallerSignal=true because the caller's signal may have fired
@@ -169,13 +184,31 @@ export async function pveFetch<T>(
   if (!cachedFailoverUrl) {
     try {
       const result = await doRequest(opts.baseUrl)
+      if (opts.id) resetFailures(opts.id)
       return result
     } catch (err) {
       primaryErr = err
-      // Skip failover entirely when behind a reverse proxy (IPs are not reachable)
       if (opts.behindProxy) throw err
-      // Only attempt failover for network errors when we have a connection ID
-      if (!opts.id || !isNetworkError(err)) throw err
+      if (!opts.id) throw err
+
+      // Timeouts: log warning but don't count as hard failure
+      if (isTimeoutError(err)) {
+        console.warn(`[failover] Timeout on connection ${opts.id} for ${path} (not counted as failure)`)
+        throw err
+      }
+
+      // Hard network error: increment counter
+      if (isHardNetworkError(err)) {
+        const shouldFailover = incrementFailures(opts.id)
+        if (!shouldFailover) {
+          console.warn(`[failover] Connection ${opts.id} failure ${getFailureCount(opts.id)}/3 for ${path}`)
+          throw err
+        }
+        console.log(`[failover] Connection ${opts.id} reached failure threshold, initiating failover...`)
+      } else {
+        // Non-network error (HTTP 500, parse error, etc.) - don't failover
+        throw err
+      }
     }
   }
 
@@ -215,7 +248,10 @@ export async function pveFetch<T>(
       }
     }
 
-    if (!cached || cached.ips.length === 0) throw err
+    if (!cached || cached.ips.length === 0) {
+      console.error(`[failover] No node IPs available for connection ${connId}. Visit Inventory or re-save the connection to discover nodes.`)
+      throw err
+    }
 
     const currentHost = extractHostFromUrl(opts.baseUrl)
 
@@ -241,7 +277,10 @@ export async function pveFetch<T>(
     setFailoverLock(connId, failoverPromise)
 
     const newUrl = await failoverPromise
-    if (newUrl) return doRequest(newUrl, 15_000, true)
+    if (newUrl) {
+      resetFailures(connId)
+      return doRequest(newUrl, 8_000, true)
+    }
 
     // All nodes failed
     throw new Error(`PVE connection ${connId}: all cluster nodes unreachable (tried ${cached.ips.length} nodes). Original error: ${(err as Error).message}`)

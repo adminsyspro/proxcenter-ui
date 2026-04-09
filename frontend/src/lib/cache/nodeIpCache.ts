@@ -82,3 +82,32 @@ export function setFailoverLock(connId: string, promise: Promise<string | null>)
     if (current?.promise === promise) locks.delete(connId)
   })
 }
+
+const FAILURE_KEY = "__proxcenter_failure_counter__" as const
+const FAILURE_THRESHOLD = 3
+
+function getFailureStore(): Map<string, number> {
+  if (!(globalThis as any)[FAILURE_KEY]) {
+    ;(globalThis as any)[FAILURE_KEY] = new Map<string, number>()
+  }
+  return (globalThis as any)[FAILURE_KEY]
+}
+
+/** Increment consecutive failure count. Returns true when threshold is reached. */
+export function incrementFailures(connId: string): boolean {
+  const store = getFailureStore()
+  const count = (store.get(connId) || 0) + 1
+  store.set(connId, count)
+  return count >= FAILURE_THRESHOLD
+}
+
+/** Reset failure count (call on any successful request). */
+export function resetFailures(connId: string): void {
+  const store = getFailureStore()
+  store.delete(connId)
+}
+
+/** Get current failure count. */
+export function getFailureCount(connId: string): number {
+  return getFailureStore().get(connId) || 0
+}

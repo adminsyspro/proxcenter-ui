@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db/prisma"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getDb } from "@/lib/db/sqlite"
+import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 
 // ---------- Types ----------
 
@@ -50,6 +51,8 @@ const subscribers = new Set<Subscriber>()
 let masterInterval: ReturnType<typeof setInterval> | null = null
 
 const POLL_INTERVAL_MS = 10_000 // 10 seconds
+const IP_REFRESH_INTERVAL = 30 // every 30 poll cycles = 5 minutes
+let ipRefreshCounter = IP_REFRESH_INTERVAL - 1 // trigger on first cycle
 
 // ---------- Diff logic ----------
 
@@ -237,6 +240,21 @@ async function pollAll() {
 
       // Auto-HA: enable HA on newly added VMs if Auto-HA is enabled
       handleAutoHaEvents(allEvents)
+    }
+
+    // Periodic node IP refresh for failover (every 5 minutes)
+    ipRefreshCounter++
+    if (ipRefreshCounter >= IP_REFRESH_INTERVAL) {
+      ipRefreshCounter = 0
+      // Run IP discovery for all PVE connections in parallel (non-blocking)
+      Promise.allSettled(
+        connections.map(async (conn) => {
+          const connConfig = await getConnectionById(conn.id)
+          if (connConfig.baseUrl && connConfig.apiToken) {
+            await discoverNodeIps(connConfig, conn.id)
+          }
+        })
+      ).catch(() => {})
     }
   } catch (e: any) {
     console.error('[inventory-poller] Master poll error:', e?.message)

@@ -1184,6 +1184,22 @@ return
 
       // Mettre à jour le rôle des assignations conservées si changé
       if (roleId !== assignmentGroup.role.id) {
+        // Global scope: update the single assignment directly (no targets to iterate)
+        if (scopeType === 'global' && assignmentGroup.scope_type === 'global') {
+          for (const assignment of assignmentGroup.assignments) {
+            const res = await fetch(`/api/v1/rbac/assignments/${assignment.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role_id: roleId })
+            })
+
+            if (!res.ok) {
+              errors.push(t('errors.updateError'))
+            }
+          }
+        }
+
+        // Scoped: update assignments whose targets are kept
         for (const target of toKeep) {
           const assignment = assignmentGroup.assignments.find((a: any) => a.scope_target === target)
 

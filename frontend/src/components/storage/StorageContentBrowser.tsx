@@ -360,31 +360,33 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
     setTransferProgress(0)
     setPhase('uploading')
 
-    // Generate a unique upload ID for progress tracking
-    const uploadId = crypto.randomUUID()
+    // Generate upload ID with fallback for non-secure contexts (HTTP)
+    const uploadId = typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     uploadIdRef.current = uploadId
-
-    // Register in ProxCenter tasks
-    addTask({
-      id: uploadId,
-      type: 'upload',
-      label: `Upload ${file.name}`,
-      detail: `${formatBytes(file.size)} → ${storage} (${node})`,
-      progress: 0,
-      status: 'running',
-      createdAt: Date.now(),
-    })
-
-    // Allow reopening the dialog from the taskbar
-    registerOnRestore(uploadId, () => {
-      setMinimized(false)
-      onOpen()
-    })
 
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
     try {
-      const CHUNK_SIZE = 50 * 1024 * 1024 // 50 MB
+      // Register in ProxCenter tasks
+      addTask({
+        id: uploadId,
+        type: 'upload',
+        label: `Upload ${file.name}`,
+        detail: `${formatBytes(file.size)} → ${storage} (${node})`,
+        progress: 0,
+        status: 'running',
+        createdAt: Date.now(),
+      })
+
+      // Allow reopening the dialog from the taskbar
+      registerOnRestore(uploadId, () => {
+        setMinimized(false)
+        onOpen()
+      })
+
+      const CHUNK_SIZE = 5 * 1024 * 1024 // 5 MB
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
       const uploadUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
 

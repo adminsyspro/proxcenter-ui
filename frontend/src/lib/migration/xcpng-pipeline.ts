@@ -493,7 +493,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const statsFile = `${tmpFile}.stats`
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
-        `nohup bash -c 'curl -s -H "Authorization: Basic ${curlAuth}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+        `nohup bash -c 'curl -s --fail -H "Authorization: Basic ${curlAuth}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
       )
       if (!startDl.success || !startDl.output?.trim()) {
         throw new Error(`Failed to start download: ${startDl.error}`)
@@ -536,23 +536,38 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
         if (!isRunning) {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
-          if (exitCode !== 0) {
-            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-            throw new Error(`Download failed with exit code ${exitCode}`)
-          }
 
+          // Parse curl stats before checking exit code (for http_code in error messages)
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
           const curlStats = statsContent.output?.match(/\{[^}]+\}/)
+          let httpCode = 0
           if (curlStats) {
             try {
               const stats = JSON.parse(curlStats[0])
               downloadedBytes = stats.size || currentSize
               downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
               downloadTime = stats.time || elapsed
+              httpCode = stats.http_code || 0
             } catch {}
           } else {
             downloadTime = elapsed
           }
+
+          if (exitCode !== 0) {
+            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+            const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
+            throw new Error(`Download failed with exit code ${exitCode}${httpInfo}. Check XO connectivity and credentials.`)
+          }
+
+          // Validate that the downloaded file is not empty
+          const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
+          const actualFileSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10) || 0
+          if (actualFileSize === 0) {
+            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+            const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
+            throw new Error(`Downloaded VHD is empty (0 bytes)${httpInfo}. The XO REST API may have returned an error or the VDI is not accessible.`)
+          }
+          downloadedBytes = actualFileSize
 
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
           break

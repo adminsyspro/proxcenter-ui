@@ -292,10 +292,20 @@ export async function xoCreateSnapshot(xo: XoConnectionInfo, vmUuid: string, nam
   if (typeof result === "object" && result.$id) return result.$id
   if (typeof result === "object" && result.uuid) return result.uuid
 
-  // Async task — poll for completion
+  // XO REST API may return a task path as plain string: "/rest/v0/tasks/xxxxx"
+  if (typeof result === "string" && result.includes("/tasks/")) {
+    const taskId = result.split("/tasks/").pop()!.replace(/^\/|\/$/g, "")
+    const snapshotUuid = await xoWaitForTask(xo, taskId)
+    if (typeof snapshotUuid === "string" && snapshotUuid.length > 0) return snapshotUuid
+    if (typeof snapshotUuid === "object" && snapshotUuid?.id) return snapshotUuid.id
+    if (typeof snapshotUuid === "object" && snapshotUuid?.$id) return snapshotUuid.$id
+    if (typeof snapshotUuid === "object" && snapshotUuid?.uuid) return snapshotUuid.uuid
+    throw new Error(`XO snapshot task completed but no UUID in result: ${JSON.stringify(snapshotUuid)}`)
+  }
+
+  // Async task — poll for completion (object with taskId property)
   if (typeof result === "object" && result.taskId) {
     const snapshotUuid = await xoWaitForTask(xo, result.taskId)
-    // Task result is the snapshot UUID (string) or an object with id/$id/uuid
     if (typeof snapshotUuid === "string" && snapshotUuid.length > 0) return snapshotUuid
     if (typeof snapshotUuid === "object" && snapshotUuid?.id) return snapshotUuid.id
     if (typeof snapshotUuid === "object" && snapshotUuid?.$id) return snapshotUuid.$id

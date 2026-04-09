@@ -48,17 +48,16 @@ export async function POST(
     // Pour les VMs QEMU
     if (resourceType === 'qemu') {
       migrateParams.online = online ? 1 : 0
-      
-      // Si un stockage cible est spécifié, on doit activer with-local-disks
-      // Cela permet de migrer les disques d'un stockage à un autre (y compris partagé -> local)
+
       if (targetstorage) {
         migrateParams['with-local-disks'] = 1
         migrateParams.targetstorage = targetstorage
-      } 
-
-      // Si on a des disques locaux mais pas de stockage cible spécifié,
-      // activer with-local-disks pour copier vers le même stockage sur le nœud cible
-      else if (withLocalDisks) {
+      } else {
+        // Always send with-local-disks for online QEMU migrations.
+        // Proxmox ignores it if the VM has no local disks, but without it
+        // migrations fail when local disks are present. The frontend detection
+        // of local disks is fragile (async storages fetch may not complete),
+        // so we always set this flag to match Proxmox native UI behavior.
         migrateParams['with-local-disks'] = 1
       }
     }

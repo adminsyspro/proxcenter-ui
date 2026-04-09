@@ -3496,6 +3496,7 @@
     "moveDiskTo": "Move disk to another storage. Current storage: <strong>{storage}</strong>",
     "formatOptional": "Format (optional)",
     "keepCurrentFormat": "Keep the current format",
+    "storageOnlyRaw": "{type} storage only supports raw format",
     "deleteSourceDisk": "Delete the source disk after moving",
     "moving": "Moving...",
     "moveTo": "Move to {storage}",

@@ -3496,6 +3496,7 @@
     "moveDiskTo": "Déplacer le disque vers un autre stockage. Stockage actuel : <strong>{storage}</strong>",
     "formatOptional": "Format (optionnel)",
     "keepCurrentFormat": "Conserver le format actuel",
+    "storageOnlyRaw": "Le stockage {type} ne supporte que le format raw",
     "deleteSourceDisk": "Supprimer le disque source après le déplacement",
     "moving": "Déplacement en cours...",
     "moveTo": "Déplacer vers {storage}",

@@ -3467,6 +3467,7 @@
     "moveDiskTo": "将磁盘移动到其他存储。当前存储：<strong>{storage}</strong>",
     "formatOptional": "格式（可选）",
     "keepCurrentFormat": "保留当前格式",
+    "storageOnlyRaw": "{type} 存储仅支持 raw 格式",
     "deleteSourceDisk": "移动后删除源磁盘",
     "moving": "正在移动...",
     "moveTo": "移动到 {storage}",

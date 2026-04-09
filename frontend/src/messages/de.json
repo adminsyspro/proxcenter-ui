@@ -3464,6 +3464,7 @@
     "moveDiskTo": "Disk auf einen anderen Storage verschieben. Aktueller Storage: <strong>{storage}</strong>",
     "formatOptional": "Format (optional)",
     "keepCurrentFormat": "Keep the aktuell format",
+    "storageOnlyRaw": "{type}-Speicher unterstützt nur das Raw-Format",
     "deleteSourceDisk": "Quell-Disk nach dem Verschieben löschen",
     "moving": "Verschieben...",
     "moveTo": "Verschieben nach {storage}",

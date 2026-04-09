@@ -30,6 +30,19 @@ import {
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
+// Storage types that support multiple disk image formats (file-based storages)
+// Block-based storages (lvm, lvmthin, rbd, zfspool, iscsi, iscsidirect) only support raw
+const FILE_BASED_STORAGE_TYPES = new Set(['dir', 'nfs', 'cifs', 'smb', 'glusterfs', 'cephfs', 'btrfs'])
+
+function getSupportedFormats(storageType: string): string[] {
+  if (FILE_BASED_STORAGE_TYPES.has(storageType)) {
+    return ['raw', 'qcow2', 'vmdk']
+  }
+
+  // Block-based storage: only raw
+  return ['raw']
+}
+
 // ==================== EDIT DISK DIALOG ====================
 type EditDiskDialogProps = {
   open: boolean
@@ -100,6 +113,24 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   const [mbpsWr, setMbpsWr] = useState('')
   const [iopsRd, setIopsRd] = useState('')
   const [iopsWr, setIopsWr] = useState('')
+
+  // Compute supported formats for the selected target storage
+  const selectedTargetStorageObj = useMemo(
+    () => storages.find(s => s.storage === targetStorage),
+    [storages, targetStorage]
+  )
+  const supportedFormats = useMemo(
+    () => selectedTargetStorageObj ? getSupportedFormats(selectedTargetStorageObj.type) : ['raw', 'qcow2', 'vmdk'],
+    [selectedTargetStorageObj]
+  )
+  const supportsMultipleFormats = supportedFormats.length > 1
+
+  // Reset format when target storage changes and current format is not supported
+  useEffect(() => {
+    if (targetFormat && !supportedFormats.includes(targetFormat)) {
+      setTargetFormat('')
+    }
+  }, [targetStorage, supportedFormats, targetFormat])
 
   // CDROM state
   const [cdromMode, setCdromMode] = useState<'iso' | 'physical' | 'none'>('none')
@@ -789,18 +820,25 @@ return
                   </Select>
                 </FormControl>
 
-                <FormControl fullWidth size="small">
+                <FormControl fullWidth size="small" disabled={!supportsMultipleFormats}>
                   <InputLabel>{t('hardware.formatOptional')}</InputLabel>
                   <Select
-                    value={targetFormat}
+                    value={supportsMultipleFormats ? targetFormat : 'raw'}
                     onChange={(e) => setTargetFormat(e.target.value)}
                     label={t('hardware.formatOptional')}
                   >
-                    <MenuItem value="">{t('hardware.keepCurrentFormat')}</MenuItem>
-                    <MenuItem value="raw">Raw</MenuItem>
-                    <MenuItem value="qcow2">QCOW2</MenuItem>
-                    <MenuItem value="vmdk">VMDK</MenuItem>
+                    {supportsMultipleFormats && (
+                      <MenuItem value="">{t('hardware.keepCurrentFormat')}</MenuItem>
+                    )}
+                    {supportedFormats.map(fmt => (
+                      <MenuItem key={fmt} value={fmt}>{fmt === 'raw' ? 'Raw disk image (raw)' : fmt === 'qcow2' ? 'QCOW2 (qcow2)' : 'VMware (vmdk)'}</MenuItem>
+                    ))}
                   </Select>
+                  {!supportsMultipleFormats && selectedTargetStorageObj && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {t('hardware.storageOnlyRaw', { type: selectedTargetStorageObj.type })}
+                    </Typography>
+                  )}
                 </FormControl>
 
                 <FormControlLabel

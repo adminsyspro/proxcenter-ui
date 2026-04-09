@@ -21,8 +21,8 @@ export async function POST(req: Request) {
 
   // Retourner directement les infos nécessaires pour le proxy WS
   return NextResponse.json({
-    baseUrl: s.conn?.baseUrl,
-    apiToken: s.conn?.apiToken, // Token API pour l'authentification WebSocket
+    baseUrl: s.baseUrl,
+    apiToken: s.apiToken,
     port: s.port,
     ticket: s.ticket,
     node: s.node,

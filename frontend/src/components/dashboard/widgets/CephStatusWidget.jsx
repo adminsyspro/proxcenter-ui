@@ -176,24 +176,44 @@ function CephClusterCard({ cluster, isDark, perfData }) {
       </Box>
 
       {/* OSD icons */}
-      {cluster.osdsTotal > 0 && cluster.osdsTotal <= 100 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, justifyContent: 'center' }}>
-          {Array.from({ length: cluster.osdsTotal }, (_, i) => {
-            const isUp = i < cluster.osdsUp
-            const isIn = i < (cluster.osdsIn || cluster.osdsUp)
-            const color = !isUp ? '#ef4444' : !isIn ? '#ff9800' : '#4caf50'
-            const status = !isUp ? 'Down' : !isIn ? 'Up / Out' : 'Up / In'
-
-            
-return (
-              <span key={i} title={`OSD.${i} - ${status}`}
-                style={{ fontSize: 12, color, opacity: isUp && isIn ? 0.6 : 1, cursor: 'default', lineHeight: 1 }}>
-                <i className="ri-hard-drive-3-fill" />
-              </span>
-            )
-          })}
-        </Box>
-      )}
+      {cluster.osdsTotal > 0 && cluster.osdsTotal <= 100 && (() => {
+        const checks = cluster.healthChecks || {}
+        const downIds = new Set()
+        const warnIds = new Set()
+        const fullIds = new Set()
+        const re = /osd\.(\d+)/g
+        for (const [n, d] of Object.entries(checks)) {
+          for (const det of (d?.detail || [])) {
+            let m; re.lastIndex = 0
+            while ((m = re.exec(det?.message || '')) !== null) {
+              const id = parseInt(m[1], 10)
+              if (n === 'OSD_DOWN' || n === 'OSD_FLAGS') downIds.add(id)
+              else if (n === 'OSD_NEARFULL' || n === 'OSD_BACKFILLFULL') warnIds.add(id)
+              else if (n === 'OSD_FULL') fullIds.add(id)
+            }
+          }
+        }
+        return (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, justifyContent: 'center' }}>
+            {Array.from({ length: cluster.osdsTotal }, (_, i) => {
+              const isUp = i < cluster.osdsUp
+              const isIn = i < (cluster.osdsIn || cluster.osdsUp)
+              let color, status, opacity
+              if (downIds.has(i) || !isUp) { color = '#ef4444'; status = 'Down'; opacity = 1 }
+              else if (fullIds.has(i)) { color = '#ef4444'; status = 'Full'; opacity = 1 }
+              else if (warnIds.has(i)) { color = '#ff9800'; status = 'Near Full'; opacity = 1 }
+              else if (!isIn) { color = '#ff9800'; status = 'Up / Out'; opacity = 1 }
+              else { color = '#4caf50'; status = 'Up / In'; opacity = 0.6 }
+              return (
+                <span key={i} title={`OSD.${i} - ${status}`}
+                  style={{ fontSize: 12, color, opacity, cursor: 'default', lineHeight: 1 }}>
+                  <i className="ri-hard-drive-3-fill" />
+                </span>
+              )
+            })}
+          </Box>
+        )
+      })()}
 
       </Box>
 

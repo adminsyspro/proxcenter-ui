@@ -2528,8 +2528,36 @@ export default function ClusterTabs(props: any) {
                                   const numUp = clusterCephData._normalized?.osd?.num_up_osds || clusterCephData.osdmap?.osdmap?.num_up_osds || 0
                                   const numIn = clusterCephData._normalized?.osd?.num_in_osds || clusterCephData.osdmap?.osdmap?.num_in_osds || 0
                                   const numTotal = clusterCephData._normalized?.osd?.num_osds || clusterCephData.osdmap?.osdmap?.num_osds || 0
-                                  const numDown = numTotal - numUp
-                                  const numOut = numTotal - numIn
+
+                                  // Parse health checks to find degraded OSDs by ID
+                                  const checks = clusterCephData.health?.checks || {}
+                                  const downIds = new Set<number>()
+                                  const warnIds = new Set<number>()
+                                  const fullIds = new Set<number>()
+                                  const osdRe = /osd\.(\d+)/g
+
+                                  for (const [name, data] of Object.entries(checks as Record<string, any>)) {
+                                    for (const d of (data?.detail || [])) {
+                                      const msg = d?.message || ''
+                                      let m
+                                      osdRe.lastIndex = 0
+                                      while ((m = osdRe.exec(msg)) !== null) {
+                                        const id = parseInt(m[1], 10)
+                                        if (name === 'OSD_DOWN' || name === 'OSD_FLAGS') downIds.add(id)
+                                        else if (name === 'OSD_NEARFULL' || name === 'OSD_BACKFILLFULL') warnIds.add(id)
+                                        else if (name === 'OSD_FULL') fullIds.add(id)
+                                      }
+                                    }
+                                  }
+
+                                  const getOsdState = (osdId: number) => {
+                                    if (downIds.has(osdId)) return { color: '#ef4444', label: 'Down', opacity: 1 }
+                                    if (fullIds.has(osdId)) return { color: '#ef4444', label: 'Full', opacity: 1 }
+                                    if (warnIds.has(osdId)) return { color: '#ff9800', label: 'Near Full', opacity: 1 }
+                                    if (osdId >= numUp) return { color: '#ef4444', label: 'Down', opacity: 1 }
+                                    return { color: '#4caf50', label: 'Up/In', opacity: 0.7 }
+                                  }
+
                                   return (
                                     <Box>
                                       <Typography variant="caption" sx={{ opacity: 0.7 }}>OSDs</Typography>
@@ -2540,12 +2568,10 @@ export default function ClusterTabs(props: any) {
                                       </Box>
                                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                         {Array.from({ length: numTotal }, (_, i) => {
-                                          const isUp = i < numUp
-                                          const isDown = i >= numUp
-                                          const color = isDown ? '#ef4444' : '#4caf50'
+                                          const state = getOsdState(i)
                                           return (
-                                            <MuiTooltip key={i} title={`OSD ${i} - ${isUp ? 'Up/In' : 'Down'}`}>
-                                              <i className="ri-hard-drive-3-fill" style={{ fontSize: 14, color, opacity: isDown ? 1 : 0.7 }} />
+                                            <MuiTooltip key={i} title={`OSD ${i} - ${state.label}`}>
+                                              <i className="ri-hard-drive-3-fill" style={{ fontSize: 14, color: state.color, opacity: state.opacity }} />
                                             </MuiTooltip>
                                           )
                                         })}

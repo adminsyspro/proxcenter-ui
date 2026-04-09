@@ -365,6 +365,7 @@ return null
           pgsTotal: Number(pgmap?.num_pgs || 0), bytesTotal: Number(pgmap?.bytes_total || 0), bytesUsed: Number(pgmap?.bytes_used || 0),
           usedPct: pgmap?.bytes_total > 0 ? round1((Number(pgmap?.bytes_used || 0) / Number(pgmap?.bytes_total)) * 100) : 0,
           readBps: Number(pgmap?.read_bytes_sec || 0), writeBps: Number(pgmap?.write_bytes_sec || 0),
+          healthChecks: data.cephStatus?.health?.checks || {},
         }
 
         // Only include real Ceph clusters (multi-node with actual OSDs)

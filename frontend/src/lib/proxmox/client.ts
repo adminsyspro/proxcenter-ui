@@ -100,12 +100,14 @@ export async function pveFetch<T>(
   }
 
   /** Core request logic against a specific baseUrl */
-  async function doRequest(baseUrl: string, timeoutMs = 15_000): Promise<T> {
+  async function doRequest(baseUrl: string, timeoutMs = 15_000, ignoreCallerSignal = false): Promise<T> {
     const url = `${baseUrl.replace(/\/$/, "")}/api2/json${path}`
 
     // Use caller signal if provided, otherwise create a timeout signal.
     // Combine both when caller provides its own signal.
-    const callerSignal = init.signal ?? undefined
+    // During failover, ignoreCallerSignal=true to avoid the caller's already-aborted
+    // signal from instantly killing failover candidates.
+    const callerSignal = (!ignoreCallerSignal && init.signal) ? init.signal : undefined
     const timeoutSignal = AbortSignal.timeout(timeoutMs)
     const signal = callerSignal
       ? AbortSignal.any([callerSignal, timeoutSignal])
@@ -148,9 +150,11 @@ export async function pveFetch<T>(
       return await doRequest(cachedFailoverUrl)
     } catch (cachedErr) {
       // Cached failover failed — try the original (maybe it recovered)
+      // Use ignoreCallerSignal=true because the caller's signal may have fired
+      // while waiting for the cached URL to timeout.
       clearFailoverUrl(opts.id!)
       try {
-        const result = await doRequest(opts.baseUrl)
+        const result = await doRequest(opts.baseUrl, 10_000, true)
         return result
       } catch {
         // Both failed — fall through to full failover
@@ -216,14 +220,15 @@ export async function pveFetch<T>(
     const currentHost = extractHostFromUrl(opts.baseUrl)
 
     // Create failover promise and set lock
+    // ignoreCallerSignal=true: the caller's AbortSignal may already be aborted
+    // (e.g. poller's 8s timeout fired while waiting for the dead primary).
+    // Failover candidates must use their own fresh timeout to succeed.
     const failoverPromise = (async (): Promise<string | null> => {
       for (const ip of cached.ips) {
         if (ip === currentHost) continue
         const candidateUrl = replaceHostInUrl(opts.baseUrl, ip)
         try {
-          // Test the candidate with a lightweight call (short timeout)
-          await doRequest(candidateUrl, 5_000)
-          // Success — persist the new baseUrl
+          await doRequest(candidateUrl, 5_000, true)
           await updateConnectionBaseUrl(connId, candidateUrl)
           return candidateUrl
         } catch {
@@ -236,7 +241,7 @@ export async function pveFetch<T>(
     setFailoverLock(connId, failoverPromise)
 
     const newUrl = await failoverPromise
-    if (newUrl) return doRequest(newUrl)
+    if (newUrl) return doRequest(newUrl, 15_000, true)
 
     // All nodes failed
     throw new Error(`PVE connection ${connId}: all cluster nodes unreachable (tried ${cached.ips.length} nodes). Original error: ${(err as Error).message}`)

@@ -337,7 +337,10 @@ export const authOptions: NextAuthOptions = {
           if (!oidcConfig.autoProvision) return false
 
           const id = nanoid()
-          const role = resolveOidcRole(groups, oidcConfig)
+          const resolvedRole = resolveOidcRole(groups, oidcConfig)
+          // Normalize: support both "role_viewer" (new) and "viewer" (legacy) formats
+          const oidcRoleId = resolvedRole.startsWith('role_') ? resolvedRole : `role_${resolvedRole}`
+          const role = oidcRoleId.replace(/^role_/, '') // Simple name for users table
 
           db.prepare(
             `INSERT INTO users (id, email, name, role, auth_provider, oidc_sub, enabled, created_at, updated_at, last_login_at)
@@ -351,7 +354,6 @@ export const authOptions: NextAuthOptions = {
           ).run(id, now)
 
           // Create RBAC role assignment from OIDC groups
-          const oidcRoleId = `role_${role}`
           const oidcRoleExists = db.prepare("SELECT id FROM rbac_roles WHERE id = ?").get(oidcRoleId)
           const finalOidcRoleId = oidcRoleExists ? (oidcRoleExists as any).id : 'role_viewer'
 

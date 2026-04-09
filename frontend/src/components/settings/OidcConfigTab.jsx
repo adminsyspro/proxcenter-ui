@@ -44,7 +44,7 @@ export default function OidcConfigTab() {
     claim_name: 'name',
     claim_groups: 'groups',
     auto_provision: true,
-    default_role: 'viewer',
+    default_role: 'role_viewer',
     group_role_mapping: '{}',
   })
 
@@ -57,6 +57,7 @@ export default function OidcConfigTab() {
   const [showSecret, setShowSecret] = useState(false)
   const [hasClientSecret, setHasClientSecret] = useState(false)
   const [groupMappings, setGroupMappings] = useState([])
+  const [availableRoles, setAvailableRoles] = useState([])
 
   useEffect(() => {
     loadConfig()
@@ -77,10 +78,14 @@ export default function OidcConfigTab() {
       const data = await res.json()
 
       if (data.data) {
+        // Normalize legacy role values (e.g. "viewer" -> "role_viewer")
+        const normalizeRole = r => (r && !r.startsWith('role_') ? `role_${r}` : r)
+
         setConfig(prev => ({
           ...prev,
           ...data.data,
           client_secret: '',
+          default_role: normalizeRole(data.data.default_role) || 'role_viewer',
         }))
         setHasClientSecret(data.data.hasClientSecret || false)
 
@@ -88,12 +93,20 @@ export default function OidcConfigTab() {
         try {
           const mapping = JSON.parse(data.data.group_role_mapping || '{}')
           setGroupMappings(
-            Object.entries(mapping).map(([group, role]) => ({ group, role }))
+            Object.entries(mapping).map(([group, role]) => ({ group, role: normalizeRole(role) }))
           )
         } catch {
           setGroupMappings([])
         }
       }
+      // Fetch available RBAC roles
+      try {
+        const rolesRes = await fetch('/api/v1/rbac/roles')
+        if (rolesRes.ok) {
+          const rolesData = await rolesRes.json()
+          setAvailableRoles(rolesData.data || [])
+        }
+      } catch {}
     } catch (e) {
       console.error('Error loading OIDC config:', e)
       setError(t('oidc.loadError'))
@@ -180,7 +193,7 @@ export default function OidcConfigTab() {
   }
 
   const addGroupMapping = () => {
-    setGroupMappings([...groupMappings, { group: '', role: 'viewer' }])
+    setGroupMappings([...groupMappings, { group: '', role: 'role_viewer' }])
   }
 
   const removeGroupMapping = (index) => {
@@ -454,9 +467,9 @@ export default function OidcConfigTab() {
               label={t('oidc.defaultRole')}
               onChange={e => setConfig({ ...config, default_role: e.target.value })}
             >
-              <MenuItem value='viewer'>Viewer</MenuItem>
-              <MenuItem value='operator'>Operator</MenuItem>
-              <MenuItem value='admin'>Admin</MenuItem>
+              {availableRoles.map(role => (
+                <MenuItem key={role.id} value={role.id}>{t(`rbac.roles.${role.id}`, { defaultValue: role.name })}</MenuItem>
+              ))}
             </Select>
             <Typography variant='caption' sx={{ mt: 0.5, opacity: 0.6 }}>
               {t('oidc.defaultRoleHelper')}
@@ -489,10 +502,9 @@ export default function OidcConfigTab() {
                   label={t('oidc.role')}
                   onChange={e => updateGroupMapping(index, 'role', e.target.value)}
                 >
-                  <MenuItem value='super_admin'>Super Admin</MenuItem>
-                  <MenuItem value='admin'>Admin</MenuItem>
-                  <MenuItem value='operator'>Operator</MenuItem>
-                  <MenuItem value='viewer'>Viewer</MenuItem>
+                  {availableRoles.map(role => (
+                    <MenuItem key={role.id} value={role.id}>{t(`rbac.roles.${role.id}`, { defaultValue: role.name })}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               <IconButton size='small' onClick={() => removeGroupMapping(index)} disabled={!config.enabled}>

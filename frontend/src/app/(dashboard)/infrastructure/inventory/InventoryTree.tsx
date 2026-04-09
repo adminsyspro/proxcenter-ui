@@ -946,7 +946,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       const savedCollapsed = localStorage.getItem('inventoryCollapsedSections')
       if (savedCollapsed) {
         const parsed = JSON.parse(savedCollapsed)
-        if (parsed.length > 0) setCollapsedSections(new Set(parsed))
+        setCollapsedSections(new Set(parsed))
       }
 
       const savedStorageExpanded = localStorage.getItem('inventoryStorageExpandedItems')

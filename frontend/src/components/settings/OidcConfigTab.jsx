@@ -468,7 +468,7 @@ export default function OidcConfigTab() {
               onChange={e => setConfig({ ...config, default_role: e.target.value })}
             >
               {availableRoles.map(role => (
-                <MenuItem key={role.id} value={role.id}>{t(`rbac.roles.${role.id}`, { defaultValue: role.name })}</MenuItem>
+                <MenuItem key={role.id} value={role.id}>{role.is_system ? t(`rbac.roles.${role.id}`) : role.name}</MenuItem>
               ))}
             </Select>
             <Typography variant='caption' sx={{ mt: 0.5, opacity: 0.6 }}>
@@ -503,7 +503,7 @@ export default function OidcConfigTab() {
                   onChange={e => updateGroupMapping(index, 'role', e.target.value)}
                 >
                   {availableRoles.map(role => (
-                    <MenuItem key={role.id} value={role.id}>{t(`rbac.roles.${role.id}`, { defaultValue: role.name })}</MenuItem>
+                    <MenuItem key={role.id} value={role.id}>{role.is_system ? t(`rbac.roles.${role.id}`) : role.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>

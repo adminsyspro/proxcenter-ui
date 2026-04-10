@@ -106,12 +106,17 @@ export async function GET(req: Request) {
         })
       : filtered
 
-    const sliced = Array.isArray(annotated) ? annotated.slice(offset, offset + limit) : annotated
+    // Apply post-annotation status filter (e.g. ?status=active should exclude silenced)
+    const finalFiltered = Array.isArray(annotated) && status
+      ? annotated.filter((a: any) => a.status === status)
+      : annotated
+
+    const sliced = Array.isArray(finalFiltered) ? finalFiltered.slice(offset, offset + limit) : finalFiltered
 
     return NextResponse.json({
       ...(response.data || {}),
       data: sliced,
-      total: Array.isArray(annotated) ? annotated.length : 0,
+      total: Array.isArray(finalFiltered) ? finalFiltered.length : 0,
     })
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {

@@ -1,12 +1,25 @@
+import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { getTenantConnectionIds } from '@/lib/tenant'
+import { getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+function buildOrchestratorFingerprint(alert: {
+  connection_id?: string
+  type?: string
+  severity?: string
+  resource?: string
+  resource_type?: string
+}): string {
+  const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
+  const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}`
+  return crypto.createHash('md5').update(data).digest('hex')
+}
 
 /**
  * GET /api/v1/orchestrator/alerts/summary
@@ -29,7 +42,28 @@ export async function GET(req: Request) {
       ? allAlerts.filter((a: any) => !a.connection_id || tenantConnectionIds.has(a.connection_id))
       : []
 
-    const active = filtered.filter((a: any) => a.status === 'active')
+    // Exclude silenced alerts from counts
+    let silencedFingerprints = new Set<string>()
+
+    try {
+      const prisma = await getSessionPrisma()
+      const now = new Date()
+      const silences = await prisma.alertSilence.findMany({
+        where: {
+          OR: [
+            { silencedUntil: null },
+            { silencedUntil: { gt: now } },
+          ],
+        },
+        select: { fingerprint: true },
+      })
+      silencedFingerprints = new Set(silences.map(s => s.fingerprint))
+    } catch {
+      // Table may not exist yet
+    }
+
+    const nonSilenced = filtered.filter((a: any) => !silencedFingerprints.has(buildOrchestratorFingerprint(a)))
+    const active = nonSilenced.filter((a: any) => a.status === 'active')
     const today = new Date().toISOString().slice(0, 10)
 
     const summary = {
@@ -37,8 +71,8 @@ export async function GET(req: Request) {
       critical: active.filter((a: any) => a.severity === 'critical').length,
       warning: active.filter((a: any) => a.severity === 'warning').length,
       info: active.filter((a: any) => a.severity === 'info').length,
-      acknowledged: filtered.filter((a: any) => a.status === 'acknowledged').length,
-      resolved_today: filtered.filter((a: any) => a.status === 'resolved' && a.resolved_at?.startsWith(today)).length,
+      acknowledged: nonSilenced.filter((a: any) => a.status === 'acknowledged').length,
+      resolved_today: nonSilenced.filter((a: any) => a.status === 'resolved' && a.resolved_at?.startsWith(today)).length,
     }
 
     return NextResponse.json(summary)

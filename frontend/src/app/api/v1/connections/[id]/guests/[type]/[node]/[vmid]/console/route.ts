@@ -27,20 +27,6 @@ export async function POST(
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
 
-  // Resolve the actual node IP for the WebSocket connection (failover-safe)
-  let nodeBaseUrl = conn.baseUrl
-  try {
-    const { prisma } = await import("@/lib/db/prisma")
-    const host = await prisma.managedHost.findFirst({
-      where: { connectionId: id, node, ip: { not: null } },
-      select: { ip: true },
-    })
-    if (host?.ip) {
-      const { replaceHostInUrl } = await import("@/lib/proxmox/urlUtils")
-      nodeBaseUrl = replaceHostInUrl(conn.baseUrl, host.ip)
-    }
-  } catch {}
-
   // Proxmox: POST .../vncproxy (option websocket=1)
   // Le body doit être une string URL-encoded
   const data = await pveFetch<any>(
@@ -58,7 +44,7 @@ export async function POST(
   const expiresAt = Date.now() + 30_000 // 30s to allow for network latency / reverse proxy
 
   sessions.set(sessionId, {
-    baseUrl: nodeBaseUrl,
+    baseUrl: conn.baseUrl,
     apiToken: conn.apiToken,
     node,
     type,

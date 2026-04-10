@@ -4719,6 +4719,7 @@
     "mainOptions": "Options principales",
     "migrateNonHaVms": "Migrer les VMs non-HA",
     "autoRebootIfKernel": "Redémarrer automatiquement si nécessaire (kernel update)",
+    "autoRebootHint": "Le timeout de reboot par défaut est de 5 minutes. Si vos serveurs mettent plus de temps à redémarrer, ajustez le timeout dans les options avancées ci-dessous.",
     "setCephNoout": "Définir le flag Ceph noout pendant la maintenance",
     "abortOnFailure": "Arrêter en cas d'erreur",
     "manualApprovalBetweenNodes": "Approbation manuelle entre chaque nœud",

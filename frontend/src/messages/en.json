@@ -4724,6 +4724,7 @@
     "mainOptions": "Main Options",
     "migrateNonHaVms": "Migrate non-HA VMs",
     "autoRebootIfKernel": "Automatically reboot if needed (kernel update)",
+    "autoRebootHint": "Default reboot timeout is 5 minutes. If your servers take longer to reboot, adjust the timeout in Advanced Options below.",
     "setCephNoout": "Set Ceph noout flag during maintenance",
     "abortOnFailure": "Abort on failure",
     "manualApprovalBetweenNodes": "Manual approval between each node",

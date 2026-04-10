@@ -4682,6 +4682,7 @@
     "mainOptions": "Hauptoptionen",
     "migrateNonHaVms": "Nicht-HA-VMs migrieren",
     "autoRebootIfKernel": "Automatischer Neustart bei Bedarf (Kernel-Update)",
+    "autoRebootHint": "Das Standard-Neustart-Timeout beträgt 5 Minuten. Wenn Ihre Server länger zum Neustart benötigen, passen Sie das Timeout in den erweiterten Optionen unten an.",
     "setCephNoout": "Ceph-noout-Flag während Wartung setzen",
     "abortOnFailure": "Bei Fehler abbrechen",
     "manualApprovalBetweenNodes": "Manuell approval between each node",

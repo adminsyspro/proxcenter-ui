@@ -4680,6 +4680,7 @@
     "mainOptions": "主要选项",
     "migrateNonHaVms": "迁移非高可用虚拟机",
     "autoRebootIfKernel": "需要时自动重启（内核更新）",
+    "autoRebootHint": "默认重启超时为 5 分钟。如果您的服务器重启时间较长，请在下方高级选项中调整超时时间。",
     "setCephNoout": "维护期间设置 Ceph noout 标志",
     "abortOnFailure": "失败时中止",
     "manualApprovalBetweenNodes": "每个节点之间手动审批",

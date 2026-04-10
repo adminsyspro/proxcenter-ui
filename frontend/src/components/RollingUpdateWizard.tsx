@@ -856,6 +856,13 @@ export default function RollingUpdateWizard({
                     }
                     label={t('updates.autoRebootIfKernel')}
                   />
+                  {config.auto_reboot && (
+                    <Alert severity="warning" icon={<i className="ri-information-line" style={{ fontSize: 18 }} />} sx={{ py: 0.5 }}>
+                      <Typography variant="caption">
+                        {t('updates.autoRebootHint')}
+                      </Typography>
+                    </Alert>
+                  )}
                   
                   {hasCeph && (
                     <FormControlLabel
@@ -935,7 +942,7 @@ export default function RollingUpdateWizard({
                         size="small"
                         value={config.reboot_timeout}
                         onChange={(e) => setConfig(c => ({ ...c, reboot_timeout: Number.parseInt(e.target.value) || 300 }))}
-                        InputProps={{ inputProps: { min: 60, max: 600 } }}
+                        InputProps={{ inputProps: { min: 60, max: 1800 } }}
                       />
                       
                       <TextField

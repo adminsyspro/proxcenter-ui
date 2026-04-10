@@ -74,8 +74,8 @@ export async function GET(req: Request) {
     }
     const deduped = Array.from(dedupMap.values())
 
-    const nonSilenced = deduped.filter((a: any) => !silencedFingerprints.has(a._fp))
-    const active = nonSilenced.filter((a: any) => a.status === 'active')
+    const visible = deduped.filter((a: any) => !silencedFingerprints.has(a._fp))
+    const active = visible.filter((a: any) => a.status === 'active')
     const today = new Date().toISOString().slice(0, 10)
 
     const summary = {
@@ -83,8 +83,8 @@ export async function GET(req: Request) {
       critical: active.filter((a: any) => a.severity === 'critical').length,
       warning: active.filter((a: any) => a.severity === 'warning').length,
       info: active.filter((a: any) => a.severity === 'info').length,
-      acknowledged: nonSilenced.filter((a: any) => a.status === 'acknowledged').length,
-      resolved_today: nonSilenced.filter((a: any) => a.status === 'resolved' && a.resolved_at?.startsWith(today)).length,
+      acknowledged: visible.filter((a: any) => a.status === 'acknowledged').length,
+      resolved_today: visible.filter((a: any) => a.status === 'resolved' && a.resolved_at?.startsWith(today)).length,
     }
 
     return NextResponse.json(summary)

@@ -321,9 +321,6 @@ export default function AlertsPage() {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() })
   const selectedAlertIds = Array.from(selectionModel.ids) as string[]
 
-  // Dismissed alert IDs (frontend-only, resets on page reload)
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
-
   // Mute popover
   const [muteAnchorEl, setMuteAnchorEl] = useState<null | HTMLElement>(null)
   const [muteTargetFingerprint, setMuteTargetFingerprint] = useState<string | null>(null)
@@ -391,8 +388,6 @@ return () => setPageInfo('', '', '')
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(alert => {
-      if (dismissedIds.has(alert.id)) return false
-
       if (search) {
         const s = search.toLowerCase()
 
@@ -405,7 +400,7 @@ return () => setPageInfo('', '', '')
 
 return true
     })
-  }, [alerts, search, severityFilter, statusFilter, dismissedIds])
+  }, [alerts, search, severityFilter, statusFilter])
 
   const handleClearAll = () => {
     if (!isEnterprise) return
@@ -553,79 +548,20 @@ return true
     }
   }
 
-  const handleDeleteAlerts = (ids: string[]) => {
-    if (ids.length === 0) return
+  const handleDeleteAlerts = async (ids: string[]) => {
+    if (!isEnterprise || ids.length === 0) return
 
-    setDismissedIds(prev => {
-      const next = new Set(prev)
-      ids.forEach(id => next.add(id))
-      return next
-    })
-    setSelectionModel({ type: 'include', ids: new Set() })
-  }
-
-  const handleBulkResolve = () => {
-    if (!isEnterprise || selectedAlertIds.length === 0) return
-
-    const resolvableIds = selectedAlertIds.filter(id => {
-      const alert = alerts.find(a => a.id === id)
-      return alert && alert.status !== 'resolved'
-    })
-
-    if (resolvableIds.length === 0) return
-
-    setConfirmDialog({
-      open: true,
-      title: t('alerts.resolve'),
-      message: t('alerts.resolveConfirm', { count: resolvableIds.length }),
-      onConfirm: async () => {
-        try {
-          await Promise.all(
-            resolvableIds.map(id =>
-              fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' })
-            )
-          )
-          showToast(t('common.success'), 'success')
-          setSelectionModel({ type: 'include', ids: new Set() })
-          revalidateAll()
-        } catch (e) {
-          showToast(t('common.error'), 'error')
-        }
-
-        setConfirmDialog(d => ({ ...d, open: false }))
-      }
-    })
-  }
-
-  const handlePurgeAlerts = () => {
-    if (!isEnterprise) return
-
-    setConfirmDialog({
-      open: true,
-      title: t('alerts.purgeAlerts'),
-      message: t('alerts.purgeAlertsConfirm'),
-      onConfirm: async () => {
-        try {
-          // Purge all alerts from orchestrator (active ones will be re-created on next cycle)
-          await fetch('/api/v1/orchestrator/alerts', { method: 'DELETE' })
-          // Also clear all local silences
-          const silences = await fetch('/api/v1/alerts/silence').then(r => r.json()).catch(() => ({ data: [] }))
-          if (silences.data?.length) {
-            await Promise.all(
-              silences.data.map((s: any) =>
-                fetch(`/api/v1/alerts/silence?fingerprint=${encodeURIComponent(s.fingerprint)}`, { method: 'DELETE' }).catch(() => {})
-              )
-            )
-          }
-          showToast(t('common.success'), 'success')
-          revalidateAll()
-        } catch (e) {
-          showToast(t('common.error'), 'error')
-        }
-
-        setConfirmDialog(d => ({ ...d, open: false }))
-      }
-    })
+    try {
+      await Promise.all(
+        ids.map(id =>
+          fetch(`/api/v1/orchestrator/alerts/${id}`, { method: 'DELETE' })
+        )
+      )
+      setSelectionModel({ type: 'include', ids: new Set() })
+      revalidateAll()
+    } catch (e) {
+      showToast(t('common.error'), 'error')
+    }
   }
 
   const MUTE_DURATIONS = [
@@ -710,11 +646,6 @@ return true
                   <i className="ri-check-line" />
                 </Button>
               </Tooltip>
-              <Tooltip title={t('alerts.resolve')}>
-                <Button size="small" color="success" onClick={() => handleResolveSingle(id)}>
-                  <i className="ri-check-double-line" />
-                </Button>
-              </Tooltip>
               {_fingerprint && (
                 <Tooltip title={t('alerts.muteAlert')}>
                   <Button size="small" onClick={(e) => handleMuteClick(e, _fingerprint)}>
@@ -722,6 +653,11 @@ return true
                   </Button>
                 </Tooltip>
               )}
+              <Tooltip title={t('common.delete')}>
+                <Button size="small" color="error" onClick={() => handleDeleteAlerts([id])}>
+                  <i className="ri-delete-bin-line" />
+                </Button>
+              </Tooltip>
             </Box>
           )
         }
@@ -729,11 +665,6 @@ return true
         if (status === 'acknowledged') {
           return (
             <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <Tooltip title={t('alerts.resolve')}>
-                <Button size="small" color="success" onClick={() => handleResolveSingle(id)}>
-                  <i className="ri-check-double-line" />
-                </Button>
-              </Tooltip>
               {_fingerprint && (
                 <Tooltip title={t('alerts.muteAlert')}>
                   <Button size="small" onClick={(e) => handleMuteClick(e, _fingerprint)}>
@@ -764,6 +695,11 @@ return true
               <Tooltip title={t('alerts.unmuteAlert')}>
                 <Button size="small" color="primary" onClick={() => _fingerprint && handleUnmute(_fingerprint)}>
                   <i className="ri-volume-up-line" />
+                </Button>
+              </Tooltip>
+              <Tooltip title={t('common.delete')}>
+                <Button size="small" color="error" onClick={() => handleDeleteAlerts([id])}>
+                  <i className="ri-delete-bin-line" />
                 </Button>
               </Tooltip>
             </Box>
@@ -880,25 +816,9 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               </FormControl>
               <Box sx={{ flex: 1 }} />
               {selectedAlertIds.length > 0 && (
-                <>
-                  <Button size="small" variant="outlined" color="success" onClick={handleBulkResolve}
-                    disabled={selectedAlertIds.filter(id => { const a = alerts.find(x => x.id === id); return a && a.status !== 'resolved' }).length === 0}>
-                    <i className="ri-check-double-line" style={{ marginRight: 4 }} /> {t('alerts.resolveSelected')} ({selectedAlertIds.length})
-                  </Button>
-                  <Button size="small" variant="outlined" color="error" onClick={() => handleDeleteAlerts(selectedAlertIds)}>
-                    <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.deleteSelected')} ({selectedAlertIds.length})
-                  </Button>
-                </>
-              )}
-              {selectedAlertIds.length === 0 && (
-                <>
-                  <Button size="small" variant="outlined" color="error" onClick={handleClearAll} disabled={filteredAlerts.filter(a => a.status === 'active').length === 0}>
-                    <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.resolveAll')} ({filteredAlerts.filter(a => a.status === 'active').length})
-                  </Button>
-                  <Button size="small" variant="outlined" onClick={handlePurgeAlerts}>
-                    <i className="ri-eraser-line" style={{ marginRight: 4 }} /> {t('alerts.purgeAlerts')}
-                  </Button>
-                </>
+                <Button size="small" variant="outlined" color="error" onClick={() => handleDeleteAlerts(selectedAlertIds)}>
+                  <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.deleteSelected')} ({selectedAlertIds.length})
+                </Button>
               )}
             </Stack>
             <Box sx={{ flex: 1, minHeight: 0 }}>

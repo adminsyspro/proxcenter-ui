@@ -656,6 +656,11 @@ return orchestratorClient.get<AlertSummary>(`/alerts/summary${query}`)
     return orchestratorClient.post<{ status: string }>(`/alerts/${id}/resolve`)
   },
 
+  // Delete a single alert by ID
+  async deleteAlert(id: string): Promise<OrchestratorResponse<{ status: string }>> {
+    return orchestratorClient.delete<{ status: string }>(`/alerts/${id}`)
+  },
+
   // Clear all active alerts
   async clearAll(connectionId?: string): Promise<OrchestratorResponse<{ status: string }>> {
     const query = connectionId ? `?connection_id=${connectionId}` : ''

@@ -379,6 +379,8 @@
     "deleteSelected": "Auswahl loschen",
     "clearResolved": "Behobene loschen",
     "clearResolvedConfirm": "Alle behobenen Warnmeldungen loschen? Dies kann nicht ruckgangig gemacht werden.",
+    "purgeAlerts": "Alte Warnmeldungen loschen",
+    "purgeAlertsConfirm": "Alle alten Warnmeldungen aus der Datenbank loschen? Aktive Warnmeldungen werden automatisch neu erstellt. Stummschaltungen werden ebenfalls geloscht.",
     "mute": "Stummschalten",
     "unmute": "Stummschaltung aufheben",
     "muteAlert": "Diese Warnung stummschalten",

@@ -410,6 +410,8 @@
     "deleteSelected": "Delete selected",
     "clearResolved": "Clear resolved",
     "clearResolvedConfirm": "Clear all resolved alerts? This cannot be undone.",
+    "purgeAlerts": "Purge old alerts",
+    "purgeAlertsConfirm": "Purge all old alerts from the database? Active alerts will be re-created automatically. Silences will also be cleared.",
     "mute": "Mute",
     "unmute": "Unmute",
     "muteAlert": "Mute this alert",

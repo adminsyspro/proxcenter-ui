@@ -621,16 +621,26 @@ return true
     })
   }
 
-  const handleClearResolved = () => {
+  const handlePurgeAlerts = () => {
     if (!isEnterprise) return
 
     setConfirmDialog({
       open: true,
-      title: t('alerts.clearResolved'),
-      message: t('alerts.clearResolvedConfirm'),
+      title: t('alerts.purgeAlerts'),
+      message: t('alerts.purgeAlertsConfirm'),
       onConfirm: async () => {
         try {
+          // Purge all alerts from orchestrator (active ones will be re-created on next cycle)
           await fetch('/api/v1/orchestrator/alerts/clear', { method: 'DELETE' })
+          // Also clear all local silences
+          const silences = await fetch('/api/v1/alerts/silence').then(r => r.json()).catch(() => ({ data: [] }))
+          if (silences.data?.length) {
+            await Promise.all(
+              silences.data.map((s: any) =>
+                fetch(`/api/v1/alerts/silence?fingerprint=${encodeURIComponent(s.fingerprint)}`, { method: 'DELETE' }).catch(() => {})
+              )
+            )
+          }
           showToast(t('common.success'), 'success')
           revalidateAll()
         } catch (e) {
@@ -909,8 +919,8 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   <Button size="small" variant="outlined" color="error" onClick={handleClearAll} disabled={filteredAlerts.filter(a => a.status === 'active').length === 0}>
                     <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.resolveAll')} ({filteredAlerts.filter(a => a.status === 'active').length})
                   </Button>
-                  <Button size="small" variant="outlined" onClick={handleClearResolved} disabled={alerts.filter(a => a.status === 'resolved').length === 0}>
-                    <i className="ri-eraser-line" style={{ marginRight: 4 }} /> {t('alerts.clearResolved')}
+                  <Button size="small" variant="outlined" onClick={handlePurgeAlerts}>
+                    <i className="ri-eraser-line" style={{ marginRight: 4 }} /> {t('alerts.purgeAlerts')}
                   </Button>
                 </>
               )}

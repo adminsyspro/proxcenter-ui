@@ -383,6 +383,8 @@
     "deleteSelected": "删除选中",
     "clearResolved": "清除已解决",
     "clearResolvedConfirm": "清除所有已解决的告警？此操作无法撤销。",
+    "purgeAlerts": "清除旧告警",
+    "purgeAlertsConfirm": "清除数据库中所有旧告警？活跃告警将自动重新创建。静音设置也将被清除。",
     "mute": "静音",
     "unmute": "取消静音",
     "muteAlert": "静音此告警",

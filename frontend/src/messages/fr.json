@@ -410,6 +410,8 @@
     "deleteSelected": "Supprimer la selection",
     "clearResolved": "Purger les resolues",
     "clearResolvedConfirm": "Purger toutes les alertes resolues ? Cette action est irreversible.",
+    "purgeAlerts": "Purger les anciennes alertes",
+    "purgeAlertsConfirm": "Purger toutes les anciennes alertes de la base de donnees ? Les alertes actives seront recreees automatiquement. Les mises en sourdine seront aussi supprimees.",
     "mute": "Mettre en sourdine",
     "unmute": "Reactiver",
     "muteAlert": "Mettre cette alerte en sourdine",

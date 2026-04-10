@@ -121,6 +121,22 @@ model Alert {
   @@map("alerts")
 }
 
+model AlertSilence {
+  id           String    @id @default(cuid())
+  tenantId     String    @default("default") @map("tenant_id")
+  fingerprint  String
+  silencedBy   String    @map("silenced_by")
+  silencedAt   DateTime  @default(now()) @map("silenced_at")
+  silencedUntil DateTime? @map("silenced_until")
+  reason       String?
+
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([tenantId, fingerprint])
+  @@index([silencedUntil])
+  @@map("alert_silences")
+}
+
 model CustomImage {
   id                String   @id @default(cuid())
   tenantId          String   @default("default") @map("tenant_id")

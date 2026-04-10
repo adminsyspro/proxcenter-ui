@@ -55,6 +55,12 @@ export async function POST(req: Request) {
       const existing = await prisma.alert.findUnique({ where: { tenantId_fingerprint: { tenantId, fingerprint } } })
 
       if (existing) {
+        // Don't touch silenced alerts - leave them as-is
+        if (existing.status === 'silenced') {
+          updated++
+          continue
+        }
+
         // Mettre à jour si active ou acknowledged (pas si resolved manuellement récemment)
         if (existing.status !== 'resolved' ||
             (existing.resolvedAt && (now.getTime() - existing.resolvedAt.getTime()) > 300000)) { // 5 min

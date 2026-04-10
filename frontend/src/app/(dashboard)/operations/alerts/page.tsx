@@ -550,16 +550,29 @@ return true
   const handleDeleteAlerts = (ids: string[]) => {
     if (!isEnterprise || ids.length === 0) return
 
+    // Collect fingerprints for the alerts to delete
+    const fingerprints = ids
+      .map(id => alerts.find(a => a.id === id)?._fingerprint)
+      .filter(Boolean) as string[]
+
+    if (fingerprints.length === 0) return
+
     setConfirmDialog({
       open: true,
       title: t('common.confirmDelete'),
       message: t('alerts.deleteConfirm', { count: ids.length }),
       onConfirm: async () => {
         try {
-          // Resolve first (to ensure orchestrator marks them resolved), then delete from local DB
-          for (const id of ids) {
-            await fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' }).catch(() => {})
-          }
+          // Silence indefinitely = effectively delete from all views
+          await Promise.all(
+            fingerprints.map(fp =>
+              fetch('/api/v1/alerts/silence', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fingerprint: fp, duration: 'indefinite' })
+              })
+            )
+          )
           showToast(t('common.success'), 'success')
           setSelectionModel({ type: 'include', ids: new Set() })
           revalidateAll()

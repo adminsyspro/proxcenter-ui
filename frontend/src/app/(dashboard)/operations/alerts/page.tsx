@@ -321,6 +321,9 @@ export default function AlertsPage() {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() })
   const selectedAlertIds = Array.from(selectionModel.ids) as string[]
 
+  // Dismissed alert IDs (frontend-only, resets on page reload)
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+
   // Mute popover
   const [muteAnchorEl, setMuteAnchorEl] = useState<null | HTMLElement>(null)
   const [muteTargetFingerprint, setMuteTargetFingerprint] = useState<string | null>(null)
@@ -388,6 +391,8 @@ return () => setPageInfo('', '', '')
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(alert => {
+      if (dismissedIds.has(alert.id)) return false
+
       if (search) {
         const s = search.toLowerCase()
 
@@ -400,7 +405,7 @@ return () => setPageInfo('', '', '')
 
 return true
     })
-  }, [alerts, search, severityFilter, statusFilter])
+  }, [alerts, search, severityFilter, statusFilter, dismissedIds])
 
   const handleClearAll = () => {
     if (!isEnterprise) return
@@ -549,41 +554,14 @@ return true
   }
 
   const handleDeleteAlerts = (ids: string[]) => {
-    if (!isEnterprise || ids.length === 0) return
+    if (ids.length === 0) return
 
-    // Collect fingerprints for the alerts to delete
-    const fingerprints = ids
-      .map(id => alerts.find(a => a.id === id)?._fingerprint)
-      .filter(Boolean) as string[]
-
-    if (fingerprints.length === 0) return
-
-    setConfirmDialog({
-      open: true,
-      title: t('common.confirmDelete'),
-      message: t('alerts.deleteConfirm', { count: ids.length }),
-      onConfirm: async () => {
-        try {
-          // Dismiss = silence with reason 'dismissed', hidden entirely from API response
-          await Promise.all(
-            [...new Set(fingerprints)].map(fp =>
-              fetch('/api/v1/alerts/silence', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fingerprint: fp, duration: 'indefinite', reason: 'dismissed' })
-              })
-            )
-          )
-          showToast(t('common.success'), 'success')
-          setSelectionModel({ type: 'include', ids: new Set() })
-          revalidateAll()
-        } catch (e) {
-          showToast(t('common.error'), 'error')
-        }
-
-        setConfirmDialog(d => ({ ...d, open: false }))
-      }
+    setDismissedIds(prev => {
+      const next = new Set(prev)
+      ids.forEach(id => next.add(id))
+      return next
     })
+    setSelectionModel({ type: 'include', ids: new Set() })
   }
 
   const handleBulkResolve = () => {

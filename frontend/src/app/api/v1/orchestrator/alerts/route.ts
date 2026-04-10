@@ -106,10 +106,27 @@ export async function GET(req: Request) {
         })
       : filtered
 
-    // Apply post-annotation status filter (e.g. ?status=active should exclude silenced)
-    const finalFiltered = Array.isArray(annotated) && status
-      ? annotated.filter((a: any) => a.status === status)
+    // Deduplicate by fingerprint: keep only the most recent entry per unique alert
+    const deduped = Array.isArray(annotated)
+      ? Array.from(
+          annotated.reduce((map: Map<string, any>, a: any) => {
+            const fp = a._fingerprint
+            const existing = map.get(fp)
+            if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
+              // Sum occurrences across duplicates
+              map.set(fp, { ...a, occurrences: (existing ? existing.occurrences : 0) + (a.occurrences || 0) })
+            } else {
+              existing.occurrences = (existing.occurrences || 0) + (a.occurrences || 0)
+            }
+            return map
+          }, new Map()).values()
+        )
       : annotated
+
+    // Apply post-annotation status filter (e.g. ?status=active should exclude silenced)
+    const finalFiltered = Array.isArray(deduped) && status
+      ? deduped.filter((a: any) => a.status === status)
+      : deduped
 
     const sliced = Array.isArray(finalFiltered) ? finalFiltered.slice(offset, offset + limit) : finalFiltered
 

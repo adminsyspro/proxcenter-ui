@@ -62,7 +62,18 @@ export async function GET(req: Request) {
       // Table may not exist yet
     }
 
-    const nonSilenced = filtered.filter((a: any) => !silencedFingerprints.has(buildOrchestratorFingerprint(a)))
+    // Deduplicate by fingerprint before counting
+    const dedupMap = new Map<string, any>()
+    for (const a of filtered) {
+      const fp = buildOrchestratorFingerprint(a)
+      const existing = dedupMap.get(fp)
+      if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
+        dedupMap.set(fp, { ...a, _fp: fp })
+      }
+    }
+    const deduped = Array.from(dedupMap.values())
+
+    const nonSilenced = deduped.filter((a: any) => !silencedFingerprints.has(a._fp))
     const active = nonSilenced.filter((a: any) => a.status === 'active')
     const today = new Date().toISOString().slice(0, 10)
 

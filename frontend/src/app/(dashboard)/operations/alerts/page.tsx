@@ -629,7 +629,7 @@ return true
       onConfirm: async () => {
         try {
           // Purge all alerts from orchestrator (active ones will be re-created on next cycle)
-          await fetch('/api/v1/orchestrator/alerts/clear', { method: 'DELETE' })
+          await fetch('/api/v1/orchestrator/alerts', { method: 'DELETE' })
           // Also clear all local silences
           const silences = await fetch('/api/v1/alerts/silence').then(r => r.json()).catch(() => ({ data: [] }))
           if (silences.data?.length) {

@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
@@ -7,6 +8,22 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+/**
+ * Build a fingerprint from an orchestrator alert to match against silences.
+ * Mirrors the logic in src/lib/alerts/fingerprint.ts but adapted for orchestrator alert shape.
+ */
+function buildOrchestratorFingerprint(alert: {
+  connection_id?: string
+  type?: string
+  severity?: string
+  resource?: string
+  resource_type?: string
+}): string {
+  const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
+  const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}`
+  return crypto.createHash('md5').update(data).digest('hex')
+}
 
 /**
  * GET /api/v1/orchestrator/alerts
@@ -44,12 +61,51 @@ export async function GET(req: Request) {
       ? allAlerts.filter((a: any) => !a.connection_id || tenantConnectionIds.has(a.connection_id))
       : allAlerts
 
-    const sliced = Array.isArray(filtered) ? filtered.slice(offset, offset + limit) : filtered
+    // Load active silences for this tenant
+    const now = new Date()
+    const silences = await prisma.alertSilence.findMany({
+      where: {
+        OR: [
+          { silencedUntil: null },
+          { silencedUntil: { gt: now } },
+        ],
+      },
+    })
+
+    // Clean up expired silences in the background
+    prisma.alertSilence.deleteMany({
+      where: {
+        silencedUntil: { not: null, lte: now },
+      },
+    }).catch(() => {})
+
+    const silenceMap = new Map(silences.map(s => [s.fingerprint, s]))
+
+    // Annotate alerts with silence state
+    const annotated = Array.isArray(filtered)
+      ? filtered.map((a: any) => {
+          const fp = buildOrchestratorFingerprint(a)
+          const silence = silenceMap.get(fp)
+          if (silence) {
+            return {
+              ...a,
+              status: 'silenced',
+              silenced_until: silence.silencedUntil?.toISOString() || null,
+              silenced_by: silence.silencedBy,
+              _original_status: a.status,
+              _fingerprint: fp,
+            }
+          }
+          return { ...a, _fingerprint: fp }
+        })
+      : filtered
+
+    const sliced = Array.isArray(annotated) ? annotated.slice(offset, offset + limit) : annotated
 
     return NextResponse.json({
       ...(response.data || {}),
       data: sliced,
-      total: Array.isArray(filtered) ? filtered.length : 0,
+      total: Array.isArray(annotated) ? annotated.length : 0,
     })
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {

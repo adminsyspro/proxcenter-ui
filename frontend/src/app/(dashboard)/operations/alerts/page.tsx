@@ -695,7 +695,7 @@ return true
     {
       field: 'actions',
       headerName: t('common.actions'),
-      width: 160,
+      width: 200,
       sortable: false,
       renderCell: (p) => {
         const { status, id, _fingerprint } = p.row

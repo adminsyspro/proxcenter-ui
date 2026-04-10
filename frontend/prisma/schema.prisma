@@ -73,6 +73,7 @@ model DashboardLayout {
   name      String   @default("custom")
   widgets   String   // JSON array of widgets
   isActive  Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

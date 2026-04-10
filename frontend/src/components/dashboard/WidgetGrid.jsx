@@ -707,6 +707,13 @@ return () => document.removeEventListener('fullscreenchange', handler)
 
       list.splice(toIdx, 0, moved)
 
+      // Persist new order to server
+      fetch('/api/v1/dashboard/layout', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: list.map(d => d.name) }),
+      }).catch(() => {})
+
       return list
     })
     setDragTabName(null)

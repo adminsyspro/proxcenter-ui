@@ -37,8 +37,8 @@ export async function GET(req: Request) {
     if (list === 'true') {
       const layouts = await prisma.dashboardLayout.findMany({
         where: { userId },
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true, name: true, isActive: true, updatedAt: true },
+        orderBy: { sortOrder: 'asc' },
+        select: { id: true, name: true, isActive: true, sortOrder: true, updatedAt: true },
       })
 
       // Migrate old "custom" names
@@ -185,12 +185,19 @@ export async function POST(req: Request) {
       data: { isActive: false },
     })
 
+    // Place new dashboard at the end
+    const maxOrder = await prisma.dashboardLayout.aggregate({
+      where: { userId },
+      _max: { sortOrder: true },
+    })
+
     const layout = await prisma.dashboardLayout.create({
       data: {
         userId,
         name: name.trim(),
         widgets: JSON.stringify(widgets || DEFAULT_LAYOUT),
         isActive: true,
+        sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
       },
     })
 
@@ -259,6 +266,44 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ data: { message: "All dashboards reset", widgets: DEFAULT_LAYOUT } })
   } catch (e: any) {
     console.error("[dashboard/layout] DELETE error:", e)
+
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/v1/dashboard/layout
+ * Reorder dashboards
+ * Body: { order: ["Dashboard1", "Dashboard2", ...] }
+ */
+export async function PATCH(req: Request) {
+  const demo = demoResponse(req)
+  if (demo) return demo
+
+  try {
+    const prisma = await getSessionPrisma()
+    const session = await getServerSession(authOptions)
+    const userId = getUserId(session)
+    const body = await req.json()
+    const { order } = body
+
+    if (!order || !Array.isArray(order)) {
+      return NextResponse.json({ error: "order array is required" }, { status: 400 })
+    }
+
+    // Update sortOrder for each dashboard
+    await Promise.all(
+      order.map((name: string, index: number) =>
+        prisma.dashboardLayout.updateMany({
+          where: { userId, name },
+          data: { sortOrder: index },
+        })
+      )
+    )
+
+    return NextResponse.json({ data: { message: "Order updated" } })
+  } catch (e: any) {
+    console.error("[dashboard/layout] PATCH error:", e)
 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

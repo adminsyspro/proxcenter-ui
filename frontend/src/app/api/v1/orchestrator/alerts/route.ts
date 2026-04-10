@@ -87,23 +87,26 @@ export async function GET(req: Request) {
       // Table may not exist yet — continue without silence annotations
     }
 
-    // Annotate alerts with silence state
+    // Annotate alerts with silence state, filter out dismissed
     const annotated = Array.isArray(filtered)
-      ? filtered.map((a: any) => {
+      ? filtered.reduce((acc: any[], a: any) => {
           const fp = buildOrchestratorFingerprint(a)
           const silence = silenceMap.get(fp)
+          if (silence?.reason === 'dismissed') return acc // dismissed = hidden entirely
           if (silence) {
-            return {
+            acc.push({
               ...a,
               status: 'silenced',
               silenced_until: silence.silencedUntil?.toISOString() || null,
               silenced_by: silence.silencedBy,
               _original_status: a.status,
               _fingerprint: fp,
-            }
+            })
+          } else {
+            acc.push({ ...a, _fingerprint: fp })
           }
-          return { ...a, _fingerprint: fp }
-        })
+          return acc
+        }, [])
       : filtered
 
     // Deduplicate by fingerprint: keep only the most recent entry per unique alert

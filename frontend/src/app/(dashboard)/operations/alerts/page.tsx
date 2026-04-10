@@ -564,13 +564,13 @@ return true
       message: t('alerts.deleteConfirm', { count: ids.length }),
       onConfirm: async () => {
         try {
-          // Silence indefinitely = effectively delete from all views
+          // Dismiss = silence with reason 'dismissed', hidden entirely from API response
           await Promise.all(
-            fingerprints.map(fp =>
+            [...new Set(fingerprints)].map(fp =>
               fetch('/api/v1/alerts/silence', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fingerprint: fp, duration: 'indefinite' })
+                body: JSON.stringify({ fingerprint: fp, duration: 'indefinite', reason: 'dismissed' })
               })
             )
           )

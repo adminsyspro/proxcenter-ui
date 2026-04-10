@@ -55,8 +55,9 @@ export async function GET(req: Request) {
             { silencedUntil: { gt: now } },
           ],
         },
-        select: { fingerprint: true },
+        select: { fingerprint: true, reason: true },
       })
+      // Both muted and dismissed alerts are excluded from counts
       silencedFingerprints = new Set(silences.map(s => s.fingerprint))
     } catch {
       // Table may not exist yet

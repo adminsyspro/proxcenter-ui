@@ -23,6 +23,7 @@ import {
   FormControlLabel,
   InputAdornment,
   InputLabel,
+  Menu,
   MenuItem,
   Select,
   Slider,
@@ -54,7 +55,7 @@ interface AlertData {
   connection_id: string
   type: string
   severity: 'info' | 'warning' | 'critical'
-  status: 'active' | 'acknowledged' | 'resolved'
+  status: 'active' | 'acknowledged' | 'resolved' | 'silenced'
   resource: string
   resource_type: string
   message: string
@@ -64,6 +65,10 @@ interface AlertData {
   occurrences: number
   first_seen_at: string
   last_seen_at: string
+  silenced_until?: string | null
+  silenced_by?: string
+  _original_status?: string
+  _fingerprint?: string
   rule_id?: string
 }
 
@@ -190,7 +195,8 @@ function StatusChip({ status, t }: { status: string; t: ReturnType<typeof useTra
   const config: Record<string, { labelKey: string; color: 'error' | 'warning' | 'success' | 'default'; variant: 'filled' | 'outlined' }> = {
     active: { labelKey: 'alerts.activeStatus', color: 'error', variant: 'filled' },
     acknowledged: { labelKey: 'alerts.acknowledgedStatus', color: 'warning', variant: 'outlined' },
-    resolved: { labelKey: 'alerts.resolvedStatus', color: 'success', variant: 'outlined' }
+    resolved: { labelKey: 'alerts.resolvedStatus', color: 'success', variant: 'outlined' },
+    silenced: { labelKey: 'alerts.silencedStatus', color: 'default', variant: 'outlined' }
   }
 
   const cfg = config[status] || { labelKey: '', color: 'default' as const, variant: 'outlined' as const }
@@ -314,6 +320,10 @@ export default function AlertsPage() {
   // Selection for bulk actions
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() })
   const selectedAlertIds = Array.from(selectionModel.ids) as string[]
+
+  // Mute popover
+  const [muteAnchorEl, setMuteAnchorEl] = useState<null | HTMLElement>(null)
+  const [muteTargetFingerprint, setMuteTargetFingerprint] = useState<string | null>(null)
 
   // Montage côté client
   useEffect(() => {
@@ -616,6 +626,52 @@ return true
     })
   }
 
+  const MUTE_DURATIONS = [
+    { key: '1h', labelKey: 'alerts.mute1h' },
+    { key: '6h', labelKey: 'alerts.mute6h' },
+    { key: '24h', labelKey: 'alerts.mute24h' },
+    { key: '7d', labelKey: 'alerts.mute7d' },
+    { key: 'indefinite', labelKey: 'alerts.muteIndefinite' },
+  ] as const
+
+  const handleMuteClick = (event: React.MouseEvent<HTMLElement>, fingerprint: string) => {
+    setMuteAnchorEl(event.currentTarget)
+    setMuteTargetFingerprint(fingerprint)
+  }
+
+  const handleMuteSelect = async (duration: string) => {
+    setMuteAnchorEl(null)
+    if (!muteTargetFingerprint || !isEnterprise) return
+
+    try {
+      await fetch('/api/v1/alerts/silence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fingerprint: muteTargetFingerprint, duration })
+      })
+      showToast(t('common.success'), 'success')
+      revalidateAll()
+    } catch (e) {
+      showToast(t('common.error'), 'error')
+    }
+
+    setMuteTargetFingerprint(null)
+  }
+
+  const handleUnmute = async (fingerprint: string) => {
+    if (!isEnterprise) return
+
+    try {
+      await fetch(`/api/v1/alerts/silence?fingerprint=${encodeURIComponent(fingerprint)}`, {
+        method: 'DELETE'
+      })
+      showToast(t('common.success'), 'success')
+      revalidateAll()
+    } catch (e) {
+      showToast(t('common.error'), 'error')
+    }
+  }
+
   const timeAgo = useTimeAgo(t)
 
   const alertColumns: GridColDef[] = [
@@ -639,10 +695,10 @@ return true
     {
       field: 'actions',
       headerName: t('common.actions'),
-      width: 120,
+      width: 160,
       sortable: false,
       renderCell: (p) => {
-        const { status, id } = p.row
+        const { status, id, _fingerprint } = p.row
 
         if (status === 'active') {
           return (
@@ -657,6 +713,13 @@ return true
                   <i className="ri-check-double-line" />
                 </Button>
               </Tooltip>
+              {_fingerprint && (
+                <Tooltip title={t('alerts.muteAlert')}>
+                  <Button size="small" onClick={(e) => handleMuteClick(e, _fingerprint)}>
+                    <i className="ri-volume-mute-line" />
+                  </Button>
+                </Tooltip>
+              )}
             </Box>
           )
         }
@@ -669,9 +732,36 @@ return true
                   <i className="ri-check-double-line" />
                 </Button>
               </Tooltip>
+              {_fingerprint && (
+                <Tooltip title={t('alerts.muteAlert')}>
+                  <Button size="small" onClick={(e) => handleMuteClick(e, _fingerprint)}>
+                    <i className="ri-volume-mute-line" />
+                  </Button>
+                </Tooltip>
+              )}
               <Tooltip title={t('common.delete')}>
                 <Button size="small" color="error" onClick={() => handleDeleteAlerts([id])}>
                   <i className="ri-delete-bin-line" />
+                </Button>
+              </Tooltip>
+            </Box>
+          )
+        }
+
+        if (status === 'silenced') {
+          const silencedUntil = p.row.silenced_until
+          const tooltipText = silencedUntil
+            ? t('alerts.silencedUntil', { date: new Date(silencedUntil).toLocaleString() })
+            : t('alerts.silencedIndefinite')
+
+          return (
+            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+              <Tooltip title={tooltipText}>
+                <Chip size="small" icon={<i className="ri-volume-mute-line" />} label={silencedUntil ? timeAgo(silencedUntil) : '∞'} variant="outlined" sx={{ fontSize: '0.7rem' }} />
+              </Tooltip>
+              <Tooltip title={t('alerts.unmuteAlert')}>
+                <Button size="small" color="primary" onClick={() => _fingerprint && handleUnmute(_fingerprint)}>
+                  <i className="ri-volume-up-line" />
                 </Button>
               </Tooltip>
             </Box>
@@ -775,6 +865,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                   <MenuItem value="active">{t('alerts.activeStatus')}</MenuItem>
                   <MenuItem value="acknowledged">{t('alerts.acknowledgedStatus')}</MenuItem>
                   <MenuItem value="resolved">{t('alerts.resolvedStatus')}</MenuItem>
+                  <MenuItem value="silenced">{t('alerts.silencedStatus')}</MenuItem>
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 140 }}>
@@ -839,6 +930,21 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               />
               )}
             </Box>
+            <Menu
+              anchorEl={muteAnchorEl}
+              open={Boolean(muteAnchorEl)}
+              onClose={() => setMuteAnchorEl(null)}
+            >
+              <Typography variant="caption" sx={{ px: 2, py: 0.5, opacity: 0.6, display: 'block' }}>
+                {t('alerts.muteDuration')}
+              </Typography>
+              {MUTE_DURATIONS.map(({ key, labelKey }) => (
+                <MenuItem key={key} onClick={() => handleMuteSelect(key)} dense>
+                  <i className={key === 'indefinite' ? 'ri-infinity-line' : 'ri-time-line'} style={{ marginRight: 8, opacity: 0.6 }} />
+                  {t(labelKey)}
+                </MenuItem>
+              ))}
+            </Menu>
           </Box>
         )}
 

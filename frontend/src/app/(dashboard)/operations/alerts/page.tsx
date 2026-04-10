@@ -396,6 +396,8 @@ return () => setPageInfo('', '', '')
 
       if (severityFilter !== 'all' && alert.severity !== severityFilter) return false
 
+      // Silenced alerts only visible via explicit "Silenced" filter
+      if (alert.status === 'silenced' && statusFilter !== 'silenced') return false
       if (statusFilter !== 'all' && alert.status !== statusFilter) return false
 
 return true

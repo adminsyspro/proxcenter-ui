@@ -102,13 +102,11 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'fingerprint is required' }, { status: 400 })
     }
 
-    const tenantId = await getCurrentTenantId()
-
-    await prisma.alertSilence.deleteMany({
-      where: { tenantId, fingerprint },
+    const result = await prisma.alertSilence.deleteMany({
+      where: { fingerprint },
     })
 
-    return NextResponse.json({ data: { deleted: true } })
+    return NextResponse.json({ data: { deleted: result.count } })
   } catch (error: any) {
     console.error('[alerts/silence] DELETE error:', error)
     return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })

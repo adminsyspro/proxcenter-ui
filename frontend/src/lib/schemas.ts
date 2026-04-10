@@ -151,6 +151,13 @@ export const patchAlertsSchema = z.object({
   userId: z.string().optional(),
 })
 
+/** POST /api/v1/alerts/silence — mute an alert */
+export const silenceAlertSchema = z.object({
+  fingerprint: z.string().min(1, 'fingerprint is required'),
+  duration: z.enum(['1h', '6h', '24h', '7d', 'indefinite']),
+  reason: z.string().optional(),
+})
+
 /** Single alert item inside the sync array */
 const syncAlertItemSchema = z.object({
   severity: z.string().min(1),

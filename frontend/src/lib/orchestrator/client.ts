@@ -552,7 +552,7 @@ export interface Alert {
   connection_id: string
   type: 'cpu' | 'memory' | 'storage' | 'node_down' | 'vm_down' | 'custom'
   severity: 'info' | 'warning' | 'critical'
-  status: 'active' | 'acknowledged' | 'resolved'
+  status: 'active' | 'acknowledged' | 'resolved' | 'silenced'
   resource: string
   resource_type: string
   resource_id: number
@@ -569,6 +569,10 @@ export interface Alert {
   notified_at?: string
   created_at: string
   updated_at: string
+  silenced_until?: string | null
+  silenced_by?: string
+  _original_status?: string
+  _fingerprint?: string
 }
 
 export interface AlertSummary {

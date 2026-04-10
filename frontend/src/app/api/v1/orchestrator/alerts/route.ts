@@ -113,10 +113,7 @@ export async function GET(req: Request) {
             const fp = a._fingerprint
             const existing = map.get(fp)
             if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
-              // Sum occurrences across duplicates
-              map.set(fp, { ...a, occurrences: (existing ? existing.occurrences : 0) + (a.occurrences || 0) })
-            } else {
-              existing.occurrences = (existing.occurrences || 0) + (a.occurrences || 0)
+              map.set(fp, a)
             }
             return map
           }, new Map()).values()

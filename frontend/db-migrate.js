@@ -222,6 +222,8 @@ try {
     { table: 'custom_images',   column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
     { table: 'deployments',     column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
     { table: 'migration_jobs',  column: 'tenant_id', type: "TEXT NOT NULL DEFAULT 'default'" },
+    // Dashboard tab ordering (2026-04-10)
+    { table: 'DashboardLayout', column: 'sort_order', type: 'INTEGER NOT NULL DEFAULT 0' },
   ]
 
   let applied = 0

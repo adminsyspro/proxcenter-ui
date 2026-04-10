@@ -34,7 +34,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material'
-import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -311,6 +311,10 @@ export default function AlertsPage() {
   const [severityFilter, setSeverityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('active')
 
+  // Selection for bulk actions
+  const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() })
+  const selectedAlertIds = Array.from(selectionModel.ids) as string[]
+
   // Montage côté client
   useEffect(() => {
     setMounted(true)
@@ -533,6 +537,85 @@ return true
     }
   }
 
+  const handleDeleteAlerts = (ids: string[]) => {
+    if (!isEnterprise || ids.length === 0) return
+
+    setConfirmDialog({
+      open: true,
+      title: t('common.confirmDelete'),
+      message: t('alerts.deleteConfirm', { count: ids.length }),
+      onConfirm: async () => {
+        try {
+          // Resolve first (to ensure orchestrator marks them resolved), then delete from local DB
+          for (const id of ids) {
+            await fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' }).catch(() => {})
+          }
+          showToast(t('common.success'), 'success')
+          setSelectionModel({ type: 'include', ids: new Set() })
+          revalidateAll()
+        } catch (e) {
+          showToast(t('common.error'), 'error')
+        }
+
+        setConfirmDialog(d => ({ ...d, open: false }))
+      }
+    })
+  }
+
+  const handleBulkResolve = () => {
+    if (!isEnterprise || selectedAlertIds.length === 0) return
+
+    const resolvableIds = selectedAlertIds.filter(id => {
+      const alert = alerts.find(a => a.id === id)
+      return alert && alert.status !== 'resolved'
+    })
+
+    if (resolvableIds.length === 0) return
+
+    setConfirmDialog({
+      open: true,
+      title: t('alerts.resolve'),
+      message: t('alerts.resolveConfirm', { count: resolvableIds.length }),
+      onConfirm: async () => {
+        try {
+          await Promise.all(
+            resolvableIds.map(id =>
+              fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' })
+            )
+          )
+          showToast(t('common.success'), 'success')
+          setSelectionModel({ type: 'include', ids: new Set() })
+          revalidateAll()
+        } catch (e) {
+          showToast(t('common.error'), 'error')
+        }
+
+        setConfirmDialog(d => ({ ...d, open: false }))
+      }
+    })
+  }
+
+  const handleClearResolved = () => {
+    if (!isEnterprise) return
+
+    setConfirmDialog({
+      open: true,
+      title: t('alerts.clearResolved'),
+      message: t('alerts.clearResolvedConfirm'),
+      onConfirm: async () => {
+        try {
+          await fetch('/api/v1/orchestrator/alerts/clear', { method: 'DELETE' })
+          showToast(t('common.success'), 'success')
+          revalidateAll()
+        } catch (e) {
+          showToast(t('common.error'), 'error')
+        }
+
+        setConfirmDialog(d => ({ ...d, open: false }))
+      }
+    })
+  }
+
   const timeAgo = useTimeAgo(t)
 
   const alertColumns: GridColDef[] = [
@@ -558,20 +641,57 @@ return true
       headerName: t('common.actions'),
       width: 120,
       sortable: false,
-      renderCell: (p) => p.row.status === 'active' ? (
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title={t('alerts.acknowledge')}>
-            <Button size="small" color="warning" onClick={() => handleAcknowledgeSingle(p.row.id)}>
-              <i className="ri-check-line" />
-            </Button>
-          </Tooltip>
-          <Tooltip title={t('alerts.resolve')}>
-            <Button size="small" color="success" onClick={() => handleResolveSingle(p.row.id)}>
-              <i className="ri-check-double-line" />
-            </Button>
-          </Tooltip>
-        </Box>
-      ) : null
+      renderCell: (p) => {
+        const { status, id } = p.row
+
+        if (status === 'active') {
+          return (
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Tooltip title={t('alerts.acknowledge')}>
+                <Button size="small" color="warning" onClick={() => handleAcknowledgeSingle(id)}>
+                  <i className="ri-check-line" />
+                </Button>
+              </Tooltip>
+              <Tooltip title={t('alerts.resolve')}>
+                <Button size="small" color="success" onClick={() => handleResolveSingle(id)}>
+                  <i className="ri-check-double-line" />
+                </Button>
+              </Tooltip>
+            </Box>
+          )
+        }
+
+        if (status === 'acknowledged') {
+          return (
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Tooltip title={t('alerts.resolve')}>
+                <Button size="small" color="success" onClick={() => handleResolveSingle(id)}>
+                  <i className="ri-check-double-line" />
+                </Button>
+              </Tooltip>
+              <Tooltip title={t('common.delete')}>
+                <Button size="small" color="error" onClick={() => handleDeleteAlerts([id])}>
+                  <i className="ri-delete-bin-line" />
+                </Button>
+              </Tooltip>
+            </Box>
+          )
+        }
+
+        if (status === 'resolved') {
+          return (
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Tooltip title={t('common.delete')}>
+                <Button size="small" color="error" onClick={() => handleDeleteAlerts([id])}>
+                  <i className="ri-delete-bin-line" />
+                </Button>
+              </Tooltip>
+            </Box>
+          )
+        }
+
+        return null
+      }
     }
   ]
 
@@ -666,9 +786,27 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                 </Select>
               </FormControl>
               <Box sx={{ flex: 1 }} />
-              <Button size="small" variant="outlined" color="error" onClick={handleClearAll} disabled={filteredAlerts.filter(a => a.status === 'active').length === 0}>
-                <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.resolveAll')} ({filteredAlerts.filter(a => a.status === 'active').length})
-              </Button>
+              {selectedAlertIds.length > 0 && (
+                <>
+                  <Button size="small" variant="outlined" color="success" onClick={handleBulkResolve}
+                    disabled={selectedAlertIds.filter(id => { const a = alerts.find(x => x.id === id); return a && a.status !== 'resolved' }).length === 0}>
+                    <i className="ri-check-double-line" style={{ marginRight: 4 }} /> {t('alerts.resolveSelected')} ({selectedAlertIds.length})
+                  </Button>
+                  <Button size="small" variant="outlined" color="error" onClick={() => handleDeleteAlerts(selectedAlertIds)}>
+                    <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.deleteSelected')} ({selectedAlertIds.length})
+                  </Button>
+                </>
+              )}
+              {selectedAlertIds.length === 0 && (
+                <>
+                  <Button size="small" variant="outlined" color="error" onClick={handleClearAll} disabled={filteredAlerts.filter(a => a.status === 'active').length === 0}>
+                    <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.resolveAll')} ({filteredAlerts.filter(a => a.status === 'active').length})
+                  </Button>
+                  <Button size="small" variant="outlined" onClick={handleClearResolved} disabled={alerts.filter(a => a.status === 'resolved').length === 0}>
+                    <i className="ri-eraser-line" style={{ marginRight: 4 }} /> {t('alerts.clearResolved')}
+                  </Button>
+                </>
+              )}
             </Stack>
             <Box sx={{ flex: 1, minHeight: 0 }}>
               {!loading && filteredAlerts.length === 0 ? (
@@ -687,6 +825,9 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                 getRowHeight={() => 'auto'}
                 pageSizeOptions={[25, 50, 100]}
                 initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                checkboxSelection
+                rowSelectionModel={selectionModel}
+                onRowSelectionModelChange={(newModel) => setSelectionModel(newModel)}
                 sx={{
                   border: 'none',
                   '& .MuiDataGrid-cell': {

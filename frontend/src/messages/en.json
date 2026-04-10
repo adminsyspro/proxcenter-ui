@@ -405,6 +405,11 @@
       "close": "Close"
     },
     "resolveConfirm": "Resolve {count} alert(s)?",
+    "deleteConfirm": "Delete {count} alert(s)? This will resolve and remove them.",
+    "resolveSelected": "Resolve selected",
+    "deleteSelected": "Delete selected",
+    "clearResolved": "Clear resolved",
+    "clearResolvedConfirm": "Clear all resolved alerts? This cannot be undone.",
     "predictive": "Predictive alerts",
     "storageAlerts": "Storage alerts",
     "healthAlerts": "Health alerts",

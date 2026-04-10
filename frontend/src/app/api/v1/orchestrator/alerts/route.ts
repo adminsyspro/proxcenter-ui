@@ -61,25 +61,31 @@ export async function GET(req: Request) {
       ? allAlerts.filter((a: any) => !a.connection_id || tenantConnectionIds.has(a.connection_id))
       : allAlerts
 
-    // Load active silences for this tenant
+    // Load active silences for this tenant (graceful fallback if table doesn't exist yet)
     const now = new Date()
-    const silences = await prisma.alertSilence.findMany({
-      where: {
-        OR: [
-          { silencedUntil: null },
-          { silencedUntil: { gt: now } },
-        ],
-      },
-    })
+    let silenceMap = new Map<string, any>()
 
-    // Clean up expired silences in the background
-    prisma.alertSilence.deleteMany({
-      where: {
-        silencedUntil: { not: null, lte: now },
-      },
-    }).catch(() => {})
+    try {
+      const silences = await prisma.alertSilence.findMany({
+        where: {
+          OR: [
+            { silencedUntil: null },
+            { silencedUntil: { gt: now } },
+          ],
+        },
+      })
 
-    const silenceMap = new Map(silences.map(s => [s.fingerprint, s]))
+      silenceMap = new Map(silences.map(s => [s.fingerprint, s]))
+
+      // Clean up expired silences in the background
+      prisma.alertSilence.deleteMany({
+        where: {
+          silencedUntil: { not: null, lte: now },
+        },
+      }).catch(() => {})
+    } catch {
+      // Table may not exist yet — continue without silence annotations
+    }
 
     // Annotate alerts with silence state
     const annotated = Array.isArray(filtered)

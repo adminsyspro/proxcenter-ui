@@ -30,6 +30,7 @@ import {
   MenuItem,
   Select,
   FormControlLabel,
+  LinearProgress,
   Snackbar,
   Switch,
   TextField,
@@ -54,6 +55,7 @@ import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
+import { formatBytes } from '@/utils/format'
 import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
 
@@ -248,6 +250,140 @@ export type TreePbsServer = {
     datastoreCount: number
     backupCount: number
   }
+}
+
+/* ---- Tooltip helpers for nodes, clusters & VMs ---- */
+
+const TOOLTIP_WIDTH = 240
+
+const tooltipSlotProps = {
+  tooltip: {
+    sx: {
+      bgcolor: 'background.paper',
+      color: 'text.primary',
+      border: '1px solid',
+      borderColor: 'divider',
+      borderRadius: 1.5,
+      boxShadow: 3,
+      p: 0,
+      width: TOOLTIP_WIDTH,
+      overflow: 'hidden',
+    }
+  }
+} as const
+
+function TooltipHeader({ icon, iconElement, label, color }: { icon?: string; iconElement?: React.ReactNode; label: string; color: string }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 0.75, bgcolor: color }}>
+      {iconElement || <i className={icon} style={{ fontSize: 14, color: '#fff' }} />}
+      <Typography variant="caption" sx={{ fontWeight: 600, fontSize: 12, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {label}
+      </Typography>
+    </Box>
+  )
+}
+
+function UsageBar({ value, label, icon }: { value: number; label: string; icon: string }) {
+  const color = value >= 90 ? 'error.main' : value >= 60 ? 'warning.main' : 'primary.main'
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <i className={icon} style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ minWidth: 24, fontSize: 11 }}>{label}</Typography>
+      <LinearProgress
+        variant="determinate"
+        value={Math.min(value, 100)}
+        sx={{
+          flex: 1, height: 4, borderRadius: 2,
+          bgcolor: 'action.hover',
+          '& .MuiLinearProgress-bar': { borderRadius: 2, bgcolor: color }
+        }}
+      />
+      <Typography variant="caption" sx={{ minWidth: 28, textAlign: 'right', fontSize: 11 }}>{value.toFixed(0)}%</Typography>
+    </Box>
+  )
+}
+
+function TooltipRow({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <i className={icon} style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ fontSize: 11 }}>{children}</Typography>
+    </Box>
+  )
+}
+
+function NodeTooltipContent({ name, status, cpu, mem, maxmem, ip, maintenance, vmCount }: {
+  name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; ip?: string; maintenance?: string; vmCount: number
+}) {
+  const theme = useTheme()
+  const logoSrc = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
+  const statusColor = status === 'online' ? '#4caf50' : status === 'offline' ? '#f44336' : '#9e9e9e'
+  const cpuPct = cpu ? cpu * 100 : 0
+  const memPct = mem && maxmem ? (mem / maxmem) * 100 : 0
+
+  return (
+    <Box>
+      <TooltipHeader
+        iconElement={<img src={logoSrc} alt="" style={{ width: 14, height: 14 }} />}
+        label={name} color="#5b6abf"
+      />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 1.5, py: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: statusColor, flexShrink: 0, ml: '4px' }} />
+          <Typography variant="caption" sx={{ textTransform: 'capitalize', fontSize: 11 }}>
+            {maintenance ? `maintenance (${maintenance})` : status || 'unknown'}
+          </Typography>
+        </Box>
+        {cpu != null && <UsageBar value={cpuPct} label="CPU" icon="ri-cpu-line" />}
+        {mem != null && maxmem ? (
+          <>
+            <UsageBar value={memPct} label="RAM" icon="ri-ram-line" />
+            <Typography variant="caption" sx={{ pl: 5.5, mt: -0.5, opacity: 0.5, fontSize: 10 }}>
+              {formatBytes(mem)} / {formatBytes(maxmem)}
+            </Typography>
+          </>
+        ) : null}
+        {ip && <TooltipRow icon="ri-global-line">{ip}</TooltipRow>}
+        <TooltipRow icon="ri-computer-line">{vmCount} guests</TooltipRow>
+      </Box>
+    </Box>
+  )
+}
+
+function ClusterTooltipContent({ name, nodes, cephHealth }: {
+  name: string; nodes: TreeCluster['nodes']; cephHealth?: string
+}) {
+  const onlineCount = nodes.filter(n => n.status === 'online').length
+  const totalVms = nodes.reduce((acc, n) => acc + n.vms.length, 0)
+  const totalMem = nodes.reduce((acc, n) => acc + (n.maxmem || 0), 0)
+  const usedMem = nodes.reduce((acc, n) => acc + (n.mem || 0), 0)
+  const avgCpu = nodes.length ? nodes.reduce((acc, n) => acc + (n.cpu || 0), 0) / nodes.length * 100 : 0
+  const memPct = totalMem ? (usedMem / totalMem) * 100 : 0
+
+  return (
+    <Box>
+      <TooltipHeader icon="ri-server-fill" label={name} color="#2e7d6f" />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 1.5, py: 1 }}>
+        <TooltipRow icon="ri-node-tree">{onlineCount}/{nodes.length} nodes online</TooltipRow>
+        {avgCpu > 0 && <UsageBar value={avgCpu} label="CPU" icon="ri-cpu-line" />}
+        {totalMem > 0 && (
+          <>
+            <UsageBar value={memPct} label="RAM" icon="ri-ram-line" />
+            <Typography variant="caption" sx={{ pl: 5.5, mt: -0.5, opacity: 0.5, fontSize: 10 }}>
+              {formatBytes(usedMem)} / {formatBytes(totalMem)}
+            </Typography>
+          </>
+        )}
+        <TooltipRow icon="ri-computer-line">{totalVms} guests</TooltipRow>
+        {cephHealth && (
+          <TooltipRow icon={cephHealth === 'HEALTH_OK' ? 'ri-checkbox-circle-line' : 'ri-alert-line'}>
+            Ceph: {cephHealth.replace('HEALTH_', '')}
+          </TooltipRow>
+        )}
+      </Box>
+    </Box>
+  )
 }
 
 type VmContextMenu = {
@@ -1229,14 +1365,19 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     }
   }
 
-  // Ouvrir la console
+  // Ouvrir la console (depuis le menu contextuel)
   const handleOpenConsole = () => {
     if (!contextMenu) return
     const { connId, node, type, vmid } = contextMenu
+    openConsoleWindow(connId, node, type, vmid)
+    handleCloseContextMenu()
+  }
+
+  // Ouvrir la console (appel direct, ex: double-clic)
+  const openConsoleWindow = (connId: string, node: string, type: string, vmid: string) => {
     const url = `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
 
     window.open(url, `console-${vmid}`, 'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no')
-    handleCloseContextMenu()
   }
 
   // Actions non implémentées (placeholder)
@@ -2498,6 +2639,7 @@ return favorites.has(vmKey)
                       isFavorite={favorites.has(vmKey)}
                       onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
                       onClick={() => onSelect({ type: 'vm', id: vmKey })}
+                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="flat"
                       t={t}
@@ -2561,6 +2703,7 @@ return favorites.has(vmKey)
                       isFavorite={true}
                       onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
                       onClick={() => onSelect({ type: 'vm', id: vmKey })}
+                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="favorite"
                       t={t}
@@ -2640,6 +2783,7 @@ return (
                       isFavorite={favorites.has(vmKey)}
                       onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
                       onClick={() => onSelect({ type: 'vm', id: vmKey })}
+                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="grouped"
                       t={t}
@@ -2718,6 +2862,7 @@ return (
                       isFavorite={favorites.has(vmKey)}
                       onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
                       onClick={() => onSelect({ type: 'vm', id: vmKey })}
+                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="grouped"
                       t={t}
@@ -2837,6 +2982,7 @@ return (
                       isFavorite={favorites.has(vmKey)}
                       onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
                       onClick={() => onSelect({ type: 'vm', id: vmKey })}
+                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
                       onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="grouped"
                       t={t}
@@ -2998,25 +3144,27 @@ return (
                 itemId={`node:${clu.connId}:${n.node}`}
                 onContextMenu={(e) => handleNodeContextMenu(e, clu.connId, n.node, n.maintenance, clu.sshEnabled)}
                 label={
+                  <Tooltip
+                    title={<NodeTooltipContent name={clu.name} status={n.status} cpu={n.cpu} mem={n.mem} maxmem={n.maxmem} ip={n.ip} maintenance={n.maintenance} vmCount={n.vms.length} />}
+                    enterDelay={500} placement="right" slotProps={tooltipSlotProps}
+                  >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <NodeIcon status={n.status} maintenance={n.maintenance} size={16} />
                     <span style={{ fontSize: 13 }}>{clu.name}</span>
                     <span style={{ opacity: 0.5, fontSize: 11 }}>({n.vms.length})</span>
-                    {/* Warning Ceph */}
                     {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
-                      <Tooltip title={`Ceph: ${clu.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
-                        <Box component="span" sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
-                          <i
-                            className={clu.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'}
-                            style={{
-                              fontSize: 14,
-                              color: clu.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800'
-                            }}
-                          />
-                        </Box>
-                      </Tooltip>
+                      <Box component="span" sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+                        <i
+                          className={clu.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'}
+                          style={{
+                            fontSize: 14,
+                            color: clu.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800'
+                          }}
+                        />
+                      </Box>
                     )}
                   </Box>
+                  </Tooltip>
                 }
               >
                 {n.vms.map(vm => {
@@ -3056,6 +3204,7 @@ return (
                         isFavorite={favorites.has(vmKey)}
                         onFavoriteToggle={() => toggleFavorite(clu.connId, n.node, vm.type, vm.vmid, vm.name)}
                         onClick={() => {}}
+                        onDoubleClick={() => openConsoleWindow(clu.connId, n.node, vm.type, vm.vmid)}
                         onContextMenu={() => {}}
                         variant="tree"
                         t={t}
@@ -3081,24 +3230,26 @@ return (
                 setClusterContextMenu({ mouseX: e.clientX, mouseY: e.clientY, connId: clu.connId, name: clu.name, nodes: clu.nodes })
               }}
               label={
+                <Tooltip
+                  title={<ClusterTooltipContent name={clu.name} nodes={clu.nodes} cephHealth={clu.cephHealth} />}
+                  enterDelay={500} placement="right" slotProps={tooltipSlotProps}
+                >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <ClusterIcon nodes={clu.nodes} />
                   <span style={{ fontSize: 13 }}>{clu.name}</span>
-                  {/* Warning Ceph */}
                   {clu.cephHealth && clu.cephHealth !== 'HEALTH_OK' && (
-                    <Tooltip title={`Ceph: ${clu.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
-                      <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
-                        <i 
-                          className={clu.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'} 
-                          style={{ 
-                            fontSize: 14, 
-                            color: clu.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800' 
-                          }} 
-                        />
-                      </Box>
-                    </Tooltip>
+                    <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
+                      <i
+                        className={clu.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'}
+                        style={{
+                          fontSize: 14,
+                          color: clu.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800'
+                        }}
+                      />
+                    </Box>
                   )}
                 </Box>
+                </Tooltip>
               }
             >
               {clu.nodes.map(n => (
@@ -3107,11 +3258,16 @@ return (
                   itemId={`node:${clu.connId}:${n.node}`}
                   onContextMenu={(e) => handleNodeContextMenu(e, clu.connId, n.node, n.maintenance, clu.sshEnabled)}
                   label={
+                    <Tooltip
+                      title={<NodeTooltipContent name={n.node} status={n.status} cpu={n.cpu} mem={n.mem} maxmem={n.maxmem} ip={n.ip} maintenance={n.maintenance} vmCount={n.vms.length} />}
+                      enterDelay={500} placement="right" slotProps={tooltipSlotProps}
+                    >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <NodeIcon status={n.status} maintenance={n.maintenance} size={16} />
                       <span style={{ fontSize: 13 }}>{n.node}</span>
                       <span style={{ opacity: 0.5, fontSize: 11 }}>({n.vms.length})</span>
                     </Box>
+                    </Tooltip>
                   }
                 >
                   {n.vms.map(vm => {
@@ -3150,6 +3306,7 @@ return (
                           isFavorite={favorites.has(vmKey)}
                           onFavoriteToggle={() => toggleFavorite(clu.connId, n.node, vm.type, vm.vmid, vm.name)}
                           onClick={() => {}}
+                          onDoubleClick={() => openConsoleWindow(clu.connId, n.node, vm.type, vm.vmid)}
                           onContextMenu={() => {}}
                           variant="tree"
                           t={t}

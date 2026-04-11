@@ -7,11 +7,13 @@ import {
   Box,
   Chip,
   IconButton,
+  LinearProgress,
   Tooltip,
   Typography,
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
+import { formatBytes } from '@/utils/format'
 import { StatusIcon } from './TreeIcons'
 
 // Re-export getVmIcon for consumers that import from VmItem
@@ -86,6 +88,7 @@ export type VmItemProps = {
   isFavorite: boolean
   onFavoriteToggle: (e: React.MouseEvent) => void
   onClick: () => void
+  onDoubleClick?: () => void
   onContextMenu: (e: React.MouseEvent) => void
   variant: VmItemVariant
   t: ReturnType<typeof useTranslations>
@@ -100,7 +103,10 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
   const {
     vmKey,
     connId,
+    connName,
+    node,
     vmType,
+    vmid,
     name,
     status,
     cpu,
@@ -113,6 +119,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     isFavorite,
     onFavoriteToggle,
     onClick,
+    onDoubleClick,
     onContextMenu,
     variant,
     t,
@@ -160,8 +167,103 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
   }) : null
 
   if (variant === 'tree') {
+    const cpuPct = getCpuPct(cpu)
+    const memPct = getMemPct(mem, maxmem)
+    const statusColor = status === 'running' ? '#4caf50' : status === 'paused' ? '#ff9800' : '#9e9e9e'
+    const headerColor = status === 'running' ? '#3b82f6' : status === 'paused' ? '#f59e0b' : '#6b7280'
+
+    const tooltipContent = (
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 0.75, bgcolor: headerColor }}>
+          <i className={vmType === 'lxc' ? 'ri-instance-fill' : 'ri-computer-fill'} style={{ fontSize: 14, color: '#fff' }} />
+          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: 12, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {vmType === 'lxc' ? 'CT' : 'VM'} {vmid} - {name}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 1.5, py: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: statusColor, flexShrink: 0, ml: '4px' }} />
+            <Typography variant="caption" sx={{ textTransform: 'capitalize', fontSize: 11 }}>{status || 'unknown'}</Typography>
+          </Box>
+          {status === 'running' && cpu != null && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <i className="ri-cpu-line" style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
+              <Typography variant="caption" sx={{ minWidth: 24, fontSize: 11 }}>CPU</Typography>
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(cpuPct, 100)}
+                sx={{
+                  flex: 1, height: 4, borderRadius: 2,
+                  bgcolor: 'action.hover',
+                  '& .MuiLinearProgress-bar': { borderRadius: 2, bgcolor: cpuPct >= 90 ? 'error.main' : cpuPct >= 60 ? 'warning.main' : 'primary.main' }
+                }}
+              />
+              <Typography variant="caption" sx={{ minWidth: 28, textAlign: 'right', fontSize: 11 }}>{cpuPct.toFixed(0)}%</Typography>
+            </Box>
+          )}
+          {status === 'running' && maxmem ? (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <i className="ri-ram-line" style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
+                <Typography variant="caption" sx={{ minWidth: 24, fontSize: 11 }}>RAM</Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.min(memPct, 100)}
+                  sx={{
+                    flex: 1, height: 4, borderRadius: 2,
+                    bgcolor: 'action.hover',
+                    '& .MuiLinearProgress-bar': { borderRadius: 2, bgcolor: memPct >= 90 ? 'error.main' : memPct >= 60 ? 'warning.main' : 'primary.main' }
+                  }}
+                />
+                <Typography variant="caption" sx={{ minWidth: 28, textAlign: 'right', fontSize: 11 }}>{memPct.toFixed(0)}%</Typography>
+              </Box>
+              <Typography variant="caption" sx={{ pl: 5.5, mt: -0.5, opacity: 0.5, fontSize: 10 }}>
+                {formatBytes(mem || 0)} / {formatBytes(maxmem)}
+              </Typography>
+            </>
+          ) : null}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <i className="ri-server-line" style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
+            <Typography variant="caption" sx={{ fontSize: 11 }}>{node}</Typography>
+          </Box>
+          {connName && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <i className="ri-link" style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
+              <Typography variant="caption" sx={{ fontSize: 11 }}>{connName}</Typography>
+            </Box>
+          )}
+        </Box>
+      </Box>
+    )
+
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+      <Tooltip
+        title={tooltipContent}
+        enterDelay={500}
+        placement="right"
+        slotProps={{
+          tooltip: {
+            sx: {
+              bgcolor: 'background.paper',
+              color: 'text.primary',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1.5,
+              boxShadow: 3,
+              p: 0,
+              width: 240,
+              overflow: 'hidden',
+            }
+          }
+        }}
+      >
+      <Box
+        onDoubleClick={(e: React.MouseEvent) => {
+          e.stopPropagation()
+          if (!isMigrating && !template && onDoubleClick) onDoubleClick()
+        }}
+        sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}
+      >
         <Box
           component="span"
           onClick={(e: React.MouseEvent) => {
@@ -197,6 +299,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         )}
         {tagElements}
       </Box>
+      </Tooltip>
     )
   }
 
@@ -306,6 +409,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     <Box
       data-vmkey={vmKey}
       onClick={() => !isMigrating && onClick()}
+      onDoubleClick={() => { if (!isMigrating && !template && onDoubleClick) onDoubleClick() }}
       onContextMenu={(e) => { if (!isMigrating) onContextMenu(e) }}
       sx={{
         display: 'flex',

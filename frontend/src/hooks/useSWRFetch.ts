@@ -1,4 +1,5 @@
 import useSWR, { SWRConfiguration } from 'swr'
+import { dequal } from 'dequal'
 
 const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(async res => {
   if (!res.ok) throw new Error(`API error: ${res.status}`)
@@ -11,5 +12,5 @@ const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(async re
 })
 
 export function useSWRFetch<T = any>(url: string | null, options?: SWRConfiguration) {
-  return useSWR<T>(url, fetcher, options)
+  return useSWR<T>(url, fetcher, { compare: dequal, ...options })
 }

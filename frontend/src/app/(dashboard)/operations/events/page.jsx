@@ -18,7 +18,9 @@ import {
   Stack,
   TextField,
   Tooltip,
-  Typography
+  Typography,
+  alpha,
+  useTheme
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
@@ -180,6 +182,7 @@ function DonutTotalCard({ title, value, segments }) {
 
 export default function EventsPage() {
   const t = useTranslations()
+  const theme = useTheme()
   const { isEnterprise } = useLicense()
 
   const { setPageInfo } = usePageTitle()
@@ -519,6 +522,12 @@ return { total, errors, warnings, running }
                 initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
                 disableRowSelectionOnClick
                 onRowDoubleClick={handleRowDoubleClick}
+                getRowClassName={(params) => {
+                  if (params.row.status === 'running') return 'row-running'
+                  if (params.row.level === 'error' || (params.row.status && params.row.status !== 'OK' && !params.row.status.includes('WARNINGS'))) return 'row-error'
+                  if (params.row.level === 'warning' || params.row.status?.includes('WARNINGS')) return 'row-warning'
+                  return ''
+                }}
                 sx={{
                   border: 'none',
                   '& .MuiDataGrid-row': {
@@ -528,6 +537,15 @@ return { total, errors, warnings, running }
                     '&:hover': {
                       bgcolor: 'action.hover'
                     }
+                  },
+                  '& .row-running': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.05),
+                  },
+                  '& .row-error': {
+                    bgcolor: alpha(theme.palette.error.main, 0.06),
+                  },
+                  '& .row-warning': {
+                    bgcolor: alpha(theme.palette.warning.main, 0.05),
                   },
                   '& .MuiDataGrid-cell': {
                     display: 'flex',

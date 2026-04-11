@@ -2,7 +2,7 @@
 import { Agent, request } from "undici"
 
 import { extractHostFromUrl, extractPortFromUrl, replaceHostInUrl } from "./urlUtils"
-import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock, incrementFailures, resetFailures, getFailureCount } from "../cache/nodeIpCache"
+import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock, incrementFailures, resetFailures, getFailureCount, FAILURE_THRESHOLD } from "../cache/nodeIpCache"
 import { invalidateConnectionCache } from "../connections/getConnection"
 
 let insecureAgent: Agent | null = null
@@ -191,17 +191,11 @@ export async function pveFetch<T>(
       if (opts.behindProxy) throw err
       if (!opts.id) throw err
 
-      // Timeouts: log warning but don't count as hard failure
-      if (isTimeoutError(err)) {
-        console.warn(`[failover] Timeout on connection ${opts.id} for ${path} (not counted as failure)`)
-        throw err
-      }
-
-      // Hard network error: increment counter
-      if (isHardNetworkError(err)) {
+      // Network error (hard or timeout): increment failure counter
+      if (isNetworkError(err)) {
         const shouldFailover = incrementFailures(opts.id)
         if (!shouldFailover) {
-          console.warn(`[failover] Connection ${opts.id} failure ${getFailureCount(opts.id)}/3 for ${path}`)
+          console.warn(`[failover] Connection ${opts.id} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${path} (${isTimeoutError(err) ? 'timeout' : 'hard error'})`)
           throw err
         }
         console.log(`[failover] Connection ${opts.id} reached failure threshold, initiating failover...`)

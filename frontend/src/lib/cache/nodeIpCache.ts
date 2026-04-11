@@ -84,7 +84,7 @@ export function setFailoverLock(connId: string, promise: Promise<string | null>)
 }
 
 const FAILURE_KEY = "__proxcenter_failure_counter__" as const
-const FAILURE_THRESHOLD = 3
+export const FAILURE_THRESHOLD = 2
 
 function getFailureStore(): Map<string, number> {
   if (!(globalThis as any)[FAILURE_KEY]) {

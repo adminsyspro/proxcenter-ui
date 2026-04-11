@@ -11,11 +11,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   IconButton,
   LinearProgress,
-  MenuItem,
-  Select,
   Snackbar,
   Tooltip,
   Typography,
@@ -84,7 +81,6 @@ export default function TaskDetailDialog({ open, task, onClose }) {
   const [details, setDetails] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [logFilter, setLogFilter] = useState('all')
   const [autoScroll, setAutoScroll] = useState(true)
   const [snackbar, setSnackbar] = useState({ open: false, message: '' })
   const [stopping, setStopping] = useState(false)
@@ -185,24 +181,7 @@ export default function TaskDetailDialog({ open, task, onClose }) {
     }
   }
 
-  // Filter logs
-  const filteredLogs = details?.logs?.filter(log => {
-    if (logFilter === 'all') return true
-    const type = getLogType(log.t)
-
-    if (logFilter === 'errors') return type === 'error'
-    if (logFilter === 'warnings') return type === 'warning' || type === 'error'
-    if (logFilter === 'transfers') return type === 'transfer'
-
-return true
-  }) || []
-
-  // Scroll when filter changes
-  useEffect(() => {
-    if (autoScroll) {
-      setTimeout(scrollToBottom, 50)
-    }
-  }, [logFilter])
+  const filteredLogs = details?.logs || []
 
   if (!task) return null
 
@@ -210,13 +189,6 @@ return true
   const progress = details?.progress ?? 0
   const statusColor = getStatusColor(details?.exitstatus || details?.status || task.status)
 
-  // Count logs by type
-  const logCounts = {
-    all: details?.logs?.length || 0,
-    errors: details?.logs?.filter(l => getLogType(l.t) === 'error').length || 0,
-    warnings: details?.logs?.filter(l => ['error', 'warning'].includes(getLogType(l.t))).length || 0,
-    transfers: details?.logs?.filter(l => getLogType(l.t) === 'transfer').length || 0
-  }
 
   return (
     <>
@@ -265,9 +237,6 @@ return true
               <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
                 {task.typeLabel || formatTaskType(task.type, t)}
               </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.6 }}>
-                {task.entity || task.node} • {task.connectionName}
-              </Typography>
             </Box>
           </Box>
           <IconButton onClick={onClose} size="small">
@@ -279,13 +248,14 @@ return true
           {/* Info bar */}
           <Box sx={{
             display: 'flex',
-            gap: 3,
+            justifyContent: 'space-between',
             px: 3,
             py: 2,
             bgcolor: 'action.hover',
             borderBottom: '1px solid',
             borderColor: 'divider',
-            flexWrap: 'wrap'
+            flexWrap: 'wrap',
+            gap: 2
           }}>
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.5, display: 'block' }}>{t('tasks.detail.node')}</Typography>
@@ -315,7 +285,7 @@ return true
               />
             </Box>
             {isRunning && (
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <Tooltip title={stopping ? t('tasks.detail.stopping') : t('tasks.detail.stop')}>
                   <span>
                     <IconButton
@@ -389,30 +359,9 @@ return true
             gap: 1,
             px: 2,
             py: 1,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
             bgcolor: '#161b22'
           }}>
-            <FormControl size="small" sx={{ minWidth: 140 }}>
-              <Select
-                value={logFilter}
-                onChange={e => setLogFilter(e.target.value)}
-                sx={{
-                  fontSize: 12,
-                  color: theme.palette.primary.light,
-                  '& .MuiSelect-select': { py: 0.5 },
-                  '& .MuiSelect-icon': { color: theme.palette.primary.light },
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: `${theme.palette.primary.main}55` },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.primary.main },
-                }}
-              >
-                <MenuItem value="all">{t('tasks.detail.allLogs')} ({logCounts.all})</MenuItem>
-                <MenuItem value="errors">{t('tasks.detail.errors')} ({logCounts.errors})</MenuItem>
-                <MenuItem value="warnings">{t('tasks.detail.warnings')} ({logCounts.warnings})</MenuItem>
-                <MenuItem value="transfers">{t('tasks.detail.transfers')} ({logCounts.transfers})</MenuItem>
-              </Select>
-            </FormControl>
-
             <Box sx={{ flex: 1 }} />
 
             <Tooltip title={autoScroll ? t('tasks.detail.autoScrollEnabled') : t('tasks.detail.autoScrollDisabled')}>
@@ -457,7 +406,7 @@ return true
               </Box>
             ) : filteredLogs.length > 0 ? (
               <Box sx={{ p: 1.5 }}>
-                {details?.totalLogLines > (details?.logs?.length || 0) && logFilter === 'all' && (
+                {details?.totalLogLines > (details?.logs?.length || 0) && (
                   <Box sx={{
                     py: 0.75,
                     px: 1.5,
@@ -523,7 +472,7 @@ return true
               </Box>
             ) : (
               <Box sx={{ p: 3, textAlign: 'center', color: 'grey.500' }}>
-                {logFilter === 'all' ? t('tasks.detail.noLogsAvailable') : t('tasks.detail.noMatchingLogs')}
+                {t('tasks.detail.noLogsAvailable')}
               </Box>
             )}
           </Box>

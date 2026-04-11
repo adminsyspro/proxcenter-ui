@@ -55,7 +55,6 @@ import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
-import { formatBytes } from '@/utils/format'
 import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
 
@@ -313,8 +312,8 @@ function TooltipRow({ icon, children }: { icon: string; children: React.ReactNod
   )
 }
 
-function NodeTooltipContent({ name, status, cpu, mem, maxmem, ip, maintenance, vmCount }: {
-  name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; ip?: string; maintenance?: string; vmCount: number
+function NodeTooltipContent({ name, status, cpu, mem, maxmem, maintenance }: {
+  name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; maintenance?: string
 }) {
   const theme = useTheme()
   const logoSrc = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
@@ -336,26 +335,16 @@ function NodeTooltipContent({ name, status, cpu, mem, maxmem, ip, maintenance, v
           </Typography>
         </Box>
         {cpu != null && <UsageBar value={cpuPct} label="CPU" icon="ri-cpu-line" />}
-        {mem != null && maxmem ? (
-          <>
-            <UsageBar value={memPct} label="RAM" icon="ri-ram-line" />
-            <Typography variant="caption" sx={{ pl: 5.5, mt: -0.5, opacity: 0.5, fontSize: 10 }}>
-              {formatBytes(mem)} / {formatBytes(maxmem)}
-            </Typography>
-          </>
-        ) : null}
-        {ip && <TooltipRow icon="ri-global-line">{ip}</TooltipRow>}
-        <TooltipRow icon="ri-computer-line">{vmCount} guests</TooltipRow>
+        {mem != null && maxmem ? <UsageBar value={memPct} label="RAM" icon="ri-ram-line" /> : null}
       </Box>
     </Box>
   )
 }
 
-function ClusterTooltipContent({ name, nodes, cephHealth }: {
-  name: string; nodes: TreeCluster['nodes']; cephHealth?: string
+function ClusterTooltipContent({ name, nodes }: {
+  name: string; nodes: TreeCluster['nodes']
 }) {
   const onlineCount = nodes.filter(n => n.status === 'online').length
-  const totalVms = nodes.reduce((acc, n) => acc + n.vms.length, 0)
   const totalMem = nodes.reduce((acc, n) => acc + (n.maxmem || 0), 0)
   const usedMem = nodes.reduce((acc, n) => acc + (n.mem || 0), 0)
   const avgCpu = nodes.length ? nodes.reduce((acc, n) => acc + (n.cpu || 0), 0) / nodes.length * 100 : 0
@@ -367,20 +356,7 @@ function ClusterTooltipContent({ name, nodes, cephHealth }: {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 1.5, py: 1 }}>
         <TooltipRow icon="ri-node-tree">{onlineCount}/{nodes.length} nodes online</TooltipRow>
         {avgCpu > 0 && <UsageBar value={avgCpu} label="CPU" icon="ri-cpu-line" />}
-        {totalMem > 0 && (
-          <>
-            <UsageBar value={memPct} label="RAM" icon="ri-ram-line" />
-            <Typography variant="caption" sx={{ pl: 5.5, mt: -0.5, opacity: 0.5, fontSize: 10 }}>
-              {formatBytes(usedMem)} / {formatBytes(totalMem)}
-            </Typography>
-          </>
-        )}
-        <TooltipRow icon="ri-computer-line">{totalVms} guests</TooltipRow>
-        {cephHealth && (
-          <TooltipRow icon={cephHealth === 'HEALTH_OK' ? 'ri-checkbox-circle-line' : 'ri-alert-line'}>
-            Ceph: {cephHealth.replace('HEALTH_', '')}
-          </TooltipRow>
-        )}
+        {totalMem > 0 && <UsageBar value={memPct} label="RAM" icon="ri-ram-line" />}
       </Box>
     </Box>
   )
@@ -3145,8 +3121,8 @@ return (
                 onContextMenu={(e) => handleNodeContextMenu(e, clu.connId, n.node, n.maintenance, clu.sshEnabled)}
                 label={
                   <Tooltip
-                    title={<NodeTooltipContent name={clu.name} status={n.status} cpu={n.cpu} mem={n.mem} maxmem={n.maxmem} ip={n.ip} maintenance={n.maintenance} vmCount={n.vms.length} />}
-                    enterDelay={500} placement="right" slotProps={tooltipSlotProps}
+                    title={<NodeTooltipContent name={clu.name} status={n.status} cpu={n.cpu} mem={n.mem} maxmem={n.maxmem} maintenance={n.maintenance} />}
+                    enterDelay={1000} enterNextDelay={1000} placement="right" slotProps={tooltipSlotProps}
                   >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <NodeIcon status={n.status} maintenance={n.maintenance} size={16} />
@@ -3231,8 +3207,8 @@ return (
               }}
               label={
                 <Tooltip
-                  title={<ClusterTooltipContent name={clu.name} nodes={clu.nodes} cephHealth={clu.cephHealth} />}
-                  enterDelay={500} placement="right" slotProps={tooltipSlotProps}
+                  title={<ClusterTooltipContent name={clu.name} nodes={clu.nodes} />}
+                  enterDelay={1000} enterNextDelay={1000} placement="right" slotProps={tooltipSlotProps}
                 >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <ClusterIcon nodes={clu.nodes} />
@@ -3259,8 +3235,8 @@ return (
                   onContextMenu={(e) => handleNodeContextMenu(e, clu.connId, n.node, n.maintenance, clu.sshEnabled)}
                   label={
                     <Tooltip
-                      title={<NodeTooltipContent name={n.node} status={n.status} cpu={n.cpu} mem={n.mem} maxmem={n.maxmem} ip={n.ip} maintenance={n.maintenance} vmCount={n.vms.length} />}
-                      enterDelay={500} placement="right" slotProps={tooltipSlotProps}
+                      title={<NodeTooltipContent name={n.node} status={n.status} cpu={n.cpu} mem={n.mem} maxmem={n.maxmem} maintenance={n.maintenance} />}
+                      enterDelay={1000} enterNextDelay={1000} placement="right" slotProps={tooltipSlotProps}
                     >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <NodeIcon status={n.status} maintenance={n.maintenance} size={16} />

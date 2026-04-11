@@ -13,7 +13,6 @@ import {
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
-import { formatBytes } from '@/utils/format'
 import { StatusIcon } from './TreeIcons'
 
 // Re-export getVmIcon for consumers that import from VmItem
@@ -217,21 +216,8 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
                 />
                 <Typography variant="caption" sx={{ minWidth: 28, textAlign: 'right', fontSize: 11 }}>{memPct.toFixed(0)}%</Typography>
               </Box>
-              <Typography variant="caption" sx={{ pl: 5.5, mt: -0.5, opacity: 0.5, fontSize: 10 }}>
-                {formatBytes(mem || 0)} / {formatBytes(maxmem)}
-              </Typography>
             </>
           ) : null}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <i className="ri-server-line" style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
-            <Typography variant="caption" sx={{ fontSize: 11 }}>{node}</Typography>
-          </Box>
-          {connName && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <i className="ri-link" style={{ fontSize: 12, opacity: 0.6, width: 14, flexShrink: 0 }} />
-              <Typography variant="caption" sx={{ fontSize: 11 }}>{connName}</Typography>
-            </Box>
-          )}
         </Box>
       </Box>
     )
@@ -239,7 +225,8 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     return (
       <Tooltip
         title={tooltipContent}
-        enterDelay={500}
+        enterDelay={1000}
+        enterNextDelay={1000}
         placement="right"
         slotProps={{
           tooltip: {

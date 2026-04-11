@@ -296,7 +296,7 @@ export default function TasksFooter({
     {
       field: 'node',
       headerName: t('tasks.columns.node'),
-      width: 140,
+      width: 180,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <img src="/images/proxmox-logo-dark.svg" alt="" style={{ width: 14, height: 14, opacity: 0.7, flexShrink: 0 }} />
@@ -438,6 +438,7 @@ export default function TasksFooter({
   }
 
   return (
+    <>
     <ThemeProvider theme={darkTaskbarTheme}>
       <Paper
         elevation={0}
@@ -532,14 +533,15 @@ export default function TasksFooter({
                   <Chip
                     size="small"
                     label={`${runningCount} ${t('tasks.inProgress')}`}
-                    color="primary"
                     variant="outlined"
-                    icon={<i className="ri-loader-4-line" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />}
+                    icon={<i className="ri-loader-4-line" style={{ fontSize: 12, animation: 'spin 1s linear infinite', color: 'inherit' }} />}
                     sx={{
                       height: 18,
                       fontSize: '0.7rem',
                       gap: 0.5,
-                      '& .MuiChip-icon': { ml: 0.5, mr: -0.25 },
+                      color: theme.palette.primary.main,
+                      borderColor: alpha(theme.palette.primary.main, 0.5),
+                      '& .MuiChip-icon': { ml: 0.5, mr: -0.25, color: theme.palette.primary.main },
                       '& .MuiChip-label': { px: 0.75 }
                     }}
                   />
@@ -758,31 +760,6 @@ return ''
         </Collapse>
       </Paper>
 
-      {/* Task Detail Dialog */}
-      {selectedTask && (
-        <TaskDetailDialog
-          open={dialogOpen}
-          task={{
-            id: selectedTask.upid,    // TaskDetailDialog uses task.id
-            upid: selectedTask.upid,
-            type: selectedTask.type,
-            typeLabel: selectedTask.description || formatTaskType(selectedTask.type),
-            status: selectedTask.status,
-            node: selectedTask.node,
-            user: selectedTask.user,
-            entity: selectedTask.entityName
-              ? `${selectedTask.entityName} (${selectedTask.entity})`
-              : selectedTask.entity,
-            startTime: selectedTask.startTime,
-            endTime: selectedTask.endTime,
-            duration: selectedTask.duration,
-            connectionId: selectedTask.connectionId,
-            connectionName: selectedTask.connectionName
-          }}
-          onClose={handleCloseDialog}
-        />
-      )}
-
       {/* CSS for spinner animation */}
       <style jsx global>{`
         @keyframes spin {
@@ -791,5 +768,31 @@ return ''
         }
       `}</style>
     </ThemeProvider>
+
+    {/* Task Detail Dialog - outside dark ThemeProvider so it follows user theme */}
+    {selectedTask && (
+      <TaskDetailDialog
+        open={dialogOpen}
+        task={{
+          id: selectedTask.upid,    // TaskDetailDialog uses task.id
+          upid: selectedTask.upid,
+          type: selectedTask.type,
+          typeLabel: selectedTask.description || formatTaskType(selectedTask.type),
+          status: selectedTask.status,
+          node: selectedTask.node,
+          user: selectedTask.user,
+          entity: selectedTask.entityName
+            ? `${selectedTask.entityName} (${selectedTask.entity})`
+            : selectedTask.entity,
+          startTime: selectedTask.startTime,
+          endTime: selectedTask.endTime,
+          duration: selectedTask.duration,
+          connectionId: selectedTask.connectionId,
+          connectionName: selectedTask.connectionName
+        }}
+        onClose={handleCloseDialog}
+      />
+    )}
+    </>
   )
 }

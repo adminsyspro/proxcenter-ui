@@ -70,17 +70,17 @@ const ModeDropdown = () => {
       <Popper
         open={open}
         transition
-        disablePortal
         placement='bottom-start'
         anchorEl={anchorRef.current}
-        className='min-is-[160px] !mbs-4 z-[1]'
+        className='min-is-[160px] !mbs-4'
+        sx={{ zIndex: 1400 }}
       >
         {({ TransitionProps, placement }) => (
           <Fade
             {...TransitionProps}
             style={{ transformOrigin: placement === 'bottom-start' ? 'left top' : 'right top' }}
           >
-            <Paper className={settings.skin === 'bordered' ? 'border shadow-none' : 'shadow-lg'}>
+            <Paper className={settings.skin === 'bordered' ? 'border shadow-none' : 'shadow-lg'} sx={{ bgcolor: 'background.paper' }}>
               <ClickAwayListener onClickAway={handleClose}>
                 <MenuList onKeyDown={handleClose}>
                   <MenuItem

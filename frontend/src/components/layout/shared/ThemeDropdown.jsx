@@ -139,16 +139,18 @@ const ThemeDropdown = () => {
         transition
         placement='bottom-end'
         anchorEl={anchorRef.current}
-        className='min-is-[240px] !mbs-4 z-[1]'
+        className='min-is-[240px] !mbs-4'
+        sx={{ zIndex: 1400 }}
       >
         {({ TransitionProps, placement }) => (
           <Fade
             {...TransitionProps}
             style={{ transformOrigin: placement === 'bottom-end' ? 'right top' : 'left top' }}
           >
-            <Paper 
+            <Paper
               className={settings.skin === 'bordered' ? 'border shadow-none' : 'shadow-lg'}
-              sx={{ p: 2 }}
+              elevation={8}
+              sx={{ p: 2, bgcolor: 'background.paper' }}
             >
               <ClickAwayListener onClickAway={handleClose}>
                 <Box>

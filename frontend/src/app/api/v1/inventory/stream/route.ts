@@ -154,15 +154,27 @@ async function fetchOneCluster(conn: {
   try {
     const connConfig = await getConnectionById(conn.id)
 
-    const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
-      pveFetch<NodeData[]>(connConfig, '/nodes'),
+    // Call /nodes FIRST to establish failover cache if the primary is down.
+    // This prevents the race condition where parallel calls fail before failover activates.
+    let nodes: NodeData[] = []
+    try {
+      nodes = await pveFetch<NodeData[]>(connConfig, '/nodes') || []
+    } catch {
+      // Primary failed — failover may have been activated. Retry once.
+      try {
+        nodes = await pveFetch<NodeData[]>(connConfig, '/nodes') || []
+      } catch {
+        // Still failing — continue with empty nodes, VMs will create synthetic entries
+      }
+    }
+
+    const [guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
       pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
       pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
       pveFetch<any>(connConfig, '/cluster/ceph/status'),
       pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
     ])
 
-    const nodes: NodeData[] = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
     const guests: GuestData[] = guestsResult.status === 'fulfilled' ? guestsResult.value || [] : []
     const haResources: HaResource[] = haResult.status === 'fulfilled' ? haResult.value || [] : []
     const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []

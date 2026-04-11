@@ -5,10 +5,24 @@ import { extractHostFromUrl, extractPortFromUrl, replaceHostInUrl } from "./urlU
 import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock, incrementFailures, resetFailures, getFailureCount, FAILURE_THRESHOLD } from "../cache/nodeIpCache"
 import { invalidateConnectionCache } from "../connections/getConnection"
 
+// Connect timeout: 5s max for TCP handshake. Undici's default (10-30s) is too
+// high — when a node is down, every request blocks until the OS TCP timeout.
+// Our AbortSignal does NOT abort during undici's connect phase, so this is the
+// only reliable way to fail fast on unreachable nodes.
+const CONNECT_TIMEOUT = 5_000
+
+let defaultAgent: Agent | null = null
+export function getDefaultAgent(): Agent {
+  if (!defaultAgent) {
+    defaultAgent = new Agent({ connect: { timeout: CONNECT_TIMEOUT } })
+  }
+  return defaultAgent
+}
+
 let insecureAgent: Agent | null = null
 export function getInsecureAgent(): Agent {
   if (!insecureAgent) {
-    insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
+    insecureAgent = new Agent({ connect: { rejectUnauthorized: false, timeout: CONNECT_TIMEOUT } })
   }
   return insecureAgent
 }
@@ -26,19 +40,22 @@ function isHardNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
   const codes = ["ECONNREFUSED", "EHOSTUNREACH", "ECONNRESET", "ENETUNREACH", "ENOTFOUND"]
   const msg = err.message || ""
+  const errCode = (err as any).code || ""
   const cause = (err as any).cause
   const causeCode = cause?.code || cause?.message || ""
-  return codes.some(c => msg.includes(c) || causeCode.includes(c))
+  return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
 /** Timeout errors - node may just be slow, not dead */
 function isTimeoutError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
-  if (err.name === "TimeoutError") return true
+  if (err.name === "TimeoutError" || err.name === "ConnectTimeoutError") return true
+  const codes = ["ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"]
   const msg = err.message || ""
+  const errCode = (err as any).code || ""
   const cause = (err as any).cause
   const causeCode = cause?.code || cause?.message || ""
-  return ["ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].some(c => msg.includes(c) || causeCode.includes(c))
+  return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
 /** Any network-level error (hard + timeout) */
@@ -48,23 +65,30 @@ function isNetworkError(err: unknown): boolean {
 
 /**
  * In-memory cache for failover URLs.
- * We do NOT persist failover URLs to the database — this preserves the
- * user-configured baseUrl (which may use DNS + valid SSL certs).
- * The console proxy and other features rely on the original baseUrl.
+ * Stored in globalThis to survive Next.js hot-reload in dev mode.
+ * We do NOT persist to database — this preserves the user-configured
+ * baseUrl (which may use DNS + valid SSL certs).
  */
-const failoverUrlCache = new Map<string, string>()
+const FAILOVER_CACHE_KEY = "__proxcenter_failover_url_cache__" as const
+
+function getFailoverStore(): Map<string, string> {
+  if (!(globalThis as any)[FAILOVER_CACHE_KEY]) {
+    ;(globalThis as any)[FAILOVER_CACHE_KEY] = new Map<string, string>()
+  }
+  return (globalThis as any)[FAILOVER_CACHE_KEY]
+}
 
 function getFailoverUrl(connId: string): string | null {
-  return failoverUrlCache.get(connId) || null
+  return getFailoverStore().get(connId) || null
 }
 
 function setFailoverUrl(connId: string, url: string): void {
-  failoverUrlCache.set(connId, url)
+  getFailoverStore().set(connId, url)
   console.log(`[failover] Cached failover URL for connection ${connId}: ${url}`)
 }
 
 function clearFailoverUrl(connId: string): void {
-  failoverUrlCache.delete(connId)
+  getFailoverStore().delete(connId)
 }
 
 /** @deprecated No longer persists — kept for reference */
@@ -86,7 +110,7 @@ export async function pveFetch<T>(
 
   const dispatcher = opts.insecureDev
     ? getInsecureAgent()
-    : undefined
+    : getDefaultAgent()
 
   const method = String(init.method || "GET").toUpperCase()
 
@@ -161,21 +185,19 @@ export async function pveFetch<T>(
   if (cachedFailoverUrl) {
     try {
       const result = await doRequest(cachedFailoverUrl)
-      if (opts.id) resetFailures(opts.id)
       return result
     } catch (cachedErr) {
-      // Cached failover failed — try the original (maybe it recovered)
-      // Use ignoreCallerSignal=true because the caller's signal may have fired
-      // while waiting for the cached URL to timeout.
-      clearFailoverUrl(opts.id!)
-      try {
-        const result = await doRequest(opts.baseUrl, 10_000, true)
-        return result
-      } catch {
-        // Both failed — fall through to full failover
+      if (!isNetworkError(cachedErr)) {
+        // HTTP error (4xx, 5xx) — the failover node IS reachable, this
+        // specific PVE API call just failed (e.g. node offline RRD data).
+        // Keep the cache intact so other requests still use the failover.
+        throw cachedErr
       }
+      // Network error — the failover node itself is unreachable.
+      // Clear cache and go directly to failover scan for a new node.
+      clearFailoverUrl(opts.id!)
       if (opts.behindProxy) throw cachedErr
-      if (!isNetworkError(cachedErr)) throw cachedErr
+      // Fall through to failover scan below
     }
   }
 
@@ -191,8 +213,31 @@ export async function pveFetch<T>(
       if (opts.behindProxy) throw err
       if (!opts.id) throw err
 
-      // Network error (hard or timeout): increment failure counter
+      // Network error (hard or timeout): check if failover is possible
       if (isNetworkError(err)) {
+        // Quick check: are there any failover candidates?
+        // If not (standalone node), fail fast instead of counting toward threshold.
+        const currentHost = extractHostFromUrl(opts.baseUrl)
+        const cached = getNodeIps(opts.id)
+        const hasAlternatives = cached && cached.ips.some(ip => ip !== currentHost)
+
+        if (!hasAlternatives) {
+          // No cached alternatives — check DB as last resort
+          let dbAlternatives = false
+          try {
+            const { prisma } = await import("../db/prisma")
+            const altCount = await prisma.managedHost.count({
+              where: { connectionId: opts.id, enabled: true, ip: { not: null, notIn: [currentHost] } },
+            })
+            dbAlternatives = altCount > 0
+          } catch {}
+
+          if (!dbAlternatives) {
+            // Standalone node or no alternatives — fail immediately
+            throw err
+          }
+        }
+
         const shouldFailover = incrementFailures(opts.id)
         if (!shouldFailover) {
           console.warn(`[failover] Connection ${opts.id} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${path} (${isTimeoutError(err) ? 'timeout' : 'hard error'})`)
@@ -272,7 +317,9 @@ export async function pveFetch<T>(
 
     const newUrl = await failoverPromise
     if (newUrl) {
-      resetFailures(connId)
+      // Don't reset failures — keep counter high so parallel requests
+      // that miss the cache immediately trigger failover instead of
+      // waiting for the threshold again.
       return doRequest(newUrl, 8_000, true)
     }
 

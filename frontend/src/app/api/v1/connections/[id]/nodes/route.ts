@@ -10,6 +10,19 @@ import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
+// Short-lived response cache to avoid hammering PVE /nodes on every navigation.
+// When a cluster has a dead node, PVE is slow to respond (~2-4s) due to corosync
+// timeouts. This cache makes subsequent navigations within the same cluster instant.
+const NODES_CACHE_KEY = "__proxcenter_nodes_response_cache__" as const
+const NODES_CACHE_TTL = 30_000 // 30 seconds
+
+function getNodesCache(): Map<string, { data: any; connectedNode: string | null; timestamp: number }> {
+  if (!(globalThis as any)[NODES_CACHE_KEY]) {
+    ;(globalThis as any)[NODES_CACHE_KEY] = new Map()
+  }
+  return (globalThis as any)[NODES_CACHE_KEY]
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const prisma = await getSessionPrisma()
   const params = await Promise.resolve(ctx.params)
@@ -21,6 +34,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // Actual filtering happens after fetching.
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
   if (denied) return denied
+
+  // Check response cache
+  const cache = getNodesCache()
+  const cached = cache.get(id)
+  if (cached && Date.now() - cached.timestamp < NODES_CACHE_TTL) {
+    return NextResponse.json({ data: cached.data, connectedNode: cached.connectedNode })
+  }
 
   const conn = await getConnectionById(id)
 
@@ -160,6 +180,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     sshAddress: sshOverrides[n.node || n.name]?.sshAddress || null,
     hostId: sshOverrides[n.node || n.name]?.hostId || null,
   }))
+
+  // Cache the response for 30s
+  cache.set(id, { data: nodesWithSsh, connectedNode, timestamp: Date.now() })
 
   return NextResponse.json({ data: nodesWithSsh, connectedNode })
 }

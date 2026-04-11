@@ -12,6 +12,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getDb } from "@/lib/db/sqlite"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
+import { getFailureCount, getNodeIps } from "@/lib/cache/nodeIpCache"
 
 // ---------- Types ----------
 
@@ -243,18 +244,24 @@ async function pollAll() {
     }
 
     // Periodic node IP refresh for failover (every 5 minutes)
+    // Only for connections that have had failures or active failover —
+    // healthy connections don't need periodic re-discovery.
     ipRefreshCounter++
     if (ipRefreshCounter >= IP_REFRESH_INTERVAL) {
       ipRefreshCounter = 0
-      // Run IP discovery for all PVE connections in parallel (non-blocking)
-      Promise.allSettled(
-        connections.map(async (conn) => {
-          const connConfig = await getConnectionById(conn.id)
-          if (connConfig.baseUrl && connConfig.apiToken) {
-            await discoverNodeIps(connConfig, conn.id)
-          }
-        })
-      ).catch(() => {})
+      const connectionsNeedingDiscovery = connections.filter(
+        conn => getFailureCount(conn.id) > 0 || getNodeIps(conn.id) === null
+      )
+      if (connectionsNeedingDiscovery.length > 0) {
+        Promise.allSettled(
+          connectionsNeedingDiscovery.map(async (conn) => {
+            const connConfig = await getConnectionById(conn.id)
+            if (connConfig.baseUrl && connConfig.apiToken) {
+              await discoverNodeIps(connConfig, conn.id)
+            }
+          })
+        ).catch(() => {})
+      }
     }
   } catch (e: any) {
     console.error('[inventory-poller] Master poll error:', e?.message)

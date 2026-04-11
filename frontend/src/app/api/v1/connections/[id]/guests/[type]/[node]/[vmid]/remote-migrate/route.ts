@@ -183,10 +183,9 @@ export async function POST(
       migrateParams['online'] = '1'
     }
     
-    // Supprimer la source après migration
-    if (deleteSource) {
-      migrateParams['delete'] = '1'
-    }
+    // Note: Proxmox remote_migrate does NOT support the 'delete' parameter.
+    // Source VM deletion is handled by our task completion handler instead
+    // (see /api/v1/tasks/[connectionId]/[node]/[upid]/route.ts).
     
     // Limite de bande passante
     if (bwlimit !== undefined && bwlimit !== null && bwlimit !== '') {

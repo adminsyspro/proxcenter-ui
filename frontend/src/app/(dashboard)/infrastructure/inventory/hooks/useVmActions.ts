@@ -25,6 +25,7 @@ type TrackTaskFn = (opts: {
   description: string
   onSuccess?: () => void
   onError?: () => void
+  queryParams?: Record<string, string>
 }) => void
 
 export type TableMigrateVm = {
@@ -261,18 +262,27 @@ export function useVmActions({
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
+    const json = await res.json()
+    const upid = json.data
+
+    if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+      trackTask({
+        upid,
+        connId,
+        node,
+        description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
+        onSuccess: () => { onRefresh?.() },
+        onError: () => { onRefresh?.() },
+        ...(params.deleteSource ? { queryParams: { deleteSource: 'true' } } : {}),
+      })
+    }
+
     toast.success(t('vmActions.migrateSuccess'))
 
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
     }
-
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    if (onRefresh) {
-      await onRefresh()
-    }
-  }, [selection, onRefresh, onSelect, toast, t])
+  }, [selection, onRefresh, onSelect, toast, t, trackTask])
 
   // ── Clone (selected VM panel) ───────────────────────────────────────
 
@@ -407,16 +417,24 @@ export function useVmActions({
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
-    toast.success(t('vmActions.migrateSuccess'))
+    const json = await res.json()
+    const upid = json.data
 
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    if (onRefresh) {
-      await onRefresh()
+    if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
+      trackTask({
+        upid,
+        connId,
+        node,
+        description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
+        onSuccess: () => { onRefresh?.(); setTableMigrateVm(null) },
+        onError: () => { onRefresh?.(); setTableMigrateVm(null) },
+        ...(params.deleteSource ? { queryParams: { deleteSource: 'true' } } : {}),
+      })
     }
 
+    toast.success(t('vmActions.migrateSuccess'))
     setTableMigrateVm(null)
-  }, [tableMigrateVm, onRefresh, toast, t])
+  }, [tableMigrateVm, onRefresh, toast, t, trackTask])
 
   // ── Table clone ─────────────────────────────────────────────────────
 

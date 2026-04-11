@@ -10,6 +10,7 @@ interface TaskInfo {
   description: string
   onSuccess?: () => void
   onError?: (error: string) => void
+  queryParams?: Record<string, string>
 }
 
 interface TaskStatus {
@@ -41,11 +42,15 @@ export function useTaskTracker() {
   const pollTaskStatus = useCallback(async (
     connId: string,
     node: string,
-    upid: string
+    upid: string,
+    queryParams?: Record<string, string>
   ): Promise<TaskStatus> => {
-    const res = await fetch(
-      `/api/v1/tasks/${encodeURIComponent(connId)}/${encodeURIComponent(node)}/${encodeURIComponent(upid)}`
-    )
+    let url = `/api/v1/tasks/${encodeURIComponent(connId)}/${encodeURIComponent(node)}/${encodeURIComponent(upid)}`
+    if (queryParams) {
+      const params = new URLSearchParams(queryParams).toString()
+      if (params) url += `?${params}`
+    }
+    const res = await fetch(url)
 
     if (!res.ok) {
       throw new Error(`Failed to get task status: ${res.status}`)
@@ -56,7 +61,7 @@ export function useTaskTracker() {
   }, [])
 
   const trackTask = useCallback(async (taskInfo: TaskInfo) => {
-    const { upid, connId, node, description, onSuccess, onError } = taskInfo
+    const { upid, connId, node, description, onSuccess, onError, queryParams } = taskInfo
 
     // Éviter de tracker la même tâche deux fois
     if (activeTasksRef.current.has(upid)) {
@@ -75,7 +80,7 @@ export function useTaskTracker() {
     const poll = async () => {
       try {
         attempts++
-        const status = await pollTaskStatus(connId, node, upid)
+        const status = await pollTaskStatus(connId, node, upid, queryParams)
 
         if (status.status === 'stopped') {
           // Tâche terminée

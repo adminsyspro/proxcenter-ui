@@ -97,6 +97,19 @@ try {
     CREATE INDEX IF NOT EXISTS "alerts_source_idx"       ON "alerts" ("source");
     CREATE INDEX IF NOT EXISTS "alerts_last_seen_at_idx" ON "alerts" ("last_seen_at");
 
+    CREATE TABLE IF NOT EXISTS "alert_silences" (
+      "id"             TEXT NOT NULL PRIMARY KEY,
+      "tenant_id"      TEXT NOT NULL DEFAULT 'default',
+      "fingerprint"    TEXT NOT NULL,
+      "silenced_by"    TEXT NOT NULL,
+      "silenced_at"    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "silenced_until" DATETIME,
+      "reason"         TEXT,
+      "created_at"     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS "alert_silences_tenant_fp_key" ON "alert_silences" ("tenant_id", "fingerprint");
+    CREATE INDEX IF NOT EXISTS "alert_silences_until_idx" ON "alert_silences" ("silenced_until");
+
     CREATE TABLE IF NOT EXISTS "blueprints" (
       "id"          TEXT NOT NULL PRIMARY KEY,
       "name"        TEXT NOT NULL,

@@ -1567,28 +1567,31 @@ return next
           const externalData = JSON.parse(e.data)
           setExternalHypervisors(externalData)
 
-          // Fetch external hypervisor VMs in parallel (VMware + XCP-ng + Hyper-V + Nutanix)
+          // Defer external VM fetches to avoid competing with critical-path requests at startup.
+          // The tree renders immediately with connection info; VMs appear after the defer.
           const extConns = (externalData || []).filter((h: any) => h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix')
           if (extConns.length > 0) {
-            Promise.all(extConns.map(async (conn: any) => {
-              try {
-                const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
-                const vmRes = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`)
-                if (vmRes.ok) {
-                  const vmJson = await vmRes.json()
-                  // Hyper-V returns data as array directly (no .vms wrapper)
-                  const vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
-                  return { id: conn.id, vms }
-                }
-              } catch { /* ignore */ }
-              return { id: conn.id, vms: [] }
-            })).then(vmResults => {
+            setTimeout(() => {
               if (!alive) return
-              const vmMap = new Map(vmResults.map(r => [r.id, r.vms]))
-              setExternalHypervisors((prev: any[]) =>
-                prev.map((h: any) => (h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix') && vmMap.has(h.id) ? { ...h, vms: vmMap.get(h.id) } : h)
-              )
-            })
+              Promise.all(extConns.map(async (conn: any) => {
+                try {
+                  const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
+                  const vmRes = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`)
+                  if (vmRes.ok) {
+                    const vmJson = await vmRes.json()
+                    const vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
+                    return { id: conn.id, vms }
+                  }
+                } catch { /* ignore */ }
+                return { id: conn.id, vms: [] }
+              })).then(vmResults => {
+                if (!alive) return
+                const vmMap = new Map(vmResults.map(r => [r.id, r.vms]))
+                setExternalHypervisors((prev: any[]) =>
+                  prev.map((h: any) => (h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix') && vmMap.has(h.id) ? { ...h, vms: vmMap.get(h.id) } : h)
+                )
+              })
+            }, 5000)
           }
         } catch { /* ignore */ }
       })

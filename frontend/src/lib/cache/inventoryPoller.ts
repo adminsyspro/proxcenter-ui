@@ -51,8 +51,8 @@ const pollers = new Map<string, ConnectionPoller>()
 const subscribers = new Set<Subscriber>()
 let masterInterval: ReturnType<typeof setInterval> | null = null
 
-const POLL_INTERVAL_MS = 10_000 // 10 seconds
-const IP_REFRESH_INTERVAL = 30 // every 30 poll cycles = 5 minutes
+const POLL_INTERVAL_MS = 15_000 // 15 seconds
+const IP_REFRESH_INTERVAL = 20 // every 20 poll cycles = 5 minutes (at 15s/cycle)
 let ipRefreshCounter = IP_REFRESH_INTERVAL - 1 // trigger on first cycle
 
 // ---------- Diff logic ----------

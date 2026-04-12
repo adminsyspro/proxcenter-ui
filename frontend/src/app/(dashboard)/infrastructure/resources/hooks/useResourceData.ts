@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 
 import { useTranslations } from 'next-intl'
+
+import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import type {
   KpiData, ResourceTrend, TopVm, GreenMetrics,
@@ -13,62 +15,45 @@ import { DEFAULT_THRESHOLDS } from '../constants'
 
 export function useResourceData(connectionId?: string) {
   const t = useTranslations()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [kpis, setKpis] = useState<KpiData | null>(null)
-  const [trends, setTrends] = useState<ResourceTrend[]>([])
-  const [trendsPeriod, setTrendsPeriod] = useState<{ start: string | null; end: string | null; daysCount: number } | null>(null)
-  const [topCpuVms, setTopCpuVms] = useState<TopVm[]>([])
-  const [topRamVms, setTopRamVms] = useState<TopVm[]>([])
-  const [green, setGreen] = useState<GreenMetrics | null>(null)
-  const [greenConfigured, setGreenConfigured] = useState(true)
-  const [overprovisioning, setOverprovisioning] = useState<OverprovisioningData | null>(null)
-  const [thresholds, setThresholds] = useState<ResourceThresholds>(DEFAULT_THRESHOLDS)
-  const [storagePools, setStoragePools] = useState<StoragePool[]>([])
-  const [networkMetrics, setNetworkMetrics] = useState<NetworkMetrics | null>(null)
-  const [healthScoreHistory, setHealthScoreHistory] = useState<HealthScoreHistoryEntry[]>([])
-  const [connections, setConnections] = useState<ConnectionInfo[]>([])
+
+  // Build SWR key from connectionId
+  const swrKey = useMemo(() => {
+    const params = new URLSearchParams()
+    if (connectionId) params.set('connectionId', connectionId)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    return `/api/v1/resources/overview${qs}`
+  }, [connectionId])
+
+  const { data: json, error: swrError, isLoading, mutate } = useSWRFetch(swrKey, {
+    revalidateOnFocus: false,
+  })
+
+  // Derive state from SWR data
+  const kpis: KpiData | null = json?.data?.kpis ?? null
+  const trends: ResourceTrend[] = json?.data?.trends ?? []
+  const trendsPeriod = json?.data?.trendsPeriod ?? null
+  const topCpuVms: TopVm[] = json?.data?.topCpuVms ?? []
+  const topRamVms: TopVm[] = json?.data?.topRamVms ?? []
+  const green: GreenMetrics | null = json?.data?.green ?? null
+  const greenConfigured: boolean = json?.data?.greenConfigured !== false
+  const overprovisioning: OverprovisioningData | null = json?.data?.overprovisioning ?? null
+  const thresholds: ResourceThresholds = json?.data?.thresholds ?? DEFAULT_THRESHOLDS
+  const storagePools: StoragePool[] = json?.data?.storagePools ?? []
+  const networkMetrics: NetworkMetrics | null = json?.data?.networkMetrics ?? null
+  const healthScoreHistory: HealthScoreHistoryEntry[] = json?.data?.healthScoreHistory ?? []
+  const connections: ConnectionInfo[] = json?.data?.connections ?? []
+
+  const error = swrError ? swrError.message : null
+
+  // AI analysis state (not part of the overview fetch)
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis>({ summary: '', recommendations: [], loading: false })
 
-  // Reset AI analysis when connection changes so auto-run re-triggers
+  // Reset AI analysis when connection changes
   useEffect(() => {
     setAiAnalysis({ summary: '', recommendations: [], loading: false })
   }, [connectionId])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      const params = new URLSearchParams()
-      if (connectionId) params.set('connectionId', connectionId)
-      const qs = params.toString() ? `?${params.toString()}` : ''
-
-      const res = await fetch(`/api/v1/resources/overview${qs}`)
-      if (!res.ok) throw new Error(t('resources.loadError'))
-      const json = await res.json()
-
-      setKpis(json.data.kpis)
-      setTrends(json.data.trends || [])
-      setTrendsPeriod(json.data.trendsPeriod || null)
-      setTopCpuVms(json.data.topCpuVms || [])
-      setTopRamVms(json.data.topRamVms || [])
-      setGreen(json.data.green || null)
-      setGreenConfigured(json.data.greenConfigured !== false)
-      setOverprovisioning(json.data.overprovisioning || null)
-      setThresholds(json.data.thresholds || DEFAULT_THRESHOLDS)
-      setStoragePools(json.data.storagePools || [])
-      setNetworkMetrics(json.data.networkMetrics || null)
-      setHealthScoreHistory(json.data.healthScoreHistory || [])
-      setConnections(json.data.connections || [])
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [connectionId])
-
-  useEffect(() => { loadData() }, [loadData])
+  const loadData = useCallback(() => { mutate() }, [mutate])
 
   const runAiAnalysis = async () => {
     if (!kpis) return
@@ -98,7 +83,7 @@ export function useResourceData(connectionId?: string) {
   }
 
   return {
-    loading,
+    loading: isLoading,
     error,
     kpis,
     trends,

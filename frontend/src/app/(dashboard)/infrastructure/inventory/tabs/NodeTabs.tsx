@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
+import { useHostsByConnection } from '@/hooks/useHosts'
 import ExpandableChart from '../components/ExpandableChart'
 
 import {
@@ -242,25 +243,16 @@ export default function NodeTabs(props: any) {
   const nodeNodeName = selection?.type === 'node' ? parseNodeId(selection.id).node : ''
 
   // Node tags
-  const [nodeTags, setNodeTags] = useState<string[]>([])
-  const [nodeTagsLoaded, setNodeTagsLoaded] = useState<string | null>(null)
+  // Node tags via shared SWR (dedup with InventoryDetails)
+  const { data: hostsData } = useHostsByConnection(nodeConnId || null)
 
-  useEffect(() => {
-    const selId = selection?.id || ''
-    if (!selId || selection?.type !== 'node' || nodeTagsLoaded === selId) return
-    setNodeTagsLoaded(selId)
-    const { connId, node } = parseNodeId(selId)
-    if (!connId || !node) return
-    fetch(`/api/v1/hosts?connId=${encodeURIComponent(connId)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(json => {
-        const hosts = json?.data?.hosts || []
-        const host = hosts.find((h: any) => h.node === node)
-        const tags = host?.managedHost?.tags || host?.tags
-        setNodeTags(tags ? String(tags).split(';').filter(Boolean) : [])
-      })
-      .catch(() => {})
-  }, [selection?.id, selection?.type, nodeTagsLoaded])
+  const nodeTags = useMemo(() => {
+    if (!nodeNodeName || !hostsData?.data?.hosts) return []
+    const hosts = hostsData.data.hosts
+    const host = hosts.find((h: any) => h.node === nodeNodeName)
+    const tags = host?.managedHost?.tags || host?.tags
+    return tags ? String(tags).split(';').filter(Boolean) : []
+  }, [hostsData, nodeNodeName])
 
   // Fetch Ceph OSD flags when on OSD sub-tab
   useEffect(() => {

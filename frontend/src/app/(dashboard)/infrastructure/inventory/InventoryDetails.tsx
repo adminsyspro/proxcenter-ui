@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { useHostsByConnection } from '@/hooks/useHosts'
 import { useFavorites } from './hooks/useFavorites'
 import { useSnapshots } from './hooks/useSnapshots'
 import { useTasks } from './hooks/useTasks'
@@ -1216,6 +1217,10 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   const [entityTags, setEntityTags] = useState<string[]>([])
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
 
+  // Hosts data via shared SWR (dedup with NodeTabs)
+  const nodeConnId = selection?.type === 'node' ? parseNodeId(selection.id).connId : null
+  const { data: hostsData } = useHostsByConnection(nodeConnId)
+
   useEffect(() => {
     setEntityTags([])
     if (!selection) return
@@ -1228,18 +1233,13 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
         })
         .catch(() => {})
     } else if (selection.type === 'node') {
-      const { connId, node } = parseNodeId(selection.id)
-      fetch(`/api/v1/hosts?connId=${encodeURIComponent(connId)}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(json => {
-          const hosts = json?.data?.hosts || []
-          const host = hosts.find((h: any) => h.node === node)
-          const tags = host?.managedHost?.tags || host?.tags
-          setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
-        })
-        .catch(() => {})
+      const { node } = parseNodeId(selection.id)
+      const hosts = hostsData?.data?.hosts || []
+      const host = hosts.find((h: any) => h.node === node)
+      const tags = host?.managedHost?.tags || host?.tags
+      setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
     }
-  }, [selection?.id, selection?.type])
+  }, [selection?.id, selection?.type, hostsData])
 
   // Reset non-data states when selection changes (data/loading/error/localTags are reset by useDetailData)
   useEffect(() => {

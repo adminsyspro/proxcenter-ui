@@ -16,7 +16,7 @@ const clusterFirewallFetcher = async (url: string) => {
 }
 
 export function useClusterFirewallOptions() {
-  const refreshInterval = useRefreshInterval(30000)
+  const refreshInterval = useRefreshInterval(120000)
   return useSWR('zero-trust/firewall-options', clusterFirewallFetcher, { refreshInterval })
 }
 

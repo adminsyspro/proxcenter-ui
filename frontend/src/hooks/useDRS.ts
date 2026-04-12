@@ -8,7 +8,7 @@ const fetcher = (url: string) => fetch(url).then(res => {
 })
 
 export function useDRSStatus(isEnterprise: boolean) {
-  const refreshInterval = useRefreshInterval(10000)
+  const refreshInterval = useRefreshInterval(30000)
   return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/status' : null, fetcher, { refreshInterval })
 }
 
@@ -33,12 +33,12 @@ const recsFetcher = async (url: string) => {
 }
 
 export function useDRSRecommendations(isEnterprise: boolean) {
-  const refreshInterval = useRefreshInterval(15000)
+  const refreshInterval = useRefreshInterval(45000)
   return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/recommendations?validate=true' : null, recsFetcher, { refreshInterval })
 }
 
 export function useDRSMigrations(isEnterprise: boolean) {
-  const refreshInterval = useRefreshInterval(10000)
+  const refreshInterval = useRefreshInterval(15000)
   return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations?active=true' : null, fetcher, { refreshInterval })
 }
 

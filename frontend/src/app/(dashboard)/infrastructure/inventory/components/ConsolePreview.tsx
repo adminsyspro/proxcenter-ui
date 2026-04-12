@@ -144,6 +144,7 @@ function ConsolePreview({
   }, [connId, node, type, vmid, isRunning, isQemu])
 
   // Fetch screenshot on mount and every 10s for running QEMU VMs
+  // Pauses when the browser tab is hidden (Page Visibility API)
   useEffect(() => {
     if (!isRunning || !isQemu) {
       setScreenshotUrl(null)
@@ -151,11 +152,30 @@ function ConsolePreview({
       return
     }
 
-    fetchScreenshot()
-    intervalRef.current = setInterval(fetchScreenshot, 10_000)
+    function start() {
+      if (intervalRef.current) return
+      fetchScreenshot()
+      intervalRef.current = setInterval(fetchScreenshot, 10_000)
+    }
+
+    function stop() {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+
+    function onVisChange() {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+
+    document.addEventListener('visibilitychange', onVisChange)
+    if (document.visibilityState === 'visible') start()
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      stop()
+      document.removeEventListener('visibilitychange', onVisChange)
     }
   }, [fetchScreenshot, isRunning, isQemu])
 

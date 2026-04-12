@@ -31,7 +31,7 @@ export function useChanges(params?: {
 }
 
 export function useRecentChanges(limit = 10) {
-  const refreshInterval = useRefreshInterval(15000)
+  const refreshInterval = useRefreshInterval(60000)
 
   return useSWRFetch(`/api/v1/changes/recent?limit=${limit}`, { refreshInterval })
 }

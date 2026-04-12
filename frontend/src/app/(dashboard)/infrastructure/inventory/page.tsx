@@ -9,6 +9,9 @@ import { useTranslations } from 'next-intl'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useRBACScopeProfile } from '@/hooks/useRBACScopeProfile'
+import { useRunningTasks } from '@/hooks/useRunningTasks'
+import { usePVEConnections } from '@/hooks/useConnections'
+import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
@@ -38,10 +41,15 @@ export default function InventoryPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
   const searchParams = useSearchParams()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const [connections, setConnections] = useState<Connection[]>([])
+  // Connections via shared SWR (dedup with other consumers)
+  const { data: connectionsData, isLoading: connectionsLoading, error: connectionsError } = usePVEConnections()
+  const connections: Connection[] = connectionsData?.data ?? []
+
+  // Favorites via shared SWR (dedup with InventoryTree/useFavorites)
+  const { data: favoritesData, mutate: mutateFavorites } = useSWRFetch('/api/v1/favorites', { revalidateOnFocus: false })
   const [selection, setSelection] = useState<InventorySelection | null>({ type: 'root', id: 'root' })
   const [refreshTree, setRefreshTree] = useState<(() => void) | null>(null)
 
@@ -61,8 +69,7 @@ export default function InventoryPage() {
   const [ipSnapLoading, setIpSnapLoading] = useState(false)
   const [ipSnapLoaded, setIpSnapLoaded] = useState(false)
 
-  // Favoris (partagés entre Tree et Details)
-  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  // Favoris (derived from SWR above)
   
   // État pour collapse la tree
   const [isTreeCollapsed, setIsTreeCollapsed] = useState(false)
@@ -166,86 +173,45 @@ export default function InventoryPage() {
   // Référence pour détecter les migrations terminées
   const prevMigratingVmsRef = useRef<MigratingVm[]>([])
 
-  // Polling des tâches en cours pour détecter les migrations
+  // Detect migrations from shared running-tasks SWR (no duplicate polling)
+  const { data: runningTasksData } = useRunningTasks()
+
   useEffect(() => {
-    const fetchRunningTasks = async () => {
-      try {
-        const res = await fetch('/api/v1/tasks/running')
+    const tasks = runningTasksData?.data || []
 
-        if (!res.ok) return
-        const json = await res.json()
-        const tasks = json.data || []
-        
-        // Filtrer les tâches de migration (qmigrate, vzmigrate, hamigrate)
-        // Note: Proxmox utilise qmigrate (pas qmmigrate) dans les tâches
-        const migrations: MigratingVm[] = tasks
-          .filter((t: any) => t.type === 'qmigrate' || t.type === 'vzmigrate' || t.type === 'hamigrate')
-          .map((t: any) => ({
-            connId: t.connectionId,
-            vmid: t.entity || '', // entity contient le VMID
-            sourceNode: t.node,
-            targetNode: undefined // On pourrait parser l'UPID pour trouver la cible
-          }))
-          .filter((m: MigratingVm) => m.vmid) // Garder seulement ceux avec un VMID
-        
-        // Détecter les migrations terminées (étaient en cours, ne le sont plus)
-        const prevIds = new Set(prevMigratingVmsRef.current.map(m => `${m.connId}:${m.vmid}`))
-        const currentIds = new Set(migrations.map(m => `${m.connId}:${m.vmid}`))
-        
-        const finishedMigrations = prevMigratingVmsRef.current.filter(
-          m => !currentIds.has(`${m.connId}:${m.vmid}`)
-        )
-        
-        // Si des migrations viennent de se terminer, rafraîchir l'inventaire
-        if (finishedMigrations.length > 0) {
-          // Rafraîchir l'arbre après un court délai pour laisser Proxmox mettre à jour
-          setTimeout(() => {
-            if (refreshTree) {
-              refreshTree()
-            }
-          }, 1000)
-        }
-        
-        // Mettre à jour la référence
-        prevMigratingVmsRef.current = migrations
+    // Filter migration tasks (qmigrate, vzmigrate, hamigrate)
+    const migrations: MigratingVm[] = tasks
+      .filter((t: any) => t.type === 'qmigrate' || t.type === 'vzmigrate' || t.type === 'hamigrate')
+      .map((t: any) => ({
+        connId: t.connectionId,
+        vmid: t.entity || '',
+        sourceNode: t.node,
+        targetNode: undefined
+      }))
+      .filter((m: MigratingVm) => m.vmid)
 
-        // Only update state if the set of migrating VMs actually changed
-        setMigratingVms(prev => {
-          const prevIds = prev.map(m => `${m.connId}:${m.vmid}`).sort((a, b) => a.localeCompare(b)).join(',')
-          const nextIds = migrations.map(m => `${m.connId}:${m.vmid}`).sort((a, b) => a.localeCompare(b)).join(',')
+    // Detect finished migrations
+    const currentIds = new Set(migrations.map(m => `${m.connId}:${m.vmid}`))
 
-          return prevIds === nextIds ? prev : migrations
-        })
-      } catch (e) {
-        console.error('Error fetching running tasks:', e)
-      }
+    const finishedMigrations = prevMigratingVmsRef.current.filter(
+      m => !currentIds.has(`${m.connId}:${m.vmid}`)
+    )
+
+    if (finishedMigrations.length > 0) {
+      setTimeout(() => {
+        if (refreshTree) refreshTree()
+      }, 1000)
     }
 
-    // Fetch initial
-    fetchRunningTasks()
+    prevMigratingVmsRef.current = migrations
 
-    // Polling toutes les 3 secondes, pause quand l'onglet est caché
-    let interval: ReturnType<typeof setInterval> | null = null
+    setMigratingVms(prev => {
+      const prevKey = prev.map(m => `${m.connId}:${m.vmid}`).sort().join(',')
+      const nextKey = migrations.map(m => `${m.connId}:${m.vmid}`).sort().join(',')
 
-    function start() {
-      if (interval !== null) return
-      interval = setInterval(fetchRunningTasks, 3000)
-    }
-
-    function stop() {
-      if (interval !== null) { clearInterval(interval); interval = null }
-    }
-
-    function onVis() {
-      if (document.visibilityState === 'visible') { fetchRunningTasks(); start() }
-      else stop()
-    }
-
-    document.addEventListener('visibilitychange', onVis)
-    if (document.visibilityState === 'visible') start()
-
-    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
-  }, [refreshTree])
+      return prevKey === nextKey ? prev : migrations
+    })
+  }, [runningTasksData, refreshTree])
 
   // Page title
   useEffect(() => {
@@ -317,21 +283,11 @@ return () => setPageInfo('', '', '')
     treeOptimisticVmTagsRef.current?.(connId, vmid, tags)
   }, [])
 
-  // Charger les favoris
-  const loadFavorites = useCallback(async () => {
-    try {
-      const res = await fetch('/api/v1/favorites')
-
-      if (res.ok) {
-        const json = await res.json()
-        const favSet = new Set<string>((json.data || []).map((f: any) => f.vm_key))
-
-        setFavorites(favSet)
-      }
-    } catch (e) {
-      console.error('Error loading favorites:', e)
-    }
-  }, [])
+  // Derive favorites from SWR data
+  const favorites = useMemo(() => {
+    const favs = favoritesData?.data || []
+    return new Set<string>(favs.map((f: any) => f.vm_key))
+  }, [favoritesData])
 
   // Toggle favori
   const toggleFavorite = useCallback(async (vm: { connId: string; node: string; type: string; vmid: string | number; name?: string }) => {
@@ -341,16 +297,7 @@ return () => setPageInfo('', '', '')
     try {
       if (isFav) {
         const res = await fetch(`/api/v1/favorites?vmKey=${encodeURIComponent(vmKey)}`, { method: 'DELETE' })
-
-        if (res.ok) {
-          setFavorites(prev => {
-            const next = new Set(prev)
-
-            next.delete(vmKey)
-
-            return next
-          })
-        }
+        if (res.ok) mutateFavorites()
       } else {
         const res = await fetch('/api/v1/favorites', {
           method: 'POST',
@@ -363,15 +310,12 @@ return () => setPageInfo('', '', '')
             vmName: vm.name
           })
         })
-
-        if (res.ok) {
-          setFavorites(prev => new Set(prev).add(vmKey))
-        }
+        if (res.ok) mutateFavorites()
       }
     } catch (e) {
       console.error('Error toggling favorite:', e)
     }
-  }, [favorites])
+  }, [favorites, mutateFavorites])
 
   // Largeur du panneau gauche (resizable)
   const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH)
@@ -386,29 +330,10 @@ return () => setPageInfo('', '', '')
     setTreeOptimisticVmStatus(() => fn)
   }, [])
 
-  const loadConnections = async () => {
-    setLoading(true)
-    setErr(null)
-
-    try {
-      // Charger uniquement les connexions PVE (pas PBS)
-      const res = await fetch('/api/v1/connections?type=pve')
-      const json = await res.json()
-      const list = Array.isArray(json?.data) ? json.data : []
-
-      setConnections(list)
-    } catch (e: any) {
-      setErr(e?.message ?? 'Failed to load connections')
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  // Derive loading/error from SWR states
   useEffect(() => {
-    void loadConnections()
-    void loadFavorites()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (connectionsError) setErr(connectionsError.message)
+  }, [connectionsError])
 
   // Quand on passe en mode tree, sélectionner automatiquement 'root' pour afficher la vue arborescente
   useEffect(() => {

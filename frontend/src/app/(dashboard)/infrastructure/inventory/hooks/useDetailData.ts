@@ -129,7 +129,7 @@ export function useDetailData(selection: InventorySelection | null) {
     function start() {
       if (intervalId !== null) return
       poll()
-      intervalId = setInterval(poll, 2000)
+      intervalId = setInterval(poll, 5000)
     }
 
     function stop() {

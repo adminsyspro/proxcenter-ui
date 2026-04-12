@@ -8,6 +8,11 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
+// In-memory response cache: avoids re-fetching 26+ RRD calls from Proxmox on every request.
+// Key = tenantId:connectionId (or tenantId:all), value = { response JSON, timestamp }
+const overviewCache = new Map<string, { data: any; timestamp: number }>()
+const CACHE_TTL_MS = 60_000 // 60 seconds
+
 // Charger les paramètres Green depuis la base de données
 async function loadGreenSettings(tenantId: string) {
   try {
@@ -720,6 +725,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const filterConnectionId = searchParams.get('connectionId') || undefined
 
+    // Check in-memory cache (avoids 26+ RRD calls to Proxmox)
+    const cacheKey = `${tenantId}:${filterConnectionId || 'all'}`
+    const cached = overviewCache.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return NextResponse.json(cached.data)
+    }
+
     // Load settings in parallel
     const [greenSettings, resourceThresholds] = await Promise.all([
       loadGreenSettings(tenantId),
@@ -1303,7 +1315,7 @@ export async function GET(request: Request) {
     // F8: Load history
     const healthScoreHistory = loadHealthScoreHistory(filterConnectionId, tenantId)
 
-    return NextResponse.json({
+    const responseBody = {
       data: {
         kpis: {
           cpu: {
@@ -1387,7 +1399,16 @@ export async function GET(request: Request) {
           } : null
         }
       }
-    })
+    }
+
+    // Cache the response for 60s
+    overviewCache.set(cacheKey, { data: responseBody, timestamp: Date.now() })
+    // Evict old entries
+    for (const [key, val] of overviewCache) {
+      if (Date.now() - val.timestamp > CACHE_TTL_MS * 3) overviewCache.delete(key)
+    }
+
+    return NextResponse.json(responseBody)
   } catch (e: any) {
     console.error("[resources/overview] Error:", e)
     

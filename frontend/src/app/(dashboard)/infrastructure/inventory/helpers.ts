@@ -393,6 +393,46 @@ export async function fetchRrd(connectionId: string, path: string, timeframe: Rr
   return asArray<any>(safeJson<any>(json))
 }
 
+/**
+ * Batch RRD fetch: fetches RRD data for multiple paths on the same connection
+ * in a single HTTP request. Returns a Map of path -> data[].
+ */
+export async function fetchRrdBatch(
+  connectionId: string,
+  paths: string[],
+  timeframe: RrdTimeframe,
+  signal?: AbortSignal
+): Promise<Map<string, any[]>> {
+  if (paths.length === 0) return new Map()
+
+  // For a single path, fall back to the regular endpoint
+  if (paths.length === 1) {
+    const data = await fetchRrd(connectionId, paths[0], timeframe, signal)
+    return new Map([[paths[0], data]])
+  }
+
+  const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd/batch`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths, timeframe }),
+    cache: 'no-store',
+    signal,
+  })
+  const json = await res.json()
+
+  if (!res.ok) {
+    throw new Error(json?.error || `RRD batch HTTP ${res.status}`)
+  }
+
+  const dataMap = new Map<string, any[]>()
+  const rawMap = json?.data || {}
+  for (const [path, data] of Object.entries(rawMap)) {
+    dataMap.set(path, asArray<any>(safeJson<any>({ data })))
+  }
+  return dataMap
+}
+
 export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
   // Root / section selections don't have details — skip fetching
   if (sel.type === 'root' || sel.type === 'storage-root' || sel.type === 'network-root' || sel.type === 'backup-root' || sel.type === 'migration-root' || sel.type === 'net-conn' || sel.type === 'net-node' || sel.type === 'net-vlan' || sel.type === 'storage-cluster' || sel.type === 'storage-node') return null

@@ -44,7 +44,7 @@ import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
 import type { InventorySelection } from './types'
-import { fetchRrd, buildSeriesFromRrd, formatTime, formatBps } from './helpers'
+import { fetchRrd, fetchRrdBatch, buildSeriesFromRrd, formatTime, formatBps } from './helpers'
 import { useResourceData } from '../resources/hooks/useResourceData'
 import { calculateImprovedPredictions } from '../resources/algorithms/improvedPrediction'
 import { calculateHealthScoreWithDetails } from '../resources/algorithms/healthScore'
@@ -387,25 +387,24 @@ function RootInventoryView({
     ;(async () => {
       const perNode: Record<string, any[]> = {}
 
-      const results = await Promise.allSettled(currentHosts.map(async (host) => {
-        const t0 = performance.now()
-        try {
-          const raw = await fetchRrd(host.connId, `/nodes/${host.node}`, infraRrdTf, abortController.signal)
-          const duration = Math.round(performance.now() - t0)
-          if (!abortController.signal.aborted) {
-            const series = buildSeriesFromRrd(raw)
-            perNode[host.node] = series
-            // console.log(`[infra-rrd] ✓ ${host.node}: ${duration}ms, ${raw.length} raw → ${series.length} pts`)
+      // Group hosts by connection for batch RRD fetches (1 request per connection instead of 1 per node)
+      const byConn = new Map<string, { connId: string; nodes: string[] }>()
+      for (const host of currentHosts) {
+        if (!byConn.has(host.connId)) byConn.set(host.connId, { connId: host.connId, nodes: [] })
+        byConn.get(host.connId)!.nodes.push(host.node)
+      }
+
+      const results = await Promise.allSettled(
+        Array.from(byConn.values()).map(async ({ connId, nodes }) => {
+          const paths = nodes.map(n => `/nodes/${n}`)
+          const batchResult = await fetchRrdBatch(connId, paths, infraRrdTf, abortController.signal)
+          if (abortController.signal.aborted) return
+          for (const node of nodes) {
+            const raw = batchResult.get(`/nodes/${node}`) || []
+            perNode[node] = buildSeriesFromRrd(raw)
           }
-          return { node: host.node, ok: true, duration, points: raw.length }
-        } catch (e) {
-          const duration = Math.round(performance.now() - t0)
-          if (!abortController.signal.aborted) {
-            // console.warn(`[infra-rrd] ✗ ${host.node}: FAILED ${duration}ms:`, e)
-          }
-          return { node: host.node, ok: false, duration, error: String(e) }
-        }
-      }))
+        })
+      )
       if (abortController.signal.aborted) {
         // console.log(`[infra-rrd] Aborted (stale effect)`)
         return

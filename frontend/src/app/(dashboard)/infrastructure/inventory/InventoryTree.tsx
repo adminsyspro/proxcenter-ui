@@ -3741,7 +3741,7 @@ return (
               }}
             >
               <i className={collapsedSections.has('migrate-ext') ? 'ri-add-line' : 'ri-subtract-line'} style={{ fontSize: 14, opacity: 0.7 }} />
-              <img src="/images/esxi-logo.svg" alt="" width={14} height={14} style={{ opacity: 0.7 }} />
+              <i className="ri-swap-box-line" style={{ fontSize: 14, opacity: 0.7 }} />
               <Typography variant="body2" sx={{ fontWeight: 700 }}>MIGRATIONS</Typography>
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
                 ({externalHypervisors.length} hosts{totalExtVms > 0 ? `, ${totalExtVms} VMs` : ''})

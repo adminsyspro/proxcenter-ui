@@ -70,18 +70,18 @@ describe('retrieveAllPropertiesEx — edge cases', () => {
   it('follows the token across three pages', async () => {
     const soapReq = vi
       .fn()
-      .mockResolvedValueOnce({ text: pageWithToken('<objects>a</objects>', 'T1') })
-      .mockResolvedValueOnce({ text: pageWithToken('<objects>b</objects>', 'T2') })
-      .mockResolvedValueOnce({ text: singlePageResponse('<objects>c</objects>') })
+      .mockResolvedValueOnce({ text: pageWithToken('<objects>PAGE_ONE</objects>', 'T1') })
+      .mockResolvedValueOnce({ text: pageWithToken('<objects>PAGE_TWO</objects>', 'T2') })
+      .mockResolvedValueOnce({ text: singlePageResponse('<objects>PAGE_THREE</objects>') })
 
     const result = await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
 
     expect(soapReq).toHaveBeenCalledTimes(3)
     expect(soapReq.mock.calls[1][0]).toContain('<urn:token>T1</urn:token>')
     expect(soapReq.mock.calls[2][0]).toContain('<urn:token>T2</urn:token>')
-    expect(result).toContain('a')
-    expect(result).toContain('b')
-    expect(result).toContain('c')
+    expect(result).toContain('PAGE_ONE')
+    expect(result).toContain('PAGE_TWO')
+    expect(result).toContain('PAGE_THREE')
   })
 
   it('returns the single response when there are no objects and no token', async () => {
@@ -94,7 +94,9 @@ describe('retrieveAllPropertiesEx — edge cases', () => {
     const result = await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
 
     expect(soapReq).toHaveBeenCalledTimes(1)
-    expect(result).toContain('returnval')
+    // Passthrough contract: the helper returns the raw response verbatim,
+    // even when the response is an empty self-closing <returnval/>.
+    expect(result).toBe(empty)
   })
 
   it('stops at maxIterations and warns when vCenter still has more pages', async () => {
@@ -127,8 +129,10 @@ describe('retrieveAllPropertiesEx — edge cases', () => {
 </soap:Body></soap:Envelope>`
     const soapReq = vi.fn().mockResolvedValueOnce({ text: xml })
 
-    await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
+    const result = await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
 
     expect(soapReq).toHaveBeenCalledTimes(1)
+    // Passthrough contract: the object data is preserved in the result.
+    expect(result).toContain('vm-1')
   })
 })

@@ -676,11 +676,13 @@ export async function soapListVMs(
 
   const sendReq = (body: string) =>
     soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   const responseText = await retrieveAllPropertiesEx(
     sendReq,
     retrieveBody,
     session.propertyCollector,
   )
+
   const propsResult = { text: responseText }
 
   // Destroy the ContainerView (fire and forget)

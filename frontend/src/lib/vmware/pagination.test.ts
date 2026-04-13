@@ -1,5 +1,6 @@
 // frontend/src/lib/vmware/pagination.test.ts
 import { describe, it, expect, vi } from 'vitest'
+
 import { retrieveAllPropertiesEx } from './pagination'
 
 const PC = 'propertyCollector'
@@ -42,6 +43,7 @@ describe('retrieveAllPropertiesEx — continuation', () => {
       '<objects><obj type="VirtualMachine">vm-1</obj></objects>',
       'TOKEN-A',
     )
+
     const page2 = singlePageResponse(
       '<objects><obj type="VirtualMachine">vm-2</obj></objects>',
     )
@@ -54,12 +56,15 @@ describe('retrieveAllPropertiesEx — continuation', () => {
     const result = await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
 
     expect(soapReq).toHaveBeenCalledTimes(2)
+
     // First call uses the original body
     expect(soapReq.mock.calls[0][0]).toBe('<initial/>')
+
     // Second call is a ContinueRetrievePropertiesEx with the token
     expect(soapReq.mock.calls[1][0]).toContain('ContinueRetrievePropertiesEx')
     expect(soapReq.mock.calls[1][0]).toContain('<urn:token>TOKEN-A</urn:token>')
     expect(soapReq.mock.calls[1][0]).toContain(`<urn:_this type="PropertyCollector">${PC}</urn:_this>`)
+
     // Both VMs are present in the concatenated text
     expect(result).toContain('vm-1')
     expect(result).toContain('vm-2')
@@ -89,11 +94,13 @@ describe('retrieveAllPropertiesEx — edge cases', () => {
 <soap:Envelope><soap:Body>
   <RetrievePropertiesExResponse><returnval/></RetrievePropertiesExResponse>
 </soap:Body></soap:Envelope>`
+
     const soapReq = vi.fn().mockResolvedValueOnce({ text: empty })
 
     const result = await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
 
     expect(soapReq).toHaveBeenCalledTimes(1)
+
     // Passthrough contract: the helper returns the raw response verbatim,
     // even when the response is an empty self-closing <returnval/>.
     expect(result).toBe(empty)
@@ -103,6 +110,7 @@ describe('retrieveAllPropertiesEx — edge cases', () => {
     const soapReq = vi.fn().mockResolvedValue({
       text: pageWithToken('<objects>x</objects>', 'INFINITE'),
     })
+
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     await retrieveAllPropertiesEx(soapReq, '<initial/>', PC, 3)
@@ -127,11 +135,13 @@ describe('retrieveAllPropertiesEx — edge cases', () => {
     </objects>
   </returnval></RetrievePropertiesExResponse>
 </soap:Body></soap:Envelope>`
+
     const soapReq = vi.fn().mockResolvedValueOnce({ text: xml })
 
     const result = await retrieveAllPropertiesEx(soapReq, '<initial/>', PC)
 
     expect(soapReq).toHaveBeenCalledTimes(1)
+
     // Passthrough contract: the object data is preserved in the result.
     expect(result).toContain('vm-1')
   })

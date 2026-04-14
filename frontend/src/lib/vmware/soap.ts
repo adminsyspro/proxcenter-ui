@@ -3,6 +3,8 @@
  * Used by both the VMware API routes and the migration pipeline
  */
 
+import { retrieveAllPropertiesEx } from "./pagination"
+
 export interface SoapSession {
   baseUrl: string
   cookie: string
@@ -672,7 +674,16 @@ export async function soapListVMs(
   </soapenv:Body>
 </soapenv:Envelope>`
 
-  const propsResult = await soapRequest(session.baseUrl, retrieveBody, session.cookie, session.insecureTLS)
+  const sendReq = (body: string) =>
+    soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
+  const responseText = await retrieveAllPropertiesEx(
+    sendReq,
+    retrieveBody,
+    session.propertyCollector,
+  )
+
+  const propsResult = { text: responseText }
 
   // Destroy the ContainerView (fire and forget)
   const destroyBody = `<?xml version="1.0" encoding="UTF-8"?>

@@ -287,13 +287,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // "sshfs" requires ESXi SSH and sshfs on PVE node
     // "sshfs_boot" always uses SSHFS
     // "https" uses VMware API (no SSHFS needed)
+    // "auto" uses SSHFS when available (required for vSAN — HTTPS can't serve vSAN objects)
     const requestedTransferMode = config.transferMode || "sshfs"
+    const hasVsanDisks = vmConfig.disks.some(d => d.datastoreName.toLowerCase().includes('vsan'))
     let useSSHFS = false
-    if (isSshfsBoot || requestedTransferMode === "sshfs") {
+    if (isSshfsBoot || requestedTransferMode === "sshfs" || (requestedTransferMode === "auto" && esxiSshAvailable)) {
       if (!esxiSshAvailable) {
         throw new Error("SSHFS transfer mode requires SSH to be configured on the ESXi connection. Please enable SSH in the connection settings.")
       }
       useSSHFS = true
+    }
+    // vSAN requires SSHFS — HTTPS /folder/ endpoint can't serve vSAN object-backed disks reliably
+    if (hasVsanDisks && !useSSHFS) {
+      throw new Error(
+        `vSAN datastores require SSHFS transfer mode but SSH is not available. ` +
+        `Please enable SSH on the ESXi connection and select "SSHFS" or "Auto" transfer mode.`
+      )
     }
 
     // Check sshfs binary on PVE node when SSHFS mode is active
@@ -1086,22 +1095,23 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Verify the disk file is accessible via SSHFS
       const checkFile = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${sshfsDiskPath}" && echo EXISTS || echo MISSING`)
       if (checkFile.output?.trim() !== "EXISTS") {
-        // Try without -flat suffix (some storage types use different naming)
+        // -flat.vmdk not found (common on vSAN where data is object-backed)
+        // Fall back to VMDK descriptor - qemu-img -f vmdk can read it and follow references
         const altPath = `${sshfsMountPath}/${disk.relativePath}`
         const checkAlt = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${altPath}" && echo EXISTS || echo MISSING`)
         if (checkAlt.output?.trim() === "EXISTS") {
-          await appendLog(jobId, `Using descriptor VMDK path (no -flat suffix): ${altPath}`, "info")
-          // qemu-img can read VMDK descriptors and resolve the flat file automatically
-          return await sshfsConvertAndImport(i, disk, altPath, tmpFile)
+          await appendLog(jobId, `Using VMDK descriptor (vSAN/object storage): qemu-img will read via descriptor`, "info")
+          return await sshfsConvertAndImport(i, disk, altPath, tmpFile, "vmdk")
         }
-        throw new Error(`Disk file not found via SSHFS: ${sshfsDiskPath}`)
+        throw new Error(`Disk file not found via SSHFS: ${sshfsDiskPath} (also tried descriptor: ${altPath})`)
       }
 
-      await sshfsConvertAndImport(i, disk, sshfsDiskPath, tmpFile)
+      await sshfsConvertAndImport(i, disk, sshfsDiskPath, tmpFile, "raw")
     }
 
     // Core convert+import from an SSHFS path for file-based storage
-    async function sshfsConvertAndImport(i: number, disk: EsxiDiskInfo, sourcePath: string, tmpFile: string) {
+    // inputFormat: "raw" for flat VMDKs (direct raw data), "vmdk" for VMDK descriptors (vSAN/object storage)
+    async function sshfsConvertAndImport(i: number, disk: EsxiDiskInfo, sourcePath: string, tmpFile: string, inputFormat: "raw" | "vmdk" = "raw") {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       const scsiSlot = `scsi${i}`
 
@@ -1122,8 +1132,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const outputFile = `${tmpFile}.${importFormat}`
 
       // Use qemu-img convert with progress output
+      // inputFormat=vmdk: reads VMDK descriptor and follows references (required for vSAN)
+      // inputFormat=raw: reads flat VMDK as raw data (standard VMFS)
       await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${convertScript}" << 'CONVEOF'\nqemu-img convert -p -f raw -O ${importFormat} "${sourcePath}" "${outputFile}" 2>"${progressFile}"\necho $? > "${exitFile}"\nCONVEOF`
+        `cat > "${convertScript}" << 'CONVEOF'\nqemu-img convert -p -f ${inputFormat} -O ${importFormat} "${sourcePath}" "${outputFile}" 2>"${progressFile}"\necho $? > "${exitFile}"\nCONVEOF`
       )
 
       const startConvert = await executeSSH(config.targetConnectionId, nodeIp,
@@ -1223,24 +1235,28 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
     }
 
-    // Stream disk via SSHFS for block storage (dd from mounted flat VMDK to pre-allocated device)
+    // Stream disk via SSHFS for block storage (dd or qemu-img convert to pre-allocated device)
     async function streamDiskViaSshfsToBlock(i: number, disk: EsxiDiskInfo, devicePath: string) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Streaming "${disk.label}" via SSHFS to block device (${diskSizeGB} GB)...`)
 
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
       let sshfsDiskPath = `${sshfsMountPath}/${flatPath}`
+      let useVmdkDescriptor = false
 
       // Verify file exists
       const checkFile = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${sshfsDiskPath}" && echo EXISTS || echo MISSING`)
       if (checkFile.output?.trim() !== "EXISTS") {
-        // Try descriptor path as fallback
+        // -flat.vmdk not found (common on vSAN where data is object-backed)
+        // Fall back to VMDK descriptor - qemu-img can read it and follow references to actual data
         const altPath = `${sshfsMountPath}/${disk.relativePath}`
         const checkAlt = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${altPath}" && echo EXISTS || echo MISSING`)
         if (checkAlt.output?.trim() === "EXISTS") {
           sshfsDiskPath = altPath
+          useVmdkDescriptor = true
+          await appendLog(jobId, `Using VMDK descriptor (vSAN/object storage): qemu-img convert will read disk data via descriptor`, "info")
         } else {
-          throw new Error(`Disk file not found via SSHFS: ${sshfsDiskPath}`)
+          throw new Error(`Disk file not found via SSHFS: ${sshfsDiskPath} (also tried descriptor: ${altPath})`)
         }
       }
 
@@ -1251,23 +1267,31 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         totalBytes: BigInt(disk.capacityBytes),
       })
 
-      // dd from SSHFS mount directly to block device
       const ctrlPrefix = `/tmp/proxcenter-mig-${jobId}-sshfsblk${i}`
       const progressFile = `${ctrlPrefix}.progress`
       const pidFile = `${ctrlPrefix}.pid`
       const exitFile = `${ctrlPrefix}.exit`
-      const ddScript = `${ctrlPrefix}.sh`
+      const transferScript = `${ctrlPrefix}.sh`
 
-      await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${ddScript}" << 'DDEOF'\ndd if="${sshfsDiskPath}" of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\necho $? > "${exitFile}"\nDDEOF`
-      )
-
-      const startDd = await executeSSH(config.targetConnectionId, nodeIp,
-        `nohup bash "${ddScript}" > /dev/null 2>&1 & echo $!`)
-      if (!startDd.success || !startDd.output?.trim()) {
-        throw new Error(`Failed to start dd: ${startDd.error}`)
+      if (useVmdkDescriptor) {
+        // vSAN / object storage: use qemu-img convert to read VMDK descriptor and write raw to block device
+        // qemu-img understands VMDK format and follows descriptor references to the actual data objects
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `cat > "${transferScript}" << 'XFEREOF'\nqemu-img convert -p -f vmdk -O raw "${sshfsDiskPath}" "${devicePath}" 2>"${progressFile}"\necho $? > "${exitFile}"\nXFEREOF`
+        )
+      } else {
+        // VMFS / standard: flat VMDK is raw data, dd directly to block device (faster, no conversion overhead)
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `cat > "${transferScript}" << 'XFEREOF'\ndd if="${sshfsDiskPath}" of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\necho $? > "${exitFile}"\nXFEREOF`
+        )
       }
-      const pid = startDd.output.trim()
+
+      const startCmd = await executeSSH(config.targetConnectionId, nodeIp,
+        `nohup bash "${transferScript}" > /dev/null 2>&1 & echo $!`)
+      if (!startCmd.success || !startCmd.output?.trim()) {
+        throw new Error(`Failed to start ${useVmdkDescriptor ? 'qemu-img convert' : 'dd'}: ${startCmd.error}`)
+      }
+      const pid = startCmd.output.trim()
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > "${pidFile}"`)
 
       const totalBytes = disk.capacityBytes
@@ -1276,15 +1300,23 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       while (true) {
         if (isCancelled(jobId)) {
-          await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${ddScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
+          await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
           throw new Error("Migration cancelled")
         }
         await new Promise(r => setTimeout(r, 3000))
 
-        // Parse dd progress: "123456789 bytes ..."
-        const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
-          `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
-        transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
+        if (useVmdkDescriptor) {
+          // Parse qemu-img progress: outputs lines like "(12.34/100%)"
+          const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
+            `tail -c 100 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '[\\d.]+(?=/100%)' | tail -1 || echo 0`)
+          const pct = Number.parseFloat(progressResult.output?.trim() || "0") || 0
+          transferredBytes = Math.round((pct / 100) * totalBytes)
+        } else {
+          // Parse dd progress: "123456789 bytes ..."
+          const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
+            `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
+          transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
+        }
 
         const elapsed = (Date.now() - startTime) / 1000
         const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
@@ -1302,9 +1334,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
         if (exitCheck.output?.trim() !== "RUNNING") {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${ddScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
           if (exitCode !== 0) {
-            throw new Error(`dd streaming failed (exit ${exitCode})`)
+            throw new Error(`${useVmdkDescriptor ? 'qemu-img convert' : 'dd'} failed (exit ${exitCode})`)
           }
           break
         }
@@ -1729,8 +1761,32 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       let bootMethod: "qemu-ssh" | "sshfs" | "nbd" | null = null
       const diskBus = vmConfig.disks[0]?.controllerType?.toLowerCase()?.includes("scsi") ? "scsi" : "sata"
       const firstDisk = vmConfig.disks[0]
+
+      // Detect vSAN: -flat.vmdk doesn't exist as a separate POSIX file on vSAN
+      // We need to check via SSHFS whether the flat file or the descriptor should be used
       const firstFlatPath = firstDisk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
-      const firstEsxiPath = `/vmfs/volumes/${firstDisk.datastoreName}/${firstFlatPath}`
+      const firstDescriptorPath = firstDisk.relativePath
+      let useVmdkFormat = false // true when we must use VMDK descriptor instead of flat raw
+
+      // Check if -flat.vmdk exists (won't on vSAN)
+      if (useSSHFS) {
+        const firstMountPath = sshfsMountedDatastores.get(firstDisk.datastoreName) || sshfsMountPath
+        const flatCheck = await executeSSH(config.targetConnectionId, nodeIp,
+          `test -f "${firstMountPath}/${firstFlatPath}" && echo EXISTS || echo MISSING`)
+        if (flatCheck.output?.trim() !== "EXISTS") {
+          const descCheck = await executeSSH(config.targetConnectionId, nodeIp,
+            `test -f "${firstMountPath}/${firstDescriptorPath}" && echo EXISTS || echo MISSING`)
+          if (descCheck.output?.trim() === "EXISTS") {
+            useVmdkFormat = true
+            await appendLog(jobId, "vSAN detected: -flat.vmdk not found, using VMDK descriptor with format=vmdk", "info")
+          }
+        }
+      }
+
+      // Resolve disk path and format based on vSAN detection
+      const bootDiskFile = useVmdkFormat ? firstDescriptorPath : firstFlatPath
+      const bootDiskFormat = useVmdkFormat ? "vmdk" : "raw"
+      const firstEsxiPath = `/vmfs/volumes/${firstDisk.datastoreName}/${bootDiskFile}`
 
       if (qemuSshKeyPath) {
         await appendLog(jobId, "Testing QEMU SSH driver connectivity...", "info")
@@ -1739,7 +1795,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         if (qemuTestResult.output?.includes("virtual size") || qemuTestResult.output?.includes("file format")) {
           bootMethod = "qemu-ssh"
-          await appendLog(jobId, "QEMU SSH driver: connection OK", "success")
+          await appendLog(jobId, `QEMU SSH driver: connection OK (format=${bootDiskFormat})`, "success")
         } else {
           await appendLog(jobId, `QEMU SSH driver test failed: ${qemuTestResult.output?.substring(0, 200)}`, "warn")
         }
@@ -1749,10 +1805,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (!bootMethod) {
         await appendLog(jobId, "Trying SSHFS/FUSE boot (QEMU reads from SSHFS mount)...", "info")
         const firstMountPath = sshfsMountedDatastores.get(firstDisk.datastoreName) || sshfsMountPath
-        const firstFusePath = `${firstMountPath}/${firstFlatPath}`
+        const firstFusePath = `${firstMountPath}/${bootDiskFile}`
 
         const fuseTestResult = await executeSSH(config.targetConnectionId, nodeIp,
-          `timeout 10 qemu-img info '${firstFusePath}' 2>&1`)
+          `timeout 10 qemu-img info ${useVmdkFormat ? "-f vmdk " : ""}'${firstFusePath}' 2>&1`)
         if (fuseTestResult.output?.includes("virtual size") || fuseTestResult.output?.includes("file format")) {
           useSshfsForBoot = true
 
@@ -1780,16 +1836,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           let nbdOk = true
           for (let di = 0; di < vmConfig.disks.length; di++) {
             const disk = vmConfig.disks[di]
-            const flatP = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
+            const diskFile = useVmdkFormat ? disk.relativePath : disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
             const mp = sshfsMountedDatastores.get(disk.datastoreName) || sshfsMountPath
-            const fusePath = `${mp}/${flatP}`
+            const fusePath = `${mp}/${diskFile}`
             const sockPath = `/tmp/proxcenter-nbd-${jobId}-${di}.sock`
 
             await executeSSH(config.targetConnectionId, nodeIp,
               `fuser -k "${sockPath}" 2>/dev/null; rm -f "${sockPath}"`)
 
             const nbdStart = await executeSSH(config.targetConnectionId, nodeIp,
-              `qemu-nbd --fork --persistent --socket="${sockPath}" --format=raw --cache=writeback --aio=threads '${fusePath}' 2>&1`)
+              `qemu-nbd --fork --persistent --socket="${sockPath}" --format=${bootDiskFormat} --cache=writeback --aio=threads '${fusePath}' 2>&1`)
 
             await new Promise(r => setTimeout(r, 1000))
             const sockCheck = await executeSSH(config.targetConnectionId, nodeIp, `test -S "${sockPath}" && echo EXISTS`)
@@ -1884,19 +1940,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const argsParts: string[] = []
         for (let di = 0; di < vmConfig.disks.length; di++) {
           const disk = vmConfig.disks[di]
-          const flatFile = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
+          const diskFile = useVmdkFormat ? disk.relativePath : disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
           const driveId = `sshfs-disk${di}`
 
           let driveSpec = ""
           if (bootMethod === "qemu-ssh") {
-            const esxiPath = `/vmfs/volumes/${disk.datastoreName}/${flatFile}`
-            driveSpec = `file.driver=ssh,file.host=${esxiHost},file.port=${esxiSshPort},file.path=${esxiPath},file.user=${esxiSshUser},file.host-key-check.mode=none${sshKeyOpt},format=raw,if=none,id=${driveId},cache=writeback,aio=threads`
+            const esxiPath = `/vmfs/volumes/${disk.datastoreName}/${diskFile}`
+            driveSpec = `file.driver=ssh,file.host=${esxiHost},file.port=${esxiSshPort},file.path=${esxiPath},file.user=${esxiSshUser},file.host-key-check.mode=none${sshKeyOpt},format=${bootDiskFormat},if=none,id=${driveId},cache=writeback,aio=threads`
           } else if (bootMethod === "sshfs") {
             const mp = sshfsMountedDatastores.get(disk.datastoreName) || sshfsMountPath
-            const fusePath = `${mp}/${flatFile}`
-            driveSpec = `file=${fusePath},format=raw,if=none,id=${driveId},cache=writeback,aio=threads,detect-zeroes=on`
+            const fusePath = `${mp}/${diskFile}`
+            driveSpec = `file=${fusePath},format=${bootDiskFormat},if=none,id=${driveId},cache=writeback,aio=threads,detect-zeroes=on`
           } else if (bootMethod === "nbd") {
             const sockPath = ndbSocketPaths[di]
+            // NBD exports raw blocks regardless of source format (qemu-nbd handles conversion)
             driveSpec = `file.driver=nbd,file.path=${sockPath},format=raw,if=none,id=${driveId},cache=writeback,aio=threads`
           }
 
@@ -1967,14 +2024,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const nbdFallbackParts: string[] = []
             for (let di = 0; di < vmConfig.disks.length; di++) {
               const disk = vmConfig.disks[di]
-              const flatP = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
+              const diskP = useVmdkFormat ? disk.relativePath : disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
               const mp = sshfsMountedDatastores.get(disk.datastoreName) || sshfsMountPath
-              const fusePath = `${mp}/${flatP}`
+              const fusePath = `${mp}/${diskP}`
               const sockPath = `/tmp/proxcenter-nbd-${jobId}-${di}.sock`
 
               await executeSSH(config.targetConnectionId, nodeIp, `fuser -k "${sockPath}" 2>/dev/null; rm -f "${sockPath}"`)
               const nbdStartResult = await executeSSH(config.targetConnectionId, nodeIp,
-                `qemu-nbd --fork --persistent --socket="${sockPath}" --format=raw --cache=writeback --aio=threads '${fusePath}' 2>&1`)
+                `qemu-nbd --fork --persistent --socket="${sockPath}" --format=${bootDiskFormat} --cache=writeback --aio=threads '${fusePath}' 2>&1`)
               await new Promise(r => setTimeout(r, 1000))
               const sockExists = await executeSSH(config.targetConnectionId, nodeIp, `test -S "${sockPath}" && echo EXISTS`)
               if (nbdStartResult.success && sockExists.output?.includes("EXISTS")) {

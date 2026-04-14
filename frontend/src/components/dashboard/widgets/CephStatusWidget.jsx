@@ -186,7 +186,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
           for (const det of (d?.detail || [])) {
             let m; re.lastIndex = 0
             while ((m = re.exec(det?.message || '')) !== null) {
-              const id = parseInt(m[1], 10)
+              const id = Number.parseInt(m[1], 10)
               if (n === 'OSD_DOWN' || n === 'OSD_FLAGS') downIds.add(id)
               else if (n === 'OSD_NEARFULL' || n === 'OSD_BACKFILLFULL') warnIds.add(id)
               else if (n === 'OSD_FULL') fullIds.add(id)

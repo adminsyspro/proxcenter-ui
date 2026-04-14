@@ -238,7 +238,7 @@ return (
       {clusterMigrations.length > 0 && (
         <Box sx={{ borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', pt: 0.5 }}>
           <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
-            <i className='ri-history-line' style={{ fontSize: 9, marginRight: 3 }} />
+            <i className='ri-history-line' style={{ fontSize: 9, marginRight: 3 }} />{' '}
             Migrations
           </Typography>
           {clusterMigrations.map((mig, idx) => {

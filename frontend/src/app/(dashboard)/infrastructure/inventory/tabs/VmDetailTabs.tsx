@@ -1736,7 +1736,7 @@ export default function VmDetailTabs(props: any) {
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-price-tag-3-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-price-tag-3-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     Tags
                                   </Box>
                                 </td>
@@ -1919,7 +1919,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-plug-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-plug-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     Hotplug
                                   </Box>
                                 </td>
@@ -1941,7 +1941,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-flashlight-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-flashlight-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     ACPI
                                   </Box>
                                 </td>
@@ -1964,7 +1964,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-speed-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-speed-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     KVM Hardware
                                   </Box>
                                 </td>
@@ -2046,7 +2046,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-fingerprint-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-fingerprint-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     SMBIOS (type1)
                                   </Box>
                                 </td>
@@ -2066,7 +2066,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-robot-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-robot-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     QEMU Guest Agent
                                   </Box>
                                 </td>
@@ -2089,7 +2089,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-shield-check-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-shield-check-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     Protection
                                   </Box>
                                 </td>
@@ -2112,7 +2112,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-tv-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-tv-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     Spice Enhancements
                                   </Box>
                                 </td>
@@ -2130,7 +2130,7 @@ return (
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-save-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-save-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     VM State Storage
                                   </Box>
                                 </td>
@@ -2148,7 +2148,7 @@ return (
                               <tr>
                                 <td style={{ padding: '6px 16px', fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-lock-password-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <i className="ri-lock-password-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     AMD SEV
                                   </Box>
                                 </td>
@@ -3792,7 +3792,7 @@ return (
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <i className="ri-shield-check-line" style={{ fontSize: 20 }} />
+                          <i className="ri-shield-check-line" style={{ fontSize: 20 }} />{' '}
                           High Availability (HA)
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 1 }}>

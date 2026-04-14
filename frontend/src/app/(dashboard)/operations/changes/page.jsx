@@ -641,7 +641,7 @@ export default function ChangesPage() {
             page={page}
             onPageChange={(_, newPage) => setPage(newPage)}
             rowsPerPage={rowsPerPage}
-            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0) }}
+            onRowsPerPageChange={(e) => { setRowsPerPage(Number.parseInt(e.target.value, 10)); setPage(0) }}
             rowsPerPageOptions={[25, 50, 100]}
             labelRowsPerPage={t('common.rowsPerPage')}
             sx={{ borderTop: '1px solid', borderColor: 'divider' }}

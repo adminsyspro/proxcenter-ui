@@ -258,7 +258,7 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
             Are you sure you want to delete{' '}
             <strong style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {deleteTarget ? getFileName(deleteTarget.volid) : ''}
-            </strong>
+            </strong>{' '}
             ?
           </DialogContentText>
           {deleteTarget?.size && (
@@ -538,11 +538,11 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
             disabled={uploading}
           >
             <ToggleButton value="file" sx={{ textTransform: 'none', fontWeight: 600, gap: 0.75 }}>
-              <i className="ri-upload-2-line" style={{ fontSize: 16 }} />
+              <i className="ri-upload-2-line" style={{ fontSize: 16 }} />{' '}
               Upload file
             </ToggleButton>
             <ToggleButton value="url" sx={{ textTransform: 'none', fontWeight: 600, gap: 0.75 }}>
-              <i className="ri-links-line" style={{ fontSize: 16 }} />
+              <i className="ri-links-line" style={{ fontSize: 16 }} />{' '}
               Download from URL
             </ToggleButton>
           </ToggleButtonGroup>

@@ -206,8 +206,8 @@ export default function InventoryPage() {
     prevMigratingVmsRef.current = migrations
 
     setMigratingVms(prev => {
-      const prevKey = prev.map(m => `${m.connId}:${m.vmid}`).sort().join(',')
-      const nextKey = migrations.map(m => `${m.connId}:${m.vmid}`).sort().join(',')
+      const prevKey = prev.map(m => `${m.connId}:${m.vmid}`).sort((a, b) => a.localeCompare(b)).join(',')
+      const nextKey = migrations.map(m => `${m.connId}:${m.vmid}`).sort((a, b) => a.localeCompare(b)).join(',')
 
       return prevKey === nextKey ? prev : migrations
     })

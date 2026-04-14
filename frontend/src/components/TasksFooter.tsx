@@ -491,7 +491,7 @@ export default function TasksFooter({
                   display: 'flex', alignItems: 'center', gap: 0.5,
                 }}
               >
-                <img src="/images/proxmox-logo-dark.svg" alt="" style={{ height: 14, width: 'auto' }} />
+                <img src="/images/proxmox-logo-dark.svg" alt="" style={{ height: 14, width: 'auto' }} />{' '}
                 Proxmox
               </Box>
               <Box

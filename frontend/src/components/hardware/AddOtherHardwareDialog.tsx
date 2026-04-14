@@ -257,19 +257,19 @@ export function AddOtherHardwareDialog({
             <Select value={hwType} onChange={e => setHwType(e.target.value as HardwareType)} label={t('common.type')}>
               <MenuItem value="usb">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-usb-line" style={{ fontSize: 18 }} />
+                  <i className="ri-usb-line" style={{ fontSize: 18 }} />{' '}
                   USB Device
                 </Box>
               </MenuItem>
               <MenuItem value="pci">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-cpu-line" style={{ fontSize: 18 }} />
+                  <i className="ri-cpu-line" style={{ fontSize: 18 }} />{' '}
                   PCI Device
                 </Box>
               </MenuItem>
               <MenuItem value="serial">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-terminal-line" style={{ fontSize: 18 }} />
+                  <i className="ri-terminal-line" style={{ fontSize: 18 }} />{' '}
                   Serial Port
                 </Box>
               </MenuItem>

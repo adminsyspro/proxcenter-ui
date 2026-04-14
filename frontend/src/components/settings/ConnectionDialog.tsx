@@ -407,11 +407,11 @@ export default function ConnectionDialog({
             sx={{ mt: 1, mb: 1, width: '100%' }}
           >
             <ToggleButton value="esxi" sx={{ flex: 1, gap: 1 }}>
-              <i className="ri-server-line" />
+              <i className="ri-server-line" />{' '}
               ESXi (Direct)
             </ToggleButton>
             <ToggleButton value="vcenter" sx={{ flex: 1, gap: 1 }}>
-              <i className="ri-cloud-line" />
+              <i className="ri-cloud-line" />{' '}
               vCenter
             </ToggleButton>
           </ToggleButtonGroup>

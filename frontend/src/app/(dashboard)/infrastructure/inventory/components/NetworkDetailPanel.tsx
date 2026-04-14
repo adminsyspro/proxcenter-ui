@@ -346,7 +346,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-computer-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                <i className="ri-computer-line" style={{ fontSize: 18, opacity: 0.7 }} />{' '}
                 Virtual Machines
               </Typography>
             </Box>

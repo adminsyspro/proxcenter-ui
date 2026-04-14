@@ -532,7 +532,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
               <CardContent sx={{ p: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                   <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <i className="ri-line-chart-line" style={{ fontSize: 18 }} />
+                    <i className="ri-line-chart-line" style={{ fontSize: 18 }} />{' '}
                     Server Statistics
                   </Typography>
                   {/* Sélecteur de timeframe */}

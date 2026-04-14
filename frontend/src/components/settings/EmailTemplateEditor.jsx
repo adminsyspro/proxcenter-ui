@@ -397,7 +397,7 @@ export default function EmailTemplateEditor() {
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>
-                <i className="ri-file-list-3-line" style={{ marginRight: 8 }} />
+                <i className="ri-file-list-3-line" style={{ marginRight: 8 }} />{' '}
                 Templates
               </Typography>
               

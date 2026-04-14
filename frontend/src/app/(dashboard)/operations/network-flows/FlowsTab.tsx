@@ -1152,7 +1152,7 @@ export default function FlowsTab() {
           />
           <Box sx={{ mt: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-              <i className="ri-information-line" style={{ fontSize: 12, marginRight: 4 }} />
+              <i className="ri-information-line" style={{ fontSize: 12, marginRight: 4 }} />{' '}
               1 paquet sur <strong>{samplingRate}</strong> sera échantillonné
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">

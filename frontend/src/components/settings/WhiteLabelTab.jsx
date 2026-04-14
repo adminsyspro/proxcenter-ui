@@ -139,7 +139,7 @@ export default function WhiteLabelTab() {
   return (
     <Box sx={{ p: 3, maxWidth: 800 }}>
       <Typography variant="h6" sx={{ mb: 0.5, fontWeight: 700 }}>
-        <i className="ri-pantone-line" style={{ marginRight: 8, opacity: 0.7 }} />
+        <i className="ri-pantone-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
         White Label / Branding
       </Typography>
       <Typography variant="body2" sx={{ mb: 3, opacity: 0.6 }}>
@@ -154,7 +154,7 @@ export default function WhiteLabelTab() {
         <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 2, '&:last-child': { pb: 2 } }}>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-              <i className="ri-toggle-line" style={{ marginRight: 8, opacity: 0.7 }} />
+              <i className="ri-toggle-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
               Enable White Label
             </Typography>
             <Typography variant="caption" sx={{ opacity: 0.6 }}>
@@ -173,7 +173,7 @@ export default function WhiteLabelTab() {
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent>
           <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-            <i className="ri-text" style={{ marginRight: 8, opacity: 0.7 }} />
+            <i className="ri-text" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
             Application Name
           </Typography>
           <TextField
@@ -202,7 +202,7 @@ export default function WhiteLabelTab() {
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent>
           <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-            <i className="ri-image-line" style={{ marginRight: 8, opacity: 0.7 }} />
+            <i className="ri-image-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
             Logos
           </Typography>
 
@@ -318,7 +318,7 @@ export default function WhiteLabelTab() {
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent>
           <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-            <i className="ri-palette-line" style={{ marginRight: 8, opacity: 0.7 }} />
+            <i className="ri-palette-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
             Primary Color
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -368,7 +368,7 @@ export default function WhiteLabelTab() {
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent>
           <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-            <i className="ri-layout-bottom-line" style={{ marginRight: 8, opacity: 0.7 }} />
+            <i className="ri-layout-bottom-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
             Footer
           </Typography>
           <TextField
@@ -432,7 +432,7 @@ export default function WhiteLabelTab() {
       <Card variant="outlined" sx={{ mb: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
         <CardContent>
           <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-            <i className="ri-eye-line" style={{ marginRight: 8, opacity: 0.7 }} />
+            <i className="ri-eye-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
             Preview
           </Typography>
           <Box sx={{

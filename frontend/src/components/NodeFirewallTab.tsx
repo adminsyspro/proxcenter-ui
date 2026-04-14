@@ -126,7 +126,7 @@ export default function NodeFirewallTab({ connectionId, node }: Props) {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-shield-keyhole-line" style={{ fontSize: 20 }} />
+                <i className="ri-shield-keyhole-line" style={{ fontSize: 20 }} />{' '}
                 Firewall
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

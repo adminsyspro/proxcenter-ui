@@ -89,7 +89,7 @@ const ModeDropdown = () => {
                     selected={settings.mode === 'light'}
                     sx={{ color: settings.mode === 'light' ? 'primary.main' : 'text.primary' }}
                   >
-                    <i className='ri-sun-line' />
+                    <i className='ri-sun-line' />{' '}
                     Light
                   </MenuItem>
                   <MenuItem
@@ -98,7 +98,7 @@ const ModeDropdown = () => {
                     selected={settings.mode === 'dark'}
                     sx={{ color: settings.mode === 'dark' ? 'primary.main' : 'text.primary' }}
                   >
-                    <i className='ri-moon-clear-line' />
+                    <i className='ri-moon-clear-line' />{' '}
                     Dark
                   </MenuItem>
                   <MenuItem
@@ -107,7 +107,7 @@ const ModeDropdown = () => {
                     selected={settings.mode === 'system'}
                     sx={{ color: settings.mode === 'system' ? 'primary.main' : 'text.primary' }}
                   >
-                    <i className='ri-computer-line' />
+                    <i className='ri-computer-line' />{' '}
                     System
                   </MenuItem>
                 </MenuList>

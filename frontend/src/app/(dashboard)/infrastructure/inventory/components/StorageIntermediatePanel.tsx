@@ -277,7 +277,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                  <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />{' '}
                   Shared Storages
                 </Typography>
               </Box>
@@ -449,7 +449,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-database-2-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                <i className="ri-database-2-line" style={{ fontSize: 18, opacity: 0.7 }} />{' '}
                 Storages
               </Typography>
             </Box>

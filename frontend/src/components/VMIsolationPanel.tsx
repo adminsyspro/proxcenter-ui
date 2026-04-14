@@ -345,7 +345,7 @@ return true
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="ri-computer-line" style={{ fontSize: 20 }} />
+              <i className="ri-computer-line" style={{ fontSize: 20 }} />{' '}
               VMs
             </Typography>
             <Chip

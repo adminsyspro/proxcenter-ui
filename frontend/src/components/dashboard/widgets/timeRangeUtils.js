@@ -27,7 +27,7 @@ export function formatTime(payload) {
   if (!t) return null
   const d = new Date(typeof t === 'number' ? (t > 1e12 ? t : t * 1000) : t)
 
-  if (isNaN(d)) return t
+  if (Number.isNaN(d.getTime())) return t
   const dd = String(d.getDate()).padStart(2, '0')
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const hh = String(d.getHours()).padStart(2, '0')

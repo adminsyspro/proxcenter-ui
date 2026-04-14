@@ -132,7 +132,7 @@ export default function TemplateDownloadDialog({ open, onClose, connId, node, st
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
-        <i className="ri-download-cloud-2-line" style={{ fontSize: 22, opacity: 0.7 }} />
+        <i className="ri-download-cloud-2-line" style={{ fontSize: 22, opacity: 0.7 }} />{' '}
         CT Templates Repository
       </DialogTitle>
       <DialogContent sx={{ p: 0 }}>

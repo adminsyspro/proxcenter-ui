@@ -2933,7 +2933,7 @@ export default function NodeTabs(props: any) {
                         {/* Header avec boutons */}
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <i className="ri-information-line" style={{ fontSize: 20 }} />
+                            <i className="ri-information-line" style={{ fontSize: 20 }} />{' '}
                             Cluster Information
                           </Typography>
                         </Box>
@@ -2980,7 +2980,7 @@ export default function NodeTabs(props: any) {
                           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                             <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                               <Typography fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <i className="ri-server-line" style={{ fontSize: 18 }} />
+                                <i className="ri-server-line" style={{ fontSize: 18 }} />{' '}
                                 Cluster Nodes
                               </Typography>
                             </Box>
@@ -3343,7 +3343,7 @@ export default function NodeTabs(props: any) {
                         {/* Dialog Delete Replication Job */}
                         <Dialog open={deleteReplicationDialogOpen} onClose={() => setDeleteReplicationDialogOpen(false)} maxWidth="xs" fullWidth>
                           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-                            <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
+                            <i className="ri-error-warning-line" style={{ fontSize: 20 }} />{' '}
                             Remove Replication Job
                           </DialogTitle>
                           <DialogContent>
@@ -3973,7 +3973,7 @@ export default function NodeTabs(props: any) {
                         {/* Dialog Upload Subscription Key */}
                         <Dialog open={subscriptionKeyDialogOpen} onClose={() => setSubscriptionKeyDialogOpen(false)} maxWidth="sm" fullWidth>
                           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <i className="ri-key-line" style={{ fontSize: 20 }} />
+                            <i className="ri-key-line" style={{ fontSize: 20 }} />{' '}
                             Upload Subscription Key
                           </DialogTitle>
                           <DialogContent>
@@ -4030,7 +4030,7 @@ export default function NodeTabs(props: any) {
                         {/* Dialog Remove Subscription */}
                         <Dialog open={removeSubscriptionDialogOpen} onClose={() => setRemoveSubscriptionDialogOpen(false)} maxWidth="xs" fullWidth>
                           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-                            <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
+                            <i className="ri-error-warning-line" style={{ fontSize: 20 }} />{' '}
                             Remove Subscription
                           </DialogTitle>
                           <DialogContent>

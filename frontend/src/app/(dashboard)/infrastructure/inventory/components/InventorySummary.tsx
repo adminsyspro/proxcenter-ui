@@ -963,7 +963,7 @@ return `${mins}m`
         fullWidth
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-file-list-line" style={{ fontSize: 24, color: '#ff9800' }} />
+          <i className="ri-file-list-line" style={{ fontSize: 24, color: '#ff9800' }} />{' '}
           Changelog
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>

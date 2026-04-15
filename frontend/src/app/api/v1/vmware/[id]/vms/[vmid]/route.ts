@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { soapLogin, soapLogout, soapRequest, extractProp } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths } from "@/lib/vmware/soap"
 
 export const runtime = "nodejs"
 
@@ -74,6 +74,7 @@ export async function GET(
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
           <urn:pathSet>snapshot</urn:pathSet>
           <urn:pathSet>config.hardware.device</urn:pathSet>
+          <urn:pathSet>runtime.host</urn:pathSet>
         </urn:propSet>
         <urn:objectSet>
           <urn:obj type="VirtualMachine">${vmid}</urn:obj>
@@ -157,6 +158,37 @@ export async function GET(
 
       const sockets = numCPU > 0 && numCoresPerSocket > 0 ? Math.ceil(numCPU / numCoresPerSocket) : 1
 
+      // vCenter inventory path (datacenter/cluster/host) for the libvirt vpx URI
+      // used by virt-v2v migrations. Best-effort: undefined fields fall back to
+      // manual entry (or pipeline error) at migration time.
+      const hostMor = extractProp(xml, 'runtime.host')
+      let vcenterDatacenter: string | undefined
+      let vcenterCluster: string | undefined
+      let vcenterHost: string | undefined
+      let vcenterHostStatus: "ok" | "warn" | "crit" | "unknown" | undefined
+      let vcenterHostConnectionState: string | undefined
+      let vcenterHostPowerState: string | undefined
+      console.log(`[vmware/vms/${vmid}] runtime.host extraction: isVcenter=${session.isVcenter}, hostMor=${JSON.stringify(hostMor)}`)
+      if (hostMor && session.isVcenter) {
+        try {
+          const paths = await soapResolveHostInventoryPaths(session, [hostMor])
+          const path = paths.get(hostMor)
+          console.log(`[vmware/vms/${vmid}] inventory path resolution: hostMor=${hostMor}, resolved=${path ? JSON.stringify(path) : 'NULL'}`)
+          if (path) {
+            vcenterDatacenter = path.datacenter
+            vcenterCluster = path.cluster ?? undefined
+            vcenterHost = path.host
+            vcenterHostStatus = path.status
+            vcenterHostConnectionState = path.connectionState
+            vcenterHostPowerState = path.powerState
+          }
+        } catch (resolveErr) {
+          console.warn(`[vmware/vms/${vmid}] Failed to resolve vCenter inventory path for ${hostMor}: ${(resolveErr as Error)?.message || resolveErr}`)
+        }
+      } else if (session.isVcenter) {
+        console.warn(`[vmware/vms/${vmid}] vCenter session but no runtime.host extracted from VM properties; the migration will fail with "vcenterDatacenter required"`)
+      }
+
       return NextResponse.json({
         data: {
           vmid,
@@ -186,6 +218,12 @@ export async function GET(
           snapshotCount,
           connectionId: conn.id,
           connectionName: conn.name,
+          vcenterDatacenter,
+          vcenterCluster,
+          vcenterHost,
+          vcenterHostStatus,
+          vcenterHostConnectionState,
+          vcenterHostPowerState,
         }
       })
     } finally {

@@ -1468,7 +1468,14 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       esxiHostInfo: {
         connectionId: connId,
         connectionName: conn.name || connId,
-        hostType: conn.type || 'vmware',
+        // vCenter is stored as type=vmware + subType=vcenter in the DB. The UI uses
+        // hostType='vcenter' as the discriminator everywhere (e.g. enabling v2v code
+        // paths, showing temp storage selector, hiding sshfs option), so promote
+        // subType when present. Without this, vCenter behaves like a standalone ESXi
+        // in the UI even though backend routes it through the v2v pipeline.
+        hostType: (conn.type === 'vmware' && conn.subType === 'vcenter')
+          ? 'vcenter'
+          : (conn.type || 'vmware'),
         baseUrl: conn.baseUrl || '',
         version,
         licenseFull: statusData?.data?.licenseFull ?? false,
@@ -1485,7 +1492,12 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     // Determine API prefix from connection type
     const connTypeR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' }).catch(() => null)
     const connTypeData = connTypeR?.ok ? await connTypeR.json().catch(() => ({})) : {}
-    const connType = connTypeData?.data?.type || connTypeData?.type || 'vmware'
+    // Same vCenter-disambiguation rule as in the host panel above (sel.type === 'ext'):
+    // promote subType='vcenter' to hostType='vcenter' so all UI gates that key off
+    // hostType behave consistently between the host dashboard and the per-VM panel.
+    const rawConnType = connTypeData?.data?.type || connTypeData?.type || 'vmware'
+    const rawConnSubType = connTypeData?.data?.subType || connTypeData?.subType
+    const connType = (rawConnType === 'vmware' && rawConnSubType === 'vcenter') ? 'vcenter' : rawConnType
     const apiPrefix = connType === 'xcpng' ? 'xcpng' : connType === 'nutanix' ? 'nutanix' : connType === 'hyperv' ? 'hyperv' : 'vmware'
 
     const [vmR, statusR] = await Promise.all([

@@ -1009,6 +1009,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await appendLog(jobId, `Could not resolve datastore symlink, using name directly: ${remotePath}`, "warn")
       }
       let mounted = false
+      const mountErrors: string[] = []
 
       if (esxiKey) {
         // Key-based auth
@@ -1021,14 +1022,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           `cat > "${sshWrapperPath}" << 'SSHEOF'\n${sshWrapperKey}\nSSHEOF\nchmod +x "${sshWrapperPath}"`
         )
         // Try with perf options
-        const mountCmd = `mkdir -p "${mountPath}" && sshfs -o ${sshfsBaseOpts},ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}"`
+        const mountCmd = `mkdir -p "${mountPath}" && sshfs -o ${sshfsBaseOpts},ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
         const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
         if (rc.success) mounted = true
+        else mountErrors.push(`attempt 1 (key+perf): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`)
         if (!mounted) {
           // Fallback: minimal
-          const mountCmd2 = `mkdir -p "${mountPath}" && sshfs -o StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}"`
+          const mountCmd2 = `mkdir -p "${mountPath}" && sshfs -o StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
           const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2)
           if (rc2.success) mounted = true
+          else mountErrors.push(`attempt 2 (key+minimal): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`)
         }
       } else if (esxiPass) {
         // Password-based auth via password_stdin + ssh wrapper script
@@ -1037,27 +1040,44 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           `cat > "${sshWrapperPath}" << 'SSHEOF'\n${sshWrapperContent}\nSSHEOF\nchmod +x "${sshWrapperPath}"`
         )
         // Try with perf options + algo wrapper
-        const mountCmd = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,${sshfsBaseOpts},ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}"`
+        const mountCmd = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,${sshfsBaseOpts},ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
         const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
         if (rc.success) mounted = true
+        else mountErrors.push(`attempt 1 (perf+algo): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`)
         if (!mounted) {
           // Fallback: no algo wrapper (let ssh negotiate)
-          const mountCmd2 = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ServerAliveInterval=15,cache=yes,entry_timeout=3600,attr_timeout=3600 ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}"`
+          const mountCmd2 = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ServerAliveInterval=15,cache=yes,entry_timeout=3600,attr_timeout=3600 ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
           const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2)
           if (rc2.success) mounted = true
+          else mountErrors.push(`attempt 2 (negotiate): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`)
         }
         if (!mounted) {
           // Fallback: absolute minimal
-          const mountCmd3 = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,cache=yes ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}"`
+          const mountCmd3 = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,cache=yes ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
           const rc3 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd3)
           if (rc3.success) mounted = true
+          else mountErrors.push(`attempt 3 (minimal): ${(rc3.error || rc3.output || '').toString().trim().slice(0, 300)}`)
         }
       }
 
       if (!mounted) {
         // Cleanup wrapper script
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${sshWrapperPath}" "${mountPath}.esxi-key"`).catch(() => {})
-        throw new Error(`Failed to mount ESXi datastore via SSHFS. Ensure SSH is accessible on ${esxiHost}:${esxiSshPort}`)
+        // Surface the actual SSH/sshfs error so the user can diagnose. Common causes:
+        //   - "Connection refused": SSH not enabled on the ESXi (vSphere -> Configure -> Services -> SSH)
+        //   - "Permission denied": wrong password, or root login disabled
+        //   - "subsystem request failed" / "Connection reset": SFTP subsystem disabled on ESXi
+        //   - "no matching host key type": ESXi's old SSH algos need the wrapper (already attempted)
+        const errSummary = mountErrors.length
+          ? mountErrors.join(" | ")
+          : "no SSH/sshfs output captured (check authentication method and ESXi SSH availability)"
+        throw new Error(
+          `Failed to mount ESXi datastore via SSHFS on ${esxiHost}:${esxiSshPort}. ` +
+          `Underlying errors: ${errSummary}. ` +
+          `Verify: (1) SSH enabled on ESXi (vSphere Client > Configure > Services > SSH > Start), ` +
+          `(2) credentials valid (try 'ssh ${esxiSshUser}@${esxiHost}' from the Proxmox node), ` +
+          `(3) SFTP subsystem available on ESXi (try 'sftp ${esxiSshUser}@${esxiHost}').`
+        )
       }
 
       // Verify mount by listing files
@@ -1176,10 +1196,30 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
         if (exitCheck.output?.trim() !== "RUNNING") {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+          // Capture the FULL stderr from qemu-img BEFORE deleting the progress file.
+          // qemu-img writes both progress lines (carriage-return separated) and error
+          // messages to stderr; on failure the last lines are usually the actual error.
+          // Without this we'd surface the useless "exit 1" generic, hiding the root cause
+          // (locked file, bad descriptor, permission denied, broken vmdk chain, etc.).
+          let stderrTail = ""
+          if (exitCode !== 0) {
+            const stderrCapture = await executeSSH(
+              config.targetConnectionId,
+              nodeIp,
+              `tail -c 2000 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -v '/100%' | tail -10`,
+            )
+            stderrTail = (stderrCapture.output || "").trim()
+          }
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${convertScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${outputFile}"`)
-            throw new Error(`qemu-img convert failed (exit ${exitCode})`)
+            throw new Error(
+              `qemu-img convert failed (exit ${exitCode}) on ${sourcePath}. ` +
+              `Source format: ${inputFormat}, target format: ${importFormat}. ` +
+              (stderrTail
+                ? `qemu-img stderr (last lines): ${stderrTail}`
+                : `No stderr captured. Common causes: VMDK descriptor references missing -flat file (vSAN object access issue), VMDK locked by running VM (power off and retry), or sparse VMDK with broken extent map.`),
+            )
           }
           break
         }
@@ -1334,9 +1374,25 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
         if (exitCheck.output?.trim() !== "RUNNING") {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+          // Capture stderr tail BEFORE deleting progressFile (same bug as transferDiskViaSshfs).
+          let stderrTail = ""
+          if (exitCode !== 0) {
+            const stderrCapture = await executeSSH(
+              config.targetConnectionId,
+              nodeIp,
+              `tail -c 2000 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -v '/100%' | tail -10`,
+            )
+            stderrTail = (stderrCapture.output || "").trim()
+          }
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
           if (exitCode !== 0) {
-            throw new Error(`${useVmdkDescriptor ? 'qemu-img convert' : 'dd'} failed (exit ${exitCode})`)
+            const tool = useVmdkDescriptor ? 'qemu-img convert' : 'dd'
+            throw new Error(
+              `${tool} failed (exit ${exitCode}) on ${sshfsDiskPath} -> ${devicePath}. ` +
+              (stderrTail
+                ? `${tool} stderr (last lines): ${stderrTail}`
+                : `No stderr captured. For vSAN: descriptor may reference unreachable -flat object. For block storage: target device may be in use or wrong size.`),
+            )
           }
           break
         }

@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
+import { BULK_MIG_CONCURRENCY } from './bulkMigrationConfig'
 import { useFavorites } from './hooks/useFavorites'
 import { useSnapshots } from './hooks/useSnapshots'
 import { useTasks } from './hooks/useTasks'
@@ -250,7 +251,7 @@ export default function InventoryDetails({
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)
   const [nodeActionShutdownLocal, setNodeActionShutdownLocal] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[] } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
@@ -265,7 +266,7 @@ export default function InventoryDetails({
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
-  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null>(null)
+  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
@@ -275,8 +276,11 @@ export default function InventoryDetails({
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
   const [bulkMigOpen, setBulkMigOpen] = useState(false)
   const [bulkMigStarting, setBulkMigStarting] = useState(false)
-  const BULK_MIG_CONCURRENCY = 2
-  const [bulkMigJobs, setBulkMigJobs] = useState<{ vmid: string; name: string; jobId: string; status: string; progress: number; error?: string; logs?: { ts: string; msg: string; level: string }[]; targetNode?: string }[]>([])
+  // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
+  // by the queued-job poller below to decide how many slots are free; must
+  // match the dispatcher in InventoryDialogs.tsx or the two will fight each
+  // other (dispatcher starts N, poller immediately starts more on top).
+  const [bulkMigJobs, setBulkMigJobs] = useState<{ vmid: string; name: string; jobId: string; status: string; progress: number; error?: string; logs?: { ts: string; msg: string; level: string }[]; targetNode?: string; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string }[]>([])
   const [bulkMigProgressExpanded, setBulkMigProgressExpanded] = useState(true)
   const [bulkMigLogsExpanded, setBulkMigLogsExpanded] = useState(false)
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
@@ -634,18 +638,92 @@ export default function InventoryDetails({
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/check-sshfs`).then(r => r.json()).then(d => {
       setMigSshfsAvailable(d.data?.installed ?? false)
     }).catch(() => setMigSshfsAvailable(false))
-    // Run vCenter (virt-v2v) preflight check for the target node
-    fetch('/api/v1/migrations/preflight', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: fetchNode, vmName: esxiMigrateVm?.name, sourceType: esxiMigrateVm?.hostType }),
-    }).then(r => r.json()).then(d => {
-      setVcenterPreflight({ checked: true, ok: !d.errors?.length, installing: false, errors: d.errors || [], virtV2vInstalled: d.virtV2vInstalled ?? false, virtioWinInstalled: d.virtioWinInstalled ?? false, detectedDisks: d.detectedDisks || [], tempStorages: d.tempStorages || [] })
-      // Auto-populate disk paths if disks were detected
-      if (d.detectedDisks?.length > 0) {
-        setMigDiskPaths(d.detectedDisks.join('\n'))
+    // Run the virt-v2v preflight across the relevant node(s) for the migration
+    // target. In Auto mode, the batch may land on ANY node of the cluster, so we
+    // must check deps on EVERY online node; if any single node is missing a tool,
+    // some VMs in the batch would silently fail after a multi-GB NFC download.
+    // We aggregate with AND semantics: a dep is shown as "installed" only when
+    // all targeted nodes have it; the Install button then pushes apt-get to all
+    // nodes in parallel.
+    const nodesToCheck = migTargetNode === '__auto__'
+      ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
+      : [migTargetNode]
+    if (nodesToCheck.length === 0) {
+      setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['No online nodes in the selected cluster'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, detectedDisks: [], tempStorages: [] })
+      return
+    }
+    Promise.all(nodesToCheck.map(async (node: string) => {
+      try {
+        const r = await fetch('/api/v1/migrations/preflight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node, vmName: esxiMigrateVm?.name, sourceType: esxiMigrateVm?.hostType }),
+        })
+        const d = await r.json()
+        return { node, ...d }
+      } catch {
+        return { node, _error: true }
       }
-    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, detectedDisks: [], tempStorages: [] }))
+    })).then((results: any[]) => {
+      const anyError = results.some(r => r._error)
+      const allVirtV2v = results.every(r => !!r.virtV2vInstalled)
+      const allNbdkit = results.every(r => !!r.nbdkitInstalled)
+      const allNbdcopy = results.every(r => !!r.nbdcopyInstalled)
+      const allVirtioWin = results.every(r => !!r.virtioWinInstalled)
+      // tempStorages: when targeting multiple nodes we take the INTERSECTION by
+      // path (a temp dir is only useful if it exists on every node the batch
+      // may land on — otherwise some jobs would fail at the SSHFS/mkdir step).
+      // Single-node mode simply takes the one node's list.
+      let aggregatedTempStorages: any[] = []
+      if (results.length === 1) {
+        aggregatedTempStorages = results[0].tempStorages || []
+      } else {
+        const pathCount = new Map<string, { count: number; sample: any }>()
+        for (const r of results) {
+          for (const ts of (r.tempStorages || [])) {
+            const existing = pathCount.get(ts.path)
+            if (existing) {
+              existing.count++
+              // Keep the smallest availableBytes across nodes (pessimistic
+              // estimate — the batch can only rely on space that every node has).
+              if (ts.availableBytes < existing.sample.availableBytes) existing.sample = ts
+            } else {
+              pathCount.set(ts.path, { count: 1, sample: ts })
+            }
+          }
+        }
+        aggregatedTempStorages = [...pathCount.values()]
+          .filter(v => v.count === results.length)
+          .map(v => v.sample)
+          .sort((a, b) => b.availableBytes - a.availableBytes)
+      }
+      // Union of errors across nodes, prefixed with the node name so the user
+      // can tell which node is the blocker.
+      const allErrors: string[] = []
+      for (const r of results) {
+        for (const err of (r.errors || [])) {
+          allErrors.push(results.length > 1 ? `[${r.node}] ${err}` : err)
+        }
+      }
+      // detectedDisks: only honour when single-node; in bulk auto we don't want
+      // to auto-populate a disk path based on one specific node's /mnt/hyperv view.
+      const detectedDisks = results.length === 1 ? (results[0].detectedDisks || []) : []
+      setVcenterPreflight({
+        checked: true,
+        ok: !anyError && allErrors.length === 0,
+        installing: false,
+        errors: anyError ? ['Preflight check failed on one or more nodes'] : allErrors,
+        virtV2vInstalled: allVirtV2v,
+        virtioWinInstalled: allVirtioWin,
+        nbdkitInstalled: allNbdkit,
+        nbdcopyInstalled: allNbdcopy,
+        detectedDisks,
+        tempStorages: aggregatedTempStorages,
+      })
+      if (detectedDisks.length > 0) {
+        setMigDiskPaths(detectedDisks.join('\n'))
+      }
+    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, detectedDisks: [], tempStorages: [] }))
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
       const storages = (d.data || d || []).filter((s: any) => {
         const content = s.content || ''
@@ -775,6 +853,13 @@ export default function InventoryDetails({
                   migrationType: cfg.migrationType,
                   transferMode: cfg.transferMode,
                   startAfterMigration: cfg.startAfterMigration,
+                  // vCenter inventory path was captured per-VM when the bulk job was
+                  // enqueued (see InventoryDialogs.tsx bulk-launch handler). Forward it
+                  // here too, otherwise queued vCenter migrations would lose the path
+                  // and the v2v pipeline would throw "vcenterDatacenter required".
+                  ...((job as any).vcenterDatacenter && { vcenterDatacenter: (job as any).vcenterDatacenter }),
+                  ...((job as any).vcenterCluster && { vcenterCluster: (job as any).vcenterCluster }),
+                  ...((job as any).vcenterHost && { vcenterHost: (job as any).vcenterHost }),
                 }),
               })
               const d = await res.json()
@@ -3545,6 +3630,11 @@ return vm?.isCluster ?? false
                                     connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
                                     committed: vm.committed, guestOS: vm.guest_OS, licenseFull: data.esxiHostInfo!.licenseFull,
                                     hostType: ht,
+                                    // vCenter inventory path resolved server-side via SOAP
+                                    // (soapResolveHostInventoryPaths). Undefined for standalone ESXi.
+                                    vcenterDatacenter: (vm as any).vcenterDatacenter,
+                                    vcenterCluster: (vm as any).vcenterCluster,
+                                    vcenterHost: (vm as any).vcenterHost,
                                   })
                                 }}
                               >
@@ -3666,6 +3756,10 @@ return vm?.isCluster ?? false
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
                             hostType: ht, diskPaths: (vm as any).diskPaths,
+                            // Forward vCenter inventory path if the source endpoint resolved it.
+                            vcenterDatacenter: (vm as any).vcenterDatacenter,
+                            vcenterCluster: (vm as any).vcenterCluster,
+                            vcenterHost: (vm as any).vcenterHost,
                           })
                         }}
                       >

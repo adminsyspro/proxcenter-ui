@@ -383,38 +383,73 @@ export default function ConnectionDialog({
         )}
 
         {isVmware && (
-          <ToggleButtonGroup
-            value={form.subType}
-            exclusive
-            size="small"
-            onChange={(_e, value) => {
-              if (value !== null) {
-                handleChange('subType', value)
-                // Adjust defaults based on sub-type
-                if (value === 'vcenter') {
-                  if (form.vmwareUser === 'root') {
-                    handleChange('vmwareUser', 'administrator@vsphere.local')
-                  }
-                  // Disable SSH for vCenter
-                  handleSshEnabledChange(false)
-                } else if (value === 'esxi') {
-                  if (form.vmwareUser === 'administrator@vsphere.local') {
-                    handleChange('vmwareUser', 'root')
+          <>
+            <ToggleButtonGroup
+              value={form.subType}
+              exclusive
+              size="small"
+              onChange={(_e, value) => {
+                if (value !== null) {
+                  handleChange('subType', value)
+                  // Adjust defaults based on sub-type
+                  if (value === 'vcenter') {
+                    if (form.vmwareUser === 'root') {
+                      handleChange('vmwareUser', 'administrator@vsphere.local')
+                    }
+                    // Disable SSH for vCenter
+                    handleSshEnabledChange(false)
+                  } else if (value === 'esxi') {
+                    if (form.vmwareUser === 'administrator@vsphere.local') {
+                      handleChange('vmwareUser', 'root')
+                    }
                   }
                 }
-              }
-            }}
-            sx={{ mt: 1, mb: 1, width: '100%' }}
-          >
-            <ToggleButton value="esxi" sx={{ flex: 1, gap: 1 }}>
-              <i className="ri-server-line" />{' '}
-              ESXi (Direct)
-            </ToggleButton>
-            <ToggleButton value="vcenter" sx={{ flex: 1, gap: 1 }}>
-              <i className="ri-cloud-line" />{' '}
-              vCenter
-            </ToggleButton>
-          </ToggleButtonGroup>
+              }}
+              sx={{ mt: 1, mb: 1, width: '100%' }}
+            >
+              <ToggleButton value="esxi" sx={{ flex: 1, gap: 1 }}>
+                <i className="ri-server-line" />{' '}
+                ESXi (Direct)
+              </ToggleButton>
+              <ToggleButton value="vcenter" sx={{ flex: 1, gap: 1 }}>
+                <i className="ri-cloud-line" />{' '}
+                vCenter
+              </ToggleButton>
+            </ToggleButtonGroup>
+            {/*
+              vSAN advisory: VMDK descriptors on vSAN reference data objects via
+              vsan:// URIs that only ESXi's internal vSAN filesystem layer can
+              resolve. The ESXi-direct path (SSHFS + qemu-img) reads descriptors
+              from outside the ESXi and therefore can't follow vsan://, so it
+              silently fails at disk conversion. Migrations via vCenter use the
+              NFC (HttpNfcLease) API which goes through ESXi internally and is
+              vSAN-aware (same path ovftool takes). We surface the requirement
+              up-front here so users don't discover it after a failed migration.
+              i18n: <strong> and <code> tags in the message are interpreted by
+              next-intl's t.rich() via the chunks callbacks below.
+            */}
+            <Alert severity="info" icon={<i className="ri-information-line" />} sx={{ mb: 2, mt: 0.5 }}>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                {t('settings.vmwareSubtypeNoticeTitle')}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                {t.rich('settings.vmwareSubtypeNoticeEsxi', {
+                  strong: (chunks: any) => <strong>{chunks}</strong>,
+                })}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                {t.rich('settings.vmwareSubtypeNoticeVcenter', {
+                  strong: (chunks: any) => <strong>{chunks}</strong>,
+                  code: (chunks: any) => <code>{chunks}</code>,
+                })}
+              </Typography>
+              <Typography variant="body2">
+                {t.rich('settings.vmwareSubtypeNoticeVsan', {
+                  strong: (chunks: any) => <strong>{chunks}</strong>,
+                })}
+              </Typography>
+            </Alert>
+          </>
         )}
 
         <TextField

@@ -610,6 +610,38 @@ export interface VmwareVmSummary {
   committedStorage: number
   uncommittedStorage: number
   template: boolean
+  /**
+   * vCenter only: ManagedObjectReference of the HostSystem currently running this VM.
+   * Empty string on standalone ESXi (no inventory hierarchy above the host).
+   * Used by soapResolveHostInventoryPaths() to compute the libvirt vpx URI for virt-v2v.
+   */
+  hostMor: string
+}
+
+/**
+ * Resolved inventory path for a single ESXi host inside a vCenter.
+ * Used to build the libvirt vpx URI: vpx://USER@VCENTER/{datacenter}/host[/cluster]/{host}
+ */
+export interface VmwareHostInventoryPath {
+  /** Datacenter name (vCenter inventory). */
+  datacenter: string
+  /** Cluster name when the host is part of a ClusterComputeResource; null for standalone hosts. */
+  cluster: string | null
+  /** ESX/ESXi hostname as registered in vCenter (typically the FQDN). */
+  host: string
+  /**
+   * Runtime health aggregate for the host, derived from its connectionState
+   * and powerState. Used by the UI to render a status pastille in the tree:
+   *   - "ok":   connected + poweredOn (normal operating state)
+   *   - "warn": notResponding, standby, or an unknown combination
+   *   - "crit": disconnected or poweredOff (host unreachable/halted)
+   * "unknown" is returned when vCenter didn't expose the fields.
+   */
+  status: "ok" | "warn" | "crit" | "unknown"
+  /** Raw connectionState from vCenter (connected, notResponding, disconnected). */
+  connectionState?: string
+  /** Raw powerState from vCenter (poweredOn, poweredOff, standby). */
+  powerState?: string
 }
 
 /**
@@ -657,6 +689,7 @@ export async function soapListVMs(
           <urn:pathSet>config.hardware.memoryMB</urn:pathSet>
           <urn:pathSet>config.template</urn:pathSet>
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
+          <urn:pathSet>runtime.host</urn:pathSet>
         </urn:propSet>
         <urn:objectSet>
           <urn:obj type="ContainerView">${viewRef}</urn:obj>
@@ -715,6 +748,7 @@ export async function soapListVMs(
     let template = false
     let committedStorage = 0
     let uncommittedStorage = 0
+    let hostMor = ""
 
     const propRegex = /<propSet>\s*<name>([^<]+)<\/name>\s*<val[^>]*>([\s\S]*?)<\/val>\s*<\/propSet>/g
     let propMatch: RegExpExecArray | null
@@ -738,6 +772,12 @@ export async function soapListVMs(
           if (u) uncommittedStorage += Number.parseInt(u[1], 10) || 0
           break
         }
+        case "runtime.host": {
+          // <val type="HostSystem">host-22</val>; the inner text IS the MOR id.
+          // Standalone ESXi sessions return an empty/"ha-host" value which we ignore later.
+          hostMor = propVal.trim()
+          break
+        }
       }
     }
 
@@ -752,8 +792,219 @@ export async function soapListVMs(
       committedStorage,
       uncommittedStorage,
       template,
+      hostMor,
     })
   }
 
   return vms
+}
+
+// -- vCenter inventory path resolution (HostSystem MOR -> {datacenter, cluster?, host}) --
+// Used to build virt-v2v's libvirt vpx URI: vpx://USER@VCENTER/{datacenter}/host[/cluster]/{host}
+
+/** XML-escape a value safely embedded in a SOAP body. */
+function xmlEscape(s: string): string {
+  return s.replace(/[<>&"']/g, c => (
+    c === "<" ? "&lt;" :
+    c === ">" ? "&gt;" :
+    c === "&" ? "&amp;" :
+    c === '"' ? "&quot;" :
+    "&apos;"
+  ))
+}
+
+interface PropValue {
+  /** Inner text of <val>...</val>, trimmed. */
+  value: string
+  /** The xsi:type-style attribute on the val element (present for ManagedObjectReference values). */
+  refType?: string
+}
+
+/**
+ * Bulk-fetch a fixed set of property paths for a list of MORs of the same base type.
+ *
+ * Uses PropertyCollector.RetrievePropertiesEx with one PropertyFilterSpec containing
+ * one propSet (the requested paths) and one objectSet per MOR. The base type drives
+ * which propSet applies; subtypes are honored automatically (e.g. requesting type
+ * "ComputeResource" returns ClusterComputeResource objects with the cluster name too).
+ */
+async function soapBatchProps(
+  session: SoapSession,
+  baseType: string,
+  mors: string[],
+  paths: string[],
+): Promise<Map<string, Record<string, PropValue>>> {
+  const out = new Map<string, Record<string, PropValue>>()
+  if (mors.length === 0) return out
+
+  const objSpecs = mors
+    .map(mor => `<urn:objectSet><urn:obj type="${xmlEscape(baseType)}">${xmlEscape(mor)}</urn:obj></urn:objectSet>`)
+    .join("")
+  const pathTags = paths.map(p => `<urn:pathSet>${xmlEscape(p)}</urn:pathSet>`).join("")
+
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet>
+          <urn:type>${xmlEscape(baseType)}</urn:type>
+          ${pathTags}
+        </urn:propSet>
+        ${objSpecs}
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
+  // Parse <objects> blocks. We accept any actual subtype on the <obj> tag, since
+  // RetrievePropertiesEx returns objects with their concrete type even when the
+  // request specifies a base type (this is how we detect ClusterComputeResource).
+  for (const objBlock of result.text.matchAll(/<objects>([\s\S]*?)<\/objects>/g)) {
+    const block = objBlock[1]
+    const morMatch = block.match(/<obj\b[^>]*>([^<]+)<\/obj>/)
+    if (!morMatch) continue
+    const mor = morMatch[1].trim()
+
+    const props: Record<string, PropValue> = {}
+    for (const pm of block.matchAll(/<propSet>\s*<name>([^<]+)<\/name>\s*<val\b([^>]*)>([\s\S]*?)<\/val>\s*<\/propSet>/g)) {
+      const name = pm[1]
+      const attrs = pm[2] || ""
+      const value = pm[3].trim()
+      // ManagedObjectReference vals carry BOTH xsi:type="ManagedObjectReference"
+      // (the schema type) and type="HostSystem" (the MOR target type). We want the
+      // latter, so the lookbehind skips colon-prefixed attribute names like xsi:type.
+      const typeAttr = attrs.match(/(?<![\w:])type=(?:"([^"]*)"|'([^']*)')/)
+      props[name] = { value, refType: typeAttr ? (typeAttr[1] || typeAttr[2]) : undefined }
+    }
+    out.set(mor, props)
+  }
+  return out
+}
+
+/**
+ * Resolve a list of HostSystem MORs (from VirtualMachine.runtime.host) to their
+ * vCenter inventory path: datacenter name, cluster name (if any), host name.
+ *
+ * Returns an empty map for non-vCenter sessions or when the input list is empty.
+ * Hosts that cannot be fully resolved (orphaned, partial inventory, etc.) are
+ * silently omitted from the result; callers should treat a missing entry as
+ * "unknown, surface a manual-entry fallback to the user".
+ *
+ * Walks the inventory hierarchy in 4 batched calls (regardless of how many VMs
+ * share a given host), so cost is O(unique hosts), not O(VMs).
+ */
+export async function soapResolveHostInventoryPaths(
+  session: SoapSession,
+  hostMors: string[],
+): Promise<Map<string, VmwareHostInventoryPath>> {
+  const out = new Map<string, VmwareHostInventoryPath>()
+  if (!session.isVcenter) return out
+
+  const uniqueHosts = [...new Set(hostMors.filter(m => m && m !== "ha-host"))]
+  if (uniqueHosts.length === 0) return out
+
+  // Step 1: HostSystem -> { name, parent (CR or CCR), connectionState, powerState }.
+  // We also fetch the runtime state here so the UI can render a health pastille
+  // on each host row in the inventory tree without an additional SOAP round-trip.
+  const hostProps = await soapBatchProps(session, "HostSystem", uniqueHosts, [
+    "name",
+    "parent",
+    "runtime.connectionState",
+    "runtime.powerState",
+  ])
+  console.log(`[soapResolveHostInventoryPaths] step1 HostSystem (${uniqueHosts.length} unique hosts requested):`,
+    JSON.stringify([...hostProps.entries()].map(([k, v]) => [k, { name: v.name?.value, parent: v.parent }])))
+
+  // Step 2: deduplicate parent MORs and resolve their { name, parent (HostFolder) }.
+  // ClusterComputeResource extends ComputeResource, so a single query against the
+  // base type returns both kinds; the actual subtype lives on the <obj> element and
+  // is preserved in the parent PropValue.refType from step 1.
+  const parentByHost = new Map<string, { mor: string; type: string }>()
+  for (const [hostMor, props] of hostProps) {
+    const p = props["parent"]
+    if (p?.value && p.refType) parentByHost.set(hostMor, { mor: p.value, type: p.refType })
+  }
+  const uniqueParents = [...new Set([...parentByHost.values()].map(p => p.mor))]
+  const parentProps = await soapBatchProps(session, "ComputeResource", uniqueParents, ["name", "parent"])
+  console.log(`[soapResolveHostInventoryPaths] step2 ComputeResource (${uniqueParents.length} unique parents):`,
+    JSON.stringify([...parentProps.entries()].map(([k, v]) => [k, { name: v.name?.value, parent: v.parent }])))
+
+  // Step 3: deduplicate host-folder MORs and resolve their parent (Datacenter).
+  // We assume the folder's parent IS the datacenter; nested host folders are uncommon
+  // in practice. If we hit one we'll return a partial path and skip the host.
+  const folderByParent = new Map<string, string>()
+  for (const [parentMor, props] of parentProps) {
+    const p = props["parent"]
+    if (p?.value) folderByParent.set(parentMor, p.value)
+  }
+  const uniqueFolders = [...new Set(folderByParent.values())]
+  const folderProps = await soapBatchProps(session, "Folder", uniqueFolders, ["parent"])
+  console.log(`[soapResolveHostInventoryPaths] step3 Folder (${uniqueFolders.length} unique folders):`,
+    JSON.stringify([...folderProps.entries()].map(([k, v]) => [k, { parent: v.parent }])))
+
+  const dcByFolder = new Map<string, string>()
+  for (const [folderMor, props] of folderProps) {
+    const p = props["parent"]
+    if (p?.value && p.refType === "Datacenter") dcByFolder.set(folderMor, p.value)
+  }
+
+  // Step 4: resolve datacenter names.
+  const uniqueDcs = [...new Set(dcByFolder.values())]
+  const dcProps = await soapBatchProps(session, "Datacenter", uniqueDcs, ["name"])
+  console.log(`[soapResolveHostInventoryPaths] step4 Datacenter (${uniqueDcs.length} unique DCs):`,
+    JSON.stringify([...dcProps.entries()].map(([k, v]) => [k, { name: v.name?.value }])))
+
+  // Step 5: assemble the path for each requested host.
+  for (const hostMor of uniqueHosts) {
+    const hp = hostProps.get(hostMor)
+    const hostName = hp?.["name"]?.value
+    if (!hostName) continue
+
+    const parentInfo = parentByHost.get(hostMor)
+    if (!parentInfo) continue
+    const pp = parentProps.get(parentInfo.mor)
+    if (!pp) continue
+    const isCluster = parentInfo.type === "ClusterComputeResource"
+    const clusterName = pp["name"]?.value || null
+
+    const folderMor = folderByParent.get(parentInfo.mor)
+    if (!folderMor) continue
+    const dcMor = dcByFolder.get(folderMor)
+    if (!dcMor) continue
+    const dcName = dcProps.get(dcMor)?.["name"]?.value
+    if (!dcName) continue
+
+    // Derive an aggregate health status from vCenter's connection + power state.
+    // Both properties return simple enum strings on HostSystem.runtime; the
+    // values are documented in vSphere's vim API reference.
+    const connectionState = hp?.["runtime.connectionState"]?.value
+    const powerState = hp?.["runtime.powerState"]?.value
+    let status: "ok" | "warn" | "crit" | "unknown" = "unknown"
+    if (!connectionState && !powerState) {
+      status = "unknown"
+    } else if (connectionState === "disconnected" || powerState === "poweredOff") {
+      status = "crit"
+    } else if (connectionState === "connected" && powerState === "poweredOn") {
+      status = "ok"
+    } else {
+      // notResponding, standby, or any state mid-transition.
+      status = "warn"
+    }
+
+    out.set(hostMor, {
+      datacenter: dcName,
+      cluster: isCluster ? clusterName : null,
+      host: hostName,
+      status,
+      connectionState,
+      powerState,
+    })
+  }
+
+  return out
 }

@@ -14,6 +14,19 @@ export interface PreflightResult {
   virtV2vInstalled: boolean
   pvInstalled: boolean
   virtioWinInstalled: boolean
+  /**
+   * nbdkit server binary present on the target node. Required by virt-v2v's
+   * `-i disk` mode (the NFC path used for vSAN VMs). Missing nbdkit causes the
+   * migration to fail right after NFC download with "nbdkit is not installed".
+   */
+  nbdkitInstalled: boolean
+  /**
+   * nbdcopy binary present on the target node (from package `libnbd-bin` on
+   * Debian). virt-v2v shells out to nbdcopy during the "Copying disk N/N"
+   * phase; missing it fails the migration AFTER OS conversion succeeded,
+   * which is the worst failure point cost-wise. We surface it upfront.
+   */
+  nbdcopyInstalled: boolean
   diskSpaceAvailableBytes: number
   diskSpaceRequired: number
   diskSpaceSufficient: boolean
@@ -42,6 +55,8 @@ export async function runV2vPreflight(
     virtioWinInstalled: false,
     virtV2vInstalled: false,
     pvInstalled: false,
+    nbdkitInstalled: false,
+    nbdcopyInstalled: false,
     diskSpaceAvailableBytes: 0,
     diskSpaceRequired: requiredDiskBytes,
     diskSpaceSufficient: false,
@@ -62,13 +77,15 @@ export async function runV2vPreflight(
   result.ssh = true
 
   // 2-4: Run remaining checks in parallel
-  const [v2vCheck, pvCheck, dfCheck, virtioWinCheck, ntfsFixCheck, virtCustomizeCheck] = await Promise.all([
+  const [v2vCheck, pvCheck, dfCheck, virtioWinCheck, ntfsFixCheck, virtCustomizeCheck, nbdkitCheck, nbdcopyCheck] = await Promise.all([
     executeSSH(targetConnectionId, nodeIp, "which virt-v2v"),
     executeSSH(targetConnectionId, nodeIp, "which pv"),
     executeSSH(targetConnectionId, nodeIp, "df -B1 /tmp | tail -1 | awk '{print $4}'"),
     executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/virtio-win/virtio-win.iso && echo yes || echo no"),
     executeSSH(targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo yes || echo no"),
     executeSSH(targetConnectionId, nodeIp, "which virt-customize && echo yes || echo no"),
+    executeSSH(targetConnectionId, nodeIp, "which nbdkit"),
+    executeSSH(targetConnectionId, nodeIp, "which nbdcopy"),
   ])
 
   // 2. Check virt-v2v installed
@@ -83,6 +100,22 @@ export async function runV2vPreflight(
     result.pvInstalled = true
   } else {
     errors.push("pv (pipe viewer) is not installed on the target node")
+  }
+
+  // 3b. Check nbdkit (server) and nbdcopy (from libnbd-bin). Both are required
+  // by virt-v2v's `-i disk` input mode which is how the NFC transport passes
+  // downloaded VMDKs back to virt-v2v for vSAN-sourced migrations. Surfacing
+  // them in preflight lets the UI show the same "Install" button that already
+  // exists for virt-v2v itself — installV2vPackages() installs all four at once.
+  if (nbdkitCheck.success && nbdkitCheck.output?.trim()) {
+    result.nbdkitInstalled = true
+  } else {
+    errors.push("nbdkit is not installed on the target node (required for vSAN VM migration via virt-v2v -i disk)")
+  }
+  if (nbdcopyCheck.success && nbdcopyCheck.output?.trim()) {
+    result.nbdcopyInstalled = true
+  } else {
+    errors.push("nbdcopy (package libnbd-bin) is not installed on the target node (required for virt-v2v disk copy step)")
   }
 
   // 4. Check virtio-win drivers
@@ -183,9 +216,16 @@ export async function installV2vPackages(
   const conn = await getConnectionById(targetConnectionId)
   const nodeIp = await getNodeIp(conn, targetNode)
 
+  // nbdkit + libnbd-bin are required by virt-v2v's `-i disk` + NFC path:
+  //   - nbdkit: serves the input VMDK over NBD so virt-v2v can read it
+  //   - libnbd-bin: provides `nbdcopy` used for the actual disk copy step
+  // On Debian 12 (Bookworm, PVE 8 base) "nbdkit" is a metapackage pulling
+  // nbdkit-server + basic plugins, and `libnbd-bin` ships `nbdcopy`/`nbdinfo`.
+  // Missing either causes a late failure after a multi-GB NFC download, so we
+  // install them upfront.
   return executeSSH(
     targetConnectionId,
     nodeIp,
-    "apt-get update -qq && apt-get install -y virt-v2v pv"
+    "apt-get update -qq && apt-get install -y virt-v2v pv nbdkit libnbd-bin"
   )
 }

@@ -428,7 +428,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])
-  const [externalHypervisors, setExternalHypervisors] = useState<{ id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string }[] }[]>([])
+  const [externalHypervisors, setExternalHypervisors] = useState<{ id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; vcenterHostStatus?: 'ok' | 'warn' | 'crit' | 'unknown'; vcenterHostConnectionState?: string; vcenterHostPowerState?: string }[]; vmsLoading?: boolean; vmsLoadError?: string }[]>([])
   const [clusterStorages, setClusterStorages] = useState<TreeClusterStorage[]>([])
   const [reloadTick, setReloadTick] = useState(0)
 
@@ -1565,32 +1565,69 @@ return next
         if (!alive) return
         try {
           const externalData = JSON.parse(e.data)
-          setExternalHypervisors(externalData)
+          // Mark every external connection as "loading VMs" immediately. This
+          // drives the spinner in the tree so the user sees an indicator while
+          // the 5s defer + SOAP/API fetch runs — without it the connection row
+          // sits silent for up to ~15s (5s defer + SOAP login + listVms +
+          // inventory path resolution for vCenter) with no feedback.
+          const extTypes = new Set(['vmware', 'xcpng', 'hyperv', 'nutanix'])
+          const withLoadingFlag = (externalData || []).map((h: any) =>
+            extTypes.has(h.type) ? { ...h, vmsLoading: true } : h,
+          )
+          setExternalHypervisors(withLoadingFlag)
 
           // Defer external VM fetches to avoid competing with critical-path requests at startup.
           // The tree renders immediately with connection info; VMs appear after the defer.
-          const extConns = (externalData || []).filter((h: any) => h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix')
+          const extConns = (externalData || []).filter((h: any) => extTypes.has(h.type))
           if (extConns.length > 0) {
             setTimeout(() => {
               if (!alive) return
-              Promise.all(extConns.map(async (conn: any) => {
-                try {
-                  const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
-                  const vmRes = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`)
-                  if (vmRes.ok) {
-                    const vmJson = await vmRes.json()
-                    const vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
-                    return { id: conn.id, vms }
+              // IMPORTANT: do NOT use Promise.all here. Promise.all waits for EVERY
+              // fetch to settle before handing back control, so a single unreachable
+              // hypervisor (Nutanix/Hyper-V/XCP-ng with a dead host) would stall the
+              // "loading VMs…" state on every OTHER connection (including the one
+              // that's actually working) for the full timeout window. Instead fire
+              // each fetch independently and clear its own loading flag when it
+              // resolves — the working connections pop their VMs immediately, the
+              // broken ones stay spinning until their own timeout hits.
+              const VM_FETCH_TIMEOUT_MS = 15_000
+              for (const conn of extConns) {
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), VM_FETCH_TIMEOUT_MS)
+                const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
+                ;(async () => {
+                  let vms: any[] = []
+                  let loadError: string | undefined
+                  try {
+                    const vmRes = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`, {
+                      signal: controller.signal,
+                    })
+                    if (vmRes.ok) {
+                      const vmJson = await vmRes.json()
+                      vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
+                    } else {
+                      loadError = `HTTP ${vmRes.status}`
+                    }
+                  } catch (err: any) {
+                    loadError = err?.name === 'AbortError'
+                      ? `timeout after ${VM_FETCH_TIMEOUT_MS / 1000}s`
+                      : err?.message || 'fetch failed'
+                  } finally {
+                    clearTimeout(timeoutId)
                   }
-                } catch { /* ignore */ }
-                return { id: conn.id, vms: [] }
-              })).then(vmResults => {
-                if (!alive) return
-                const vmMap = new Map(vmResults.map(r => [r.id, r.vms]))
-                setExternalHypervisors((prev: any[]) =>
-                  prev.map((h: any) => (h.type === 'vmware' || h.type === 'xcpng' || h.type === 'hyperv' || h.type === 'nutanix') && vmMap.has(h.id) ? { ...h, vms: vmMap.get(h.id) } : h)
-                )
-              })
+                  if (!alive) return
+                  // Narrow update: only flip the state for this single connection;
+                  // leaves every other connection's loading/vms untouched so they
+                  // stream in as their own fetches settle.
+                  setExternalHypervisors((prev: any[]) =>
+                    prev.map((h: any) =>
+                      h.id === conn.id
+                        ? { ...h, vms, vmsLoading: false, vmsLoadError: loadError }
+                        : h,
+                    ),
+                  )
+                })()
+              }
             }, 5000)
           }
         } catch { /* ignore */ }
@@ -1926,11 +1963,22 @@ return items
     })
     setBackupExpandedItems(backupItems)
 
-    // Expand all Migration tree items
+    // Expand all Migration tree items, including the per-ESXi-host grouping
+    // that shows up under vCenter connections (itemId pattern `exthost:<connId>:<host>`).
+    // Without this, "Expand all" would open connections but leave VMs hidden inside
+    // collapsed host groups on vCenter sources.
     const migrationItems: string[] = []
     externalHypervisors.forEach(h => {
       migrationItems.push(`ext-type:${h.type}`)
       migrationItems.push(`ext:${h.id}`)
+      const hostsSeen = new Set<string>()
+      for (const vm of (h as any).vms || []) {
+        const host = (vm as any).vcenterHost
+        if (host && !hostsSeen.has(host)) {
+          hostsSeen.add(host)
+          migrationItems.push(`exthost:${h.id}:${host}`)
+        }
+      }
     })
     setMigrationExpandedItems(migrationItems)
 
@@ -3718,13 +3766,47 @@ return (
           nutanix: { label: 'Nutanix AHV', icon: 'ri-database-2-line', svgIcon: '/images/nutanix-logo.svg', color: '#24B47E' },
         }
 
-        const grouped = externalHypervisors.reduce<Record<string, typeof externalHypervisors>>((acc, h) => {
+        // Apply the tree-wide search to the Migrations section too: filter each
+        // connection's VMs by name, then drop connections with zero matches, then
+        // drop hypervisor groups with zero surviving connections. Matches the
+        // behaviour of the main PVE tree (see `allVms.filter(..., search)` earlier
+        // in this component). Empty search = no filtering, everything shown.
+        const q = search.trim().toLowerCase()
+        const vmMatchesSearch = (vm: any): boolean => {
+          if (!q) return true
+          const hay = `${vm.name || ''} ${vm.vmid || ''} ${vm.guest_OS || vm.guestOS || ''}`.toLowerCase()
+          return hay.includes(q)
+        }
+        const connMatchesSearch = (conn: any): boolean => {
+          if (!q) return true
+          // A connection "matches" when its own name matches (show all its VMs)
+          // OR any of its VMs match (show only the matching VMs).
+          if (`${conn.name || ''}`.toLowerCase().includes(q)) return true
+          return (conn.vms || []).some((vm: any) => vmMatchesSearch(vm))
+        }
+        const filteredHypervisors = q
+          ? externalHypervisors.filter(connMatchesSearch).map(conn => ({
+              ...conn,
+              // Only narrow the VM list when the connection itself didn't match by name;
+              // if the connection name matches, show all its VMs so the user can see
+              // what's inside without re-typing.
+              vms: `${conn.name || ''}`.toLowerCase().includes(q)
+                ? (conn.vms || [])
+                : (conn.vms || []).filter(vmMatchesSearch),
+            }))
+          : externalHypervisors
+
+        const grouped = filteredHypervisors.reduce<Record<string, typeof filteredHypervisors>>((acc, h) => {
           if (!acc[h.type]) acc[h.type] = []
           acc[h.type].push(h)
           return acc
         }, {})
 
-        const totalExtVms = externalHypervisors.reduce((acc, h) => acc + (h.vms?.length || 0), 0)
+        const totalExtVms = filteredHypervisors.reduce((acc, h) => acc + (h.vms?.length || 0), 0)
+
+        // When search is active but nothing matches, skip the whole section
+        // entirely. Avoids showing an empty "MIGRATIONS (0 hosts)" header.
+        if (q && filteredHypervisors.length === 0) return null
 
         return (
           <>
@@ -3752,7 +3834,27 @@ return (
                 expansionTrigger="iconContainer"
             slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
                 selectedItems={selectedItemId || ''}
-                expandedItems={migrationExpandedItems}
+                expandedItems={(() => {
+                  // When the user is searching, auto-expand the path to every
+                  // surviving match: hypervisor-type group > connection > host
+                  // group (if present) so the matching VMs are visible without
+                  // the user clicking through the chevrons. Empty search falls
+                  // back to the user's manual expansion state from localStorage.
+                  if (!q) return migrationExpandedItems
+                  const auto: string[] = []
+                  for (const [type, conns] of Object.entries(grouped)) {
+                    auto.push(`ext-type:${type}`)
+                    for (const conn of conns) {
+                      auto.push(`ext:${conn.id}`)
+                      for (const vm of conn.vms || []) {
+                        if (vm.vcenterHost) {
+                          auto.push(`exthost:${conn.id}:${vm.vcenterHost}`)
+                        }
+                      }
+                    }
+                  }
+                  return [...new Set([...migrationExpandedItems, ...auto])]
+                })()}
                 onExpandedItemsChange={(_event, itemIds) => {
                   setMigrationExpandedItems(itemIds)
                   expandingRef.current = true
@@ -3783,44 +3885,171 @@ return (
                       </Box>
                     }
                   >
-                    {conns.map(conn => (
-                      <TreeItem
-                        key={`ext:${conn.id}`}
-                        itemId={`ext:${conn.id}`}
-                        label={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                            {cfg.svgIcon ? <img src={cfg.svgIcon} alt="" width={14} height={14} style={{ opacity: 0.8 }} /> : <i className={cfg.icon} style={{ fontSize: 14, color: cfg.color, opacity: 0.8 }} />}
-                            <span style={{ fontSize: 13 }}>{conn.name}</span>
-                            <span style={{ opacity: 0.5, fontSize: 11 }}>({conn.vms?.length || 0})</span>
-                          </Box>
-                        }
-                      >
-                        {(conn.vms || []).map(vm => (
+                    {conns.map(conn => {
+                      // Render a single VM row as a TreeItem. Extracted so we can
+                      // reuse it both directly under the connection (non-vCenter)
+                      // and nested inside per-host groups (vCenter).
+                      // Visual parity with Proxmox-side VMs: the hypervisor-specific
+                      // VM icon (esxi-vm.svg / ri-computer-line) carries an
+                      // overlaid status pastille (bottom-right dot), matching the
+                      // <StatusIcon type='vm'> style used for PVE VMs elsewhere
+                      // in this tree. Green=running, orange=paused/standby, red=stopped.
+                      const renderVmItem = (vm: any) => {
+                        const vmDotColor =
+                          vm.status === 'running' ? '#4caf50' :
+                          vm.status === 'paused' || vm.status === 'suspended' ? '#ed6c02' :
+                          '#f44336'
+                        return (
                           <TreeItem
                             key={`extvm:${conn.id}:${vm.vmid}`}
                             itemId={`extvm:${conn.id}:${vm.vmid}`}
                             label={
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14 }}>
-                                  {vm.status === 'running' ? (
-                                    <PlayArrowIcon sx={{ fontSize: 14, color: '#4caf50', filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))' }} />
-                                  ) : (
-                                    <StopIcon sx={{ fontSize: 14, color: '#f44336' }} />
-                                  )}
+                                <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                                  {cfg.vmIcon
+                                    ? <img src={cfg.vmIcon} alt="" width={14} height={14} style={{ opacity: 0.7 }} />
+                                    : <i className="ri-computer-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                                  }
+                                  <Box sx={{
+                                    position: 'absolute', bottom: -2, right: -3,
+                                    width: 7, height: 7, borderRadius: '50%',
+                                    bgcolor: vmDotColor,
+                                    border: '1.5px solid', borderColor: 'background.paper',
+                                    boxShadow: vm.status === 'running' ? `0 0 4px ${vmDotColor}` : 'none',
+                                  }} />
                                 </Box>
-                                {cfg.vmIcon ? <img src={cfg.vmIcon} alt="" width={14} height={14} style={{ opacity: 0.6 }} /> : <i className="ri-computer-line" style={{ fontSize: 14, opacity: 0.6 }} />}
                                 <span style={{ fontSize: 13 }}>{vm.name || vm.vmid}</span>
-                                {vm.memory_size_MiB && (
-                                  <span style={{ opacity: 0.4, fontSize: 11 }}>
-                                    {vm.cpu ? `${vm.cpu}c` : ''}{vm.memory_size_MiB ? `${vm.cpu ? '/' : ''}${Math.round(vm.memory_size_MiB / 1024)}G` : ''}
-                                  </span>
-                                )}
                               </Box>
                             }
                           />
-                        ))}
-                      </TreeItem>
-                    ))}
+                        )
+                      }
+
+                      // Group VMs by ESXi host when this is a vCenter connection.
+                      // We detect "vCenter" by any VM carrying the `vcenterHost`
+                      // metadata (set server-side by soapResolveHostInventoryPaths);
+                      // standalone ESXi + Hyper-V + Nutanix + XCP-ng leave it empty
+                      // and fall back to the flat layout we had before.
+                      const allVms = conn.vms || []
+                      const anyHostResolved = allVms.some((vm: any) => !!vm.vcenterHost)
+                      let groupedByHost: [string, any[]][] = []
+                      let unhostedVms: any[] = []
+                      if (anyHostResolved) {
+                        const map = new Map<string, any[]>()
+                        for (const vm of allVms) {
+                          const host = vm.vcenterHost || ''
+                          if (!host) { unhostedVms.push(vm); continue }
+                          if (!map.has(host)) map.set(host, [])
+                          map.get(host)!.push(vm)
+                        }
+                        groupedByHost = [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
+                      }
+
+                      return (
+                        <TreeItem
+                          key={`ext:${conn.id}`}
+                          itemId={`ext:${conn.id}`}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              {cfg.svgIcon ? <img src={cfg.svgIcon} alt="" width={14} height={14} style={{ opacity: 0.8 }} /> : <i className={cfg.icon} style={{ fontSize: 14, color: cfg.color, opacity: 0.8 }} />}
+                              <span style={{ fontSize: 13 }}>{conn.name}</span>
+                              {/* Three mutually-exclusive states for the label suffix:
+                                  1. vmsLoading   → spinner + "loading VMs…"
+                                  2. vmsLoadError → red ✗ icon with the error as tooltip
+                                  3. normal       → counter "(N hosts, M VMs)"
+                                  The error branch replaces the spinner so a dead
+                                  Nutanix/Hyper-V/XCP-ng host doesn't look like it's
+                                  still trying — it clearly failed and the user can
+                                  investigate or remove the connection. */}
+                              {(conn as any).vmsLoading ? (
+                                <>
+                                  <CircularProgress size={10} thickness={5} sx={{ color: cfg.color, opacity: 0.7 }} />
+                                  <span style={{ opacity: 0.5, fontSize: 11, fontStyle: 'italic' }}>
+                                    loading VMs…
+                                  </span>
+                                </>
+                              ) : (conn as any).vmsLoadError ? (
+                                <Box
+                                  component="span"
+                                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                                  title={`Failed to load VMs: ${(conn as any).vmsLoadError}`}
+                                >
+                                  <i className="ri-close-circle-fill" style={{ fontSize: 12, color: '#f44336' }} />
+                                  <span style={{ opacity: 0.6, fontSize: 11, color: '#f44336' }}>
+                                    unreachable
+                                  </span>
+                                </Box>
+                              ) : (
+                                <span style={{ opacity: 0.5, fontSize: 11 }}>
+                                  {anyHostResolved
+                                    ? `(${groupedByHost.length} host${groupedByHost.length === 1 ? '' : 's'}, ${allVms.length} VMs)`
+                                    : `(${allVms.length})`}
+                                </span>
+                              )}
+                            </Box>
+                          }
+                        >
+                          {anyHostResolved ? (
+                            <>
+                              {groupedByHost.map(([host, vms]) => {
+                                // All VMs under the same host share the same
+                                // vcenterHostStatus (resolved from the same
+                                // HostSystem MOR), so we read it from the first
+                                // VM. Default to 'unknown' if the SOAP resolution
+                                // didn't return a status (e.g. orphaned host).
+                                const hostStatus = (vms[0] as any)?.vcenterHostStatus || 'unknown'
+                                const statusColor =
+                                  hostStatus === 'ok' ? '#4caf50' :
+                                  hostStatus === 'warn' ? '#ff9800' :
+                                  hostStatus === 'crit' ? '#f44336' :
+                                  '#9e9e9e' // unknown -> grey
+                                const statusTitle =
+                                  hostStatus === 'ok' ? 'Connected, powered on' :
+                                  hostStatus === 'warn' ? 'Not responding or standby' :
+                                  hostStatus === 'crit' ? 'Disconnected or powered off' :
+                                  'Status unknown'
+                                return (
+                                <TreeItem
+                                  key={`exthost:${conn.id}:${host}`}
+                                  itemId={`exthost:${conn.id}:${host}`}
+                                  label={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      {/* Server icon with overlaid health dot, same
+                                          pattern as <NodeIcon> for Proxmox hosts.
+                                          Colour keyed to the host's runtime state
+                                          resolved server-side from vCenter's
+                                          runtime.connectionState + runtime.powerState. */}
+                                      <Box
+                                        component="span"
+                                        title={statusTitle}
+                                        sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, flexShrink: 0 }}
+                                      >
+                                        <i className="ri-server-line" style={{ fontSize: 16, opacity: 0.6 }} />
+                                        <Box sx={{
+                                          position: 'absolute', bottom: -2, right: -2,
+                                          width: 8, height: 8, borderRadius: '50%',
+                                          bgcolor: statusColor,
+                                          border: '1.5px solid', borderColor: 'background.paper',
+                                          boxShadow: hostStatus === 'ok' ? `0 0 4px ${statusColor}` : 'none',
+                                        }} />
+                                      </Box>
+                                      <span style={{ fontSize: 13 }}>{host}</span>
+                                      <span style={{ opacity: 0.5, fontSize: 11 }}>({vms.length})</span>
+                                    </Box>
+                                  }
+                                >
+                                  {vms.map(renderVmItem)}
+                                </TreeItem>
+                              )
+                              })}
+                              {unhostedVms.map(renderVmItem)}
+                            </>
+                          ) : (
+                            allVms.map(renderVmItem)
+                          )}
+                        </TreeItem>
+                      )
+                    })}
                   </TreeItem>
                 )
               })}

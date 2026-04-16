@@ -64,26 +64,51 @@ function isNetworkError(err: unknown): boolean {
 }
 
 /**
- * In-memory cache for failover URLs.
+ * In-memory cache for failover URLs with circuit breaker timestamps.
  * Stored in globalThis to survive Next.js hot-reload in dev mode.
  * We do NOT persist to database — this preserves the user-configured
  * baseUrl (which may use DNS + valid SSL certs).
+ *
+ * Circuit breaker states:
+ *  - CLOSED: no cached failover, normal operation (try primary)
+ *  - OPEN: cached failover exists, age < HALF_OPEN_INTERVAL_MS (use failover directly)
+ *  - HALF_OPEN: cached failover exists, age >= HALF_OPEN_INTERVAL_MS (probe primary first)
  */
-const FAILOVER_CACHE_KEY = "__proxcenter_failover_url_cache__" as const
+type FailoverEntry = {
+  url: string
+  cachedAt: number  // Date.now() when failover was cached
+}
 
-function getFailoverStore(): Map<string, string> {
+const FAILOVER_CACHE_KEY = "__proxcenter_failover_url_cache__" as const
+const HALF_OPEN_INTERVAL_MS = 60_000  // 60 seconds before retrying primary
+
+function getFailoverStore(): Map<string, FailoverEntry> {
   if (!(globalThis as any)[FAILOVER_CACHE_KEY]) {
-    ;(globalThis as any)[FAILOVER_CACHE_KEY] = new Map<string, string>()
+    ;(globalThis as any)[FAILOVER_CACHE_KEY] = new Map<string, FailoverEntry>()
   }
   return (globalThis as any)[FAILOVER_CACHE_KEY]
 }
 
 function getFailoverUrl(connId: string): string | null {
-  return getFailoverStore().get(connId) || null
+  const entry = getFailoverStore().get(connId)
+  return entry?.url || null
+}
+
+function isHalfOpen(connId: string): boolean {
+  const entry = getFailoverStore().get(connId)
+  if (!entry) return false
+  return (Date.now() - entry.cachedAt) >= HALF_OPEN_INTERVAL_MS
+}
+
+function refreshFailoverTimestamp(connId: string): void {
+  const entry = getFailoverStore().get(connId)
+  if (entry) {
+    entry.cachedAt = Date.now()
+  }
 }
 
 function setFailoverUrl(connId: string, url: string): void {
-  getFailoverStore().set(connId, url)
+  getFailoverStore().set(connId, { url, cachedAt: Date.now() })
   console.log(`[failover] Cached failover URL for connection ${connId}: ${url}`)
 }
 
@@ -178,11 +203,31 @@ export async function pveFetch<T>(
     return json.data as T
   }
 
-  // When a failover URL is cached, try it first — the original baseUrl is likely
-  // still down and waiting for its TCP timeout would stall the UI for seconds.
+  // Circuit breaker: when a failover URL is cached, periodically probe the
+  // primary to detect recovery.  States:
+  //  - OPEN (< 60s since failover): use failover directly
+  //  - HALF_OPEN (>= 60s): probe primary with short timeout first
+  //  - CLOSED (no cache): normal flow below
   const cachedFailoverUrl = opts.id ? getFailoverUrl(opts.id) : null
 
   if (cachedFailoverUrl) {
+    // HALF_OPEN: enough time has passed, probe the primary
+    if (opts.id && isHalfOpen(opts.id)) {
+      try {
+        const result = await doRequest(opts.baseUrl, 5_000)  // shorter timeout for probe
+        // Primary is back! Clear failover cache and reset failures
+        clearFailoverUrl(opts.id)
+        resetFailures(opts.id)
+        console.log(`[failover] Primary node recovered for connection ${opts.id}, clearing failover cache`)
+        return result
+      } catch (probeErr) {
+        // Primary still down, reset timer and use failover
+        refreshFailoverTimestamp(opts.id)
+        console.log(`[failover] Primary still down for connection ${opts.id}, staying on failover`)
+      }
+    }
+
+    // OPEN: use cached failover
     try {
       const result = await doRequest(cachedFailoverUrl)
       return result

@@ -103,6 +103,7 @@ export type AllVmItem = {
   template?: boolean
   hastate?: string
   hagroup?: string
+  lock?: string  // PVE lock type: "migrate", "backup", "snapshot", etc.
   isCluster?: boolean
   osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null
   isMigrating?: boolean  // true si la VM est en cours de migration
@@ -158,6 +159,8 @@ type Props = {
   onNodeAction?: (connId: string, node: string, action: 'reboot' | 'shutdown') => void
   onStoragesChange?: (storages: TreeClusterStorage[]) => void
   onExternalHypervisorsChange?: (hypervisors: { id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string }[] }[]) => void
+  showVmId?: boolean
+  onToggleShowVmId?: () => void
 }
 
 type Connection = {
@@ -193,7 +196,7 @@ type TreeCluster = {
     cpu?: number      // node-level CPU usage (fraction 0-1)
     mem?: number      // node-level used memory (bytes)
     maxmem?: number   // node-level total memory (bytes)
-    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string }[]
+    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
   }[]
 }
 
@@ -419,7 +422,7 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange }: Props) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Props) {
   const t = useTranslations()
   const theme = useTheme()
   const router = useRouter()
@@ -1467,7 +1470,8 @@ return next
         tags: guest.tags || null,
         template: guest.template === 1 || guest.template === true,
         hastate: guest.hastate,
-        hagroup: guest.hagroup
+        hagroup: guest.hagroup,
+        lock: guest.lock,
       }))
     }))
   }), [])
@@ -2040,6 +2044,7 @@ return items
       template?: boolean
       hastate?: string
       hagroup?: string
+      lock?: string
       sshEnabled?: boolean
     }[] = []
 
@@ -2066,6 +2071,7 @@ return items
             template: vm.template,
             hastate: vm.hastate,
             hagroup: vm.hagroup,
+            lock: vm.lock,
             sshEnabled: clu.sshEnabled
           })
         })
@@ -2122,6 +2128,7 @@ return vms
         template: vm.template,
         hastate: vm.hastate,
         hagroup: vm.hagroup,
+        lock: vm.lock,
         isCluster: vm.isCluster,
       })))
     }
@@ -2499,6 +2506,13 @@ return favorites.has(vmKey)
               </IconButton>
             </Tooltip>
           )}
+          {onToggleShowVmId && (
+            <Tooltip title={showVmId ? t('inventory.hideVmId') : t('inventory.showVmId')}>
+              <IconButton size='small' onClick={onToggleShowVmId} sx={{ color: showVmId ? 'primary.main' : 'text.disabled' }}>
+                <i className="ri-hashtag" style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title={t('settings.connections')}>
             <IconButton size='small' onClick={() => router.push('/settings?tab=connections')}>
               <i className='ri-add-circle-line' style={{ fontSize: 18 }} />
@@ -2601,7 +2615,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded]
+    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId]
   )
 
   return (
@@ -2672,6 +2686,8 @@ return favorites.has(vmKey)
                       variant="flat"
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                      showVmId={showVmId}
+                      lock={vm.lock}
                     />
                   </Box>
                 )
@@ -2736,6 +2752,8 @@ return favorites.has(vmKey)
                       variant="favorite"
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                      showVmId={showVmId}
+                      lock={vm.lock}
                     />
                   </Box>
                 )
@@ -2816,6 +2834,8 @@ return (
                       variant="grouped"
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                      showVmId={showVmId}
+                      lock={vm.lock}
                     />
                   )
                 })}
@@ -2895,6 +2915,8 @@ return (
                       variant="grouped"
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                      showVmId={showVmId}
+                      lock={vm.lock}
                     />
                   )
                 })}
@@ -3015,6 +3037,8 @@ return (
                       variant="grouped"
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                      showVmId={showVmId}
+                      lock={vm.lock}
                     />
                   )
                 })}
@@ -3072,6 +3096,8 @@ return (
                       variant="template"
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                      showVmId={showVmId}
+                      lock={vm.lock}
                     />
                   </Box>
                 )
@@ -3237,6 +3263,8 @@ return (
                         variant="tree"
                         t={t}
                         tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                        showVmId={showVmId}
+                        lock={vm.lock}
                       />
                     }
                   />
@@ -3339,6 +3367,8 @@ return (
                           variant="tree"
                           t={t}
                           tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                          showVmId={showVmId}
+                          lock={vm.lock}
                         />
                       }
                     />

@@ -450,19 +450,30 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
 
       if (exit === 'OK') {
         message = 'Completed successfully'
-        // Handle deleteSource for cross-cluster migrations that exit cleanly
-        if (deleteSource) {
-          const taskType = status?.type || ''
-          const vmid = status?.id || ''
-          if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
-            try {
-              const vmConfig = await pveFetch<any>(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`)
-              if (vmConfig?.lock) {
-                const { executeSSH } = await import('@/lib/ssh/exec')
-                const { getNodeIp } = await import('@/lib/ssh/node-ip')
-                const nodeIp = await getNodeIp(connection, node)
-                await executeSSH(connectionId, nodeIp, `qm unlock ${vmid}`)
+        const taskType = status?.type || ''
+        const vmid = status?.id || ''
+        if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
+          // Always attempt to unlock source VM after successful migration
+          try {
+            const vmConfig = await pveFetch<any>(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`)
+            if (vmConfig?.lock) {
+              const { executeSSH } = await import('@/lib/ssh/exec')
+              const { getNodeIp } = await import('@/lib/ssh/node-ip')
+              const nodeIp = await getNodeIp(connection, node)
+              const unlockResult = await executeSSH(connectionId, nodeIp, `qm unlock ${vmid}`)
+              if (unlockResult.success) {
+                console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} after cross-cluster migration`)
+              } else {
+                console.warn(`[task-api] SSH unlock failed for VM ${vmid}:`, unlockResult.error)
               }
+            }
+          } catch (unlockErr: any) {
+            console.warn(`[task-api] Could not auto-unlock VM ${vmid}:`, unlockErr?.message)
+          }
+
+          // Delete source VM only if requested
+          if (deleteSource) {
+            try {
               await pveFetch(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}`, {
                 method: 'DELETE',
                 body: new URLSearchParams({ purge: '1', 'destroy-unreferenced-disks': '1' }).toString(),

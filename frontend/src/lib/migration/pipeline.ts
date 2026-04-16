@@ -1000,13 +1000,27 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // /vmfs/volumes/Datastore is a symlink to /vmfs/volumes/<UUID>, we need the real path
       let remotePath = `/vmfs/volumes/${datastoreName}`
       const { esxiHost: resolveHost, esxiSshPort: resolvePort, esxiSshUser: resolveUser, setupCmd: resolveSetup, sshPrefix: resolveSshPrefix, cleanupCmd: resolveCleanup } = buildEsxiSshPrefix(`/tmp/proxcenter-sshfs-resolve-${jobId}`)
-      const resolveCmd = `${resolveSetup ? resolveSetup + ' && ' : ''}${resolveSshPrefix} -p ${resolvePort} ${resolveUser}@${resolveHost} "readlink -f '/vmfs/volumes/${datastoreName.replace(/'/g, "'\\''")}'" 2>/dev/null${resolveCleanup ? ' ; ' + resolveCleanup : ''}`
+      const safeDsName = datastoreName.replace(/'/g, "'\\''")
+      const resolveCmd = `${resolveSetup ? resolveSetup + ' && ' : ''}${resolveSshPrefix} -p ${resolvePort} ${resolveUser}@${resolveHost} "readlink -f '/vmfs/volumes/${safeDsName}'" 2>/dev/null${resolveCleanup ? ' ; ' + resolveCleanup : ''}`
       const resolveResult = await executeSSH(config.targetConnectionId, nodeIp, resolveCmd)
       if (resolveResult.success && resolveResult.output?.trim().startsWith("/vmfs/")) {
         remotePath = resolveResult.output.trim()
         await appendLog(jobId, `Resolved datastore path: ${datastoreName} -> ${remotePath}`, "info")
       } else {
-        await appendLog(jobId, `Could not resolve datastore symlink, using name directly: ${remotePath}`, "warn")
+        // readlink failed — try fallback: ls -la to parse symlink target
+        await appendLog(jobId, `readlink failed for ${datastoreName}, trying ls -la fallback...`, "warn")
+        const fallbackCmd = `${resolveSetup ? resolveSetup + ' && ' : ''}${resolveSshPrefix} -p ${resolvePort} ${resolveUser}@${resolveHost} "ls -la '/vmfs/volumes/${safeDsName}'" 2>/dev/null${resolveCleanup ? ' ; ' + resolveCleanup : ''}`
+        const fallbackResult = await executeSSH(config.targetConnectionId, nodeIp, fallbackCmd)
+        // ls -la on a symlink: lrwxrwxrwx ... 3Par_DMZ1 -> 6508540b-49183378-c5fe-bc97e1ab7c50
+        const arrowMatch = fallbackResult.output?.match(/->\s*(\S+)/)
+        if (arrowMatch?.[1]) {
+          const resolvedUuid = arrowMatch[1]
+          remotePath = resolvedUuid.startsWith("/") ? resolvedUuid : `/vmfs/volumes/${resolvedUuid}`
+          await appendLog(jobId, `Resolved datastore via ls fallback: ${datastoreName} -> ${remotePath}`, "info")
+        } else {
+          // SFTP cannot follow symlinks — this will likely fail, warn clearly
+          await appendLog(jobId, `Could not resolve datastore symlink for "${datastoreName}". SSHFS/SFTP cannot follow symlinks — mount will likely fail. If it does, check SSH connectivity from the Proxmox node to the ESXi host.`, "error")
+        }
       }
       let mounted = false
       const mountErrors: string[] = []

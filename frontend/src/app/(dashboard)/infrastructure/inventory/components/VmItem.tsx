@@ -92,6 +92,8 @@ export type VmItemProps = {
   variant: VmItemVariant
   t: ReturnType<typeof useTranslations>
   tags?: string[]
+  showVmId?: boolean
+  lock?: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,6 +125,8 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     variant,
     t,
     tags,
+    showVmId,
+    lock,
   } = props
   const { getColor, getShape } = useTagColors(connId)
   const shape = getShape(connId)
@@ -267,9 +271,9 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         >
           <i className={isFavorite ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 14 }} />
         </Box>
-        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} />
+        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} lock={lock} />
         <Typography variant="body2" sx={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {name}
+          {showVmId ? `${vmid} - ${name}` : name}
         </Typography>
         {template && (
           <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
@@ -332,7 +336,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         <i className="ri-file-copy-fill" style={{ opacity: 0.8, fontSize: 14, color: '#0288d1' }} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {name}
+            {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
           <Chip label={vmType === 'lxc' ? 'LXC' : 'VM'} size="small" sx={{ height: 16, fontSize: 10 }} />
         </Box>
@@ -376,10 +380,10 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         >
           <i className="ri-star-fill" style={{ fontSize: 14 }} />
         </IconButton>
-        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} />
+        <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} lock={lock} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {name}
+            {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
           {template && (
             <Chip label={t('inventory.template')} size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
@@ -431,11 +435,11 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
       >
         <i className={isFavorite ? "ri-star-fill" : "ri-star-line"} style={{ fontSize: 14 }} />
       </IconButton>
-      <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} />
+      <StatusIcon status={status} type="vm" isMigrating={isMigrating} isPendingAction={isPendingAction} template={template} vmType={vmType} lock={lock} />
       {isGrouped ? (
         <>
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {name}
+            {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
           {template && (
             <Chip label={t('inventory.tpl')} size="small" sx={{ height: 16, fontSize: 10 }} />
@@ -455,7 +459,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {name}
+            {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
           {template && (
             <Chip label={t('inventory.template')} size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
@@ -489,5 +493,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
   prev.name === next.name &&
   prev.variant === next.variant &&
   prev.template === next.template &&
-  prev.tags?.join(';') === next.tags?.join(';')
+  prev.tags?.join(';') === next.tags?.join(';') &&
+  prev.showVmId === next.showVmId &&
+  prev.lock === next.lock
 )

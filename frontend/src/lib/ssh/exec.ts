@@ -93,7 +93,9 @@ export async function executeSSH(
   }
 
   // Prefix command with sudo if configured
-  const finalCommand = connection.sshUseSudo ? `sudo ${command}` : command
+  // Use `sudo sh -c '...'` so compound commands (&&, ||, pipes, redirects)
+  // all execute under sudo. Naive `sudo cmd1 && cmd2` only sudo's cmd1.
+  const finalCommand = connection.sshUseSudo ? `sudo sh -c ${shellEscape(command)}` : command
 
   // 1. Try orchestrator
   try {

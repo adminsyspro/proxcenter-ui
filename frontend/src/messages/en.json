@@ -1239,6 +1239,8 @@
     "unknownError": "Unknown error",
     "template": "Template",
     "tpl": "Tpl",
+    "showVmId": "Show VM IDs",
+    "hideVmId": "Hide VM IDs",
     "console": "Console",
     "convertToTemplate": "Convert to template",
     "errorCloningVm": "Error cloning VM",
@@ -3604,6 +3606,7 @@
       "bandwidthLimitHelp": "Leave empty for unlimited",
       "deleteSourceVm": "Delete source VM after migration",
       "deleteSourceVmDesc": "By default, the source VM is kept in a stopped state",
+      "deleteSourceRequiresSsh": "Requires SSH to be enabled on the source connection to unlock and delete the VM after migration",
       "liveMigration": "Live Migration (Online)",
       "liveMigrationDesc": "VM will stay running during migration (minimal downtime)",
       "vmStopped": "VM is stopped - offline migration will be used",
@@ -3673,7 +3676,12 @@
     "groupMappingDesc": "Map LDAP groups to RBAC roles. At each login, the user's global role is synchronized from their LDAP groups.",
     "groupName": "LDAP group (DN or CN)",
     "role": "RBAC Role",
-    "addMapping": "Add mapping"
+    "addMapping": "Add mapping",
+    "accessRestriction": "Access Restriction",
+    "accessRestrictionDesc": "When enabled, only users who belong to at least one allowed group can log in. Users not in any allowed group will be denied access.",
+    "requireGroup": "Require group membership to log in",
+    "allowedGroup": "Allowed group",
+    "addAllowedGroup": "Add allowed group"
   },
   "oidc": {
     "description": "Configure OIDC/SSO authentication to allow users to sign in with their corporate identity provider (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",

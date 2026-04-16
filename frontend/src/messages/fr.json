@@ -910,6 +910,8 @@
     "unknownError": "Erreur inconnue",
     "template": "Template",
     "tpl": "Tpl",
+    "showVmId": "Afficher les ID des VMs",
+    "hideVmId": "Masquer les ID des VMs",
     "console": "Console",
     "convertToTemplate": "Convertir en template",
     "errorCloningVm": "Erreur lors du clonage de la VM",
@@ -3604,6 +3606,7 @@
       "bandwidthLimitHelp": "Laisser vide pour illimité",
       "deleteSourceVm": "Supprimer la VM source après migration",
       "deleteSourceVmDesc": "Par défaut, la VM source est conservée à l'état arrêté",
+      "deleteSourceRequiresSsh": "Nécessite que le SSH soit activé sur la connexion source pour déverrouiller et supprimer la VM après la migration",
       "liveMigration": "Migration à chaud (Online)",
       "liveMigrationDesc": "La VM reste active pendant la migration (interruption minimale)",
       "vmStopped": "VM arrêtée - migration à froid utilisée",
@@ -3673,7 +3676,12 @@
     "groupMappingDesc": "Associez les groupes LDAP aux rôles RBAC. À chaque connexion, le rôle global de l'utilisateur est synchronisé depuis ses groupes LDAP.",
     "groupName": "Groupe LDAP (DN ou CN)",
     "role": "Rôle RBAC",
-    "addMapping": "Ajouter un mapping"
+    "addMapping": "Ajouter un mapping",
+    "accessRestriction": "Restriction d'acc\u00e8s",
+    "accessRestrictionDesc": "Lorsque cette option est activ\u00e9e, seuls les utilisateurs appartenant \u00e0 au moins un groupe autoris\u00e9 peuvent se connecter. Les utilisateurs n'appartenant \u00e0 aucun groupe autoris\u00e9 se verront refuser l'acc\u00e8s.",
+    "requireGroup": "Exiger l'appartenance \u00e0 un groupe pour se connecter",
+    "allowedGroup": "Groupe autoris\u00e9",
+    "addAllowedGroup": "Ajouter un groupe autoris\u00e9"
   },
   "oidc": {
     "description": "Configurez l'authentification OIDC/SSO pour permettre aux utilisateurs de se connecter via leur fournisseur d'identité d'entreprise (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",

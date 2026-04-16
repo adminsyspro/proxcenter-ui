@@ -157,6 +157,11 @@ node bundle-novnc.js
     
     let rfb = null;
     let vmStatus = 'unknown';  // running, stopped, paused
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    const BASE_RECONNECT_DELAY = 2000; // 2s
+    let reconnectTimer = null;
+    let userDisconnected = false; // true when user explicitly closes
     
     document.title = `Console - ${type?.toUpperCase()} ${vmid} - ${node}`;
     vmInfo.textContent = `${type?.toUpperCase()} ${vmid} • ${node}`;
@@ -308,6 +313,11 @@ node bundle-novnc.js
           console.log('VNC connected');
           loading.style.display = 'none';
           setStatus('connected', 'Connected');
+          reconnectAttempts = 0;
+          if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+          }
           btnCad.disabled = false;
           
           // Focus agressif sur le canvas
@@ -343,11 +353,34 @@ node bundle-novnc.js
         
         rfb.addEventListener('disconnect', (e) => {
           console.log('VNC disconnected:', e.detail);
-          setStatus('', 'Disconnected');
           btnCad.disabled = true;
-          loading.style.display = 'block';
-          loadingText.textContent = 'Disconnected';
-          loadingSubtext.textContent = 'Click Reconnect';
+
+          if (userDisconnected) {
+            setStatus('', 'Disconnected');
+            loading.style.display = 'block';
+            loadingText.textContent = 'Disconnected';
+            loadingSubtext.textContent = 'Click Reconnect to resume';
+            return;
+          }
+
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000);
+            reconnectAttempts++;
+            setStatus('connecting', 'Reconnecting (' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')...');
+            loading.style.display = 'block';
+            loadingText.textContent = 'Reconnecting...';
+            loadingSubtext.textContent = 'Attempt ' + reconnectAttempts + ' of ' + MAX_RECONNECT_ATTEMPTS + ' in ' + Math.round(delay / 1000) + 's';
+            reconnectTimer = setTimeout(function() {
+              reconnectTimer = null;
+              connect();
+            }, delay);
+          } else {
+            setStatus('error', 'Connection lost');
+            loading.style.display = 'block';
+            loadingText.textContent = 'Connection lost';
+            loadingSubtext.textContent = 'Node may be offline. Click Reconnect to try again.';
+            reconnectAttempts = 0;
+          }
         });
         
         rfb.addEventListener('credentialsrequired', () => {
@@ -416,8 +449,23 @@ node bundle-novnc.js
     btnStop.addEventListener('click', () => vmAction('stop'));
     btnPause.addEventListener('click', () => vmAction('suspend'));
     
-    btnReconnect.addEventListener('click', connect);
-    btnClose.addEventListener('click', () => window.close());
+    btnReconnect.addEventListener('click', function() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      reconnectAttempts = 0;
+      userDisconnected = false;
+      connect();
+    });
+    btnClose.addEventListener('click', function() {
+      userDisconnected = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      window.close();
+    });
     screen.addEventListener('click', () => {
       const canvas = screen.querySelector('canvas');
       if (canvas) canvas.focus();

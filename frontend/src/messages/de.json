@@ -1207,6 +1207,8 @@
     "unknownError": "Unknown Fehler",
     "template": "Template",
     "tpl": "Tpl",
+    "showVmId": "VM-IDs anzeigen",
+    "hideVmId": "VM-IDs ausblenden",
     "console": "Konsole",
     "convertToTemplate": "In Vorlage umwandeln",
     "errorCloningVm": "Fehler cloning VM",
@@ -3572,6 +3574,7 @@
       "bandwidthLimitHelp": "Leer lassen für unbegrenzt",
       "deleteSourceVm": "löschen source VM after Migration",
       "deleteSourceVmDesc": "Standardmäßig wird die Quell-VM im gestoppten Zustand beibehalten",
+      "deleteSourceRequiresSsh": "Erfordert aktiviertes SSH auf der Quellverbindung zum Entsperren und Löschen der VM nach der Migration",
       "liveMigration": "Live-Migration (Online)",
       "liveMigrationDesc": "VM bleibt während der Migration aktiv (minimale Ausfallzeit)",
       "vmStopped": "VM ist gestoppt - Offline-Migration wird verwendet",
@@ -3641,7 +3644,12 @@
     "groupMappingDesc": "Map LDAP groups to RBAC roles. At each login, the user's Global role is synchronized from their LDAP groups.",
     "groupName": "LDAP-Gruppe (DN oder CN)",
     "role": "RBAC-Rolle",
-    "addMapping": "hinzufügen mapping"
+    "addMapping": "hinzuf\u00fcgen mapping",
+    "accessRestriction": "Zugriffsbeschr\u00e4nkung",
+    "accessRestrictionDesc": "Wenn aktiviert, k\u00f6nnen sich nur Benutzer anmelden, die mindestens einer erlaubten Gruppe angeh\u00f6ren. Benutzern, die keiner erlaubten Gruppe angeh\u00f6ren, wird der Zugriff verweigert.",
+    "requireGroup": "Gruppenmitgliedschaft f\u00fcr Anmeldung erforderlich",
+    "allowedGroup": "Erlaubte Gruppe",
+    "addAllowedGroup": "Erlaubte Gruppe hinzuf\u00fcgen"
   },
   "oidc": {
     "description": "Konfigurieren Sie OIDC/SSO-Authentifizierung, damit Benutzer sich mit ihrem Unternehmens-Identity-Provider anmelden können (Keycloak, Azure AD, Okta, Google, Auth0 usw.).",

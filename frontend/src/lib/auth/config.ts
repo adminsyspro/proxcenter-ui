@@ -189,6 +189,25 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Identifiants LDAP invalides")
         }
 
+        // Check group restriction BEFORE creating/updating user
+        const ldapConfigForRestriction = getLdapConfig()
+        if (ldapConfigForRestriction?.requireGroup && ldapConfigForRestriction.allowedGroups.length > 0) {
+          const userGroups = ldapUser.groups || []
+          const isAllowed = ldapConfigForRestriction.allowedGroups.some(allowedGroup => {
+            return userGroups.some(userGroup => {
+              // Exact DN match
+              if (userGroup === allowedGroup) return true
+              // CN extraction for simplified match
+              const cnMatch = userGroup.match(/^CN=([^,]+)/i)
+              return cnMatch && cnMatch[1] === allowedGroup
+            })
+          })
+
+          if (!isAllowed) {
+            throw new Error("Access denied: your LDAP account is not in an authorized group")
+          }
+        }
+
         const db = getDb()
         const email = ldapUser.email.toLowerCase()
 

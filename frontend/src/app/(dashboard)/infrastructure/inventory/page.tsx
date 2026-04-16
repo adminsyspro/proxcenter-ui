@@ -74,6 +74,22 @@ export default function InventoryPage() {
   // État pour collapse la tree
   const [isTreeCollapsed, setIsTreeCollapsed] = useState(false)
 
+  // Show VM ID in tree
+  const [showVmId, setShowVmId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pxc-show-vmid') === 'true'
+    }
+    return false
+  })
+
+  const toggleShowVmId = useCallback(() => {
+    setShowVmId(prev => {
+      const next = !prev
+      localStorage.setItem('pxc-show-vmid', String(next))
+      return next
+    })
+  }, [])
+
   // Create VM/LXC dialog requests from tree context menu
   const [createDialogRequest, setCreateDialogRequest] = useState<{ type: 'createVm' | 'createLxc'; connId: string; node: string; ts: number } | null>(null)
 
@@ -532,6 +548,8 @@ return () => setPageInfo('', '', '')
               onNodeAction={(connId, node, action) => setNodeActionRequest({ action, connId, node, ts: Date.now() })}
               onStoragesChange={setClusterStorages}
               onExternalHypervisorsChange={setExternalHypervisors}
+              showVmId={showVmId}
+              onToggleShowVmId={toggleShowVmId}
             />
           )}
         </Box>

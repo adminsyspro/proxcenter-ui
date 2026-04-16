@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { isSharedStorage } from '@/lib/proxmox/storage'
 
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
@@ -396,7 +397,7 @@ export default function InventoryDetails({
       for (const s of cs.sharedStorages) sharedSet.add(s.storage)
       for (const n of cs.nodes) {
         for (const s of n.storages) {
-          if (s.shared) sharedSet.add(s.storage)
+          if (isSharedStorage(s)) sharedSet.add(s.storage)
         }
       }
     }

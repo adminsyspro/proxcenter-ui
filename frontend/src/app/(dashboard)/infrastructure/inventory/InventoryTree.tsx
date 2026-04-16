@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { isSharedStorage } from '@/lib/proxmox/storage'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
 import { 
@@ -977,7 +978,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     const sharedSet = new Set<string>()
     if (cs) {
       for (const s of cs.sharedStorages) sharedSet.add(s.storage)
-      for (const n of cs.nodes) for (const s of n.storages) if (s.shared) sharedSet.add(s.storage)
+      for (const n of cs.nodes) for (const s of n.storages) if (isSharedStorage(s)) sharedSet.add(s.storage)
     }
 
     let alive = true

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { isSharedStorage } from "@/lib/proxmox/storage"
 
 export const runtime = "nodejs"
 
@@ -27,9 +28,11 @@ export async function GET(
     ) || []
 
     // Identifier les storages locaux (non partagés)
+    // Uses type-aware detection to handle cases where PVE API transiently
+    // omits the shared flag for inherently-shared backends like RBD (#249)
     const localStorages = new Set(
       storages
-        .filter((s: any) => !s.shared && s.active === 1)
+        .filter((s: any) => !isSharedStorage(s) && s.active === 1)
         .map((s: any) => s.storage)
     )
 

@@ -5,6 +5,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
+import { isSharedStorage } from "@/lib/proxmox/storage"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
@@ -366,7 +367,7 @@ async function fetchStoragesForCluster(conn: {
     const nodeStorages = new Map<string, StorageItem[]>()
 
     for (const item of allItems) {
-      if (item.shared) {
+      if (isSharedStorage(item)) {
         // For shared storages, aggregate usage across nodes
         if (!sharedSet.has(item.storage)) {
           sharedSet.set(item.storage, { ...item, node: '' })

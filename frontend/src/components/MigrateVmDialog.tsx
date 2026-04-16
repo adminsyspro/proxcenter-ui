@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
+import { isSharedStorage } from '@/lib/proxmox/storage'
 
 import {
   Dialog,
@@ -336,7 +337,7 @@ export function MigrateVmDialog({
           if (storagesRes.ok) {
             const storagesJson = await storagesRes.json()
             for (const s of (storagesJson.data || [])) {
-              if (s.shared) sharedStorages.add(s.storage)
+              if (isSharedStorage(s)) sharedStorages.add(s.storage)
             }
           }
         } catch {}

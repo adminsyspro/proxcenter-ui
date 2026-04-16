@@ -25,7 +25,7 @@ export function getVmIcon(type: string, isTemplate?: boolean, filled = true): st
 /* Status Icon Component                                              */
 /* ------------------------------------------------------------------ */
 
-export function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, template, vmType, size: propSize }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; isPendingAction?: boolean; maintenance?: string; template?: boolean; vmType?: string; size?: number }) {
+export function StatusIcon({ status, type, isMigrating, isPendingAction, maintenance, template, vmType, size: propSize, lock }: { status?: string; type: 'node' | 'vm'; isMigrating?: boolean; isPendingAction?: boolean; maintenance?: string; template?: boolean; vmType?: string; size?: number; lock?: string }) {
   if (type === 'node') {
     return null // Use NodeIcon instead for nodes
   }
@@ -83,6 +83,17 @@ export function StatusIcon({ status, type, isMigrating, isPendingAction, mainten
         border: '1.5px solid', borderColor: 'background.paper',
         boxShadow: status === 'running' ? `0 0 4px ${dotColor}` : 'none',
       }} />
+      {lock && (
+        <Box sx={{
+          position: 'absolute', top: -3, left: -3,
+          width: dotSize, height: dotSize, borderRadius: '50%',
+          bgcolor: '#ff9800',
+          border: '1.5px solid', borderColor: 'background.paper',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <i className="ri-lock-fill" style={{ fontSize: dotSize - 2, color: '#fff' }} />
+        </Box>
+      )}
     </Box>
   )
 }

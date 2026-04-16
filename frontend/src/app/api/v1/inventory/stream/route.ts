@@ -65,6 +65,7 @@ type GuestData = {
   template?: number | boolean
   hastate?: string
   hagroup?: string
+  lock?: string  // PVE lock type: "migrate", "backup", "snapshot", etc.
 }
 
 type HaResource = {
@@ -258,6 +259,7 @@ async function fetchOneCluster(conn: {
         cpu: g.cpu, mem: g.mem, maxmem: g.maxmem,
         disk: g.disk, maxdisk: g.maxdisk,
         uptime: g.uptime, pool: g.pool, tags: g.tags,
+        lock: g.lock,
         template: g.template === 1 || g.template === true,
         hastate: (() => {
           const haSid = `${g.type === 'lxc' ? 'ct' : 'vm'}:${g.vmid}`

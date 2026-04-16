@@ -84,6 +84,17 @@ export function getDb() {
     }
   } catch {}
 
+  // Migration: add require_group and allowed_groups columns to ldap_config
+  try {
+    const ldapColsReq = db.pragma('table_info(ldap_config)') as any[]
+    if (!ldapColsReq.some((c: any) => c.name === 'require_group')) {
+      db.exec(`ALTER TABLE ldap_config ADD COLUMN require_group INTEGER NOT NULL DEFAULT 0`)
+    }
+    if (!ldapColsReq.some((c: any) => c.name === 'allowed_groups')) {
+      db.exec(`ALTER TABLE ldap_config ADD COLUMN allowed_groups TEXT DEFAULT '[]'`)
+    }
+  } catch {}
+
   // Migration: add missing columns to Prisma-managed tables
   const prismaMigrations: [string, string, string][] = [
     ['Connection', 'tags', 'TEXT'],

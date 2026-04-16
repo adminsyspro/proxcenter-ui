@@ -18,7 +18,7 @@ export async function GET() {
 
     const config = db
       .prepare(
-        `SELECT id, enabled, url, bind_dn, bind_password_enc, base_dn, user_filter, email_attribute, name_attribute, tls_insecure, group_attribute, group_role_mapping, default_role, created_at, updated_at
+        `SELECT id, enabled, url, bind_dn, bind_password_enc, base_dn, user_filter, email_attribute, name_attribute, tls_insecure, group_attribute, group_role_mapping, default_role, require_group, allowed_groups, created_at, updated_at
          FROM ldap_config WHERE id = 'default'`
       )
       .get() as any
@@ -37,6 +37,8 @@ export async function GET() {
           group_attribute: "memberOf",
           group_role_mapping: "{}",
           default_role: "role_viewer",
+          require_group: false,
+          allowed_groups: [],
         },
       })
     }
@@ -55,6 +57,11 @@ export async function GET() {
         group_attribute: config.group_attribute || "memberOf",
         group_role_mapping: config.group_role_mapping || "{}",
         default_role: config.default_role || "role_viewer",
+        require_group: config.require_group === 1,
+        allowed_groups: (() => {
+          try { return JSON.parse(config.allowed_groups || '[]') }
+          catch { return [] }
+        })(),
       },
     })
   } catch (error: any) {
@@ -86,6 +93,8 @@ export async function PUT(req: Request) {
       group_attribute,
       group_role_mapping,
       default_role,
+      require_group,
+      allowed_groups,
     } = body
 
     // Validation
@@ -126,6 +135,8 @@ export async function PUT(req: Request) {
         "group_attribute = ?",
         "group_role_mapping = ?",
         "default_role = ?",
+        "require_group = ?",
+        "allowed_groups = ?",
         "updated_at = ?",
       ]
 
@@ -141,6 +152,8 @@ export async function PUT(req: Request) {
         group_attribute || "memberOf",
         group_role_mapping || "{}",
         default_role || "role_viewer",
+        require_group ? 1 : 0,
+        JSON.stringify(allowed_groups || []),
         now,
       ]
 
@@ -155,8 +168,8 @@ export async function PUT(req: Request) {
     } else {
       // Création
       db.prepare(
-        `INSERT INTO ldap_config (id, enabled, url, bind_dn, bind_password_enc, base_dn, user_filter, email_attribute, name_attribute, tls_insecure, group_attribute, group_role_mapping, default_role, created_at, updated_at)
-         VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO ldap_config (id, enabled, url, bind_dn, bind_password_enc, base_dn, user_filter, email_attribute, name_attribute, tls_insecure, group_attribute, group_role_mapping, default_role, require_group, allowed_groups, created_at, updated_at)
+         VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         enabled ? 1 : 0,
         url || "",
@@ -170,6 +183,8 @@ export async function PUT(req: Request) {
         group_attribute || "memberOf",
         group_role_mapping || "{}",
         default_role || "role_viewer",
+        require_group ? 1 : 0,
+        JSON.stringify(allowed_groups || []),
         now,
         now
       )

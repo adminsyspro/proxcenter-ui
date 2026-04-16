@@ -25,6 +25,8 @@ export interface LdapConfig {
   groupAttribute: string
   groupRoleMapping: Record<string, string>
   defaultRole: string
+  requireGroup: boolean
+  allowedGroups: string[]
 }
 
 // Configuration orchestrator
@@ -86,6 +88,11 @@ export function getLdapConfig(): LdapConfig | null {
     groupAttribute: config.group_attribute || 'memberOf',
     groupRoleMapping,
     defaultRole: config.default_role || 'role_viewer',
+    requireGroup: config.require_group === 1,
+    allowedGroups: (() => {
+      try { return JSON.parse(config.allowed_groups || '[]') }
+      catch { return [] }
+    })(),
   }
 }
 

@@ -458,6 +458,70 @@ export default function LdapConfigTab() {
           >
             {t('ldap.addMapping')}
           </Button>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant='body2' fontWeight={600} sx={{ mb: 1 }}>
+            {t('ldap.accessRestriction')}
+          </Typography>
+          <Typography variant='body2' sx={{ opacity: 0.6, mb: 2 }}>
+            {t('ldap.accessRestrictionDesc')}
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.require_group || false}
+                onChange={e => setConfig({ ...config, require_group: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={t('ldap.requireGroup')}
+            sx={{ mb: 2 }}
+          />
+
+          {config.require_group && (
+            <>
+              {(config.allowed_groups || []).map((group, index) => (
+                <Box key={index} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center' }}>
+                  <TextField
+                    size='small'
+                    fullWidth
+                    label={t('ldap.allowedGroup')}
+                    value={group}
+                    onChange={e => {
+                      const updated = [...(config.allowed_groups || [])]
+                      updated[index] = e.target.value
+                      setConfig({ ...config, allowed_groups: updated })
+                    }}
+                    disabled={!config.enabled}
+                    placeholder='CN=ProxCenter-Users,OU=Groups,DC=...'
+                  />
+                  <IconButton
+                    size='small'
+                    color='error'
+                    disabled={!config.enabled}
+                    onClick={() => {
+                      const updated = (config.allowed_groups || []).filter((_, i) => i !== index)
+                      setConfig({ ...config, allowed_groups: updated })
+                    }}
+                  >
+                    <i className='ri-delete-bin-line' />
+                  </IconButton>
+                </Box>
+              ))}
+              <Button
+                size='small'
+                variant='outlined'
+                startIcon={<i className='ri-add-line' />}
+                disabled={!config.enabled}
+                onClick={() => setConfig({ ...config, allowed_groups: [...(config.allowed_groups || []), ''] })}
+                sx={{ mt: 1 }}
+              >
+                {t('ldap.addAllowedGroup')}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 

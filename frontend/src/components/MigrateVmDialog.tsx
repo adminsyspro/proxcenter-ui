@@ -498,7 +498,7 @@ export function MigrateVmDialog({
         if (json.data && Array.isArray(json.data)) {
           // Check if source connection has SSH enabled
           const sourceConn = json.data.find((c: any) => c.id === connId)
-          if (sourceConn) setSourceSSHEnabled(!!sourceConn.sshEnabled)
+          if (sourceConn) setSourceSSHEnabled(!!sourceConn.sshEnabled && !!sourceConn.sshConfigured)
 
           // Filter out current connection and ensure only PVE type
           const otherConnections = json.data

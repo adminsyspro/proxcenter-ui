@@ -1684,7 +1684,7 @@ return
 
   // Charger la config du cluster quand on sélectionne l'onglet Cluster
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 10 && !clusterConfigLoaded && !clusterConfigLoading) {
+    if (selection?.type === 'cluster' && clusterTab === 11 && !clusterConfigLoaded && !clusterConfigLoading) {
       loadClusterConfig(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterConfigLoaded, clusterConfigLoading, loadClusterConfig])
@@ -1784,7 +1784,7 @@ return
 
   // Charger les mises à jour quand on sélectionne l'onglet Rolling Update
   useEffect(() => {
-    if (selection?.type === 'cluster' && clusterTab === 11 && data?.nodesData?.length > 0) {
+    if (selection?.type === 'cluster' && clusterTab === 12 && data?.nodesData?.length > 0) {
       const connId = selection.id || ''
       // Charger les mises à jour et les VMs locales pour chaque nœud
       data.nodesData.forEach((node: any) => {

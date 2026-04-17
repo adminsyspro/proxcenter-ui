@@ -966,6 +966,7 @@
     "tabHighAvailability": "Hochverfügbarkeit",
     "tabStorage": "Storage",
     "tabFirewall": "Firewall",
+    "tabSdn": "SDN",
     "tabChangeTracking": "Änderungsverfolgung",
     "tabCompliance": "Compliance",
     "tabDatacenterSettings": "Einstellungen",
@@ -5513,5 +5514,27 @@
     "noTimelineData": "Keine Zeitreihendaten für dieses Paar verfügbar (erfordert InfluxDB)",
     "compare": "Vergleichen",
     "yesterday": "Gestern"
+  },
+  "sdn": {
+    "subtab": {
+      "zones": "Zonen",
+      "zonesTitle": "SDN-Zonen",
+      "zonesPlaceholder": "SDN-Zonen verwalten (Simple, VLAN, QinQ, VXLAN, EVPN). Demnächst verfügbar.",
+      "vnets": "VNets",
+      "vnetsTitle": "Virtuelle Netzwerke",
+      "vnetsPlaceholder": "VNets und ihre Subnetze verwalten. Demnächst verfügbar.",
+      "options": "Optionen",
+      "optionsTitle": "SDN-Optionen",
+      "optionsPlaceholder": "Controller, IPAMs und DNS konfigurieren. Demnächst verfügbar.",
+      "ipams": "IPAM-Zuweisungen",
+      "ipamsTitle": "IPAM-Zuweisungen",
+      "ipamsPlaceholder": "IPAM-verwaltete IP-Zuweisungen je VNet durchsuchen. Demnächst verfügbar.",
+      "firewall": "VNet-Firewall",
+      "firewallTitle": "VNet-Firewall",
+      "firewallPlaceholder": "Firewall-Regeln auf VNet-Ebene konfigurieren. Demnächst verfügbar.",
+      "fabrics": "Fabrics",
+      "fabricsTitle": "Fabrics (OpenFabric / OSPF)",
+      "fabricsPlaceholder": "Erfordert Proxmox VE 9+. OpenFabric- und OSPF-Fabrics hier konfigurieren."
+    }
   }
 }

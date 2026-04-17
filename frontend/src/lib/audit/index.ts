@@ -76,7 +76,6 @@ export type AuditAction =
 
   // SDN
   | "sdn.apply"
-  | "sdn.apply.completed"
 
 export type AuditStatus = "success" | "failure" | "warning"
 

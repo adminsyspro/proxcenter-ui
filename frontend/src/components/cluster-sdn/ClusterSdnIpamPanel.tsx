@@ -127,9 +127,9 @@ export default function ClusterSdnIpamPanel({ connId }: Props) {
 
       <Box sx={{ flex: 1, minHeight: 300 }}>
         <DataGrid
-          rows={allocations}
+          rows={allocations.map((row, idx) => ({ ...row, __rid: idx }))}
           columns={columns}
-          getRowId={(row, i) => `${row.ip}-${row.mac || row.vmid || row.hostname || i}`}
+          getRowId={(row) => row.__rid as number}
           loading={loadingAllocs}
           pageSizeOptions={[10, 25, 50, 100]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}

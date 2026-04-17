@@ -39,7 +39,7 @@ const TASK_POLL_MAX_MS = 5 * 60_000
 export default function ClusterSdnTab({ connId }: Props) {
   const t = useTranslations()
   const rbac = useRBAC()
-  const canManage = rbac?.hasPermission?.('connection.manage') ?? true
+  const canManage = rbac?.hasPermission?.('connection.manage') ?? false
 
   const [sdnTab, setSdnTab] = useState(0)
   const [status, setStatus] = useState<SdnStatusResponse | null>(null)
@@ -100,6 +100,7 @@ export default function ClusterSdnTab({ connId }: Props) {
       const upid: string = body.data?.upid
       if (!upid) throw new Error('No UPID returned')
       const result = await pollTask(upid)
+      setToast(null)
       if (result === 'ok') {
         setToast({ kind: 'success', text: t('sdn.apply.toast.success') })
       } else if (result === 'timeout') {
@@ -109,6 +110,7 @@ export default function ClusterSdnTab({ connId }: Props) {
       }
       void refreshStatus()
     } catch (e: any) {
+      setToast(null)
       setToast({ kind: 'error', text: t('sdn.apply.toast.failed', { error: e?.message || String(e) }) })
     } finally {
       applyingRef.current = false
@@ -197,6 +199,7 @@ export default function ClusterSdnTab({ connId }: Props) {
       </Dialog>
 
       <Snackbar
+        key={toast?.kind ?? 'none'}
         open={!!toast}
         autoHideDuration={toast?.kind === 'info' ? null : 5000}
         onClose={() => setToast(null)}

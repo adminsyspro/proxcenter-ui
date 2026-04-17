@@ -3483,6 +3483,8 @@
     "reassignTo": "重新分配到总线插槽",
     "reassign": "重新分配",
     "confirmDeleteDisk": "确定要删除磁盘 {id} 吗？",
+    "confirmDeleteTitle": "Delete disk",
+    "confirmDeleteCdromHint": "The CD/DVD drive and its ISO mapping will be removed from the VM configuration.",
     "confirmDeleteNetwork": "确定要删除接口 {id} 吗？",
     "newSize": "新大小",
     "sizeIncrease": "+{size} GB",

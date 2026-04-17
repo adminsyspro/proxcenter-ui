@@ -3512,6 +3512,8 @@
     "reassignTo": "Reassign to bus slot",
     "reassign": "Reassign",
     "confirmDeleteDisk": "Are you sure you want to delete disk {id}?",
+    "confirmDeleteTitle": "Delete disk",
+    "confirmDeleteCdromHint": "The CD/DVD drive and its ISO mapping will be removed from the VM configuration.",
     "confirmDeleteNetwork": "Are you sure you want to delete interface {id}?",
     "newSize": "New size",
     "sizeIncrease": "+{size} GB",

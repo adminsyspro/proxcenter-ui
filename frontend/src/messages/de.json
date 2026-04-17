@@ -3480,6 +3480,8 @@
     "reassignTo": "Dem Bus-Slot neu zuweisen",
     "reassign": "Neu zuweisen",
     "confirmDeleteDisk": "Möchten Sie die Disk {id} wirklich löschen?",
+    "confirmDeleteTitle": "Delete disk",
+    "confirmDeleteCdromHint": "The CD/DVD drive and its ISO mapping will be removed from the VM configuration.",
     "confirmDeleteNetwork": "Möchten Sie die Schnittstelle {id} wirklich löschen?",
     "newSize": "Neue Größe",
     "sizeIncrease": "+{size} GB",

@@ -320,11 +320,16 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
 
 function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message: string; speed: string; eta: string } {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
-    return { progress: 0, message: 'Starting...', speed: '', eta: '' }
+    return { progress: 0, message: '', speed: '', eta: '' }
   }
 
   let progress = 0
-  let message = 'In progress...'
+  // Default message is empty so the frontend can distinguish "task that
+  // reports progress" (message is non-empty) from "task that doesn't"
+  // (vncproxy, qmstart, etc.). The previous 'In progress...' default made
+  // every running task show a misleading progress section with an animated
+  // bar at 0% even when no progress data existed.
+  let message = ''
   let speed = ''
   let eta = ''
 

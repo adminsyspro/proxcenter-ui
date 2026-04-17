@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
   Dialog,
   DialogContent,
   DialogActions,
+  DialogTitle,
   Button,
   TextField,
   FormControl,
@@ -438,10 +439,15 @@ return
     }
   }
 
-  const handleDelete = async () => {
-    if (!disk) return
-    if (!confirm(t('hardware.confirmDeleteDisk', { id: disk.id }))) return
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
+  const handleDeleteClick = useCallback(() => {
+    if (!disk) return
+    setConfirmDeleteOpen(true)
+  }, [disk])
+
+  const handleDeleteConfirm = useCallback(async () => {
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     setError(null)
 
@@ -453,16 +459,61 @@ return
     } finally {
       setDeleting(false)
     }
-  }
+  }, [onDelete, onClose, t])
+
+  // Replaces the native confirm() that was here before. Using a MUI Dialog
+  // is required by our codebase conventions (feedback_modals_mui.md) and also
+  // looks consistent with the rest of the app.
+  const handleDelete = handleDeleteClick
 
   if (!disk) return null
 
   const isWorking = saving || deleting || resizing || moving || cdromSaving || reassigning
 
+  // MUI confirmation dialog for disk deletion (replaces native confirm()).
+  // Rendered as a sibling to every main dialog variant below via a Fragment.
+  const deleteConfirmDialog = (
+    <Dialog
+      open={confirmDeleteOpen}
+      onClose={() => setConfirmDeleteOpen(false)}
+      maxWidth="xs"
+      fullWidth
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+        <Box sx={{ width: 36, height: 36, borderRadius: 1, bgcolor: 'error.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <i className="ri-delete-bin-line" style={{ fontSize: 20, color: '#fff' }} />
+        </Box>
+        {t('hardware.confirmDeleteTitle', { defaultMessage: 'Delete disk' })}
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="body2">
+          {t('hardware.confirmDeleteDisk', { id: disk.id })}
+        </Typography>
+        {disk.isCdrom && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            {t('hardware.confirmDeleteCdromHint', { defaultMessage: 'The CD/DVD drive and its ISO mapping will be removed from the VM configuration.' })}
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={() => setConfirmDeleteOpen(false)}>{t('common.cancel')}</Button>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={handleDeleteConfirm}
+          startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <i className="ri-delete-bin-line" />}
+          disabled={deleting}
+        >
+          {t('common.delete')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+
   // ── CDROM Dialog ──────────────────────────────────────────
   if (disk.isCdrom) {
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <>{deleteConfirmDialog}<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
         <AppDialogTitle onClose={onClose} icon={<i className="ri-disc-line" style={{ fontSize: 24 }} />}>
           {disk.id} (CD/DVD)
         </AppDialogTitle>
@@ -543,13 +594,14 @@ return
             </Button>
           </Box>
         </DialogActions>
-      </Dialog>
+      </Dialog></>
     )
   }
 
   // ── Unused disk Dialog ───────────────────────────────────
   if (disk.isUnused) {
     return (
+      <>{deleteConfirmDialog}
       <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
         <AppDialogTitle onClose={onClose} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 24, color: 'var(--mui-palette-warning-main)' }} />}>
           {disk.id} — {t('inventory.unused')}
@@ -613,13 +665,13 @@ return
             </Button>
           </Box>
         </DialogActions>
-      </Dialog>
+      </Dialog></>
     )
   }
 
   // ── Regular disk Dialog ───────────────────────────────────
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <>{deleteConfirmDialog}<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <AppDialogTitle onClose={onClose} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 24 }} />}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{t('common.edit')}: {disk.id}</span>
@@ -890,6 +942,6 @@ return
           )}
         </Box>
       </DialogActions>
-    </Dialog>
+    </Dialog></>
   )
 }

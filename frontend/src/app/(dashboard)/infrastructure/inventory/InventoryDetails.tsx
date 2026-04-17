@@ -758,7 +758,12 @@ export default function InventoryDetails({
   const updatePCTaskRef = useRef(updatePCTask)
   updatePCTaskRef.current = updatePCTask
 
-  // Poll migration job status + sync to TasksBar
+  // Poll migration job status + sync to TasksBar.
+  // Prefer j.currentStep when available — processV2vOutput updates it with
+  // the live virt-v2v phase name ("Inspecting the source", "Copying disk 1/2",
+  // etc.) which is far more descriptive than the pipeline-level j.status
+  // ("transferring"). The status-based fallback is kept for non-virt-v2v steps
+  // and for the brief moment before the first virt-v2v event arrives.
   useEffect(() => {
     if (!migJobId) return
     const taskId = `migration-${migJobId}`
@@ -768,7 +773,7 @@ export default function InventoryDetails({
         if (d.data) {
           const j = d.data
           const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
-          const step = j.status === 'transferring' ? `Transferring${speed}`
+          const stepFallback = j.status === 'transferring' ? `Transferring${speed}`
             : j.status === 'configuring' ? 'Configuring'
             : j.status === 'creating_vm' ? 'Creating VM'
             : j.status === 'preflight' ? 'Pre-flight checks'
@@ -778,7 +783,7 @@ export default function InventoryDetails({
             : j.status
           updatePCTaskRef.current(taskId, {
             progress: j.progress || 0,
-            detail: step,
+            detail: j.currentStep || stepFallback,
             status: j.status === 'completed' ? 'done' : j.status === 'failed' || j.status === 'cancelled' ? 'error' : 'running',
             ...(j.status === 'failed' ? { error: j.error } : {}),
           })
@@ -816,12 +821,12 @@ export default function InventoryDetails({
               job.error = j.error
               if (j.logs) job.logs = j.logs
               changed = true
-              // Sync to PCTask
+              // Sync to PCTask — prefer j.currentStep (live virt-v2v phase)
               const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
-              const step = j.status === 'transferring' ? `Transferring${speed}` : j.status === 'completed' ? 'Completed' : j.status === 'failed' ? (j.error || 'Failed') : j.status
+              const stepFallback = j.status === 'transferring' ? `Transferring${speed}` : j.status === 'completed' ? 'Completed' : j.status === 'failed' ? (j.error || 'Failed') : j.status
               updatePCTaskRef.current(`migration-${job.jobId}`, {
                 progress: j.progress || 0,
-                detail: step,
+                detail: j.currentStep || stepFallback,
                 status: j.status === 'completed' ? 'done' : j.status === 'failed' || j.status === 'cancelled' ? 'error' : 'running',
                 ...(j.status === 'failed' ? { error: j.error } : {}),
               })

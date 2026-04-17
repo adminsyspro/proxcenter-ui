@@ -3512,6 +3512,8 @@
     "reassignTo": "Réassigner au bus",
     "reassign": "Réassigner",
     "confirmDeleteDisk": "Êtes-vous sûr de vouloir supprimer le disque {id} ?",
+    "confirmDeleteTitle": "Supprimer le disque",
+    "confirmDeleteCdromHint": "Le lecteur CD/DVD et son mappage ISO seront retirés de la configuration de la VM.",
     "confirmDeleteNetwork": "Êtes-vous sûr de vouloir supprimer l'interface {id} ?",
     "newSize": "Nouvelle taille",
     "sizeIncrease": "+{size} GB",

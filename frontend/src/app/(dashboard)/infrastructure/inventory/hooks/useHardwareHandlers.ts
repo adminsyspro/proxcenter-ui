@@ -169,15 +169,48 @@ export function useHardwareHandlers({
     if (!selection || selection.type !== 'vm' || !selectedDisk) throw new Error('No disk selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
+    const configUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delete: selectedDisk.id })
+    // PVE refuses to delete a device that's listed in the VM's boot order
+    // ("unable to delete ideN - is a boot device"). This commonly hits CD/DVD
+    // drives with ISOs mounted — the drive was added to boot order for the
+    // install and left there afterwards. We read the current boot order,
+    // strip the target device out if present, and save the trimmed order
+    // before issuing the delete. This mirrors what the PVE native UI does
+    // when you remove a boot-order device via the Hardware panel.
+    try {
+      const cfgRes = await fetch(configUrl)
+      if (cfgRes.ok) {
+        const cfgData = await cfgRes.json().catch(() => ({}))
+        const cfg = cfgData?.data || cfgData || {}
+        const bootStr: string = cfg.boot || ''
+        // Format: "order=scsi0;ide2;net0" — semicolon-separated list after "order="
+        const orderMatch = bootStr.match(/order=([^;].*?)$/m) || bootStr.match(/order=(.*)/)
+        if (orderMatch) {
+          const devices = orderMatch[1].split(';').filter(Boolean)
+          if (devices.includes(selectedDisk.id)) {
+            const newDevices = devices.filter(d => d !== selectedDisk.id)
+            const newBoot = newDevices.length > 0 ? `order=${newDevices.join(';')}` : 'order='
+            // Update boot order first (remove the device from it)
+            await fetch(configUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ boot: newBoot }),
+            })
+          }
+        }
       }
-    )
+    } catch {
+      // Best-effort: if reading/updating boot order fails, the subsequent
+      // delete will also fail with PVE's "is a boot device" error which
+      // is surfaced to the user. Not a silent failure.
+    }
+
+    const res = await fetch(configUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delete: selectedDisk.id })
+    })
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))

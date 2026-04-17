@@ -305,8 +305,13 @@ export default function TaskDetailDialog({ open, task, onClose }) {
             )}
           </Box>
 
-          {/* Progress section */}
-          {(isRunning || progress > 0) && (
+          {/* Progress section — only shown when the task actually carries
+              progress data (message, speed, percent > 0). Most PVE tasks
+              (vncproxy, qmstart, qmshutdown, etc.) don't emit progress at
+              all; for those, the Status chip + logs are sufficient feedback.
+              Showing a perpetually-indeterminate bar at "0%" on those tasks
+              was confusing (looked broken) and added no information. */}
+          {(progress > 0 || details?.message || details?.speed) && (
             <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>

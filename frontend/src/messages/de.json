@@ -5547,6 +5547,33 @@
       },
       "empty": "Keine VNets konfiguriert"
     },
+    "options": {
+      "controllers": {
+        "title": "Controller",
+        "columns": {
+          "id": "ID",
+          "type": "Typ",
+          "nodes": "Knoten"
+        },
+        "empty": "Keine Controller konfiguriert"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "Typ"
+        },
+        "empty": "Keine IPAM-Backends konfiguriert"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "Typ"
+        },
+        "empty": "Keine DNS-Backends konfiguriert"
+      }
+    },
     "common": {
       "reload": "Neu laden",
       "loadFailed": "Laden fehlgeschlagen: {error}"

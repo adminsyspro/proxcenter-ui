@@ -5545,6 +5545,33 @@
       },
       "empty": "未配置 VNet"
     },
+    "options": {
+      "controllers": {
+        "title": "控制器",
+        "columns": {
+          "id": "ID",
+          "type": "类型",
+          "nodes": "节点"
+        },
+        "empty": "未配置控制器"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "类型"
+        },
+        "empty": "未配置 IPAM 后端"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "类型"
+        },
+        "empty": "未配置 DNS 后端"
+      }
+    },
     "common": {
       "reload": "重新加载",
       "loadFailed": "加载失败：{error}"

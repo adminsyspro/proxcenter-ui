@@ -5592,6 +5592,33 @@
       },
       "empty": "No VNets configured"
     },
+    "options": {
+      "controllers": {
+        "title": "Controllers",
+        "columns": {
+          "id": "ID",
+          "type": "Type",
+          "nodes": "Nodes"
+        },
+        "empty": "No controllers configured"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "No IPAM backends configured"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "No DNS backends configured"
+      }
+    },
     "common": {
       "reload": "Reload",
       "loadFailed": "Failed to load: {error}"

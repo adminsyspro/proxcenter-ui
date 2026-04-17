@@ -5593,6 +5593,33 @@
       },
       "empty": "Aucun VNet configuré"
     },
+    "options": {
+      "controllers": {
+        "title": "Contrôleurs",
+        "columns": {
+          "id": "ID",
+          "type": "Type",
+          "nodes": "Nœuds"
+        },
+        "empty": "Aucun contrôleur configuré"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "Aucun backend IPAM configuré"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "Aucun backend DNS configuré"
+      }
+    },
     "common": {
       "reload": "Recharger",
       "loadFailed": "Échec du chargement : {error}"

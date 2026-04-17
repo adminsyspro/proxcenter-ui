@@ -5631,6 +5631,25 @@
       },
       "empty": "Aucune allocation IP dans ce backend"
     },
+    "vnetFirewallPanel": {
+      "title": "Pare-feu VNet",
+      "picker": "VNet",
+      "noVnets": "Aucun VNet configuré - créez un VNet pour gérer les règles de pare-feu",
+      "columns": {
+        "on": "On",
+        "type": "Type",
+        "action": "Action",
+        "macro": "Macro",
+        "protocol": "Protocole",
+        "source": "Source",
+        "sPort": "S.Port",
+        "destination": "Destination",
+        "dPort": "D.Port",
+        "logLevel": "Niveau de journalisation",
+        "comment": "Commentaire"
+      },
+      "empty": "Aucune règle de pare-feu définie pour ce VNet"
+    },
     "common": {
       "reload": "Recharger",
       "loadFailed": "Échec du chargement : {error}"

@@ -5583,6 +5583,25 @@
       },
       "empty": "此 IPAM 中未找到 IP 分配"
     },
+    "vnetFirewallPanel": {
+      "title": "VNet 防火墙",
+      "picker": "VNet",
+      "noVnets": "未配置 VNet - 创建一个 VNet 以管理防火墙规则",
+      "columns": {
+        "on": "On",
+        "type": "类型",
+        "action": "操作",
+        "macro": "宏",
+        "protocol": "协议",
+        "source": "源",
+        "sPort": "S.Port",
+        "destination": "目标",
+        "dPort": "D.Port",
+        "logLevel": "日志级别",
+        "comment": "注释"
+      },
+      "empty": "此 VNet 没有定义防火墙规则"
+    },
     "common": {
       "reload": "重新加载",
       "loadFailed": "加载失败：{error}"

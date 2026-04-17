@@ -5630,6 +5630,25 @@
       },
       "empty": "No IP allocations found in this IPAM"
     },
+    "vnetFirewallPanel": {
+      "title": "VNet Firewall",
+      "picker": "VNet",
+      "noVnets": "No VNets configured - create a VNet to manage firewall rules",
+      "columns": {
+        "on": "On",
+        "type": "Type",
+        "action": "Action",
+        "macro": "Macro",
+        "protocol": "Protocol",
+        "source": "Source",
+        "sPort": "S.Port",
+        "destination": "Destination",
+        "dPort": "D.Port",
+        "logLevel": "Log level",
+        "comment": "Comment"
+      },
+      "empty": "No firewall rules defined for this VNet"
+    },
     "common": {
       "reload": "Reload",
       "loadFailed": "Failed to load: {error}"

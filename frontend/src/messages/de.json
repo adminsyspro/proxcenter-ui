@@ -5585,6 +5585,25 @@
       },
       "empty": "Keine IP-Zuweisungen in diesem IPAM"
     },
+    "vnetFirewallPanel": {
+      "title": "VNet-Firewall",
+      "picker": "VNet",
+      "noVnets": "Keine VNets konfiguriert - erstellen Sie ein VNet, um Firewall-Regeln zu verwalten",
+      "columns": {
+        "on": "On",
+        "type": "Typ",
+        "action": "Aktion",
+        "macro": "Makro",
+        "protocol": "Protokoll",
+        "source": "Quelle",
+        "sPort": "S.Port",
+        "destination": "Ziel",
+        "dPort": "D.Port",
+        "logLevel": "Log-Level",
+        "comment": "Kommentar"
+      },
+      "empty": "Keine Firewall-Regeln für dieses VNet definiert"
+    },
     "common": {
       "reload": "Neu laden",
       "loadFailed": "Laden fehlgeschlagen: {error}"

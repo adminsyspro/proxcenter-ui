@@ -5535,6 +5535,18 @@
       },
       "empty": "Keine SDN-Zonen konfiguriert"
     },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "Alias",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN-fähig",
+        "state": "Status"
+      },
+      "empty": "Keine VNets konfiguriert"
+    },
     "common": {
       "reload": "Neu laden",
       "loadFailed": "Laden fehlgeschlagen: {error}"

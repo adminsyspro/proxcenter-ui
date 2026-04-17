@@ -5581,6 +5581,18 @@
       },
       "empty": "Aucune zone SDN configurée"
     },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "Alias",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN Aware",
+        "state": "État"
+      },
+      "empty": "Aucun VNet configuré"
+    },
     "common": {
       "reload": "Recharger",
       "loadFailed": "Échec du chargement : {error}"

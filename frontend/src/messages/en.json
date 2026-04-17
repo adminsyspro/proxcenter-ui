@@ -5580,6 +5580,18 @@
       },
       "empty": "No SDN zones configured"
     },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "Alias",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN Aware",
+        "state": "State"
+      },
+      "empty": "No VNets configured"
+    },
     "common": {
       "reload": "Reload",
       "loadFailed": "Failed to load: {error}"

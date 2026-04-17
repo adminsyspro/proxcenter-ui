@@ -5533,6 +5533,18 @@
       },
       "empty": "未配置 SDN 区域"
     },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "别名",
+        "zone": "区域",
+        "tag": "标签",
+        "vlanAware": "VLAN 感知",
+        "state": "状态"
+      },
+      "empty": "未配置 VNet"
+    },
     "common": {
       "reload": "重新加载",
       "loadFailed": "加载失败：{error}"

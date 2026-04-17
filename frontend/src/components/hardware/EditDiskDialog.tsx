@@ -21,6 +21,7 @@ import {
   Stack,
   Alert,
   CircularProgress,
+  LinearProgress,
   Tabs,
   Tab,
   Chip,
@@ -831,10 +832,6 @@ return
         {/* Tab Move Storage */}
         {tab === 3 && onMoveStorage && (
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="info" icon={<i className="ri-information-line" />}>
-              {t.rich('hardware.moveDiskTo', { storage: disk.storage, strong: (chunks) => <strong>{chunks}</strong> })}
-            </Alert>
-
             {storagesLoading ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
                 <CircularProgress size={20} />
@@ -851,24 +848,38 @@ return
                   >
                     {storages
                       .filter(s => s.storage !== disk.storage)
-                      .map(s => (
-                        <MenuItem key={s.storage} value={s.storage}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <i className="ri-hard-drive-2-line" style={{ fontSize: 16, opacity: 0.7 }} />
-                              <span>{s.storage}</span>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Chip label={s.type} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
-                              {s.avail !== undefined && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatBytes(s.avail)} free
-                                </Typography>
+                      .map(s => {
+                        const total = (s.total || 0)
+                        const used = (s.used || 0)
+                        const avail = s.avail ?? (total - used)
+                        const usagePct = total > 0 ? Math.round((used / total) * 100) : 0
+                        const usageColor = usagePct > 90 ? 'error' : usagePct > 75 ? 'warning' : 'primary'
+                        return (
+                          <MenuItem key={s.storage} value={s.storage}>
+                            <Box sx={{ width: '100%' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <i className="ri-hard-drive-2-line" style={{ fontSize: 16, opacity: 0.7 }} />
+                                  <Typography variant="body2" fontWeight={500}>{s.storage}</Typography>
+                                </Box>
+                                {total > 0 && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {formatBytes(avail)} free / {formatBytes(total)}
+                                  </Typography>
+                                )}
+                              </Box>
+                              {total > 0 && (
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={usagePct}
+                                  color={usageColor as any}
+                                  sx={{ height: 4, borderRadius: 1 }}
+                                />
                               )}
                             </Box>
-                          </Box>
-                        </MenuItem>
-                      ))}
+                          </MenuItem>
+                        )
+                      })}
                   </Select>
                 </FormControl>
 

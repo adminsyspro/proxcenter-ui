@@ -878,6 +878,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     let otherHardwareInfo: any[] = []
     let optionsInfo: any = {}
     let cloudInitConfig: any = null
+    let pendingKeys: string[] = []
     let name = g.name || `VM ${vmid}`
     let description = ''
 
@@ -890,6 +891,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         description = config.description || ''
 
         const pending = config.pending || {}
+        pendingKeys = Object.keys(pending).filter(k => k !== 'delete')
 
         // Parse CPU type and flags from cpu field (e.g. "host,flags=+aes;-pcid")
         const cpuRaw = config.cpu || 'kvm64'
@@ -1091,6 +1093,17 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           }
         })
 
+        // Options pending keys: the subset of PVE config keys that map to
+        // VM options (boot order, hotplug, ACPI, KVM, agent, etc.). We track
+        // which ones have pending values so the Options tab can show change
+        // indicators + a revert button, mirroring what we do in Hardware.
+        const optionsPendingKeys = [
+          'onboot', 'startup', 'boot', 'hotplug', 'acpi', 'kvm',
+          'freeze', 'localtime', 'agent', 'tablet', 'protection',
+          'ostype', 'scsihw', 'spice_enhancements', 'vmstatestorage',
+          'startdate', 'sev',
+        ].filter(k => pending[k] !== undefined)
+
         optionsInfo = {
           scsihw: config.scsihw || 'virtio-scsi-single',
           onboot: config.onboot === 1 || config.onboot === true,
@@ -1111,6 +1124,13 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           spiceEnhancements: config.spice_enhancements || 'none',
           vmStateStorage: config.vmstatestorage || 'Automatic',
           amdSEV: config.sev ? 'enabled' : 'default',
+          // Pending keys specific to options (for the revert button in Options tab)
+          pendingKeys: optionsPendingKeys,
+          // Raw pending values so the Options tab can show old→new indicators
+          // per row (strikethrough old + orange new, like Proxmox native UI).
+          pendingValues: optionsPendingKeys.length > 0
+            ? Object.fromEntries(optionsPendingKeys.map(k => [k, pending[k]]))
+            : undefined,
         }
 
         // Cloud-Init extraction
@@ -1183,6 +1203,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       optionsInfo,
       cloudInitConfig,
       nodeCapacity,
+      pendingKeys,
     }
   }
 

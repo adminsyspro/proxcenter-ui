@@ -39,6 +39,9 @@ const ALLOWED_QEMU_FIELDS = new Set([
 
   // Delete (pour supprimer des options)
   'delete',
+
+  // Revert pending changes (comma-separated config keys to undo)
+  'revert',
 ])
 
 // Champs autorisés pour LXC
@@ -48,6 +51,7 @@ const ALLOWED_LXC_FIELDS = new Set([
   'memory', 'swap',
   'unprivileged', 'features',
   'delete',
+  'revert',
 ])
 
 // GET: Récupérer la configuration de la VM

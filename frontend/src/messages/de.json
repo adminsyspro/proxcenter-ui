@@ -588,6 +588,7 @@
     "fullView": "Vollständige Ansicht",
     "performances": "Leistung",
     "pendingRestart": "Konfiguration pending restart",
+    "revertPendingChanges": "Revert pending changes",
     "memory": "Arbeitsspeicher",
     "enableBallooning": "Ballooning aktivieren",
     "minMemoryBalloon": "minimal memory (balloon)",

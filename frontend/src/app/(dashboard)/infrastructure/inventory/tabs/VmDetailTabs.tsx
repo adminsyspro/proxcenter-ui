@@ -680,6 +680,41 @@ export default function VmDetailTabs(props: any) {
                     </Box>
                   ) : (
                     <Stack spacing={1}>
+                      {/* ── Pending changes revert button (full width) ── */}
+                      {(() => {
+                        // Use the raw pending keys from PVE's config.pending, which
+                        // covers ALL pending changes (CPU, memory, machine, bios, vga,
+                        // network, disks, etc.) — not just the CPU+memory subset we
+                        // were manually tracking before.
+                        const revertKeys = data?.pendingKeys as string[] | undefined
+                        if (!revertKeys || revertKeys.length === 0) return null
+                        return (
+                          <Button
+                            fullWidth
+                            variant="contained"
+                            startIcon={<i className="ri-arrow-go-back-line" />}
+                            onClick={async () => {
+                              try {
+                                const { connId, node, type, vmid } = parseVmId(selection?.id || '')
+                                await fetch(
+                                  `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
+                                  {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ revert: revertKeys.join(',') }),
+                                  },
+                                )
+                                if (refreshData) await refreshData()
+                              } catch {
+                                // Best-effort; the inline alerts will persist until
+                                // the user refreshes manually if the revert fails.
+                              }
+                            }}
+                          >
+                            {t('inventory.revertPendingChanges')}
+                          </Button>
+                        )
+                      })()}
                       {/* CPU et RAM côte à côte */}
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 1 }}>
                         {/* CPU */}
@@ -1648,7 +1683,7 @@ export default function VmDetailTabs(props: any) {
                                           {row.label}
                                         </Box>
                                       </td>
-                                      <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                      <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                         <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13 }}>
                                           {row.value}
                                         </Typography>
@@ -1681,6 +1716,45 @@ export default function VmDetailTabs(props: any) {
                       <CircularProgress />
                     </Box>
                   ) : (
+                    <Stack spacing={1}>
+                    {/* Revert pending options button — same pattern as Hardware tab */}
+                    {data?.optionsInfo?.pendingKeys?.length > 0 && (
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        startIcon={<i className="ri-arrow-go-back-line" />}
+                        onClick={async () => {
+                          try {
+                            const { connId, node, type, vmid } = parseVmId(selection?.id || '')
+                            await fetch(
+                              `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
+                              {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ revert: data.optionsInfo.pendingKeys.join(',') }),
+                              },
+                            )
+                            if (refreshData) await refreshData()
+                          } catch {}
+                        }}
+                      >
+                        {t('inventory.revertPendingChanges')}
+                      </Button>
+                    )}
+                    {(() => {
+                      // Helper to highlight option rows that have pending changes.
+                      // Returns extra inline styles for the <tr> (orange left border
+                      // + subtle tint) and a small "pending" chip to append in the
+                      // value cell. Defined once here and used by each row below.
+                      const pv = data?.optionsInfo?.pendingValues || {}
+                      const isPending = (key: string) => pv[key] !== undefined
+                      const pendingRowStyle = (key: string): React.CSSProperties => isPending(key)
+                        ? { borderLeft: '3px solid #ed6c02', backgroundColor: 'rgba(237, 108, 2, 0.06)' }
+                        : {}
+                      const pendingChip = (key: string) => isPending(key)
+                        ? <MuiTooltip title={t('inventory.pendingRestart')} arrow placement="top"><span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex', alignItems: 'center', cursor: 'default' }}><i className="ri-error-warning-fill" style={{ fontSize: 14, color: '#ed6c02' }}></i></span></MuiTooltip>
+                        : null
+                      return (
                     <Card variant="outlined" sx={{ borderRadius: 2 }}>
                       <CardContent sx={{ p: 0 }}>
                         <Box sx={{ overflowX: 'auto' }}>
@@ -1700,7 +1774,7 @@ export default function VmDetailTabs(props: any) {
                                     {t('common.name')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>{data.name || data.title || 'N/A'}</td>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>{data.name || data.title || 'N/A'}</td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'name', label: t('common.name'), value: data.name || '', type: 'text' })}>
@@ -1740,7 +1814,7 @@ export default function VmDetailTabs(props: any) {
                                     Tags
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                                     {localTags && localTags.length > 0 ? (
                                       localTags.map(tag => {
@@ -1782,13 +1856,14 @@ return (
                                     {t('common.enabled')} boot
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.onboot ? t('common.yes') : t('common.no')}
                                     color={data.optionsInfo?.onboot ? 'success' : 'default'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('onboot')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1807,6 +1882,7 @@ return (
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontFamily: 'monospace', fontSize: '0.9rem' }}>
                                   {data.optionsInfo?.startupOrder || 'order=any'}
+                                  {pendingChip('startup')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1823,8 +1899,9 @@ return (
                                     {t('inventory.osType')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   {formatOsType(data.optionsInfo?.ostype)}
+                                  {pendingChip('ostype')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1865,6 +1942,7 @@ return (
                                       />
                                     ))
                                   })()}
+                                  {pendingChip('boot')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1900,13 +1978,14 @@ return (
                                     {t('inventory.usbTablet')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.useTablet !== false ? t('common.enabled') : t('common.disabled')}
                                     color={data.optionsInfo?.useTablet !== false ? 'success' : 'default'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('tablet')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1923,12 +2002,13 @@ return (
                                     Hotplug
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                                     {(data.optionsInfo?.hotplug || 'disk,network,usb').split(',').map((h: string) => h.trim().toLowerCase()).filter(Boolean).map((h: string) => (
                                       <Chip key={h} label={{ disk: 'Disk', network: 'Network', usb: 'USB', memory: 'Memory', cpu: 'CPU' }[h] || h} size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 22 }} />
                                     ))}
                                   </Box>
+                                  {pendingChip('hotplug')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1945,13 +2025,14 @@ return (
                                     ACPI
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.acpi !== false ? t('common.enabled') : t('common.disabled')}
                                     color={data.optionsInfo?.acpi !== false ? 'success' : 'default'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('acpi')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1968,13 +2049,14 @@ return (
                                     KVM Hardware
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Chip
                                     size="small"
                                     label={data.optionsInfo?.kvmEnabled !== false ? t('common.enabled') : t('common.disabled')}
                                     color={data.optionsInfo?.kvmEnabled !== false ? 'success' : 'default'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('kvm')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -1991,13 +2073,14 @@ return (
                                     {t('inventory.freezeCpuOnStartup')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
-                                  <Chip 
-                                    size="small" 
-                                    label={data.optionsInfo?.freezeCpu ? t('common.yes') : t('common.no')} 
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
+                                  <Chip
+                                    size="small"
+                                    label={data.optionsInfo?.freezeCpu ? t('common.yes') : t('common.no')}
                                     color={data.optionsInfo?.freezeCpu ? 'warning' : 'default'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('freeze')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2014,8 +2097,9 @@ return (
                                     {t('inventory.rtcLocalTime')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   {data.optionsInfo?.useLocalTime === 'yes' ? t('common.yes') : t('common.no')}
+                                  {pendingChip('localtime')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2032,8 +2116,9 @@ return (
                                     {t('inventory.rtcDate')}
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   {data.optionsInfo?.rtcStartDate || 'now'}
+                                  {pendingChip('startdate')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2070,13 +2155,14 @@ return (
                                     QEMU Guest Agent
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
-                                  <Chip 
-                                    size="small" 
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
+                                  <Chip
+                                    size="small"
                                     label={data.optionsInfo?.agentEnabled ? t('common.enabled') : t('common.disabled')}
                                     color={data.optionsInfo?.agentEnabled ? 'success' : 'warning'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('agent')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2093,13 +2179,14 @@ return (
                                     Protection
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
-                                  <Chip 
-                                    size="small" 
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
+                                  <Chip
+                                    size="small"
                                     label={data.optionsInfo?.protection ? t('common.enabled') : t('common.disabled')}
                                     color={data.optionsInfo?.protection ? 'success' : 'default'}
                                     variant="outlined"
                                   />
+                                  {pendingChip('protection')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2116,8 +2203,9 @@ return (
                                     Spice Enhancements
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   {data.optionsInfo?.spiceEnhancements || 'none'}
+                                  {pendingChip('spice_enhancements')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2134,8 +2222,9 @@ return (
                                     VM State Storage
                                   </Box>
                                 </td>
-                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   {data.optionsInfo?.vmStateStorage || t('inventoryPage.automatic')}
+                                  {pendingChip('vmstatestorage')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2154,6 +2243,7 @@ return (
                                 </td>
                                 <td style={{ padding: '6px 16px' }}>
                                   {data.optionsInfo?.amdSEV === 'enabled' ? t('common.enabled') : t('common.disabled')}
+                                  {pendingChip('amd_sev')}
                                 </td>
                                 <td style={{ padding: '6px 16px', textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
@@ -2173,6 +2263,9 @@ return (
                         </Box>
                       </CardContent>
                     </Card>
+                      )
+                    })()}
+                    </Stack>
                   )}
                 </Box>
               )}
@@ -3704,7 +3797,7 @@ return (
                                       {t('inventory.cloudInit.ipConfig')} ({key.replaceAll('ipconfig', '')})
                                     </Box>
                                   </td>
-                                  <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12 }}>
+                                  <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                     <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{String(val)}</Typography>
                                     <Typography variant="caption" color="text.secondary">{t('inventory.cloudInit.ipConfigHelp')}</Typography>
                                   </td>

@@ -592,6 +592,7 @@
     "fullView": "完整视图",
     "performances": "性能",
     "pendingRestart": "配置待重启生效",
+    "revertPendingChanges": "Revert pending changes",
     "memory": "内存 (RAM)",
     "enableBallooning": "启用内存气球",
     "minMemoryBalloon": "最小内存（气球）",

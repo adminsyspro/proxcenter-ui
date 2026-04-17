@@ -620,6 +620,7 @@
     "fullView": "Vue complète",
     "performances": "Performances",
     "pendingRestart": "Configuration en attente de redémarrage",
+    "revertPendingChanges": "Annuler les modifications en attente",
     "memory": "Mémoire (RAM)",
     "enableBallooning": "Activer le ballooning",
     "minMemoryBalloon": "Mémoire minimum (balloon)",

@@ -620,6 +620,7 @@
     "fullView": "Full view",
     "performances": "Performance",
     "pendingRestart": "Configuration pending restart",
+    "revertPendingChanges": "Revert pending changes",
     "memory": "Memory (RAM)",
     "enableBallooning": "Enable ballooning",
     "minMemoryBalloon": "Minimum memory (balloon)",

@@ -5523,6 +5523,21 @@
       "ipam": "IPAM",
       "vnetFirewall": "VNet-Firewall",
       "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "SDN-Zonen",
+      "columns": {
+        "id": "ID",
+        "type": "Typ",
+        "nodes": "Knoten",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "Keine SDN-Zonen konfiguriert"
+    },
+    "common": {
+      "reload": "Neu laden",
+      "loadFailed": "Laden fehlgeschlagen: {error}"
     }
   }
 }

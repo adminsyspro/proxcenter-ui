@@ -5521,6 +5521,21 @@
       "ipam": "IPAM",
       "vnetFirewall": "VNet 防火墙",
       "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "SDN 区域",
+      "columns": {
+        "id": "ID",
+        "type": "类型",
+        "nodes": "节点",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "未配置 SDN 区域"
+    },
+    "common": {
+      "reload": "重新加载",
+      "loadFailed": "加载失败：{error}"
     }
   }
 }

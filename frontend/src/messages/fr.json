@@ -5569,6 +5569,21 @@
       "ipam": "IPAM",
       "vnetFirewall": "Pare-feu VNet",
       "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "Zones SDN",
+      "columns": {
+        "id": "ID",
+        "type": "Type",
+        "nodes": "Nœuds",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "Aucune zone SDN configurée"
+    },
+    "common": {
+      "reload": "Recharger",
+      "loadFailed": "Échec du chargement : {error}"
     }
   }
 }

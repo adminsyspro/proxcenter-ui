@@ -267,7 +267,7 @@ export default function InventoryDetails({
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
-  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null>(null)
+  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
@@ -650,7 +650,7 @@ export default function InventoryDetails({
       ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
       : [migTargetNode]
     if (nodesToCheck.length === 0) {
-      setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['No online nodes in the selected cluster'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, detectedDisks: [], tempStorages: [] })
+      setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['No online nodes in the selected cluster'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] })
       return
     }
     Promise.all(nodesToCheck.map(async (node: string) => {
@@ -670,6 +670,8 @@ export default function InventoryDetails({
       const allVirtV2v = results.every(r => !!r.virtV2vInstalled)
       const allNbdkit = results.every(r => !!r.nbdkitInstalled)
       const allNbdcopy = results.every(r => !!r.nbdcopyInstalled)
+      const allGuestfsTools = results.every(r => !!r.guestfsToolsInstalled)
+      const allOvmf = results.every(r => !!r.ovmfInstalled)
       const allVirtioWin = results.every(r => !!r.virtioWinInstalled)
       // tempStorages: when targeting multiple nodes we take the INTERSECTION by
       // path (a temp dir is only useful if it exists on every node the batch
@@ -718,13 +720,15 @@ export default function InventoryDetails({
         virtioWinInstalled: allVirtioWin,
         nbdkitInstalled: allNbdkit,
         nbdcopyInstalled: allNbdcopy,
+        guestfsToolsInstalled: allGuestfsTools,
+        ovmfInstalled: allOvmf,
         detectedDisks,
         tempStorages: aggregatedTempStorages,
       })
       if (detectedDisks.length > 0) {
         setMigDiskPaths(detectedDisks.join('\n'))
       }
-    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, detectedDisks: [], tempStorages: [] }))
+    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] }))
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
       const storages = (d.data || d || []).filter((s: any) => {
         const content = s.content || ''

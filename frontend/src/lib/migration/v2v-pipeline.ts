@@ -690,11 +690,12 @@ function buildV2vCommand(
   const vmNameEsc = shellEscape(config.sourceVmName)
 
   let v2vCmd: string
-  // --block-driver was added in virt-v2v 2.2.0. Older versions (Debian 12 Bookworm
-  // ships 2.0.x) reject the flag and default to virtio-blk for guest driver injection.
-  // Linux guests boot fine either way; Windows guests with virt-v2v < 2.2 will end up
-  // with virtio-blk drivers and must be attached on virtio0 instead of scsi0, currently
-  // not handled, so warn upstream when supportsBlockDriver is false on a Windows source.
+  // --block-driver landed in libguestfs/virt-v2v but is not present in every
+  // 2.x build (Debian 12 Bookworm's 2.0.x, plus some 2.2.0 packages that predate
+  // the flag). Without it virt-v2v defaults to virtio-blk driver injection for
+  // Windows. Linux guests boot fine either way; Windows guests in the fallback
+  // path are attached on virtio0 instead of scsi0 (see `useVirtioBlk` at the
+  // disk-attach loop) so the injected viostor.sys matches the actual bus.
   const blockDriverOpt = supportsBlockDriver ? '--block-driver virtio-scsi ' : ''
   // NOTE: no trailing `2>&1`. The caller (runVirtV2vWithProgress) wraps the
   // whole command in a nohup + file redirect (`> log 2>&1`) so the streams
@@ -903,7 +904,7 @@ export async function runV2vMigrationPipeline(
     if (!supportsBlockDriver) {
       await appendLog(
         jobId,
-        "virt-v2v on this node is older than 2.2.0 and does not support --block-driver. Falling back to virtio-blk default. Linux guests are unaffected; Windows guests may not boot from a virtio-scsi controller without manual driver injection.",
+        "virt-v2v on this node does not support --block-driver. Falling back to virtio-blk: Windows data disks will be attached on virtio0 (matching the injected viostor.sys driver) instead of scsi0.",
         "warn",
       )
     }
@@ -1334,18 +1335,27 @@ export async function runV2vMigrationPipeline(
       await processV2vOutput(jobId, v2vResult.output, hasDownloadPhase ? 50 : 0, hasDownloadPhase ? 50 : 100)
     }
 
-    // NTFS dirty flag recovery: if virt-v2v failed with NTFS errors and we're in disk mode, try ntfsfix
-    const isDiskMode = config.diskPaths && config.diskPaths.length > 0
+    // NTFS dirty flag recovery: if virt-v2v failed with NTFS errors and we're in disk mode, try ntfsfix.
+    // "disk mode" means the VMDKs are local files — either from config.diskPaths (Hyper-V/Nutanix)
+    // or from nfcDownloadedDisks (vCenter NFC export). Both paths have the files on the PVE node.
+    const localDiskPaths = (config.diskPaths && config.diskPaths.length > 0)
+      ? config.diskPaths
+      : (nfcDownloadedDisks.length > 0 ? nfcDownloadedDisks : null)
     const isNtfsError = !v2vResult.success && v2vResult.output &&
-      /read.only|not cleanly unmounted|ntfs.*dirty|mounted read.only|windows hibernat/i.test(v2vResult.output)
+      /read.only|not cleanly unmounted|ntfs.*dirty|mounted read.only|windows hibernat|Fast Restart/i.test(v2vResult.output)
 
-    if (isNtfsError && isDiskMode) {
-      await appendLog(jobId, "NTFS dirty flag detected, attempting ntfsfix recovery...", "warn")
+    if (isNtfsError && localDiskPaths) {
+      await appendLog(jobId, "NTFS dirty flag detected (Windows Fast Startup / Hibernation). Attempting ntfsfix recovery...", "warn")
 
-      // Check if ntfsfix + qemu-nbd are available
-      const toolCheck = await executeSSH(config.targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo ok")
+      // Check if ntfsfix + qemu-nbd are available; auto-install if missing
+      let toolCheck = await executeSSH(config.targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo ok")
+      if (!toolCheck.success || !toolCheck.output?.trim().endsWith("ok")) {
+        await appendLog(jobId, "ntfsfix/qemu-nbd not found, auto-installing ntfs-3g + qemu-utils...", "warn")
+        await executeSSH(config.targetConnectionId, nodeIp, "apt-get update -qq && apt-get install -y ntfs-3g qemu-utils")
+        toolCheck = await executeSSH(config.targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo ok")
+      }
       if (toolCheck.success && toolCheck.output?.trim().endsWith("ok")) {
-        for (const diskPath of config.diskPaths!) {
+        for (const diskPath of localDiskPaths) {
           await appendLog(jobId, `Running ntfsfix on ${diskPath}...`)
           // Use qemu-nbd to expose disk, find NTFS partition, run ntfsfix
           const ntfsFixCmd = [
@@ -1667,10 +1677,17 @@ export async function runV2vMigrationPipeline(
     // Track the highest disk number used (EFI VMs may have disk-0 for efidisk0)
     let nextDiskNum = isEfi ? 1 : 0
 
+    // When virt-v2v can't inject virtio-scsi (`--block-driver` missing), it falls
+    // back to virtio-blk (viostor.sys) as the boot-critical driver on Windows.
+    // Attaching on scsi0 in that case yields INACCESSIBLE_BOOT_DEVICE (0x7B) at
+    // first boot because vioscsi.sys isn't registered as critical. Attach on
+    // virtio0 instead so the injected viostor matches the bus.
+    const useVirtioBlk = isWindowsVm && !supportsBlockDriver
+
     for (let i = 0; i < diskFiles.length; i++) {
       const diskFile = diskFiles[i]
       const diskPath = `${outputDir}/${diskFile}`
-      const scsiSlot = `scsi${i}`
+      const diskSlot = useVirtioBlk ? `virtio${i}` : `scsi${i}`
 
       await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Importing ${diskFile}...`)
       await updateJob(jobId, "transferring", {
@@ -1730,7 +1747,7 @@ export async function runV2vMigrationPipeline(
 
         // Attach disk via PVE API
         const attachBody = new URLSearchParams({
-          [scsiSlot]: `${diskVolume},discard=on`,
+          [diskSlot]: `${diskVolume},discard=on`,
         })
         try {
           await pveFetch<any>(
@@ -1738,9 +1755,9 @@ export async function runV2vMigrationPipeline(
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
             { method: "PUT", body: attachBody }
           )
-          await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
+          await appendLog(jobId, `Disk ${i + 1} imported and attached as ${diskSlot}`, "success")
         } catch (attachErr: any) {
-          await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
+          await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
         }
       } else {
         // Block storage: stat size -> pvesm alloc -> pvesm path -> pv | dd
@@ -1763,7 +1780,10 @@ export async function runV2vMigrationPipeline(
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
         )
         const existingNums = Object.keys(vmConf)
-          .filter(k => k.match(/^(?:scsi|sata|virtio|ide|unused)\d+$/))
+          // efidisk/tpmstate also consume vm-<vmid>-disk-N slots — miss them and we
+          // collide on "dataset already exists" when PVE auto-allocates the efidisk
+          // as disk-0 on OVMF VMs.
+          .filter(k => k.match(/^(?:scsi|sata|virtio|ide|unused|efidisk|tpmstate)\d+$/))
           .map(k => {
             const val = String(vmConf[k])
             const m = val.match(/vm-\d+-disk-(\d+)/)
@@ -1842,7 +1862,7 @@ export async function runV2vMigrationPipeline(
 
         // Attach disk via PVE API
         const attachBody = new URLSearchParams({
-          [scsiSlot]: volumeId,
+          [diskSlot]: volumeId,
         })
         try {
           await pveFetch<any>(
@@ -1850,22 +1870,25 @@ export async function runV2vMigrationPipeline(
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
             { method: "PUT", body: attachBody }
           )
-          await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
+          await appendLog(jobId, `Disk ${i + 1} imported and attached as ${diskSlot}`, "success")
         } catch (attachErr: any) {
-          await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
+          await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
         }
       }
 
       nextDiskNum++
     }
 
-    // Set boot order
+    // Set boot order — must match the slot of the first data disk, which on
+    // Windows-without-block-driver lives on virtio0 (see useVirtioBlk comment
+    // above).
+    const bootSlot = useVirtioBlk ? "virtio0" : "scsi0"
     await pveFetch<any>(
       pveConn,
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      { method: "PUT", body: new URLSearchParams({ boot: "order=scsi0" }) }
+      { method: "PUT", body: new URLSearchParams({ boot: `order=${bootSlot}` }) }
     )
-    await appendLog(jobId, "Boot order set to scsi0", "success")
+    await appendLog(jobId, `Boot order set to ${bootSlot}`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 

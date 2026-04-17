@@ -239,7 +239,7 @@ export interface InventoryDialogsProps {
   migNodes: any[]
   migStorages: any[]
   migSshfsAvailable: boolean | null
-  vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null
+  vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[] } | null
   setVcenterPreflight: (v: any) => void
   migStarting: boolean
   setMigStarting: (v: boolean) => void
@@ -388,6 +388,72 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   const theme = useTheme()
   const toast = useToast()
   const { addTask: addPCTask, registerOnRestore } = useProxCenterTasks()
+
+  // virtio-win ISO download progress (background curl + polling)
+  const [virtioWinProgress, setVirtioWinProgress] = useState<{ downloading: boolean; percent: number; sizeBytes: number } | null>(null)
+  const virtioWinPollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Cleanup polling on unmount
+  React.useEffect(() => {
+    return () => { if (virtioWinPollRef.current) clearInterval(virtioWinPollRef.current) }
+  }, [])
+
+  const startVirtioWinDownload = async () => {
+    const installNodes = migTargetNode === '__auto__'
+      ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
+      : [migTargetNode]
+    if (installNodes.length === 0) return
+
+    // Start background download on all target nodes
+    setVirtioWinProgress({ downloading: true, percent: 0, sizeBytes: 0 })
+    await Promise.all(installNodes.map((node: string) => fetch('/api/v1/migrations/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node, action: 'install-virtio-win' }),
+    }))).catch(() => {})
+
+    // Poll progress every 2s (check first node as representative)
+    const pollNode = installNodes[0]
+    virtioWinPollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch('/api/v1/migrations/preflight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: pollNode, action: 'check-virtio-win' }),
+        })
+        const d = await r.json()
+        setVirtioWinProgress({ downloading: d.downloading, percent: d.percent || 0, sizeBytes: d.sizeBytes || 0 })
+        if (d.done) {
+          if (virtioWinPollRef.current) clearInterval(virtioWinPollRef.current)
+          virtioWinPollRef.current = null
+          setVirtioWinProgress(null)
+          // Re-run preflight to update checklist
+          const results = await Promise.all(installNodes.map(async (node: string) => {
+            const r2 = await fetch('/api/v1/migrations/preflight', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node }),
+            })
+            return r2.json()
+          }))
+          setVcenterPreflight({
+            checked: true,
+            ok: results.every((r: any) => !(r.errors || []).length),
+            installing: false,
+            errors: [],
+            virtV2vInstalled: results.every((r: any) => !!r.virtV2vInstalled),
+            virtioWinInstalled: results.every((r: any) => !!r.virtioWinInstalled),
+            nbdkitInstalled: results.every((r: any) => !!r.nbdkitInstalled),
+            nbdcopyInstalled: results.every((r: any) => !!r.nbdcopyInstalled),
+            guestfsToolsInstalled: results.every((r: any) => !!r.guestfsToolsInstalled),
+            ovmfInstalled: results.every((r: any) => !!r.ovmfInstalled),
+            detectedDisks: [],
+            tempStorages: results[0]?.tempStorages || [],
+          })
+        }
+      } catch {}
+    }, 2000)
+  }
 
   return (
     <>
@@ -1840,6 +1906,8 @@ return
                       { label: 'virt-v2v', installed: vcenterPreflight.virtV2vInstalled, required: true, note: 'VM OS conversion + driver injection' },
                       { label: 'nbdkit', installed: vcenterPreflight.nbdkitInstalled, required: true, note: 'needed by virt-v2v -i disk on vSAN VMs' },
                       { label: 'libnbd-bin (nbdcopy)', installed: vcenterPreflight.nbdcopyInstalled, required: true, note: 'virt-v2v disk copy step' },
+                      { label: 'guestfs-tools (rhsrvany)', installed: vcenterPreflight.guestfsToolsInstalled, required: true, note: 'Windows firstboot scripts' },
+                      { label: 'ovmf', installed: vcenterPreflight.ovmfInstalled, required: true, note: 'UEFI firmware for output metadata' },
                     ]
                     const virtioWinMissing = !vcenterPreflight.virtioWinInstalled
                     const virtioWinRequired = isWindowsGuest
@@ -1930,6 +1998,8 @@ return
                               const allVirtV2v = results.every((r: any) => !!r.virtV2vInstalled)
                               const allNbdkit = results.every((r: any) => !!r.nbdkitInstalled)
                               const allNbdcopy = results.every((r: any) => !!r.nbdcopyInstalled)
+                              const allGuestfsTools = results.every((r: any) => !!r.guestfsToolsInstalled)
+                              const allOvmf = results.every((r: any) => !!r.ovmfInstalled)
                               const allVirtioWin = results.every((r: any) => !!r.virtioWinInstalled)
                               const firstWithDisks = results.find((r: any) => r.detectedDisks && r.detectedDisks.length > 0)
                               const firstWithStorages = results[0]
@@ -1942,6 +2012,8 @@ return
                                 virtioWinInstalled: allVirtioWin,
                                 nbdkitInstalled: allNbdkit,
                                 nbdcopyInstalled: allNbdcopy,
+                                guestfsToolsInstalled: allGuestfsTools,
+                                ovmfInstalled: allOvmf,
                                 detectedDisks: firstWithDisks?.detectedDisks || [],
                                 tempStorages: firstWithStorages?.tempStorages || [],
                               })
@@ -1968,17 +2040,34 @@ return
                       {virtioWinMissing && virtioWinRequired && (
                         <Alert severity="info" sx={{ fontSize: 11, mt: 1, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
                           <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                            virtio-win ISO — manual install (Windows guest detected)
+                            virtio-win ISO (Windows guest detected)
                           </Typography>
                           <Typography variant="body2" sx={{ mb: 1, fontSize: 11 }}>
-                            This ISO contains the signed Windows VirtIO drivers (storage + network)
-                            that virt-v2v injects into Windows VMs during conversion.
-                            It's <strong>not auto-installed</strong>: the ISO isn't in Debian repos and weighs ~700 MB.
-                            Run the following on {isAuto ? 'every node of your target cluster' : 'your target Proxmox node'}:
+                            Windows VirtIO drivers (storage + network) required for VM to boot after conversion.
                           </Typography>
-                          <CopyableCommand command={`mkdir -p /usr/share/virtio-win
-curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
-  https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso`} />
+                          {virtioWinProgress ? (
+                            <Box>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="caption" sx={{ fontSize: 10 }}>
+                                  Downloading virtio-win.iso… {(virtioWinProgress.sizeBytes / 1048576).toFixed(0)} MB
+                                </Typography>
+                                <Typography variant="caption" fontWeight={700} sx={{ fontSize: 10 }}>
+                                  {virtioWinProgress.percent}%
+                                </Typography>
+                              </Box>
+                              <LinearProgress variant="determinate" value={virtioWinProgress.percent} sx={{ height: 6, borderRadius: 1 }} />
+                            </Box>
+                          ) : (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              startIcon={<i className="ri-download-2-line" />}
+                              onClick={startVirtioWinDownload}
+                              sx={{ textTransform: 'none', fontSize: 11 }}
+                            >
+                              Download virtio-win ISO (~700 MB)
+                            </Button>
+                          )}
                         </Alert>
                       )}
                       </>
@@ -2279,14 +2368,15 @@ curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
                   const isV2vSource = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
                   if (isV2vSource) {
                     if (!vcenterPreflight?.checked) return false // preflight not run yet, don't pre-gate
-                    // Only apt-installable deps block the button. virtio-win is
-                    // advisory: Linux guests don't need it, and for Windows some
-                    // users accept the risk (VM images with VirtIO drivers already
-                    // baked in). The UI shows a manual-install instruction block
-                    // instead, with no hard block.
                     if (!vcenterPreflight.virtV2vInstalled) return true
                     if (!vcenterPreflight.nbdkitInstalled) return true
                     if (!vcenterPreflight.nbdcopyInstalled) return true
+                    if (!vcenterPreflight.guestfsToolsInstalled) return true
+                    if (!vcenterPreflight.ovmfInstalled) return true
+                    // virtio-win is required for Windows guests — without it the
+                    // VM will likely BSOD with INACCESSIBLE_BOOT_DEVICE.
+                    const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
+                    if (isWindowsGuest && !vcenterPreflight.virtioWinInstalled) return true
                     // Temp storage must have at least 2x the source VM's committed
                     // space (rough heuristic: NFC download + virt-v2v converted output).
                     if (!migTempStorage) return true
@@ -2816,6 +2906,8 @@ curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
                     { label: 'virt-v2v', installed: vcenterPreflight.virtV2vInstalled, required: true, note: 'VM OS conversion + driver injection' },
                     { label: 'nbdkit', installed: vcenterPreflight.nbdkitInstalled, required: true, note: 'needed by virt-v2v -i disk on vSAN VMs' },
                     { label: 'libnbd-bin (nbdcopy)', installed: vcenterPreflight.nbdcopyInstalled, required: true, note: 'virt-v2v disk copy step' },
+                    { label: 'guestfs-tools (rhsrvany)', installed: vcenterPreflight.guestfsToolsInstalled, required: true, note: 'Windows firstboot scripts' },
+                    { label: 'ovmf', installed: vcenterPreflight.ovmfInstalled, required: true, note: 'UEFI firmware for output metadata' },
                   ]
                   const virtioWinMissingBulk = !vcenterPreflight.virtioWinInstalled && hasWindowsInBatch
                   const missingAptBulk = aptChecklistBulk.some(d => !d.installed)
@@ -2901,6 +2993,8 @@ curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
                               virtioWinInstalled: results.every((r: any) => !!r.virtioWinInstalled),
                               nbdkitInstalled: results.every((r: any) => !!r.nbdkitInstalled),
                               nbdcopyInstalled: results.every((r: any) => !!r.nbdcopyInstalled),
+                              guestfsToolsInstalled: results.every((r: any) => !!r.guestfsToolsInstalled),
+                              ovmfInstalled: results.every((r: any) => !!r.ovmfInstalled),
                               detectedDisks: [],
                               tempStorages: results[0]?.tempStorages || [],
                             })
@@ -2916,34 +3010,41 @@ curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
                       </Button>
                     </Alert>}
                     {virtioWinMissingBulk && (() => {
-                      // Count Windows VMs to make the copy-message concrete
-                      // ("N Windows VM(s) detected in the batch"). Helps the
-                      // user understand WHY the block is showing.
                       const windowsCount = selectedVms.filter((vm: any) => {
                         const os = (vm.guest_OS || vm.guestOS || '').toString().toLowerCase()
                         return os.includes('win')
                       }).length
                       return (
-                        /* Manual virtio-win instruction block for bulk mode.
-                           Shown only when hasWindowsInBatch (detected from the
-                           Guest OS column data). Not blocking (see bulk button
-                           disable logic) — the user may accept the risk for
-                           Windows VMs with VirtIO drivers already baked in. */
                         <Alert severity="info" sx={{ fontSize: 11, mt: 1, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
                           <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                            virtio-win ISO — manual install ({windowsCount} Windows VM{windowsCount === 1 ? '' : 's'} in the batch)
+                            virtio-win ISO ({windowsCount} Windows VM{windowsCount === 1 ? '' : 's'} in the batch)
                           </Typography>
                           <Typography variant="body2" sx={{ mb: 1, fontSize: 11 }}>
-                            This ISO contains the signed Windows VirtIO drivers that virt-v2v injects into Windows guests during conversion.
-                            It's <strong>not auto-installed</strong>: the ISO isn't in Debian repos and weighs ~700 MB.
-                            Run the following on {isAutoBulk ? 'every node of your target cluster' : 'your target Proxmox node'}:
+                            Windows VirtIO drivers required for Windows VMs to boot after conversion.
                           </Typography>
-                          <CopyableCommand command={`mkdir -p /usr/share/virtio-win
-curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
-  https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso`} />
-                          <Typography variant="caption" sx={{ display: 'block', mt: 0.75, opacity: 0.7 }}>
-                            Not blocking: Windows VMs migrated without virtio-win may boot without optimized storage/network drivers.
-                          </Typography>
+                          {virtioWinProgress ? (
+                            <Box>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="caption" sx={{ fontSize: 10 }}>
+                                  Downloading virtio-win.iso… {(virtioWinProgress.sizeBytes / 1048576).toFixed(0)} MB
+                                </Typography>
+                                <Typography variant="caption" fontWeight={700} sx={{ fontSize: 10 }}>
+                                  {virtioWinProgress.percent}%
+                                </Typography>
+                              </Box>
+                              <LinearProgress variant="determinate" value={virtioWinProgress.percent} sx={{ height: 6, borderRadius: 1 }} />
+                            </Box>
+                          ) : (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              startIcon={<i className="ri-download-2-line" />}
+                              onClick={startVirtioWinDownload}
+                              sx={{ textTransform: 'none', fontSize: 11 }}
+                            >
+                              Download virtio-win ISO (~700 MB)
+                            </Button>
+                          )}
                         </Alert>
                       )
                     })()}
@@ -3188,13 +3289,18 @@ curl -fsSL -o /usr/share/virtio-win/virtio-win.iso \\
                   const isV2vSource = bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix'
                   if (isV2vSource) {
                     if (vcenterPreflight?.checked) {
-                      // Bulk mode: only apt-installable deps are blocking. virtio-win
-                      // stays advisory (same as single-VM). A batch may include
-                      // Linux-only VMs, or the user may accept the risk for Windows
-                      // VMs with baked-in VirtIO drivers — we don't hard-gate on it.
                       if (!vcenterPreflight.virtV2vInstalled) return true
                       if (!vcenterPreflight.nbdkitInstalled) return true
                       if (!vcenterPreflight.nbdcopyInstalled) return true
+                      if (!vcenterPreflight.guestfsToolsInstalled) return true
+                      if (!vcenterPreflight.ovmfInstalled) return true
+                      // In bulk, block if batch contains Windows VMs and virtio-win is missing
+                      if (!vcenterPreflight.virtioWinInstalled) {
+                        const hasWin = (bulkMigHostInfo?.vms || [])
+                          .filter((vm: any) => bulkMigSelected.has(vm.vmid))
+                          .some((vm: any) => (vm.guest_OS || vm.guestOS || '').toString().toLowerCase().includes('win'))
+                        if (hasWin) return true
+                      }
                     }
                   } else {
                     if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true

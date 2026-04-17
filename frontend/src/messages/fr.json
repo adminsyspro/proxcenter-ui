@@ -5564,23 +5564,11 @@
   "sdn": {
     "subtab": {
       "zones": "Zones",
-      "zonesTitle": "Zones SDN",
-      "zonesPlaceholder": "Gérer les zones SDN (Simple, VLAN, QinQ, VXLAN, EVPN). Bientôt disponible.",
       "vnets": "VNets",
-      "vnetsTitle": "Réseaux virtuels",
-      "vnetsPlaceholder": "Gérer les VNets et leurs sous-réseaux. Bientôt disponible.",
       "options": "Options",
-      "optionsTitle": "Options SDN",
-      "optionsPlaceholder": "Configuration des contrôleurs, IPAMs et DNS. Bientôt disponible.",
-      "ipams": "Allocations IPAM",
-      "ipamsTitle": "Allocations IPAM",
-      "ipamsPlaceholder": "Parcourir les allocations IP gérées par IPAM, par VNet. Bientôt disponible.",
-      "firewall": "Firewall VNet",
-      "firewallTitle": "Firewall VNet",
-      "firewallPlaceholder": "Configurer les règles de firewall au niveau des VNets. Bientôt disponible.",
-      "fabrics": "Fabrics",
-      "fabricsTitle": "Fabrics (OpenFabric / OSPF)",
-      "fabricsPlaceholder": "Nécessite Proxmox VE 9+. Configurer les fabrics OpenFabric et OSPF ici."
+      "ipam": "IPAM",
+      "vnetFirewall": "Pare-feu VNet",
+      "fabrics": "Fabrics"
     }
   }
 }

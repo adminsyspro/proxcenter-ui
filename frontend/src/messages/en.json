@@ -5563,23 +5563,11 @@
   "sdn": {
     "subtab": {
       "zones": "Zones",
-      "zonesTitle": "SDN Zones",
-      "zonesPlaceholder": "Manage SDN zones (Simple, VLAN, QinQ, VXLAN, EVPN). Coming soon.",
       "vnets": "VNets",
-      "vnetsTitle": "Virtual Networks",
-      "vnetsPlaceholder": "Manage VNets and their subnets. Coming soon.",
       "options": "Options",
-      "optionsTitle": "SDN Options",
-      "optionsPlaceholder": "Controllers, IPAMs and DNS configuration. Coming soon.",
-      "ipams": "IPAM Allocations",
-      "ipamsTitle": "IPAM Allocations",
-      "ipamsPlaceholder": "Browse IPAM-managed IP allocations per VNet. Coming soon.",
-      "firewall": "VNet Firewall",
-      "firewallTitle": "VNet Firewall",
-      "firewallPlaceholder": "Configure firewall rules scoped to VNets. Coming soon.",
-      "fabrics": "Fabrics",
-      "fabricsTitle": "Fabrics (OpenFabric / OSPF)",
-      "fabricsPlaceholder": "Requires Proxmox VE 9+. Configure OpenFabric and OSPF fabrics here."
+      "ipam": "IPAM",
+      "vnetFirewall": "VNet Firewall",
+      "fabrics": "Fabrics"
     }
   }
 }

@@ -5516,23 +5516,11 @@
   "sdn": {
     "subtab": {
       "zones": "区域",
-      "zonesTitle": "SDN 区域",
-      "zonesPlaceholder": "管理 SDN 区域 (Simple、VLAN、QinQ、VXLAN、EVPN)。即将推出。",
-      "vnets": "虚拟网络",
-      "vnetsTitle": "虚拟网络",
-      "vnetsPlaceholder": "管理 VNet 及其子网。即将推出。",
+      "vnets": "VNets",
       "options": "选项",
-      "optionsTitle": "SDN 选项",
-      "optionsPlaceholder": "配置控制器、IPAM 和 DNS。即将推出。",
-      "ipams": "IPAM 分配",
-      "ipamsTitle": "IPAM 分配",
-      "ipamsPlaceholder": "按 VNet 浏览 IPAM 管理的 IP 分配。即将推出。",
-      "firewall": "VNet 防火墙",
-      "firewallTitle": "VNet 防火墙",
-      "firewallPlaceholder": "配置作用于 VNet 的防火墙规则。即将推出。",
-      "fabrics": "Fabric",
-      "fabricsTitle": "Fabric (OpenFabric / OSPF)",
-      "fabricsPlaceholder": "需要 Proxmox VE 9+。在此配置 OpenFabric 和 OSPF Fabric。"
+      "ipam": "IPAM",
+      "vnetFirewall": "VNet 防火墙",
+      "fabrics": "Fabrics"
     }
   }
 }

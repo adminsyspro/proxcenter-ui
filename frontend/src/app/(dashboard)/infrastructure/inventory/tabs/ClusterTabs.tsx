@@ -51,7 +51,7 @@ import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
-import ClusterSdnTab from '@/components/cluster-sdn'
+import ClusterSdnTab from '@/components/cluster-sdn/ClusterSdnTab'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
@@ -760,7 +760,7 @@ export default function ClusterTabs(props: any) {
                 <Tab
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className="ri-share-forward-line" style={{ fontSize: 16 }} />
+                      <i className="ri-node-tree" style={{ fontSize: 16 }} />
                       {t('inventory.tabSdn')}
                     </Box>
                   }
@@ -3254,10 +3254,8 @@ export default function ClusterTabs(props: any) {
                 )}
 
                 {/* Onglet SDN - Index 10 */}
-                {clusterTab === 10 && (
-                  <ClusterSdnTab
-                    connectionId={selection?.id?.split(':')[0] || ''}
-                  />
+                {clusterTab === 10 && connId && (
+                  <ClusterSdnTab connId={connId} />
                 )}
 
                 {/* Onglet Rolling Update - Index 12 */}

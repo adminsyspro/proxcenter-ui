@@ -5574,6 +5574,17 @@
         "empty": "Keine DNS-Backends konfiguriert"
       }
     },
+    "ipamPanel": {
+      "title": "IPAM-Zuweisungen",
+      "picker": "IPAM-Backend",
+      "noBackends": "Keine IPAM-Backends konfiguriert",
+      "columns": {
+        "name": "Name / VMID",
+        "ip": "IP-Adresse",
+        "mac": "MAC"
+      },
+      "empty": "Keine IP-Zuweisungen in diesem IPAM"
+    },
     "common": {
       "reload": "Neu laden",
       "loadFailed": "Laden fehlgeschlagen: {error}"

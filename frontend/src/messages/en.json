@@ -5619,6 +5619,17 @@
         "empty": "No DNS backends configured"
       }
     },
+    "ipamPanel": {
+      "title": "IPAM Allocations",
+      "picker": "IPAM backend",
+      "noBackends": "No IPAM backends configured",
+      "columns": {
+        "name": "Name / VMID",
+        "ip": "IP Address",
+        "mac": "MAC"
+      },
+      "empty": "No IP allocations found in this IPAM"
+    },
     "common": {
       "reload": "Reload",
       "loadFailed": "Failed to load: {error}"

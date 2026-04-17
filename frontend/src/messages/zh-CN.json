@@ -5572,6 +5572,17 @@
         "empty": "未配置 DNS 后端"
       }
     },
+    "ipamPanel": {
+      "title": "IPAM 分配",
+      "picker": "IPAM 后端",
+      "noBackends": "未配置 IPAM 后端",
+      "columns": {
+        "name": "名称 / VMID",
+        "ip": "IP 地址",
+        "mac": "MAC"
+      },
+      "empty": "此 IPAM 中未找到 IP 分配"
+    },
     "common": {
       "reload": "重新加载",
       "loadFailed": "加载失败：{error}"

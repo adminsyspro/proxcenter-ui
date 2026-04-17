@@ -5620,6 +5620,17 @@
         "empty": "Aucun backend DNS configuré"
       }
     },
+    "ipamPanel": {
+      "title": "Allocations IPAM",
+      "picker": "Backend IPAM",
+      "noBackends": "Aucun backend IPAM configuré",
+      "columns": {
+        "name": "Nom / VMID",
+        "ip": "Adresse IP",
+        "mac": "MAC"
+      },
+      "empty": "Aucune allocation IP dans ce backend"
+    },
     "common": {
       "reload": "Recharger",
       "loadFailed": "Échec du chargement : {error}"

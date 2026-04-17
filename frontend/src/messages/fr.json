@@ -5650,6 +5650,21 @@
       },
       "empty": "Aucune règle de pare-feu définie pour ce VNet"
     },
+    "fabricsPanel": {
+      "title": "Fabrics",
+      "unavailable": {
+        "title": "Les Fabrics nécessitent Proxmox VE 9 ou plus récent",
+        "body": "Mettez à jour votre cluster vers PVE 9 pour configurer des Fabrics SDN OpenFabric / OSPF."
+      },
+      "columns": {
+        "name": "Nom",
+        "protocol": "Protocole",
+        "ipv4": "IPv4",
+        "ipv6": "IPv6",
+        "interfaces": "Interfaces"
+      },
+      "empty": "Aucun Fabric configuré"
+    },
     "common": {
       "reload": "Recharger",
       "loadFailed": "Échec du chargement : {error}"

@@ -5602,6 +5602,21 @@
       },
       "empty": "此 VNet 没有定义防火墙规则"
     },
+    "fabricsPanel": {
+      "title": "Fabrics",
+      "unavailable": {
+        "title": "Fabrics 需要 Proxmox VE 9 或更高版本",
+        "body": "请将集群升级到 PVE 9 以配置 OpenFabric / OSPF SDN Fabrics。"
+      },
+      "columns": {
+        "name": "名称",
+        "protocol": "协议",
+        "ipv4": "IPv4",
+        "ipv6": "IPv6",
+        "interfaces": "接口"
+      },
+      "empty": "未配置 Fabric"
+    },
     "common": {
       "reload": "重新加载",
       "loadFailed": "加载失败：{error}"

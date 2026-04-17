@@ -55,6 +55,7 @@ type GuestData = {
   status: string
   node: string
   cpu?: number
+  maxcpu?: number
   mem?: number
   maxmem?: number
   disk?: number
@@ -256,7 +257,7 @@ async function fetchOneCluster(conn: {
         type: g.type || 'qemu',
         status: g.status || 'unknown',
         node: g.node,
-        cpu: g.cpu, mem: g.mem, maxmem: g.maxmem,
+        cpu: g.cpu, maxcpu: g.maxcpu, mem: g.mem, maxmem: g.maxmem,
         disk: g.disk, maxdisk: g.maxdisk,
         uptime: g.uptime, pool: g.pool, tags: g.tags,
         lock: g.lock,

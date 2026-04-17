@@ -91,6 +91,7 @@ export type AllVmItem = {
   name: string
   status?: string
   cpu?: number
+  maxcpu?: number
   mem?: number
   maxmem?: number
   disk?: number
@@ -1462,6 +1463,7 @@ return next
         name: guest.name || `${guest.type}:${guest.vmid}`,
         status: guest.status,
         cpu: guest.cpu,
+        maxcpu: guest.maxcpu,
         mem: guest.mem,
         maxmem: guest.maxmem,
         disk: guest.disk,
@@ -2033,6 +2035,7 @@ return items
       name: string
       status?: string
       cpu?: number
+      maxcpu?: number
       mem?: number
       maxmem?: number
       disk?: number
@@ -2060,6 +2063,7 @@ return items
             name: vm.name,
             status: vm.status,
             cpu: vm.cpu,
+            maxcpu: vm.maxcpu,
             mem: vm.mem,
             maxmem: vm.maxmem,
             disk: vm.disk,
@@ -2118,6 +2122,7 @@ return vms
         name: vm.name,
         status: vm.status,
         cpu: vm.cpu,
+        maxcpu: vm.maxcpu,
         mem: vm.mem,
         maxmem: vm.maxmem,
         disk: vm.disk,

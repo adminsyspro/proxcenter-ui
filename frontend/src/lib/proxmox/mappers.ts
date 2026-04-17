@@ -39,6 +39,7 @@ export function mapClusterResource(r: any): ProxmoxResource {
     node: r.node,
     status: r.status,
     cpu: r.cpu,
+    maxcpu: r.maxcpu,
     mem: r.mem,
     maxmem: r.maxmem,
     disk: r.disk,

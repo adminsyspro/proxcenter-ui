@@ -433,7 +433,9 @@ export type VmRow = {
   type: 'qemu' | 'lxc'
   status: string
   cpu?: number
+  maxcpu?: number
   ram?: number
+  mem?: number
   maxmem?: number
   disk?: number
   maxdisk?: number
@@ -743,15 +745,20 @@ return { id: vm.id, data }
 
     const columns = [
       { header: 'ID', key: 'id', width: 8 },
-      { header: 'Nom', key: 'name', width: 25 },
+      { header: 'Name', key: 'name', width: 25 },
       { header: 'Type', key: 'type', width: 10 },
       { header: 'Status', key: 'status', width: 10 },
       { header: 'Node', key: 'node', width: 20 },
       { header: 'HA', key: 'ha', width: 10 },
       { header: 'HA Group', key: 'hagroup', width: 15 },
-      { header: 'CPU (%)', key: 'cpu', width: 10 },
-      { header: 'RAM (%)', key: 'ram', width: 10 },
-      { header: 'RAM Max (GB)', key: 'rammax', width: 12 },
+      { header: 'vCPU (allocated)', key: 'vcpu', width: 14 },
+      { header: 'CPU Usage (%)', key: 'cpu', width: 12 },
+      { header: 'RAM Allocated (GB)', key: 'ramalloc', width: 16 },
+      { header: 'RAM Used (GB)', key: 'ramused', width: 14 },
+      { header: 'RAM Usage (%)', key: 'ram', width: 12 },
+      { header: 'Disk Allocated (GB)', key: 'diskalloc', width: 16 },
+      { header: 'Disk Used (GB)', key: 'diskused', width: 14 },
+      { header: 'Disk Usage (%)', key: 'diskpct', width: 12 },
       { header: 'Uptime', key: 'uptime', width: 12 },
       { header: 'IP', key: 'ip', width: 15 },
       { header: 'Snapshots', key: 'snapshots', width: 10 },
@@ -762,6 +769,12 @@ return { id: vm.id, data }
     ws.columns = columns
 
     for (const vm of vms) {
+      const ramAllocGB = vm.maxmem ? Math.round(vm.maxmem / 1073741824 * 10) / 10 : ''
+      const ramUsedGB = vm.maxmem && vm.ram !== undefined ? Math.round((vm.ram / 100) * vm.maxmem / 1073741824 * 10) / 10 : ''
+      const diskAllocGB = vm.maxdisk ? Math.round(vm.maxdisk / 1073741824 * 10) / 10 : ''
+      const diskUsedGB = vm.disk ? Math.round(vm.disk / 1073741824 * 10) / 10 : ''
+      const diskPct = vm.maxdisk && vm.disk ? Math.round((vm.disk / vm.maxdisk) * 100) : ''
+
       ws.addRow({
         id: vm.vmid,
         name: vm.name,
@@ -770,14 +783,19 @@ return { id: vm.id, data }
         node: vm.node,
         ha: vm.hastate || '',
         hagroup: vm.hagroup || '',
+        vcpu: vm.maxcpu ?? '',
         cpu: vm.cpu !== undefined ? Math.round(vm.cpu) : '',
+        ramalloc: ramAllocGB,
+        ramused: ramUsedGB,
         ram: vm.ram !== undefined ? Math.round(vm.ram) : '',
-        rammax: vm.maxmem ? Math.round(vm.maxmem / 1024 / 1024 / 1024 * 10) / 10 : '',
+        diskalloc: diskAllocGB,
+        diskused: diskUsedGB,
+        diskpct: diskPct,
         uptime: typeof vm.uptime === 'number' ? secondsToUptime(vm.uptime) : (vm.uptime || ''),
         ip: vm.ip || '',
         snapshots: vm.snapshots ?? '',
         tags: vm.tags?.join(', ') || '',
-        template: vm.template ? 'Oui' : 'Non',
+        template: vm.template ? 'Yes' : 'No',
       })
     }
 

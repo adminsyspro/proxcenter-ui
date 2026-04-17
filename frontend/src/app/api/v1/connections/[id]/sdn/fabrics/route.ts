@@ -21,7 +21,10 @@ export async function GET(
       // PVE 9+: /cluster/sdn/fabrics returns { fabrics, nodes } (exact shape may evolve).
       const payload = await pveFetch<any>(conn, "/cluster/sdn/fabrics")
       // Normalise to { fabrics, nodes } regardless of the PVE response shape variations.
-      const fabrics = Array.isArray(payload) ? payload : (payload?.fabrics ?? [])
+      const rawFabrics = Array.isArray(payload) ? payload : (payload?.fabrics ?? [])
+      // PVE directory-index endpoints can return self-descriptors like [{"subdir":"fabric"}].
+      // Keep only entries that look like real fabric records (have a `fabric` id).
+      const fabrics = rawFabrics.filter((f: any) => f && typeof f === "object" && typeof f.fabric === "string")
       const nodes = Array.isArray(payload) ? [] : (payload?.nodes ?? [])
       return NextResponse.json({ data: { fabrics, nodes } })
     } catch (e: any) {

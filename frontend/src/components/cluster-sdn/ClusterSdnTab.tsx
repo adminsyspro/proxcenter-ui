@@ -12,7 +12,6 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
 import Snackbar from '@mui/material/Snackbar'
-import Stack from '@mui/material/Stack'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import Tooltip from '@mui/material/Tooltip'
@@ -128,43 +127,43 @@ export default function ClusterSdnTab({ connId }: Props) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ p: 2, pb: 0 }}>
-        <Box sx={{ flex: 1 }}>
-          {pending && (
-            <Alert severity="warning" sx={{ py: 0.5 }}>
-              {t('sdn.banner.pending')}
-            </Alert>
-          )}
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider', px: 2 }}>
+        <Tabs
+          value={sdnTab}
+          onChange={(_e, v) => setSdnTab(v)}
+          sx={{ flex: 1, minWidth: 0 }}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-grid-line" style={{ fontSize: 16 }} />{t('sdn.subtab.zones')}</Box>} />
+          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-share-line" style={{ fontSize: 16 }} />{t('sdn.subtab.vnets')}</Box>} />
+          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-settings-3-line" style={{ fontSize: 16 }} />{t('sdn.subtab.options')}</Box>} />
+          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-router-line" style={{ fontSize: 16 }} />{t('sdn.subtab.ipam')}</Box>} />
+          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />{t('sdn.subtab.vnetFirewall')}</Box>} />
+          <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-node-tree" style={{ fontSize: 16 }} />{t('sdn.subtab.fabrics')}</Box>} />
+        </Tabs>
         <Tooltip title={applyTooltip} arrow disableHoverListener={!applyTooltip}>
           <span>
             <Button
               variant="contained"
               color="warning"
+              size="small"
               disabled={applyDisabled}
               onClick={() => setApplyDialogOpen(true)}
               startIcon={applying ? <CircularProgress size={14} color="inherit" /> : <i className="ri-check-double-line" />}
+              sx={{ ml: 2, flexShrink: 0 }}
             >
               {t('sdn.apply.button')}
             </Button>
           </span>
         </Tooltip>
-      </Stack>
+      </Box>
 
-      <Tabs
-        value={sdnTab}
-        onChange={(_e, v) => setSdnTab(v)}
-        sx={{ borderBottom: 1, borderColor: 'divider', px: 2, mt: 1 }}
-        variant="scrollable"
-        scrollButtons="auto"
-      >
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-grid-line" style={{ fontSize: 16 }} />{t('sdn.subtab.zones')}</Box>} />
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-share-line" style={{ fontSize: 16 }} />{t('sdn.subtab.vnets')}</Box>} />
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-settings-3-line" style={{ fontSize: 16 }} />{t('sdn.subtab.options')}</Box>} />
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-router-line" style={{ fontSize: 16 }} />{t('sdn.subtab.ipam')}</Box>} />
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />{t('sdn.subtab.vnetFirewall')}</Box>} />
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><i className="ri-node-tree" style={{ fontSize: 16 }} />{t('sdn.subtab.fabrics')}</Box>} />
-      </Tabs>
+      {pending && (
+        <Alert severity="warning" sx={{ mx: 2, mt: 1, py: 0.5 }}>
+          {t('sdn.banner.pending')}
+        </Alert>
+      )}
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {sdnTab === 0 && <ClusterSdnZonesPanel connId={connId} />}

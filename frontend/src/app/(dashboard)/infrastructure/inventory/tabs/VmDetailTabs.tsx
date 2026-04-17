@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
 import DOMPurify from 'dompurify'
@@ -74,6 +74,60 @@ import { useTagColors } from '@/contexts/TagColorContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
+
+function BufferedNumberField({
+  value,
+  onCommit,
+  display,
+  parse,
+  fallback,
+  ...rest
+}: Omit<React.ComponentProps<typeof TextField>, 'value' | 'onChange'> & {
+  value: number
+  onCommit: (n: number) => void
+  display?: (n: number) => string
+  parse?: (s: string) => number
+  fallback: number
+}) {
+  const fmt = display || ((n: number) => String(n))
+  const prs = parse || ((s: string) => Number(s))
+  const [raw, setRaw] = useState<string>(fmt(value))
+
+  useEffect(() => {
+    setRaw(fmt(value))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const text = e.target.value
+
+    setRaw(text)
+
+    if (text === '' || text === '-' || text === '.') return
+
+    const n = prs(text)
+
+    if (Number.isFinite(n)) onCommit(n)
+  }
+
+  const handleBlur = () => {
+    if (raw === '' || raw === '-' || raw === '.') {
+      onCommit(fallback)
+      setRaw(fmt(fallback))
+
+      return
+    }
+
+    const n = prs(raw)
+
+    if (!Number.isFinite(n)) {
+      onCommit(fallback)
+      setRaw(fmt(fallback))
+    }
+  }
+
+  return <TextField value={raw} onChange={handleChange} onBlur={handleBlur} {...rest} />
+}
 
 export default function VmDetailTabs(props: any) {
   const t = useTranslations()
@@ -770,18 +824,19 @@ export default function VmDetailTabs(props: any) {
                             <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
-                                <TextField
+                                <BufferedNumberField
                                   size="small"
                                   type="number"
                                   value={cpuSockets}
-                                  onChange={(e) => setCpuSockets(Number(e.target.value))}
+                                  onCommit={setCpuSockets}
+                                  fallback={1}
                                   sx={{ width: 70 }}
                                   inputProps={{ min: 1, max: maxSockets }}
                                 />
                               </Box>
                               <Slider
                                 value={Math.min(cpuSockets, maxSockets)}
-                                onChange={(_, val) => setCpuSockets(val as number)}
+                                onChange={(_, val) => setCpuSockets(Math.round(val as number))}
                                 min={1}
                                 max={maxSockets}
                                 step={1}
@@ -795,11 +850,12 @@ export default function VmDetailTabs(props: any) {
                             <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
-                                <TextField
+                                <BufferedNumberField
                                   size="small"
                                   type="number"
                                   value={cpuCores}
-                                  onChange={(e) => setCpuCores(Math.max(1, Number(e.target.value)))}
+                                  onCommit={setCpuCores}
+                                  fallback={1}
                                   sx={{ width: 70 }}
                                   inputProps={{ min: 1 }}
                                 />
@@ -816,7 +872,7 @@ export default function VmDetailTabs(props: any) {
                                 return (
                                   <Slider
                                     value={Math.min(cpuCores, sliderMax)}
-                                    onChange={(_, val) => setCpuCores(val as number)}
+                                    onChange={(_, val) => setCpuCores(Math.round(val as number))}
                                     min={1}
                                     max={sliderMax}
                                     step={1}
@@ -1126,15 +1182,19 @@ export default function VmDetailTabs(props: any) {
                           <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                               <Typography variant="body2" fontWeight={600}>{t('inventoryPage.memory')}</Typography>
-                              <TextField
+                              <BufferedNumberField
                                 size="small"
                                 type="number"
-                                value={(memory / 1024).toFixed(0)}
-                                onChange={(e) => {
-                                  const newMem = Math.max(512, Number(e.target.value) * 1024)
-                                  setMemory(newMem)
-                                  if (balloonEnabled && balloon > newMem) setBalloon(newMem)
+                                value={memory}
+                                display={(v) => String(Math.round(v / 1024))}
+                                parse={(s) => Number(s) * 1024}
+                                onCommit={(newMem) => {
+                                  const clamped = Math.max(512, newMem)
+
+                                  setMemory(clamped)
+                                  if (balloonEnabled && balloon > clamped) setBalloon(clamped)
                                 }}
+                                fallback={1024}
                                 InputProps={{
                                   endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                 }}
@@ -1145,7 +1205,7 @@ export default function VmDetailTabs(props: any) {
                             {(() => {
                               const hostMemGb = Math.floor((data.nodeCapacity?.maxMem || 64 * 1024 * 1024 * 1024) / (1024 * 1024 * 1024))
                               const sliderMax = Math.min(hostMemGb, 128)
-                              const step = sliderMax > 32 ? 2 : 1
+                              const step = 1
                               const marks = [
                                 { value: 1, label: '1' },
                                 ...(sliderMax >= 16 ? [{ value: Math.floor(sliderMax / 4), label: `${Math.floor(sliderMax / 4)}` }] : []),
@@ -1156,7 +1216,7 @@ export default function VmDetailTabs(props: any) {
                                 <Slider
                                   value={Math.min(memory / 1024, sliderMax)}
                                   onChange={(_, val) => {
-                                    const newMem = (val as number) * 1024
+                                    const newMem = Math.round(val as number) * 1024
                                     setMemory(newMem)
                                     if (balloonEnabled && balloon > newMem) setBalloon(newMem)
                                   }}

@@ -166,6 +166,47 @@ function SliderWithInput({
   helperText?: string
   disabled?: boolean
 }) {
+  const [raw, setRaw] = useState<string>(String(value))
+
+  useEffect(() => {
+    setRaw(String(value))
+  }, [value])
+
+  const commit = (text: string) => {
+    if (text === '' || text === '-') {
+      onChange(min)
+      setRaw(String(min))
+
+      return
+    }
+
+    const num = Number(text)
+
+    if (!Number.isFinite(num)) {
+      onChange(min)
+      setRaw(String(min))
+
+      return
+    }
+
+    const clamped = Math.max(min, Math.min(max, num))
+
+    onChange(clamped)
+    setRaw(String(clamped))
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const text = e.target.value
+
+    setRaw(text)
+
+    if (text === '' || text === '-') return
+
+    const num = Number(text)
+
+    if (Number.isFinite(num)) onChange(num)
+  }
+
   return (
     <Box sx={{ mb: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -175,8 +216,9 @@ function SliderWithInput({
         <TextField
           size="small"
           type="number"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
+          value={raw}
+          onChange={handleInputChange}
+          onBlur={() => commit(raw)}
           disabled={disabled}
           InputProps={{
             endAdornment: unit ? <InputAdornment position="end">{unit}</InputAdornment> : undefined,
@@ -187,7 +229,12 @@ function SliderWithInput({
       </Box>
       <Slider
         value={value}
-        onChange={(_, val) => onChange(val as number)}
+        onChange={(_, val) => {
+          const num = val as number
+          const stepped = step >= 1 ? Math.round(num) : num
+
+          onChange(stepped)
+        }}
         min={min}
         max={max}
         step={step}

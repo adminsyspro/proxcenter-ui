@@ -99,6 +99,55 @@ const createDefaultNic = (): NicConfig => ({
   mtu: '1500',
 })
 
+function NumericTextField({
+  value,
+  onChange,
+  fallback,
+  parse = Number.parseInt,
+  ...rest
+}: Omit<React.ComponentProps<typeof TextField>, 'value' | 'onChange'> & {
+  value: number
+  onChange: (v: number) => void
+  fallback: number
+  parse?: (s: string) => number
+}) {
+  const [raw, setRaw] = useState<string>(String(value))
+
+  useEffect(() => {
+    setRaw(String(value))
+  }, [value])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const text = e.target.value
+
+    setRaw(text)
+
+    if (text === '' || text === '-') return
+
+    const num = parse(text)
+
+    if (Number.isFinite(num)) onChange(num)
+  }
+
+  const handleBlur = () => {
+    if (raw === '' || raw === '-') {
+      onChange(fallback)
+      setRaw(String(fallback))
+
+      return
+    }
+
+    const num = parse(raw)
+
+    if (!Number.isFinite(num)) {
+      onChange(fallback)
+      setRaw(String(fallback))
+    }
+  }
+
+  return <TextField value={raw} onChange={handleChange} onBlur={handleBlur} {...rest} />
+}
+
 function CreateVmDialog({
   open,
   onClose,
@@ -1481,18 +1530,20 @@ return
 
               {/* Sockets × Cores + Type */}
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                <TextField
+                <NumericTextField
                   label={t('inventory.createVm.sockets')}
                   value={cpuSockets}
-                  onChange={(e) => setCpuSockets(Number.parseInt(e.target.value) || 1)}
+                  onChange={setCpuSockets}
+                  fallback={1}
                   size="small"
                   type="number"
                   inputProps={{ min: 1, max: 4 }}
                 />
-                <TextField
+                <NumericTextField
                   label={t('inventory.createVm.cores')}
                   value={cpuCores}
-                  onChange={(e) => setCpuCores(Number.parseInt(e.target.value) || 1)}
+                  onChange={setCpuCores}
+                  fallback={1}
                   size="small"
                   type="number"
                   inputProps={{ min: 1, max: 128 }}
@@ -1555,10 +1606,11 @@ return
                       size="small"
                       disabled
                     />
-                    <TextField
+                    <NumericTextField
                       label={t('inventory.createVm.cpuUnits')}
                       value={cpuUnits}
-                      onChange={(e) => setCpuUnits(Number.parseInt(e.target.value) || 100)}
+                      onChange={setCpuUnits}
+                      fallback={100}
                       size="small"
                       type="number"
                     />
@@ -1635,10 +1687,11 @@ return
                 />
               </Box>
 
-              <TextField
+              <NumericTextField
                 label={t('inventory.createVm.memoryMib')}
                 value={memorySize}
-                onChange={(e) => setMemorySize(Number.parseInt(e.target.value) || 512)}
+                onChange={setMemorySize}
+                fallback={512}
                 size="small"
                 type="number"
                 inputProps={{ min: 128, step: 128 }}
@@ -1663,10 +1716,11 @@ return
                       label={t('inventory.createVm.ballooningDevice')}
                       sx={{ gridColumn: '1 / -1' }}
                     />
-                    <TextField
+                    <NumericTextField
                       label={t('inventory.createVm.minMemoryMib')}
                       value={minMemory}
-                      onChange={(e) => setMinMemory(Number.parseInt(e.target.value) || 512)}
+                      onChange={setMinMemory}
+                      fallback={512}
                       size="small"
                       type="number"
                       inputProps={{ min: 128, step: 128 }}

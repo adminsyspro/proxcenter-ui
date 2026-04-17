@@ -5620,6 +5620,27 @@
     "common": {
       "reload": "重新加载",
       "loadFailed": "加载失败：{error}"
+    },
+    "banner": {
+      "pending": "存在未应用的 SDN 更改。单击应用以将其提交到网络。"
+    },
+    "apply": {
+      "button": "应用",
+      "dialog": {
+        "title": "应用 SDN 配置",
+        "body": "此操作将在所有集群节点上重新加载网络配置。活动连接不会中断，但配置错误的更改可能会导致网络问题。是否继续？",
+        "confirm": "应用",
+        "cancel": "取消"
+      },
+      "toast": {
+        "applying": "正在应用 SDN 配置...",
+        "success": "SDN 配置已应用",
+        "failed": "应用失败：{error}"
+      },
+      "tooltip": {
+        "noPending": "没有待处理的更改",
+        "noPermission": "需要 connection.manage 权限"
+      }
     }
   }
 }

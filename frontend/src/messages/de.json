@@ -5622,6 +5622,27 @@
     "common": {
       "reload": "Neu laden",
       "loadFailed": "Laden fehlgeschlagen: {error}"
+    },
+    "banner": {
+      "pending": "Nicht angewendete SDN-Änderungen vorhanden. Klicken Sie auf Anwenden, um sie auf dem Netzwerk zu übernehmen."
+    },
+    "apply": {
+      "button": "Anwenden",
+      "dialog": {
+        "title": "SDN-Konfiguration anwenden",
+        "body": "Dies lädt die Netzwerkkonfiguration auf allen Cluster-Knoten neu. Aktive Verbindungen werden nicht unterbrochen, aber fehlerhafte Änderungen können Netzwerkprobleme verursachen. Fortfahren?",
+        "confirm": "Anwenden",
+        "cancel": "Abbrechen"
+      },
+      "toast": {
+        "applying": "SDN-Konfiguration wird angewendet...",
+        "success": "SDN-Konfiguration angewendet",
+        "failed": "Anwenden fehlgeschlagen: {error}"
+      },
+      "tooltip": {
+        "noPending": "Keine ausstehenden Änderungen",
+        "noPermission": "Berechtigung connection.manage erforderlich"
+      }
     }
   }
 }

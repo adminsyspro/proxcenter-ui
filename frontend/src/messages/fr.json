@@ -5668,6 +5668,27 @@
     "common": {
       "reload": "Recharger",
       "loadFailed": "Échec du chargement : {error}"
+    },
+    "banner": {
+      "pending": "Des modifications SDN non appliquées existent. Cliquez sur Appliquer pour les valider sur le réseau."
+    },
+    "apply": {
+      "button": "Appliquer",
+      "dialog": {
+        "title": "Appliquer la configuration SDN",
+        "body": "Cette action rechargera la configuration réseau sur tous les nœuds du cluster. Les connexions actives ne sont pas interrompues, mais des modifications mal configurées peuvent causer des problèmes réseau. Continuer ?",
+        "confirm": "Appliquer",
+        "cancel": "Annuler"
+      },
+      "toast": {
+        "applying": "Application de la configuration SDN...",
+        "success": "Configuration SDN appliquée",
+        "failed": "Échec de l'application : {error}"
+      },
+      "tooltip": {
+        "noPending": "Aucune modification en attente",
+        "noPermission": "Requiert la permission connection.manage"
+      }
     }
   }
 }

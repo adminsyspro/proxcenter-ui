@@ -5667,6 +5667,27 @@
     "common": {
       "reload": "Reload",
       "loadFailed": "Failed to load: {error}"
+    },
+    "banner": {
+      "pending": "Unapplied SDN changes exist. Click Apply to commit them to the network."
+    },
+    "apply": {
+      "button": "Apply",
+      "dialog": {
+        "title": "Apply SDN configuration",
+        "body": "This will reload network configuration on all cluster nodes. Active connections are not interrupted, but misconfigured changes may cause network issues. Continue?",
+        "confirm": "Apply",
+        "cancel": "Cancel"
+      },
+      "toast": {
+        "applying": "Applying SDN configuration...",
+        "success": "SDN configuration applied",
+        "failed": "Apply failed: {error}"
+      },
+      "tooltip": {
+        "noPending": "No pending changes",
+        "noPermission": "Requires connection.manage permission"
+      }
     }
   }
 }

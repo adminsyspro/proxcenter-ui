@@ -214,7 +214,7 @@ export interface InventoryDialogsProps {
   executeBulkAction: () => void
 
   // ESXi / External migration dialog
-  esxiMigrateVm: { vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[] } | null
+  esxiMigrateVm: { vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[]; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null
   setEsxiMigrateVm: (v: any) => void
   migTargetConn: string
   setMigTargetConn: (v: string) => void
@@ -2197,6 +2197,42 @@ return
                 ) : null
               })()}
 
+              {/* Cold-on-running warning: Offline migration requires the VM to be off.
+                  We ask the user to power it down first instead of auto-powering off,
+                  which surprises users whose VM wasn't actually ready for shutdown. */}
+              {migType === 'cold' && (esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn') && (
+                <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
+                  Offline migration requires the source VM to be powered off. Please stop
+                  <strong> {esxiMigrateVm.name || esxiMigrateVm.vmid}</strong> before starting
+                  the migration, or switch to Live migration.
+                </Alert>
+              )}
+              {/* Live-on-stopped warning: Live migration snapshots the running VM so
+                  the transfer happens with zero interruption. On a stopped VM the
+                  snapshot step is pointless and you may as well use Offline. Block
+                  rather than silently fall back, to make the choice explicit. */}
+              {migType === 'live' && esxiMigrateVm && esxiMigrateVm.status !== 'running' && esxiMigrateVm.status !== 'poweredOn' && (
+                <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
+                  Live migration requires the source VM to be running (so VMware can
+                  snapshot and quiesce the guest). <strong>{esxiMigrateVm.name || esxiMigrateVm.vmid}</strong>
+                  is currently {esxiMigrateVm.status || 'stopped'}. Start it first, or switch to
+                  Offline migration.
+                </Alert>
+              )}
+              {/* Live-on-Windows-without-Tools: VSS quiesce requires running VMware
+                  Tools in the guest, otherwise the snapshot is crash-consistent and
+                  virt-v2v fails on the dirty NTFS 10+ minutes into the migration.
+                  Fail fast here before the user commits to a long download. */}
+              {migType === 'live' && esxiMigrateVm && (esxiMigrateVm.status === 'running' || esxiMigrateVm.status === 'poweredOn') && (esxiMigrateVm.guestOS || '').toLowerCase().includes('windows') && esxiMigrateVm.toolsRunningStatus !== 'guestToolsRunning' && (
+                <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
+                  Live migration of a Windows guest requires VMware Tools installed AND running in the source VM
+                  (VSS quiesce is the only way to capture a clean NTFS snapshot while the VM keeps running). Current state:
+                  toolsStatus=<strong>{esxiMigrateVm.toolsStatus || 'unknown'}</strong>, toolsRunningStatus=<strong>{esxiMigrateVm.toolsRunningStatus || 'unknown'}</strong>.
+                  Install VMware Tools on <strong>{esxiMigrateVm.name || esxiMigrateVm.vmid}</strong> and retry, or shut it down
+                  (run <code>powercfg /h off</code> then <code>shutdown /s /f /t 0</code> inside Windows) and use Offline migration.
+                </Alert>
+              )}
+
               {/* Info banner */}
               <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', border: '1px solid', borderColor: 'primary.main', borderOpacity: 0.2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-information-line" style={{ fontSize: 18, color: theme.palette.primary.main }} />
@@ -2206,7 +2242,9 @@ return
                     : esxiMigrateVm?.hostType === 'hyperv'
                     ? 'Cold migration only. Mount your Hyper-V share at /mnt/hyperv/ on the target Proxmox node. Disks are detected automatically.'
                     : esxiMigrateVm?.hostType === 'vcenter'
-                    ? 'Cold migration only. virt-v2v will handle disk conversion and virtio driver injection automatically.'
+                    ? (migType === 'live'
+                        ? 'Live migration: vCenter snapshot is created on the running VM, disks are exported via NFC while the VM stays up, then the source is powered off and the snapshot removed just before virt-v2v runs. Downtime = convert + import + boot (minutes).'
+                        : 'Cold migration: the source VM must be powered off. virt-v2v handles disk conversion and virtio driver injection automatically.')
                     : migType === 'cold' ? t('inventoryPage.esxiMigration.coldMigrationInfo')
                     : migType === 'live' ? t('inventoryPage.esxiMigration.liveMigrationInfo')
                     : t('inventoryPage.esxiMigration.sshfsBootMigrationInfo')
@@ -2368,6 +2406,19 @@ return
                   // Base requirements (always apply)
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || migStarting) return true
                   const isV2vSource = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                  // Power-state gates: cold needs the VM off, live needs it on.
+                  // Applies to every source type. Auto-power-off/on is intentionally
+                  // NOT done here - the user toggles VM state on the source hypervisor
+                  // themselves so a surprise shutdown never happens, and live migration
+                  // on a stopped VM is pointless (it becomes just a cold run with an
+                  // orphan snapshot attempt).
+                  const isRunning = esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn'
+                  if (migType === 'cold' && isRunning) return true
+                  if (migType === 'live' && esxiMigrateVm && !isRunning) return true
+                  // Live + Windows needs running VMware Tools for VSS quiesce,
+                  // otherwise virt-v2v will fail on a dirty NTFS. Fail fast in
+                  // the UI rather than 10 min into the migration.
+                  if (migType === 'live' && esxiMigrateVm && (esxiMigrateVm.guestOS || '').toLowerCase().includes('windows') && esxiMigrateVm.toolsRunningStatus !== 'guestToolsRunning') return true
                   if (isV2vSource) {
                     if (!vcenterPreflight?.checked) return false // preflight not run yet, don't pre-gate
                     if (!vcenterPreflight.virtV2vInstalled) return true
@@ -2873,7 +2924,9 @@ return
                 {/* vCenter/Hyper-V info banner for bulk */}
                 {bulkMigHostInfo?.hostType === 'vcenter' && (
                   <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-information-line" style={{ fontSize: 18 }} />}>
-                    Cold migration only. virt-v2v will handle disk conversion and virtio driver injection automatically.
+                    {migType === 'live'
+                      ? 'Live migration: each VM is snapshotted, its disks are NFC-exported while it stays running, then the source is powered off + snapshot removed just before virt-v2v. Per-VM downtime = convert + import + boot.'
+                      : 'Cold migration: each source VM must be powered off first. virt-v2v handles disk conversion and virtio driver injection automatically.'}
                   </Alert>
                 )}
                 {bulkMigHostInfo?.hostType === 'hyperv' && (
@@ -3141,13 +3194,53 @@ return
                 )}
 
                 {migType === 'cold' && bulkMigHostInfo?.vms && (() => {
-                  const runningVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status === 'running')
+                  const runningVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))
                   return runningVms.length > 0 ? (
                     <Alert severity="warning" sx={{ fontSize: 12 }}>
                       {t('inventoryPage.esxiMigration.coldMigrationRunningVms')}
                       <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
                         {runningVms.map((vm: any) => (
                           <li key={vm.vmid}><strong>{vm.name || vm.vmid}</strong></li>
+                        ))}
+                      </Box>
+                    </Alert>
+                  ) : null
+                })()}
+                {migType === 'live' && bulkMigHostInfo?.vms && (() => {
+                  const stoppedVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status !== 'running' && vm.status !== 'poweredOn')
+                  return stoppedVms.length > 0 ? (
+                    <Alert severity="warning" sx={{ fontSize: 12 }}>
+                      Live migration requires the source VM to be running (so VMware can snapshot + quiesce the guest).
+                      The following selected VM(s) are not running. Start them first, or switch the batch to Offline migration:
+                      <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
+                        {stoppedVms.map((vm: any) => (
+                          <li key={vm.vmid}><strong>{vm.name || vm.vmid}</strong> ({vm.status || 'stopped'})</li>
+                        ))}
+                      </Box>
+                    </Alert>
+                  ) : null
+                })()}
+                {/* Live + Windows guests without running VMware Tools: VSS quiesce
+                    won't run so the snapshot will be crash-consistent and virt-v2v
+                    will fail on the dirty NTFS mid-conversion. Surface the offenders
+                    upfront rather than wasting download time. */}
+                {migType === 'live' && bulkMigHostInfo?.vms && (() => {
+                  const winNoTools = bulkMigHostInfo.vms.filter((vm: any) =>
+                    bulkMigSelected.has(vm.vmid) &&
+                    (vm.status === 'running' || vm.status === 'poweredOn') &&
+                    (vm.guest_OS || vm.guestOS || '').toString().toLowerCase().includes('windows') &&
+                    vm.toolsRunningStatus !== 'guestToolsRunning'
+                  )
+                  return winNoTools.length > 0 ? (
+                    <Alert severity="warning" sx={{ fontSize: 12 }}>
+                      Live migration of Windows guests requires VMware Tools installed AND running
+                      (VSS quiesce is the only way to capture a clean NTFS snapshot while the VM keeps running).
+                      The following selected Windows VM(s) do not have Tools running. Install / repair Tools
+                      in each guest and retry, or switch the batch to Offline migration (with
+                      <code>powercfg /h off</code> + <code>shutdown /s /f /t 0</code> on each guest):
+                      <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
+                        {winNoTools.map((vm: any) => (
+                          <li key={vm.vmid}><strong>{vm.name || vm.vmid}</strong> (toolsStatus={vm.toolsStatus || 'unknown'}, toolsRunningStatus={vm.toolsRunningStatus || 'unknown'})</li>
                         ))}
                       </Box>
                     </Alert>
@@ -3384,7 +3477,20 @@ return
                     if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                     if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
                   }
-                  if (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status === 'running')) return true
+                  // Batch-wide power-state gates. The inner Alerts list the offending
+                  // VMs individually; here we just return true so the button is disabled
+                  // whenever the batch mixes the chosen migrationType with an incompatible
+                  // VM state.
+                  if (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))) return true
+                  if (migType === 'live' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status !== 'running' && vm.status !== 'poweredOn')) return true
+                  // Live + Windows in the batch without running VMware Tools: block
+                  // (symmetric with the individual modal check).
+                  if (migType === 'live' && bulkMigHostInfo?.vms?.some((vm: any) =>
+                    bulkMigSelected.has(vm.vmid) &&
+                    (vm.status === 'running' || vm.status === 'poweredOn') &&
+                    (vm.guest_OS || vm.guestOS || '').toString().toLowerCase().includes('windows') &&
+                    vm.toolsRunningStatus !== 'guestToolsRunning'
+                  )) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}

@@ -252,7 +252,7 @@ export default function InventoryDetails({
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)
   const [nodeActionShutdownLocal, setNodeActionShutdownLocal] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
@@ -3647,6 +3647,12 @@ return vm?.isCluster ?? false
                                     connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
                                     committed: vm.committed, guestOS: vm.guest_OS, licenseFull: data.esxiHostInfo!.licenseFull,
                                     hostType: ht,
+                                    // Forwarded to the modal so cold-vs-running guards can
+                                    // disable the migrate button when the VM isn't off.
+                                    status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
+                                    // VMware Tools state, needed by the Live-on-Windows guard.
+                                    toolsStatus: (vm as any).toolsStatus,
+                                    toolsRunningStatus: (vm as any).toolsRunningStatus,
                                     // vCenter inventory path resolved server-side via SOAP
                                     // (soapResolveHostInventoryPaths). Undefined for standalone ESXi.
                                     vcenterDatacenter: (vm as any).vcenterDatacenter,
@@ -3773,6 +3779,11 @@ return vm?.isCluster ?? false
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
                             hostType: ht, diskPaths: (vm as any).diskPaths,
+                            // Power state for cold-migration guard (disable Start button + warn).
+                            status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
+                            // VMware Tools state for the Live-on-Windows guard.
+                            toolsStatus: (vm as any).toolsStatus,
+                            toolsRunningStatus: (vm as any).toolsRunningStatus,
                             // Forward vCenter inventory path if the source endpoint resolved it.
                             vcenterDatacenter: (vm as any).vcenterDatacenter,
                             vcenterCluster: (vm as any).vcenterCluster,

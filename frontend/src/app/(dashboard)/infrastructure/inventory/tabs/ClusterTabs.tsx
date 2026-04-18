@@ -51,6 +51,7 @@ import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
+import ClusterSdnTab from '@/components/cluster-sdn/ClusterSdnTab'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
@@ -662,7 +663,7 @@ export default function ClusterTabs(props: any) {
 
   return (
     <>
-          {/* Onglets pour Cluster: Summary / Nodes / VMs / HA / Backups / Notes / Ceph / Storage / Firewall / Rolling Update / Cluster */}
+          {/* Onglets pour Cluster: Summary / Nodes / VMs / HA / Backups / Snapshots / Notes / Ceph / Storage / Firewall / SDN / Cluster / Rolling Update / ... */}
           {selection?.type === 'cluster' && data.nodesData ? (
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Tabs
@@ -753,6 +754,14 @@ export default function ClusterTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabFirewall')}
+                    </Box>
+                  }
+                />
+                <Tab
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-node-tree" style={{ fontSize: 16 }} />
+                      {t('inventory.tabSdn')}
                     </Box>
                   }
                 />
@@ -3244,8 +3253,13 @@ export default function ClusterTabs(props: any) {
                   />
                 )}
 
-                {/* Onglet Rolling Update - Index 11 */}
-                {clusterTab === 11 && (
+                {/* Onglet SDN - Index 10 */}
+                {clusterTab === 10 && connId && (
+                  <ClusterSdnTab connId={connId} />
+                )}
+
+                {/* Onglet Rolling Update - Index 12 */}
+                {clusterTab === 12 && (
                   <Box sx={{ p: 2 }}>
                     <Stack spacing={3}>
                       {/* Header */}
@@ -3934,15 +3948,15 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet CVE - Index 12 */}
-                {clusterTab === 12 && (
+                {/* Onglet CVE - Index 13 */}
+                {clusterTab === 13 && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     <CveTab connectionId={selection?.id?.split(':')[0] || ''} available={cveAvailable} />
                   </Box>
                 )}
 
-                {/* Onglet Cluster - Index 10 */}
-                {clusterTab === 10 && (
+                {/* Onglet Cluster - Index 11 */}
+                {clusterTab === 11 && (
                   <Box sx={{ p: 2 }}>
                     {(clusterConfigLoading || !clusterConfigLoaded) ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -4116,36 +4130,36 @@ export default function ClusterTabs(props: any) {
                   </Box>
                 )}
 
-                {/* Onglet Change Tracking - Index 13 */}
-                {clusterTab === 13 && (
+                {/* Onglet Change Tracking - Index 14 */}
+                {clusterTab === 14 && (
                   <ChangeTrackingTab
                     connectionId={selection?.id || ''}
                   />
                 )}
 
-                {/* Onglet Compliance - Index 14 */}
-                {clusterTab === 14 && (
+                {/* Onglet Compliance - Index 15 */}
+                {clusterTab === 15 && (
                   <ComplianceTab
                     connectionId={selection?.id || ''}
                   />
                 )}
 
-                {/* Onglet Datacenter Settings - Index 15 */}
-                {clusterTab === 15 && (
+                {/* Onglet Datacenter Settings - Index 16 */}
+                {clusterTab === 16 && (
                   <DatacenterSettingsTab
                     connectionId={selection?.id || ''}
                   />
                 )}
 
-                {/* Onglet Metric Server - Index 16 */}
-                {clusterTab === 16 && (
+                {/* Onglet Metric Server - Index 17 */}
+                {clusterTab === 17 && (
                   <MetricServerTab
                     connectionId={selection?.id || ''}
                   />
                 )}
 
-                {/* Onglet Notifications - Index 17 */}
-                {clusterTab === 17 && (
+                {/* Onglet Notifications - Index 18 */}
+                {clusterTab === 18 && (
                   <NotificationsTab
                     connectionId={selection?.id || ''}
                   />

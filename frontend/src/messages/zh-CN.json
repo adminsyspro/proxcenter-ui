@@ -969,6 +969,7 @@
     "tabHighAvailability": "高可用",
     "tabStorage": "存储",
     "tabFirewall": "防火墙",
+    "tabSdn": "SDN",
     "tabChangeTracking": "变更",
     "tabCompliance": "合规性",
     "tabDatacenterSettings": "设置",
@@ -5511,5 +5512,135 @@
     "noTimelineData": "此对端没有可用的时间线数据（需要 InfluxDB）",
     "compare": "对比",
     "yesterday": "昨天"
+  },
+  "sdn": {
+    "subtab": {
+      "zones": "区域",
+      "vnets": "VNets",
+      "options": "选项",
+      "ipam": "IPAM",
+      "vnetFirewall": "VNet 防火墙",
+      "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "SDN 区域",
+      "columns": {
+        "id": "ID",
+        "type": "类型",
+        "nodes": "节点",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "未配置 SDN 区域"
+    },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "别名",
+        "zone": "区域",
+        "tag": "标签",
+        "vlanAware": "VLAN 感知",
+        "state": "状态"
+      },
+      "empty": "未配置 VNet"
+    },
+    "options": {
+      "controllers": {
+        "title": "控制器",
+        "columns": {
+          "id": "ID",
+          "type": "类型",
+          "nodes": "节点"
+        },
+        "empty": "未配置控制器"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "类型"
+        },
+        "empty": "未配置 IPAM 后端"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "类型"
+        },
+        "empty": "未配置 DNS 后端"
+      }
+    },
+    "ipamPanel": {
+      "title": "IPAM 分配",
+      "picker": "IPAM 后端",
+      "noBackends": "未配置 IPAM 后端",
+      "columns": {
+        "name": "名称 / VMID",
+        "ip": "IP 地址",
+        "mac": "MAC"
+      },
+      "empty": "此 IPAM 中未找到 IP 分配"
+    },
+    "vnetFirewallPanel": {
+      "title": "VNet 防火墙",
+      "picker": "VNet",
+      "noVnets": "未配置 VNet - 创建一个 VNet 以管理防火墙规则",
+      "columns": {
+        "on": "On",
+        "type": "类型",
+        "action": "操作",
+        "macro": "宏",
+        "protocol": "协议",
+        "source": "源",
+        "sPort": "S.Port",
+        "destination": "目标",
+        "dPort": "D.Port",
+        "logLevel": "日志级别",
+        "comment": "注释"
+      },
+      "empty": "此 VNet 没有定义防火墙规则"
+    },
+    "fabricsPanel": {
+      "title": "Fabrics",
+      "unavailable": {
+        "title": "Fabrics 需要 Proxmox VE 9 或更高版本",
+        "body": "请将集群升级到 PVE 9 以配置 OpenFabric / OSPF SDN Fabrics。"
+      },
+      "columns": {
+        "name": "名称",
+        "protocol": "协议",
+        "ipv4": "IPv4",
+        "ipv6": "IPv6",
+        "interfaces": "接口"
+      },
+      "empty": "未配置 Fabric"
+    },
+    "common": {
+      "reload": "重新加载",
+      "loadFailed": "加载失败：{error}"
+    },
+    "banner": {
+      "pending": "存在未应用的 SDN 更改。单击应用以将其提交到网络。"
+    },
+    "apply": {
+      "button": "应用",
+      "dialog": {
+        "title": "应用 SDN 配置",
+        "body": "此操作将在所有集群节点上重新加载网络配置。活动连接不会中断，但配置错误的更改可能会导致网络问题。是否继续？",
+        "confirm": "应用",
+        "cancel": "取消"
+      },
+      "toast": {
+        "applying": "正在应用 SDN 配置...",
+        "success": "SDN 配置已应用",
+        "failed": "应用失败：{error}"
+      },
+      "tooltip": {
+        "noPending": "没有待处理的更改",
+        "noPermission": "需要 connection.manage 权限"
+      }
+    }
   }
 }

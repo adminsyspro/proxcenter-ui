@@ -1029,6 +1029,7 @@
     "tabHighAvailability": "Haute disponibilité",
     "tabStorage": "Stockage",
     "tabFirewall": "Firewall",
+    "tabSdn": "SDN",
     "tabChangeTracking": "Changements",
     "tabCompliance": "Conformité",
     "tabDatacenterSettings": "Paramètres",
@@ -5559,5 +5560,135 @@
     "noTimelineData": "Pas de données temporelles pour cette paire (nécessite InfluxDB)",
     "compare": "Comparer",
     "yesterday": "Hier"
+  },
+  "sdn": {
+    "subtab": {
+      "zones": "Zones",
+      "vnets": "VNets",
+      "options": "Options",
+      "ipam": "IPAM",
+      "vnetFirewall": "Pare-feu VNet",
+      "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "Zones SDN",
+      "columns": {
+        "id": "ID",
+        "type": "Type",
+        "nodes": "Nœuds",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "Aucune zone SDN configurée"
+    },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "Alias",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN Aware",
+        "state": "État"
+      },
+      "empty": "Aucun VNet configuré"
+    },
+    "options": {
+      "controllers": {
+        "title": "Contrôleurs",
+        "columns": {
+          "id": "ID",
+          "type": "Type",
+          "nodes": "Nœuds"
+        },
+        "empty": "Aucun contrôleur configuré"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "Aucun backend IPAM configuré"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "Aucun backend DNS configuré"
+      }
+    },
+    "ipamPanel": {
+      "title": "Allocations IPAM",
+      "picker": "Backend IPAM",
+      "noBackends": "Aucun backend IPAM configuré",
+      "columns": {
+        "name": "Nom / VMID",
+        "ip": "Adresse IP",
+        "mac": "MAC"
+      },
+      "empty": "Aucune allocation IP dans ce backend"
+    },
+    "vnetFirewallPanel": {
+      "title": "Pare-feu VNet",
+      "picker": "VNet",
+      "noVnets": "Aucun VNet configuré - créez un VNet pour gérer les règles de pare-feu",
+      "columns": {
+        "on": "On",
+        "type": "Type",
+        "action": "Action",
+        "macro": "Macro",
+        "protocol": "Protocole",
+        "source": "Source",
+        "sPort": "S.Port",
+        "destination": "Destination",
+        "dPort": "D.Port",
+        "logLevel": "Niveau de journalisation",
+        "comment": "Commentaire"
+      },
+      "empty": "Aucune règle de pare-feu définie pour ce VNet"
+    },
+    "fabricsPanel": {
+      "title": "Fabrics",
+      "unavailable": {
+        "title": "Les Fabrics nécessitent Proxmox VE 9 ou plus récent",
+        "body": "Mettez à jour votre cluster vers PVE 9 pour configurer des Fabrics SDN OpenFabric / OSPF."
+      },
+      "columns": {
+        "name": "Nom",
+        "protocol": "Protocole",
+        "ipv4": "IPv4",
+        "ipv6": "IPv6",
+        "interfaces": "Interfaces"
+      },
+      "empty": "Aucun Fabric configuré"
+    },
+    "common": {
+      "reload": "Recharger",
+      "loadFailed": "Échec du chargement : {error}"
+    },
+    "banner": {
+      "pending": "Des modifications SDN non appliquées existent. Cliquez sur Appliquer pour les valider sur le réseau."
+    },
+    "apply": {
+      "button": "Appliquer",
+      "dialog": {
+        "title": "Appliquer la configuration SDN",
+        "body": "Cette action rechargera la configuration réseau sur tous les nœuds du cluster. Les connexions actives ne sont pas interrompues, mais des modifications mal configurées peuvent causer des problèmes réseau. Continuer ?",
+        "confirm": "Appliquer",
+        "cancel": "Annuler"
+      },
+      "toast": {
+        "applying": "Application de la configuration SDN...",
+        "success": "Configuration SDN appliquée",
+        "failed": "Échec de l'application : {error}"
+      },
+      "tooltip": {
+        "noPending": "Aucune modification en attente",
+        "noPermission": "Requiert la permission connection.manage"
+      }
+    }
   }
 }

@@ -23,6 +23,7 @@ export type AuditCategory =
   | "templates"      // Actions cloud-init templates / blueprints
   | "migration"      // Migration ESXi → Proxmox
   | "admin"          // Admin actions (tenants, etc.)
+  | "sdn"            // SDN (zones, vnets, apply)
 
 export type AuditAction =
 
@@ -72,6 +73,9 @@ export type AuditAction =
   | "tenant.switch"
   | "tenant.add_user"
   | "tenant.remove_user"
+
+  // SDN
+  | "sdn.apply"
 
 export type AuditStatus = "success" | "failure" | "warning"
 

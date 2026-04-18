@@ -998,6 +998,7 @@
     "tabHighAvailability": "High Availability",
     "tabStorage": "Storage",
     "tabFirewall": "Firewall",
+    "tabSdn": "SDN",
     "tabChangeTracking": "Changes",
     "tabCompliance": "Compliance",
     "tabDatacenterSettings": "Settings",
@@ -5558,5 +5559,135 @@
     "noTimelineData": "No timeline data available for this pair (requires InfluxDB)",
     "compare": "Compare",
     "yesterday": "Yesterday"
+  },
+  "sdn": {
+    "subtab": {
+      "zones": "Zones",
+      "vnets": "VNets",
+      "options": "Options",
+      "ipam": "IPAM",
+      "vnetFirewall": "VNet Firewall",
+      "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "SDN Zones",
+      "columns": {
+        "id": "ID",
+        "type": "Type",
+        "nodes": "Nodes",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "No SDN zones configured"
+    },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "Alias",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN Aware",
+        "state": "State"
+      },
+      "empty": "No VNets configured"
+    },
+    "options": {
+      "controllers": {
+        "title": "Controllers",
+        "columns": {
+          "id": "ID",
+          "type": "Type",
+          "nodes": "Nodes"
+        },
+        "empty": "No controllers configured"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "No IPAM backends configured"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "Type"
+        },
+        "empty": "No DNS backends configured"
+      }
+    },
+    "ipamPanel": {
+      "title": "IPAM Allocations",
+      "picker": "IPAM backend",
+      "noBackends": "No IPAM backends configured",
+      "columns": {
+        "name": "Name / VMID",
+        "ip": "IP Address",
+        "mac": "MAC"
+      },
+      "empty": "No IP allocations found in this IPAM"
+    },
+    "vnetFirewallPanel": {
+      "title": "VNet Firewall",
+      "picker": "VNet",
+      "noVnets": "No VNets configured - create a VNet to manage firewall rules",
+      "columns": {
+        "on": "On",
+        "type": "Type",
+        "action": "Action",
+        "macro": "Macro",
+        "protocol": "Protocol",
+        "source": "Source",
+        "sPort": "S.Port",
+        "destination": "Destination",
+        "dPort": "D.Port",
+        "logLevel": "Log level",
+        "comment": "Comment"
+      },
+      "empty": "No firewall rules defined for this VNet"
+    },
+    "fabricsPanel": {
+      "title": "Fabrics",
+      "unavailable": {
+        "title": "Fabrics requires Proxmox VE 9 or later",
+        "body": "Upgrade your cluster to PVE 9 to configure OpenFabric / OSPF SDN fabrics."
+      },
+      "columns": {
+        "name": "Name",
+        "protocol": "Protocol",
+        "ipv4": "IPv4",
+        "ipv6": "IPv6",
+        "interfaces": "Interfaces"
+      },
+      "empty": "No fabrics configured"
+    },
+    "common": {
+      "reload": "Reload",
+      "loadFailed": "Failed to load: {error}"
+    },
+    "banner": {
+      "pending": "Unapplied SDN changes exist. Click Apply to commit them to the network."
+    },
+    "apply": {
+      "button": "Apply",
+      "dialog": {
+        "title": "Apply SDN configuration",
+        "body": "This will reload network configuration on all cluster nodes. Active connections are not interrupted, but misconfigured changes may cause network issues. Continue?",
+        "confirm": "Apply",
+        "cancel": "Cancel"
+      },
+      "toast": {
+        "applying": "Applying SDN configuration...",
+        "success": "SDN configuration applied",
+        "failed": "Apply failed: {error}"
+      },
+      "tooltip": {
+        "noPending": "No pending changes",
+        "noPermission": "Requires connection.manage permission"
+      }
+    }
   }
 }

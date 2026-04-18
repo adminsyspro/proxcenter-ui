@@ -966,6 +966,7 @@
     "tabHighAvailability": "Hochverfügbarkeit",
     "tabStorage": "Storage",
     "tabFirewall": "Firewall",
+    "tabSdn": "SDN",
     "tabChangeTracking": "Änderungsverfolgung",
     "tabCompliance": "Compliance",
     "tabDatacenterSettings": "Einstellungen",
@@ -5513,5 +5514,135 @@
     "noTimelineData": "Keine Zeitreihendaten für dieses Paar verfügbar (erfordert InfluxDB)",
     "compare": "Vergleichen",
     "yesterday": "Gestern"
+  },
+  "sdn": {
+    "subtab": {
+      "zones": "Zonen",
+      "vnets": "VNets",
+      "options": "Optionen",
+      "ipam": "IPAM",
+      "vnetFirewall": "VNet-Firewall",
+      "fabrics": "Fabrics"
+    },
+    "zones": {
+      "title": "SDN-Zonen",
+      "columns": {
+        "id": "ID",
+        "type": "Typ",
+        "nodes": "Knoten",
+        "mtu": "MTU",
+        "ipam": "IPAM"
+      },
+      "empty": "Keine SDN-Zonen konfiguriert"
+    },
+    "vnets": {
+      "title": "VNets",
+      "columns": {
+        "id": "ID",
+        "alias": "Alias",
+        "zone": "Zone",
+        "tag": "Tag",
+        "vlanAware": "VLAN-fähig",
+        "state": "Status"
+      },
+      "empty": "Keine VNets konfiguriert"
+    },
+    "options": {
+      "controllers": {
+        "title": "Controller",
+        "columns": {
+          "id": "ID",
+          "type": "Typ",
+          "nodes": "Knoten"
+        },
+        "empty": "Keine Controller konfiguriert"
+      },
+      "ipam": {
+        "title": "IPAM",
+        "columns": {
+          "id": "ID",
+          "type": "Typ"
+        },
+        "empty": "Keine IPAM-Backends konfiguriert"
+      },
+      "dns": {
+        "title": "DNS",
+        "columns": {
+          "id": "ID",
+          "type": "Typ"
+        },
+        "empty": "Keine DNS-Backends konfiguriert"
+      }
+    },
+    "ipamPanel": {
+      "title": "IPAM-Zuweisungen",
+      "picker": "IPAM-Backend",
+      "noBackends": "Keine IPAM-Backends konfiguriert",
+      "columns": {
+        "name": "Name / VMID",
+        "ip": "IP-Adresse",
+        "mac": "MAC"
+      },
+      "empty": "Keine IP-Zuweisungen in diesem IPAM"
+    },
+    "vnetFirewallPanel": {
+      "title": "VNet-Firewall",
+      "picker": "VNet",
+      "noVnets": "Keine VNets konfiguriert - erstellen Sie ein VNet, um Firewall-Regeln zu verwalten",
+      "columns": {
+        "on": "On",
+        "type": "Typ",
+        "action": "Aktion",
+        "macro": "Makro",
+        "protocol": "Protokoll",
+        "source": "Quelle",
+        "sPort": "S.Port",
+        "destination": "Ziel",
+        "dPort": "D.Port",
+        "logLevel": "Log-Level",
+        "comment": "Kommentar"
+      },
+      "empty": "Keine Firewall-Regeln für dieses VNet definiert"
+    },
+    "fabricsPanel": {
+      "title": "Fabrics",
+      "unavailable": {
+        "title": "Fabrics erfordert Proxmox VE 9 oder neuer",
+        "body": "Aktualisieren Sie Ihren Cluster auf PVE 9, um OpenFabric- / OSPF-SDN-Fabrics zu konfigurieren."
+      },
+      "columns": {
+        "name": "Name",
+        "protocol": "Protokoll",
+        "ipv4": "IPv4",
+        "ipv6": "IPv6",
+        "interfaces": "Schnittstellen"
+      },
+      "empty": "Keine Fabrics konfiguriert"
+    },
+    "common": {
+      "reload": "Neu laden",
+      "loadFailed": "Laden fehlgeschlagen: {error}"
+    },
+    "banner": {
+      "pending": "Nicht angewendete SDN-Änderungen vorhanden. Klicken Sie auf Anwenden, um sie auf dem Netzwerk zu übernehmen."
+    },
+    "apply": {
+      "button": "Anwenden",
+      "dialog": {
+        "title": "SDN-Konfiguration anwenden",
+        "body": "Dies lädt die Netzwerkkonfiguration auf allen Cluster-Knoten neu. Aktive Verbindungen werden nicht unterbrochen, aber fehlerhafte Änderungen können Netzwerkprobleme verursachen. Fortfahren?",
+        "confirm": "Anwenden",
+        "cancel": "Abbrechen"
+      },
+      "toast": {
+        "applying": "SDN-Konfiguration wird angewendet...",
+        "success": "SDN-Konfiguration angewendet",
+        "failed": "Anwenden fehlgeschlagen: {error}"
+      },
+      "tooltip": {
+        "noPending": "Keine ausstehenden Änderungen",
+        "noPermission": "Berechtigung connection.manage erforderlich"
+      }
+    }
   }
 }

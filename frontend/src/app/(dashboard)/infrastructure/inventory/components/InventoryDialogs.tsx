@@ -1803,8 +1803,10 @@ return
                       ))}
                     </Select>
                   </FormControl>
-                  {/* Migration type selector — hidden for vCenter (cold only) */}
-                  {esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
+                  {/* Migration type selector — hidden for Hyper-V / Nutanix (cold only).
+                      vCenter supports cold + live (via NFC-on-snapshot); direct ESXi
+                      additionally supports sshfs_boot. */}
+                  {esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       {t('inventoryPage.esxiMigration.migrationType')}
@@ -1814,7 +1816,7 @@ return
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
                         { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
                         { value: 'sshfs_boot' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeSshfsBoot', descKey: 'migrationTypeSshfsBootDesc' },
-                      ]).map(opt => (
+                      ]).filter(opt => esxiMigrateVm?.hostType !== 'vcenter' || opt.value !== 'sshfs_boot').map(opt => (
                         <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
                           <Box
                             onClick={() => setMigType(opt.value)}
@@ -2407,7 +2409,10 @@ return
                         targetNode: migTargetNode,
                         targetStorage: migTargetStorage,
                         networkBridge: migNetworkBridge,
-                        migrationType: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'cold' : migType,
+                        // vCenter supports cold + live via the v2v pipeline
+                        // (NFC-on-snapshot). Hyper-V / Nutanix are still cold only.
+                        migrationType: (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'cold'
+                          : (esxiMigrateVm.hostType === 'vcenter' ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                         transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
                         startAfterMigration: migStartAfter,
                         ...((esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') && migTempStorage !== '/tmp' && {
@@ -2789,8 +2794,10 @@ return
                   </Stack>
                 </Box>
 
-                {/* Migration type — hidden for vCenter (cold only) */}
-                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && (
+                {/* Migration type — hidden for Hyper-V / Nutanix (cold only).
+                    vCenter supports cold + live (NFC-on-snapshot); direct ESXi
+                    additionally supports sshfs_boot. */}
+                {bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     {t('inventoryPage.esxiMigration.migrationType')}
@@ -2800,7 +2807,7 @@ return
                       { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
                       { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
                       { value: 'sshfs_boot' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeSshfsBoot', descKey: 'migrationTypeSshfsBootDesc' },
-                    ]).map(opt => (
+                    ]).filter(opt => bulkMigHostInfo?.hostType !== 'vcenter' || opt.value !== 'sshfs_boot').map(opt => (
                       <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
                         <Box
                           onClick={() => setMigType(opt.value)}
@@ -3445,7 +3452,11 @@ return
                           targetNode: job.targetNode,
                           targetStorage: migTargetStorage,
                           networkBridge: migNetworkBridge,
-                          migrationType: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'cold' : migType,
+                          // vCenter supports cold + live (NFC-on-snapshot); Hyper-V /
+                          // Nutanix still force cold since their pipelines don't have a
+                          // snapshot-based transfer path. sshfs_boot is ESXi-direct only.
+                          migrationType: (isHypervBulk || isNutanixBulk) ? 'cold'
+                            : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                           transferMode: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'v2v' : migTransferMode,
                           startAfterMigration: migStartAfter,
                           // vCenter inventory path required by libvirt vpx URI (auto-discovered
@@ -3499,7 +3510,8 @@ return
                     targetConnectionId: migTargetConn,
                     targetStorage: migTargetStorage,
                     networkBridge: migNetworkBridge,
-                    migrationType: isVcenterBulk ? 'cold' : migType,
+                    migrationType: (isHypervBulk || isNutanixBulk) ? 'cold'
+                      : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                     transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
                     startAfterMigration: migStartAfter,
                     sourceType,

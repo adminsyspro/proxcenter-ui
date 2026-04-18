@@ -108,6 +108,7 @@ export async function executeSSH(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     })
 
     if (res.ok) {
@@ -130,7 +131,7 @@ export async function executeSSH(
   }
 
   // 2. Fallback: direct ssh2
-  return executeSSHDirect({ host: nodeIp, port, user, key, password, passphrase, command: finalCommand })
+  return executeSSHDirect({ host: nodeIp, port, user, key, password, passphrase, command: finalCommand, timeoutMs })
 }
 
 /**
@@ -144,13 +145,18 @@ export function executeSSHDirect(opts: {
   password?: string
   passphrase?: string
   command: string
+  timeoutMs?: number
 }): Promise<SSHResult> {
   return new Promise((resolve) => {
     const conn = new Client()
+    // Overall timeout for the full SSH operation (connect + exec + stream).
+    // Long-running commands (e.g. multi-GB dd writes) pass a large timeoutMs
+    // from the caller. Falls back to 30s for plain command execs.
+    const overallTimeoutMs = opts.timeoutMs ?? 30_000
     const timeout = setTimeout(() => {
       conn.end()
-      resolve({ success: false, error: "SSH connection timeout (30s)" })
-    }, 30_000)
+      resolve({ success: false, error: `SSH connection timeout (${Math.round(overallTimeoutMs / 1000)}s)` })
+    }, overallTimeoutMs)
 
     conn.on("ready", () => {
       // codeql[js/command-line-injection] — commands are built server-side, not from direct user input

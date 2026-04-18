@@ -169,15 +169,22 @@ async function downloadDiskViaNfc(
   const pidFile = `${ctrlPrefix}.pid`
   const exitFile = `${ctrlPrefix}.exit`
   const errFile = `${ctrlPrefix}.err`
+  const statsFile = `${ctrlPrefix}.stats`
 
   // Curl is launched in the background via nohup so we can poll its progress.
   // We write the cookie to a temp config file (chmod 600) instead of inlining it
   // on the command line to avoid leaking the SOAP session token in process listings.
+  //
+  // write-out captures the HTTP response code + final body size + timing so
+  // we can diagnose silently-truncated streams (HTTP 200 with tiny chunked
+  // body). These end up in statsFile and are surfaced in error messages when
+  // validation fails.
   const curlCfg = `${ctrlPrefix}.curlcfg`
   const cfgContent = [
     `header = "Cookie: ${cookieEsc}"`,
     `output = "${localPath}"`,
     `url = "${device.url}"`,
+    `write-out = "http_code=%{http_code}\\nresponse_code=%{response_code}\\nsize_download=%{size_download}\\ntime_total=%{time_total}\\ncontent_type=%{content_type}\\nnum_connects=%{num_connects}\\nspeed_download=%{speed_download}\\n"`,
     "silent",
     "show-error",
     "fail",
@@ -195,7 +202,7 @@ async function downloadDiskViaNfc(
 
   const launchCmd =
     `nohup bash -c ` +
-    `"curl -K ${shellEscape(curlCfg)} 2>${shellEscape(errFile)}; ` +
+    `"curl -K ${shellEscape(curlCfg)} >${shellEscape(statsFile)} 2>${shellEscape(errFile)}; ` +
     `echo \\$? > ${shellEscape(exitFile)}; ` +
     `rm -f ${shellEscape(curlCfg)}" ` +
     `> /dev/null 2>&1 & echo $!`
@@ -219,7 +226,7 @@ async function downloadDiskViaNfc(
 
   while (true) {
     if (isCancelled(jobId)) {
-      await executeSSH(targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f ${shellEscape(curlCfg)} ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)}`).catch(() => {})
+      await executeSSH(targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f ${shellEscape(curlCfg)} ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
       throw new Error("Migration cancelled")
     }
     await new Promise(r => setTimeout(r, stallCheckIntervalMs))
@@ -230,40 +237,103 @@ async function downloadDiskViaNfc(
 
     if (exitOut !== "RUNNING") {
       const exitCode = Number.parseInt(exitOut, 10)
+      // Read curl diagnostic files BEFORE any cleanup: both the success and
+      // failure paths may need them to build actionable error messages.
+      const [errCapture, statsCapture] = await Promise.all([
+        executeSSH(targetConnectionId, nodeIp, `tail -c 1000 ${shellEscape(errFile)} 2>/dev/null`),
+        executeSSH(targetConnectionId, nodeIp, `cat ${shellEscape(statsFile)} 2>/dev/null`),
+      ])
+      const curlStderr = (errCapture.output || "").trim()
+      const curlStats = (statsCapture.output || "").trim()
+
       if (exitCode !== 0) {
-        const errCapture = await executeSSH(targetConnectionId, nodeIp, `tail -c 1000 ${shellEscape(errFile)} 2>/dev/null`)
-        const errMsg = (errCapture.output || "").trim()
-        await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)}`).catch(() => {})
+        await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
         throw new Error(
           `NFC disk download failed (curl exit ${exitCode}). ` +
           `URL: ${device.url}. ` +
-          `Curl stderr: ${errMsg || "(empty)"}. ` +
+          `Stats: ${curlStats || "(none)"}. ` +
+          `Curl stderr: ${curlStderr || "(empty)"}. ` +
           `Common causes: vCenter cert mismatch (set insecureTLS on the connection), ` +
           `expired SOAP session (lease timed out), ` +
           `or vCenter NFC service unhealthy.`,
         )
       }
-      await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)}`).catch(() => {})
-
-      // Sanity-check the file size matches what the lease promised (when known).
-      if (device.fileSize > 0) {
-        const stat = await executeSSH(targetConnectionId, nodeIp, `stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`)
-        const got = Number.parseInt(stat.output?.trim() || "0", 10)
-        if (got === 0) {
-          throw new Error(`NFC disk download produced an empty file at ${localPath}`)
-        }
-        // We allow size mismatch (vSAN dynamic VMDKs may be smaller than promised
-        // capacity if thin-provisioned), so log a warn instead of throwing.
-        if (got < device.fileSize * 0.9) {
-          await appendLog(
-            jobId,
-            `[NFC disk ${diskIndex + 1}/${totalDisks}] Downloaded ${(got / 1073741824).toFixed(1)} GB (expected ~${sizeGB} GB, ` +
-            `acceptable for thin-provisioned disks)`,
-            "warn",
-          )
-        }
+      // Surface the curl stats on success so users can see HTTP code + actual
+      // byte count + transfer time in the job logs for diagnosis.
+      if (curlStats) {
+        const statsLine = curlStats.replace(/\n/g, " ")
+        await appendLog(jobId, `[NFC disk ${diskIndex + 1}/${totalDisks}] curl: ${statsLine}`, "info")
+      }
+      // Defer the control-file cleanup until after validation so the rest of
+      // this block can attach curl diagnostics to validation error messages.
+      const cleanupCtrl = async () => {
+        await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
       }
 
+      // Validate the downloaded VMDK before declaring success. curl --fail
+      // catches HTTP >= 400 but NOT stream truncation (a chunked 200 response
+      // with a partial body is treated as success). vCenter occasionally
+      // terminates NFC streams mid-transfer on multi-disk migrations when the
+      // lease state drifts between disks, so we defend with three checks:
+      // a) minimum file size, b) KDMV sparse-stream magic, c) ratio vs the
+      // expected capacity when known.
+      const statRes = await executeSSH(
+        targetConnectionId,
+        nodeIp,
+        `stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`,
+      )
+      const got = Number.parseInt(statRes.output?.trim() || "0", 10)
+      // Common diagnostic suffix for validation errors: curl stats + stderr
+      // give the user actionable context (was it HTTP 200 with 0 bytes? a
+      // specific error from vCenter? a connection reset?). We format them
+      // compactly on a single line.
+      const diagSuffix = ` [curl: ${(curlStats || "(no stats)").replace(/\n/g, " ")}]` +
+        (curlStderr ? ` [stderr: ${curlStderr.slice(0, 200)}]` : "")
+
+      if (got < 65536) {
+        await cleanupCtrl()
+        throw new Error(
+          `NFC disk download produced a suspiciously small file (${got} bytes) at ${localPath}. ` +
+          `vCenter likely terminated the NFC lease prematurely; retry the migration.${diagSuffix}`,
+        )
+      }
+      const magicRes = await executeSSH(
+        targetConnectionId,
+        nodeIp,
+        `head -c 4 ${shellEscape(localPath)} 2>/dev/null | od -An -c | tr -d ' \\n\\t' || echo missing`,
+      )
+      const magicDump = (magicRes.output || "").trim()
+      if (!/K.*D.*M.*V/.test(magicDump)) {
+        await cleanupCtrl()
+        throw new Error(
+          `NFC disk download did not produce a valid VMDK sparse stream at ${localPath} ` +
+          `(expected KDMV magic, got: "${magicDump.slice(0, 40)}"). ` +
+          `vCenter likely returned an error body instead of the disk stream.${diagSuffix}`,
+        )
+      }
+      // Size-ratio warning only (NOT a hard reject): thin-provisioned disks
+      // with little or no committed data legitimately stream down to a few
+      // tens of KB (VMDK sparse header + empty grain directory + footer for
+      // a freshly-attached unformatted disk). The only reliable truncation
+      // detector at this layer is KDMV magic + min size 64 KB, already
+      // enforced above. Genuine mid-stream truncation produces a stream
+      // without the end-of-stream footer and virt-v2v rejects it during
+      // ingestion, which surfaces a clear error at that stage.
+      if (device.fileSize > 0 && got < device.fileSize * 0.9) {
+        const ratio = got / device.fileSize
+        const suspicious = device.fileSize > 1073741824 && ratio < 0.005
+        const hint = suspicious
+          ? " (very small relative to capacity: either a legitimate empty data disk or a silent NFC truncation. virt-v2v will reject the stream if it is malformed)"
+          : ""
+        await appendLog(
+          jobId,
+          `[NFC disk ${diskIndex + 1}/${totalDisks}] Downloaded ${(got / 1073741824).toFixed(2)} GB (expected ~${sizeGB} GB, ` +
+          `acceptable for thin-provisioned disks)${hint}`,
+          "warn",
+        )
+      }
+
+      await cleanupCtrl()
       const elapsed = (Date.now() - startedAt) / 1000
       await appendLog(
         jobId,
@@ -341,71 +411,107 @@ async function runVcenterNfcExport(
   // Make sure the staging directory exists on the PVE node.
   await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(outputDir)}`)
 
+  // First lease: used only to enumerate how many disk URLs the VM exposes.
+  // We then open a fresh lease per disk below. vCenter multi-disk NFC leases
+  // are unreliable on vSAN: the second disk's deviceUrl frequently starts
+  // returning empty chunked 200s once disk 1 has been fully consumed in the
+  // same lease (server-side lease state appears to tie the stream to the
+  // first-downloaded device). Per-disk leases sidestep this entirely: each
+  // download gets a clean HttpNfcLease in the vCenter's ready state, so the
+  // deviceUrl we hit has never been "consumed".
   await appendLog(jobId, "Initiating NFC export lease via vCenter ExportVm...")
-  const leaseMor = await soapExportVm(vmwareSession, config.sourceVmId)
-
-  let downloadedPaths: string[] = []
-  let leaseFinalised = false
+  const probeLease = await soapExportVm(vmwareSession, config.sourceVmId)
+  let diskCount: number
   try {
-    if (isCancelled(jobId)) throw new Error("Migration cancelled")
-
-    await appendLog(jobId, `NFC lease ${leaseMor} created, waiting for ready state...`)
-    const allDevices = await soapWaitForNfcLease(vmwareSession, leaseMor)
-    const diskDevices = allDevices.filter(d => d.disk)
-    if (diskDevices.length === 0) {
+    await appendLog(jobId, `NFC lease ${probeLease} created, waiting for ready state...`)
+    const probeDevices = await soapWaitForNfcLease(vmwareSession, probeLease)
+    diskCount = probeDevices.filter(d => d.disk).length
+    if (diskCount === 0) {
       throw new Error("NFC lease returned no disk device URLs (VM has no disks?)")
     }
-    await appendLog(jobId, `NFC lease ready: ${diskDevices.length} disk URL(s) to download`, "success")
+    await appendLog(jobId, `NFC lease ready: ${diskCount} disk URL(s) to download`, "success")
+  } catch (err) {
+    await soapNfcLeaseAbort(vmwareSession, probeLease, (err as Error)?.message || "ProxCenter probe error").catch(() => {})
+    throw err
+  }
+  // Release the probe lease straight away; it has done its job.
+  await soapNfcLeaseComplete(vmwareSession, probeLease).catch(() => {})
 
-    // Each disk becomes a local file under outputDir.  We name them disk-<i>.vmdk
-    // so virt-v2v can ingest them with -i disk; vCenter NFC always emits VMDK.
-    for (let i = 0; i < diskDevices.length; i++) {
+  const downloadedPaths: string[] = []
+  try {
+    for (let i = 0; i < diskCount; i++) {
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
       const localPath = `${outputDir}/disk-${i}.vmdk`
 
-      // Patch the device fileSize when vCenter reports 0 but we know the disk
-      // capacity from the source VM inspection. The indexed match relies on
-      // NFC returning device URLs in the same order as the VM's disks; vSphere
-      // is consistent on this but it's not contractually guaranteed. Any
-      // mismatch just means a slightly-off progress bar, never a corrupt file.
-      const dev = diskDevices[i]
-      if (dev.fileSize === 0 && sourceVmwareConfig?.disks[i]?.capacityBytes) {
-        dev.fileSize = sourceVmwareConfig.disks[i].capacityBytes
+      // Open a fresh lease per disk. We still get deviceUrls for every disk
+      // in the VM on each lease (vCenter has no "single-device" export API),
+      // but we only download the i-th URL and complete the lease immediately
+      // after. The other URLs are left untouched and vCenter reclaims them
+      // when the lease is completed.
+      await appendLog(jobId, `[NFC disk ${i + 1}/${diskCount}] Opening fresh NFC lease...`, "info")
+      const leaseMor = await soapExportVm(vmwareSession, config.sourceVmId)
+      let leaseFinalised = false
+      try {
+        const allDevices = await soapWaitForNfcLease(vmwareSession, leaseMor)
+        const diskDevices = allDevices.filter(d => d.disk)
+        const dev = diskDevices[i]
+        if (!dev) {
+          throw new Error(`NFC lease returned ${diskDevices.length} disk URL(s) but disk index ${i} is missing`)
+        }
         await appendLog(
           jobId,
-          `[NFC disk ${i + 1}/${diskDevices.length}] NFC lease reported fileSize=0 (typical for thin vSAN); ` +
-          `using vCenter disk capacity ${(dev.fileSize / 1073741824).toFixed(1)} GB as progress target`,
+          `[NFC disk ${i + 1}/${diskCount}] Fresh lease ${leaseMor} ready, ${diskDevices.length} device URL(s) available, targeting index ${i}`,
           "info",
         )
-      }
 
-      await downloadDiskViaNfc(
-        jobId,
-        config.targetConnectionId,
-        nodeIp,
-        vmwareSession,
-        leaseMor,
-        dev,
-        localPath,
-        i,
-        diskDevices.length,
-        0,    // progressOffset: NFC transfer occupies 0..50% of the migration
-        50,   // progressScale: leaving 50..100% for virt-v2v + import phases
-      )
-      downloadedPaths.push(localPath)
+        // Patch the device fileSize when vCenter reports 0 but we know the disk
+        // capacity from the source VM inspection. The indexed match relies on
+        // NFC returning device URLs in the same order as the VM's disks; vSphere
+        // is consistent on this but it's not contractually guaranteed.
+        if (dev.fileSize === 0 && sourceVmwareConfig?.disks[i]?.capacityBytes) {
+          dev.fileSize = sourceVmwareConfig.disks[i].capacityBytes
+          await appendLog(
+            jobId,
+            `[NFC disk ${i + 1}/${diskCount}] NFC lease reported fileSize=0 (typical for thin vSAN); ` +
+            `using vCenter disk capacity ${(dev.fileSize / 1073741824).toFixed(1)} GB as progress target`,
+            "info",
+          )
+        }
+
+        await downloadDiskViaNfc(
+          jobId,
+          config.targetConnectionId,
+          nodeIp,
+          vmwareSession,
+          leaseMor,
+          dev,
+          localPath,
+          i,
+          diskCount,
+          0,    // progressOffset: NFC transfer occupies 0..50% of the migration
+          50,   // progressScale: leaving 50..100% for virt-v2v + import phases
+        )
+        downloadedPaths.push(localPath)
+
+        // Release this per-disk lease. Anything unexpected here is warned, not
+        // thrown: the disk is already on the PVE node, we don't want to lose
+        // it just because lease-complete hiccupped on vCenter's side.
+        await soapNfcLeaseComplete(vmwareSession, leaseMor)
+        leaseFinalised = true
+      } catch (err) {
+        if (!leaseFinalised) {
+          await soapNfcLeaseAbort(vmwareSession, leaseMor, (err as Error)?.message || "ProxCenter migration error").catch(() => {})
+        }
+        throw err
+      }
     }
 
-    // Tell vCenter the transfer succeeded so it releases the lease cleanly.
-    await soapNfcLeaseComplete(vmwareSession, leaseMor)
-    leaseFinalised = true
     await appendLog(jobId, "NFC lease completed successfully", "success")
     return downloadedPaths
   } catch (err) {
-    // Best-effort cleanup: abort the lease so vCenter doesn't keep it open, and
-    // remove any partial downloads we already created.
-    if (!leaseFinalised) {
-      await soapNfcLeaseAbort(vmwareSession, leaseMor, (err as Error)?.message || "ProxCenter migration error").catch(() => {})
-    }
+    // Clean up partial downloads across any disks that succeeded before the
+    // failing one. The per-disk lease that failed has already been aborted in
+    // the inner catch above.
     for (const p of downloadedPaths) {
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`).catch(() => {})
     }
@@ -564,12 +670,34 @@ async function runVirtV2vWithProgress(
   const startedAt = Date.now()
   let loggedNoProgressAt = 0
 
+  // Global timeout and stall detection. virt-v2v has legitimate silent phases
+  // (Inspecting / Converting can run several minutes without log output) but
+  // if BOTH the log tail and the output dir size stop changing for a long
+  // stretch, v2v is stuck (most common cause: the underlying temp filesystem
+  // filled up and writes are blocked). Without this, the poll loop runs
+  // forever on a dead migration and ties up a worker slot in bulk flows.
+  const globalTimeoutMs = Number.parseInt(process.env.V2V_GLOBAL_TIMEOUT_MS || "", 10) || 8 * 60 * 60 * 1000
+  const stallTimeoutMs = Number.parseInt(process.env.V2V_STALL_TIMEOUT_MS || "", 10) || 15 * 60 * 1000
+  let lastActivitySignatureAt = Date.now()
+  let lastActivitySignature = ""
+
   while (true) {
     if (isCancelled(jobId)) {
       await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null`).catch(() => {})
       throw new Error("Migration cancelled")
     }
     await new Promise(r => setTimeout(r, pollIntervalMs))
+
+    // Global timeout: cap how long any single v2v run can occupy the pipeline.
+    if (Date.now() - startedAt > globalTimeoutMs) {
+      await executeSSH(config.targetConnectionId, nodeIp, `kill -9 ${pid} 2>/dev/null; pkill -9 -P ${pid} 2>/dev/null || true`).catch(() => {})
+      const elapsedH = ((Date.now() - startedAt) / 3600000).toFixed(1)
+      return {
+        success: false,
+        output: "",
+        error: `virt-v2v exceeded global timeout (${elapsedH}h). Killed. Override via V2V_GLOBAL_TIMEOUT_MS env var if your VMs legitimately need more time.`,
+      }
+    }
 
     // Check if virt-v2v has exited (exit marker file present).
     const exitCheck = await executeSSH(
@@ -635,20 +763,51 @@ async function runVirtV2vWithProgress(
     // emitted, virt-v2v writes to an overlay file in outputDir whose size
     // grows as data is downloaded. That way the user can tell the
     // migration is *actually* doing work vs hung.
+    const duResult = await executeSSH(
+      config.targetConnectionId,
+      nodeIp,
+      `du -sb ${shellEscape(outputDir)} 2>/dev/null | awk '{print $1}'`,
+    )
+    const bytesRaw = (duResult.output || "").trim()
+    const bytes = Number.parseInt(bytesRaw, 10)
+    const sizeSuffix = (Number.isFinite(bytes) && bytes > 0)
+      ? `, output dir now ${(bytes / 1073741824).toFixed(2)} GB`
+      : ""
+
+    // Stall detection: signature combines output-dir size with the tail of
+    // the v2v log. If neither changes for stallTimeoutMs we treat v2v as
+    // stuck (most common cause: the temp filesystem filled up and writes
+    // are blocked). Reset signature timestamp on ANY change so legitimate
+    // long silent phases followed by progress don't trigger false positives.
+    const tailSig = (tailResult.output || "").trim().slice(-200)
+    const activitySignature = `${bytesRaw}|${tailSig}`
+    if (activitySignature !== lastActivitySignature) {
+      lastActivitySignature = activitySignature
+      lastActivitySignatureAt = Date.now()
+    } else if (Date.now() - lastActivitySignatureAt > stallTimeoutMs) {
+      await executeSSH(config.targetConnectionId, nodeIp, `kill -9 ${pid} 2>/dev/null; pkill -9 -P ${pid} 2>/dev/null || true`).catch(() => {})
+      const stallMin = Math.round(stallTimeoutMs / 60000)
+      // Surface a df snapshot so the user can tell whether /tmp is the culprit.
+      const dfRes = await executeSSH(
+        config.targetConnectionId,
+        nodeIp,
+        `df -h ${shellEscape(outputDir)} 2>/dev/null | tail -n 1`,
+      ).catch(() => ({ output: "" }))
+      const dfLine = (dfRes.output || "").trim()
+      return {
+        success: false,
+        output: "",
+        error:
+          `virt-v2v stalled: no output growth or log activity for ${stallMin} min${sizeSuffix}. ` +
+          (dfLine ? `df: ${dfLine}. ` : "") +
+          `Most common cause: the temp storage filesystem is full. Select a larger temp storage ` +
+          `in the migration modal, or override the stall threshold via V2V_STALL_TIMEOUT_MS.`,
+      }
+    }
+
     if (Date.now() - loggedNoProgressAt > 60_000) {
       loggedNoProgressAt = Date.now()
       const elapsed = (Date.now() - startedAt) / 1000
-      // Best-effort: du is fast, if it errors we just skip the size hint.
-      const duResult = await executeSSH(
-        config.targetConnectionId,
-        nodeIp,
-        `du -sb ${shellEscape(outputDir)} 2>/dev/null | awk '{print $1}'`,
-      )
-      const bytesRaw = (duResult.output || "").trim()
-      const bytes = Number.parseInt(bytesRaw, 10)
-      const sizeSuffix = (Number.isFinite(bytes) && bytes > 0)
-        ? `, output dir now ${(bytes / 1073741824).toFixed(2)} GB`
-        : ""
       await appendLog(
         jobId,
         `virt-v2v still running (${elapsed.toFixed(0)}s elapsed${sizeSuffix}). ` +
@@ -1405,7 +1564,19 @@ export async function runV2vMigrationPipeline(
     }
 
     if (!v2vResult.success) {
-      throw new Error(`virt-v2v failed: ${v2vResult.error || v2vResult.output?.substring(0, 500)}`)
+      const rawError = v2vResult.error || v2vResult.output?.substring(0, 500) || ""
+      const fullOutput = v2vResult.output || ""
+      // Source-VM errors virt-v2v cannot work around: the package database is
+      // corrupted (typically because the guest filesystem is mounted read-only
+      // or crashed mid-install). virt-v2v needs dpkg/rpm to inject virtio
+      // drivers and update initramfs, so it fails hard. No retry possible on
+      // our side: the user has to repair the source guest first.
+      const hasDpkgCorruption = /dpkg:\s+unrecoverable fatal error/i.test(fullOutput)
+      const hasRpmCorruption = /rpm:\s+error:\s+rpmdb|error:\s+rpmdbNextIterator/i.test(fullOutput)
+      const hint = (hasDpkgCorruption || hasRpmCorruption)
+        ? "\n\nHint: the source VM's package database appears corrupted (often caused by a read-only root filesystem or a crash during a package install). Boot the VM at the source, repair the dpkg/rpm state (e.g. fsck the root FS, fix any truncated files under /var/lib/dpkg/info/, or run 'rpm --rebuilddb'), then retry the migration."
+        : ""
+      throw new Error(`virt-v2v failed: ${rawError}${hint}`)
     }
     await appendLog(jobId, "virt-v2v conversion completed", "success")
 
@@ -1966,21 +2137,37 @@ export async function runV2vMigrationPipeline(
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
     await updateJob(jobId, "failed", { error: errorMsg })
 
-    // Cleanup: temp files
+    // Cleanup: temp files. Use a longer SSH timeout because the PVE node is
+    // often under stress from the same condition that caused the migration
+    // failure (SSH contention, disk full, overloaded orchestrator). Previously
+    // we used silent .catch(() => {}) which swallowed cleanup failures and
+    // let /tmp fill up across successive failed migrations until the next
+    // migration hit "no space left on device" mid-run.
+    const CLEANUP_TIMEOUT_MS = 120_000
+    const failedCleanups: string[] = []
     try {
       const pveConn = await getConnectionById(config.targetConnectionId)
       const nodeIp = await getNodeIp(pveConn, config.targetNode)
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`).catch(() => {})
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`).catch(() => {})
-      // Clean up Nutanix downloaded disks
+      const rmOutput = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`, CLEANUP_TIMEOUT_MS)
+      if (!rmOutput.success) failedCleanups.push(`${outputDir}: ${rmOutput.error || "unknown"}`)
+      const rmPw = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`, CLEANUP_TIMEOUT_MS)
+      if (!rmPw.success) failedCleanups.push(`${pwFile}: ${rmPw.error || "unknown"}`)
       const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
-      // Unmount Hyper-V share if we mounted it
+      const rmNut = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`, CLEANUP_TIMEOUT_MS)
+      if (!rmNut.success) failedCleanups.push(`${nutanixDownloadDir}: ${rmNut.error || "unknown"}`)
       if (hypervMounted) {
-        await executeSSH(config.targetConnectionId, nodeIp, "umount /mnt/hyperv").catch(() => {})
+        const umountRes = await executeSSH(config.targetConnectionId, nodeIp, "umount /mnt/hyperv", CLEANUP_TIMEOUT_MS)
+        if (!umountRes.success) failedCleanups.push(`umount /mnt/hyperv: ${umountRes.error || "unknown"}`)
       }
-    } catch {
-      // Best effort cleanup
+    } catch (cleanupErr: any) {
+      failedCleanups.push(`cleanup setup: ${cleanupErr?.message || String(cleanupErr)}`)
+    }
+    if (failedCleanups.length > 0) {
+      await appendLog(
+        jobId,
+        `Warning: ${failedCleanups.length} cleanup step(s) failed on the PVE node. Manual removal may be needed to reclaim disk space:\n- ${failedCleanups.join("\n- ")}`,
+        "warn",
+      )
     }
 
     // Cleanup: Nutanix images created for disk export
@@ -2010,7 +2197,11 @@ export async function runV2vMigrationPipeline(
       }
     }
 
-    // Cleanup: if we created a VM, try to destroy it
+    // Cleanup: if we created a VM, try to destroy it. Surface failures as a
+    // warning so the user knows a zombie VM ID may still occupy the Proxmox
+    // cluster (and its zvol/qcow2 disk on the target storage). Silent
+    // cleanup failures here previously caused VMID reuse collisions on the
+    // next migration attempt.
     if (targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
@@ -2020,8 +2211,13 @@ export async function runV2vMigrationPipeline(
           { method: "DELETE", body: new URLSearchParams({ purge: "1", "destroy-unreferenced-disks": "1" }) }
         )
         await appendLog(jobId, `Cleaned up partial VM ${targetVmid}`, "warn")
-      } catch {
-        // Cleanup failed - leave for manual intervention
+      } catch (delErr: any) {
+        await appendLog(
+          jobId,
+          `Warning: failed to destroy partial VM ${targetVmid}: ${delErr?.message || String(delErr)}. ` +
+          `Remove it manually via 'qm destroy ${targetVmid} --purge --destroy-unreferenced-disks' to free the VMID and its disk space.`,
+          "warn",
+        )
       }
     }
   } finally {
@@ -2038,14 +2234,23 @@ export async function runV2vMigrationPipeline(
     // helper does its own cleanup on internal errors, but cleanup here is the
     // safety net for failures further down the pipeline (after NFC succeeded).
     if (nfcDownloadedDisks.length > 0) {
+      const nfcFailed: string[] = []
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
         const nodeIp = await getNodeIp(pveConn, config.targetNode)
         for (const p of nfcDownloadedDisks) {
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`).catch(() => {})
+          const rmRes = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`, 120_000)
+          if (!rmRes.success) nfcFailed.push(`${p}: ${rmRes.error || "unknown"}`)
         }
-      } catch {
-        // Best-effort: PVE connection lookup itself can fail in dev/test setups.
+      } catch (e: any) {
+        nfcFailed.push(`connection lookup: ${e?.message || String(e)}`)
+      }
+      if (nfcFailed.length > 0) {
+        await appendLog(
+          jobId,
+          `Warning: failed to remove ${nfcFailed.length} NFC-downloaded VMDK(s). Manual cleanup may be needed:\n- ${nfcFailed.join("\n- ")}`,
+          "warn",
+        ).catch(() => {})
       }
     }
     cancelledJobs.delete(jobId)

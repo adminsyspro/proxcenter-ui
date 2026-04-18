@@ -182,9 +182,13 @@ export function executeSSHDirect(opts: {
           conn.end()
           if (code === 0 || code === null) {
             console.log(`[ssh] executed via ssh2 on ${opts.host}`)
-            resolve({ success: true, output: stdout.trim() })
+            resolve({ success: true, output: stdout.trim(), error: stderr.trim() || undefined })
           } else {
-            resolve({ success: false, error: stderr.trim() || `Exit code ${code}` })
+            // Preserve stdout on non-zero exit so callers can surface full
+            // script output in error diagnostics. Previously stdout was
+            // discarded and we only returned stderr or "Exit code N", which
+            // blinded us when a script redirected stderr to stdout with 2>&1.
+            resolve({ success: false, output: stdout.trim(), error: stderr.trim() || `Exit code ${code}` })
           }
         })
       })

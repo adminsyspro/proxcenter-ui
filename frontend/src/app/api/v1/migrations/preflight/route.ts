@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { runV2vPreflight, installV2vPackages } from "@/lib/migration/v2v-preflight"
+import { runV2vPreflight, installV2vPackages, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
 
 export const runtime = "nodejs"
 
@@ -36,6 +36,16 @@ export async function POST(req: Request) {
   try {
     if (action === "install") {
       const result = await installV2vPackages(targetConnectionId, targetNode)
+      return NextResponse.json(result)
+    }
+
+    if (action === "install-virtio-win") {
+      const result = await startVirtioWinDownload(targetConnectionId, targetNode)
+      return NextResponse.json(result)
+    }
+
+    if (action === "check-virtio-win") {
+      const result = await checkVirtioWinProgress(targetConnectionId, targetNode)
       return NextResponse.json(result)
     }
 

@@ -38,3 +38,5 @@ data/
 *.db
 *.db-journal
 backend/
+.gitnexus
+.worktrees/

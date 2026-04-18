@@ -1662,7 +1662,13 @@ return (
       if (responsiveHidden[col.field]) return false
 
 return true
-    }).map(col => columnWidths[col.field] ? { ...col, width: columnWidths[col.field] } : col)
+    }).map(col => {
+      const saved = columnWidths[col.field]
+      if (!saved) return col
+      // Strip flex so the saved width actually takes effect. With flex set,
+      // MUI re-runs flex layout on every columns-prop change and ignores width.
+      return { ...col, width: saved, flex: undefined }
+    })
   }, [isCompact, expanded, showNode, showTrends, showActions, showIpSnap, onVmAction, onMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths])
 
   return (

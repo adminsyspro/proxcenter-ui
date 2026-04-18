@@ -91,6 +91,10 @@ export async function GET(
           guest_OS: vm.guestOS || undefined,
           committed: vm.committedStorage || undefined,
           uncommitted: vm.uncommittedStorage || undefined,
+          // VMware Tools state, used by the migration modal to preflight
+          // Live migrations of Windows guests (VSS quiesce needs running Tools).
+          toolsStatus: vm.toolsStatus,
+          toolsRunningStatus: vm.toolsRunningStatus,
           // vCenter-only fields used by the virt-v2v migration flow.
           // Undefined on standalone ESXi (no inventory hierarchy needed there).
           vcenterDatacenter: path?.datacenter,

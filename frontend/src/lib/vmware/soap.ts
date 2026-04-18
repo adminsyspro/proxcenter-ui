@@ -165,6 +165,11 @@ export async function soapGetVmConfig(session: SoapSession, vmid: string): Promi
           <urn:pathSet>runtime.powerState</urn:pathSet>
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
           <urn:pathSet>snapshot</urn:pathSet>
+          <urn:pathSet>guest.toolsStatus</urn:pathSet>
+          <urn:pathSet>guest.toolsRunningStatus</urn:pathSet>
+          <urn:pathSet>guest.toolsVersionStatus2</urn:pathSet>
+          <urn:pathSet>summary.guest.toolsStatus</urn:pathSet>
+          <urn:pathSet>summary.guest.toolsRunningStatus</urn:pathSet>
         </urn:propSet>
         <urn:objectSet>
           <urn:obj type="VirtualMachine">${vmid}</urn:obj>
@@ -306,6 +311,37 @@ export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string)
 }
 
 /**
+ * Query whether a snapshot was actually quiesced (= VSS ran successfully in
+ * the guest). When soapCreateSnapshot is called with quiesce=true, vCenter
+ * silently falls back to a crash-consistent snapshot if VSS can't run (no
+ * VMware Tools, broken VSS writers, etc.) and the call still succeeds. The
+ * only way to know is to read the `quiesced` property on the resulting
+ * snapshot MOR afterwards. Returns true if the snapshot is flagged quiesced,
+ * false otherwise (including on query error — defensive).
+ */
+export async function soapGetSnapshotQuiesced(session: SoapSession, snapshotMor: string): Promise<boolean> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>VirtualMachineSnapshot</urn:type><urn:pathSet>config.quiesced</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="VirtualMachineSnapshot">${snapshotMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+  try {
+    const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+    return /<val[^>]*>true<\/val>/i.test(result.text)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Remove a SPECIFIC snapshot by its MOR (not RemoveAllSnapshots). Used by the
  * live migration path so we don't destroy pre-existing snapshots the user had
  * on the source VM, only the one ProxCenter created for the NFC export.
@@ -381,6 +417,33 @@ export async function soapExportVm(session: SoapSession, vmid: string): Promise<
   }
   const leaseMor = result.text.match(/<returnval type="HttpNfcLease">([^<]+)<\/returnval>/)?.[1]
   if (!leaseMor) throw new Error("ExportVm did not return an NFC lease")
+  return leaseMor
+}
+
+/**
+ * Initiate a snapshot export via HttpNfcLease. VirtualMachine.ExportVm() only
+ * works on powered-off VMs (InvalidPowerState on running VMs), so live
+ * migration paths must target the snapshot directly. The snapshot's VMDKs are
+ * immutable, so vCenter is fine serving them even while the parent VM writes
+ * to its delta. Returns the lease MOR (same shape as soapExportVm).
+ */
+export async function soapExportSnapshot(session: SoapSession, snapshotMor: string): Promise<string> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:ExportSnapshot>
+      <urn:_this type="VirtualMachineSnapshot">${snapshotMor}</urn:_this>
+    </urn:ExportSnapshot>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  if (result.text.includes("faultstring")) {
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+    throw new Error(`ExportSnapshot failed: ${fault}`)
+  }
+  const leaseMor = result.text.match(/<returnval type="HttpNfcLease">([^<]+)<\/returnval>/)?.[1]
+  if (!leaseMor) throw new Error("ExportSnapshot did not return an NFC lease")
   return leaseMor
 }
 
@@ -529,6 +592,15 @@ export interface EsxiVmConfig {
   disks: EsxiDiskInfo[]
   nics: EsxiNicInfo[]
   snapshotCount: number
+  /**
+   * VMware Tools status as reported by vCenter. Used to preflight live
+   * migrations of Windows guests: without running Tools, VSS can't quiesce
+   * the snapshot and virt-v2v will fail on a dirty NTFS.
+   * Possible values: "toolsOk", "toolsOld", "toolsNotRunning", "toolsNotInstalled".
+   */
+  toolsStatus?: string
+  /** "guestToolsRunning" | "guestToolsNotRunning" | "guestToolsExecutingScripts". */
+  toolsRunningStatus?: string
 }
 
 /** Parse full VM config from SOAP XML */
@@ -618,9 +690,23 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
 
   const sockets = numCPU > 0 && numCoresPerSocket > 0 ? Math.ceil(numCPU / numCoresPerSocket) : 1
 
+  // VMware Tools status. Empty string when vCenter hasn't populated the
+  // property (e.g. VM freshly created or tools never installed). Some vCenter
+  // versions populate the shortcut summary.guest.* path instead of the
+  // direct guest.* property, so fall back to the summary variant.
+  const toolsStatus =
+    extractProp(xml, "guest.toolsStatus") ||
+    extractProp(xml, "summary.guest.toolsStatus") ||
+    undefined
+  const toolsRunningStatus =
+    extractProp(xml, "guest.toolsRunningStatus") ||
+    extractProp(xml, "summary.guest.toolsRunningStatus") ||
+    undefined
+
   return {
     name, guestOS, guestId, numCPU, numCoresPerSocket, sockets, memoryMB,
     firmware, uuid, vmxVersion, powerState, committed, disks, nics, snapshotCount,
+    toolsStatus, toolsRunningStatus,
   }
 }
 
@@ -664,6 +750,14 @@ export interface VmwareVmSummary {
    * Used by soapResolveHostInventoryPaths() to compute the libvirt vpx URI for virt-v2v.
    */
   hostMor: string
+  /**
+   * VMware Tools install + running state, when reported by vCenter.
+   * Used by the migration modal to preflight Live migrations: VSS quiesce
+   * (required for a clean NTFS capture on Windows live snapshots) only
+   * works if Tools is installed AND running in the guest.
+   */
+  toolsStatus?: string
+  toolsRunningStatus?: string
 }
 
 /**
@@ -738,6 +832,10 @@ export async function soapListVMs(
           <urn:pathSet>config.template</urn:pathSet>
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
           <urn:pathSet>runtime.host</urn:pathSet>
+          <urn:pathSet>guest.toolsStatus</urn:pathSet>
+          <urn:pathSet>guest.toolsRunningStatus</urn:pathSet>
+          <urn:pathSet>summary.guest.toolsStatus</urn:pathSet>
+          <urn:pathSet>summary.guest.toolsRunningStatus</urn:pathSet>
         </urn:propSet>
         <urn:objectSet>
           <urn:obj type="ContainerView">${viewRef}</urn:obj>
@@ -797,6 +895,8 @@ export async function soapListVMs(
     let committedStorage = 0
     let uncommittedStorage = 0
     let hostMor = ""
+    let toolsStatus = ""
+    let toolsRunningStatus = ""
 
     const propRegex = /<propSet>\s*<name>([^<]+)<\/name>\s*<val[^>]*>([\s\S]*?)<\/val>\s*<\/propSet>/g
     let propMatch: RegExpExecArray | null
@@ -826,6 +926,14 @@ export async function soapListVMs(
           hostMor = propVal.trim()
           break
         }
+        case "guest.toolsStatus":
+        case "summary.guest.toolsStatus":
+          if (!toolsStatus) toolsStatus = propVal
+          break
+        case "guest.toolsRunningStatus":
+        case "summary.guest.toolsRunningStatus":
+          if (!toolsRunningStatus) toolsRunningStatus = propVal
+          break
       }
     }
 
@@ -841,6 +949,8 @@ export async function soapListVMs(
       uncommittedStorage,
       template,
       hostMor,
+      toolsStatus: toolsStatus || undefined,
+      toolsRunningStatus: toolsRunningStatus || undefined,
     })
   }
 

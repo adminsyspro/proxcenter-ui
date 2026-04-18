@@ -264,7 +264,7 @@ export interface InventoryDialogsProps {
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string } | null>
+  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string; tempStorage?: string } | null>
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -3052,6 +3052,77 @@ return
                   )
                 })()}
 
+                {/* Temporary storage for virt-v2v (bulk). Without this, the
+                    API defaults to /tmp on the target node, which is often a
+                    small partition (tmpfs or root FS). For bulk jobs with
+                    several multi-GB VMs the dir fills up and subsequent
+                    migrations hang or fail with "no space left on device". */}
+                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
+                  const selectedBulkVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+                  // Peak disk usage in bulk = biggest committed disk × 2 (source + converted).
+                  // Sequential runs (BULK_MIG_CONCURRENCY=1) so only one VM occupies tempStorage at a time.
+                  const maxCommitted = selectedBulkVms.reduce((m: number, vm: any) => Math.max(m, vm.committed || 0), 0)
+                  const requiredBytes = maxCommitted * 2
+                  return (
+                    <Box>
+                      <TextField
+                        select
+                        fullWidth
+                        size="small"
+                        label="Temporary Storage"
+                        value={migTempStorage}
+                        onChange={(e) => setMigTempStorage(e.target.value)}
+                        helperText={(() => {
+                          const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
+                          if (!sel) return 'Select where virt-v2v writes temporary files during conversion'
+                          const availGB = (sel.availableBytes / 1073741824).toFixed(1)
+                          const reqGB = (requiredBytes / 1073741824).toFixed(1)
+                          if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for largest VM in batch`
+                          return requiredBytes > 0
+                            ? `${availGB} GB available (${sel.filesystem}), ~${reqGB} GB peak needed per VM`
+                            : `${availGB} GB available (${sel.filesystem})`
+                        })()}
+                        error={(() => {
+                          const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
+                          return sel && requiredBytes > 0 ? sel.availableBytes < requiredBytes : false
+                        })()}
+                      >
+                        {vcenterPreflight.tempStorages.map(s => {
+                          const usedPct = Math.round(((s.totalBytes - s.availableBytes) / s.totalBytes) * 100)
+                          const availGB = (s.availableBytes / 1073741824).toFixed(1)
+                          const totalGB = (s.totalBytes / 1073741824).toFixed(1)
+                          return (
+                            <MenuItem key={s.path} value={s.path}>
+                              <Box sx={{ width: '100%' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                  <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                                  <Typography variant="body2" sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>{s.path}</Typography>
+                                  <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>
+                                    {availGB} / {totalGB} GB free
+                                  </Typography>
+                                </Box>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={usedPct}
+                                  sx={{
+                                    height: 4,
+                                    borderRadius: 2,
+                                    bgcolor: 'action.hover',
+                                    '& .MuiLinearProgress-bar': {
+                                      bgcolor: usedPct > 90 ? 'error.main' : usedPct > 70 ? 'warning.main' : 'success.main',
+                                      borderRadius: 2,
+                                    }
+                                  }}
+                                />
+                              </Box>
+                            </MenuItem>
+                          )
+                        })}
+                      </TextField>
+                    </Box>
+                  )
+                })()}
+
                 <FormControlLabel
                   control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -3391,6 +3462,13 @@ return
                           ...((job as any).vcenterHost && {
                             vcenterHost: (job as any).vcenterHost,
                           }),
+                          // tempStorage lets the user pick where virt-v2v writes
+                          // temp files. Omit when it's the default /tmp so the
+                          // server-side default path is used and we don't
+                          // inadvertently pass an empty string.
+                          ...((isVcenterBulk || isHypervBulk || isNutanixBulk) && migTempStorage && migTempStorage !== '/tmp' && {
+                            tempStorage: migTempStorage,
+                          }),
                         }),
                       })
                       const d = await res.json()
@@ -3425,6 +3503,11 @@ return
                     transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
                     startAfterMigration: migStartAfter,
                     sourceType,
+                    // Persisted across the queued-job poller so retries use the
+                    // same temp storage the user selected when starting the batch.
+                    ...((isVcenterBulk || isHypervBulk || isNutanixBulk) && migTempStorage && migTempStorage !== '/tmp' && {
+                      tempStorage: migTempStorage,
+                    }),
                   }
                   setBulkMigJobs(jobs)
                   setBulkMigStarting(false)

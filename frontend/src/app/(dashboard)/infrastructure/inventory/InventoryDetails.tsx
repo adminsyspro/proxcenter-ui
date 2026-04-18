@@ -287,7 +287,7 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string; tempStorage?: string } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -870,6 +870,7 @@ export default function InventoryDetails({
                   ...((job as any).vcenterDatacenter && { vcenterDatacenter: (job as any).vcenterDatacenter }),
                   ...((job as any).vcenterCluster && { vcenterCluster: (job as any).vcenterCluster }),
                   ...((job as any).vcenterHost && { vcenterHost: (job as any).vcenterHost }),
+                  ...(cfg.tempStorage && { tempStorage: cfg.tempStorage }),
                 }),
               })
               const d = await res.json()

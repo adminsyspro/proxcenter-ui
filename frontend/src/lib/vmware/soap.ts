@@ -305,6 +305,54 @@ export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string)
   }
 }
 
+/**
+ * Remove a SPECIFIC snapshot by its MOR (not RemoveAllSnapshots). Used by the
+ * live migration path so we don't destroy pre-existing snapshots the user had
+ * on the source VM, only the one ProxCenter created for the NFC export.
+ * removeChildren=true consolidates any child snapshots into the parent.
+ */
+export async function soapRemoveSnapshot(session: SoapSession, snapshotMor: string, removeChildren = true): Promise<void> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RemoveSnapshot_Task>
+      <urn:_this type="VirtualMachineSnapshot">${snapshotMor}</urn:_this>
+      <urn:removeChildren>${removeChildren}</urn:removeChildren>
+      <urn:consolidate>true</urn:consolidate>
+    </urn:RemoveSnapshot_Task>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  if (result.text.includes("faultstring")) {
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
+    throw new Error(`Failed to remove snapshot ${snapshotMor}: ${fault}`)
+  }
+
+  // Wait for task completion (up to 2 min: merging a large delta can be slow)
+  const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+  if (!taskMor) return
+
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000))
+    const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+    if (status.text.includes("success") || status.text.includes("error")) return
+  }
+}
+
 // ── HttpNfcLease (Export VM) — for downloading disks when snapshots are active ──
 
 export interface NfcLeaseDeviceUrl {

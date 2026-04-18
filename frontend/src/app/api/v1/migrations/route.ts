@@ -95,11 +95,17 @@ export async function POST(req: Request) {
     after(async () => {
       if (effectiveSourceType === "vcenter" || effectiveSourceType === "hyperv" || effectiveSourceType === "nutanix") {
         const { sourceVmName = "", vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage } = body
+        // Live migration via NFC-on-snapshot is only plumbed for vcenter today.
+        // Hyper-V and Nutanix still force cold: their pipelines don't own the
+        // source VM snapshot surface that live needs to keep the source running.
+        const v2vMigrationType: "cold" | "live" =
+          effectiveSourceType === "vcenter" && migrationType === "live" ? "live" : "cold"
         await runV2vMigrationPipeline(job.id, {
           sourceConnectionId, sourceVmId, sourceVmName,
           sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
           targetConnectionId, targetNode, targetStorage, networkBridge, startAfterMigration,
           vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage,
+          migrationType: v2vMigrationType,
         }, tenantId)
       } else if (effectiveSourceType === "xcpng") {
         await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: (migrationType === "sshfs_boot" ? "cold" : migrationType) as "cold" | "live" }, tenantId)

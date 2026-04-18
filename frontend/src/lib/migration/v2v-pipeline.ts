@@ -39,6 +39,9 @@ import {
   soapNfcLeaseProgress,
   soapNfcLeaseComplete,
   soapNfcLeaseAbort,
+  soapCreateSnapshot,
+  soapRemoveSnapshot,
+  soapPowerOffVm,
 } from "@/lib/vmware/soap"
 import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/soap"
 
@@ -66,6 +69,15 @@ export interface V2vMigrationConfig {
   vcenterHost?: string
   diskPaths?: string[]  // For Nutanix/Hyper-V disk-based mode
   tempStorage?: string  // Custom temp directory for virt-v2v output (default: /tmp)
+  /**
+   * "cold": power off source before NFC export (today's default).
+   * "live": take a snapshot of the running source VM, NFC export from the
+   *   snapshot (VM stays up during transfer), power off source + remove the
+   *   snapshot just before virt-v2v conversion. Downtime = convert + import
+   *   + boot on Proxmox (minutes), instead of the full transfer window.
+   *   Only supported for vcenter source; hyperv/nutanix ignore this field.
+   */
+  migrationType?: "cold" | "live"
 }
 
 interface LogEntry {
@@ -1034,6 +1046,13 @@ export async function runV2vMigrationPipeline(
   // We capture the parsed source config at vSAN detection time and use it later
   // in Phase 5 to override the sparse defaults virt-v2v would otherwise emit.
   let sourceVmwareConfig: EsxiVmConfig | null = null
+  // Live migration state. When migrationType=="live" and the source VM is
+  // powered on, we snapshot before the NFC export so transfer happens while
+  // the VM keeps serving traffic, then power off + remove the snapshot right
+  // before virt-v2v conversion. The MOR is tracked so the catch/finally blocks
+  // can remove the snapshot even on failure paths.
+  let liveSnapshotMor: string | null = null
+  let livePoweredOff = false
 
   try {
     // ── PHASE 1: Preflight ──
@@ -1397,6 +1416,46 @@ export async function runV2vMigrationPipeline(
         await appendLog(jobId, "nbdkit + libnbd-bin installed successfully", "success")
       }
 
+      // Live migration pre-NFC: take a snapshot of the running VM so the
+      // transfer runs while the VM keeps serving traffic. vCenter routes the
+      // NFC export through the snapshot's frozen VMDKs, writes during the
+      // transfer accumulate in the delta and are discarded when we power off
+      // + remove the snapshot right before virt-v2v runs.
+      const isLive = config.migrationType === "live" && config.sourceType === "vcenter"
+      if (isLive && sourceVmwareConfig.powerState === "poweredOn") {
+        const snapName = `proxcenter-live-${jobId.slice(-12)}`
+        await appendLog(
+          jobId,
+          `Live migration: creating snapshot "${snapName}" on source VM (VM stays running)...`,
+        )
+        try {
+          // quiesce=false: we rely on the guest writing to the delta during
+          // transfer. Enabling quiesce would require VMware Tools and guest
+          // FS flush, which isn't safely available on every source OS; the
+          // cold (power-off) path is the right choice when quiesce matters.
+          liveSnapshotMor = await soapCreateSnapshot(
+            vmwareSession,
+            config.sourceVmId,
+            snapName,
+            "ProxCenter live migration snapshot - do not delete manually",
+            false,
+          )
+          await appendLog(jobId, `Snapshot created (mor: ${liveSnapshotMor})`, "success")
+        } catch (snapErr: any) {
+          throw new Error(
+            `Live migration requires snapshotting the source VM, but CreateSnapshot_Task failed: ` +
+            `${snapErr?.message || String(snapErr)}. Retry with a cold migration, or fix the source ` +
+            `VM state (existing snapshot chain in a bad state, datastore full, vSAN object issues).`,
+          )
+        }
+      } else if (isLive && sourceVmwareConfig.powerState !== "poweredOn") {
+        await appendLog(
+          jobId,
+          `Live migration requested but source VM is ${sourceVmwareConfig.powerState}; running the cold path (no snapshot needed).`,
+          "info",
+        )
+      }
+
       // Reset to the transferring phase since NFC download is the bulk of the work.
       await updateJob(jobId, "transferring", { progress: 0 })
       nfcDownloadedDisks = await runVcenterNfcExport(
@@ -1407,6 +1466,44 @@ export async function runV2vMigrationPipeline(
         outputDir,
         sourceVmwareConfig,
       )
+
+      // Live migration cutover: all disks are on the PVE node now, so we can
+      // power off the source (downtime starts HERE, not at migration start)
+      // and remove our snapshot before handing off to virt-v2v. Everything
+      // the guest writes from now until it boots on Proxmox is lost, which
+      // is expected migration semantics.
+      if (liveSnapshotMor) {
+        const downtimeStart = Date.now()
+        await appendLog(jobId, "Live cutover: all disks transferred, powering off source VM (downtime starts now)...", "warn")
+        try {
+          await soapPowerOffVm(vmwareSession, config.sourceVmId)
+          livePoweredOff = true
+          await appendLog(jobId, `Source VM powered off (downtime so far: ${((Date.now() - downtimeStart) / 1000).toFixed(1)}s)`, "success")
+        } catch (powerErr: any) {
+          // Power-off failed: we cannot safely remove the snapshot while the
+          // VM keeps running and committing writes to it. Surface clearly.
+          throw new Error(
+            `Live cutover: failed to power off source VM: ${powerErr?.message || String(powerErr)}. ` +
+            `The ProxCenter snapshot is still active on the source; remove it manually via vCenter once ` +
+            `the VM is powered off.`,
+          )
+        }
+        try {
+          await soapRemoveSnapshot(vmwareSession, liveSnapshotMor)
+          await appendLog(jobId, "Source snapshot removed", "success")
+          liveSnapshotMor = null
+        } catch (snapErr: any) {
+          // Non-fatal: the VM is off, the snapshot stays but has no active
+          // writes; a user can manually consolidate it via vCenter later.
+          await appendLog(
+            jobId,
+            `Warning: failed to remove snapshot after power off: ${snapErr?.message || String(snapErr)}. ` +
+            `Remove it manually via vCenter (VM "${config.sourceVmName}" > Snapshots > Delete All).`,
+            "warn",
+          )
+        }
+      }
+
       // SOAP session is no longer needed past this point: the NFC lease has
       // been finalised inside runVcenterNfcExport(). Close it now to release
       // the vCenter session slot rather than holding it for the long virt-v2v
@@ -1682,6 +1779,97 @@ export async function runV2vMigrationPipeline(
       }
     } else {
       await appendLog(jobId, "No XML output found from virt-v2v. Using fallback config.", "warn")
+    }
+
+    // Windows EFI boot fallback fix. Proxmox creates a fresh efidisk0 (NVRAM)
+    // on VM creation so the Windows Boot Manager entry from the source VM is
+    // lost. UEFI firmware then scans attached disks for the standardised
+    // fallback path /EFI/Boot/BOOTX64.EFI — which Windows does NOT install by
+    // default (it ships its bootloader at /EFI/Microsoft/Boot/bootmgfw.efi).
+    // Result: the VM boots straight to PXE. Fix: mount the ESP on each
+    // converted disk and copy bootmgfw.efi to the fallback location. This is
+    // the same workaround most commercial migration tools apply.
+    if (vmConfig && vmConfig.firmware === "efi" && vmConfig.ostype.startsWith("win")) {
+      await appendLog(jobId, "Windows UEFI guest detected: applying EFI boot fallback fix on converted disks...")
+      // Check guestfish availability once upfront; skip quietly if unavailable
+      // (virt-customize is pulled in by virt-v2v's deps but guestfish may be
+      // packaged separately in some distros). Worst case the user sees PXE at
+      // boot and we documented the manual UEFI Shell workaround.
+      const gfCheck = await executeSSH(
+        config.targetConnectionId,
+        nodeIp,
+        "which guestfish >/dev/null 2>&1 && which virt-filesystems >/dev/null 2>&1 && echo ok || echo missing",
+      )
+      if (gfCheck.output?.trim() !== "ok") {
+        await appendLog(
+          jobId,
+          "guestfish / virt-filesystems not found on target node, skipping EFI boot fallback. " +
+          "Install libguestfs-tools to enable automatic fix; otherwise the Windows VM will need a one-time " +
+          "manual boot-from-file via UEFI Shell after migration.",
+          "warn",
+        )
+      } else {
+        // Shell script on the PVE node: iterate converted disks, for each
+        // iterate its partitions, find the one carrying Windows Boot Manager,
+        // copy bootmgfw.efi to the fallback path. Stops on first match per
+        // disk. Uses || true on inner checks so a missing partition doesn't
+        // abort the outer loop.
+        const fixScript = [
+          "set -u",
+          `OUTPUT_DIR=${shellEscape(outputDir)}`,
+          'FIXED=""',
+          'for DISK in "$OUTPUT_DIR"/*-sda "$OUTPUT_DIR"/*-sdb "$OUTPUT_DIR"/*-sdc "$OUTPUT_DIR"/*-sdd; do',
+          '  [ -f "$DISK" ] || continue',
+          '  # Parse partition list; virt-filesystems returns /dev/sda1 etc. line-separated',
+          '  for PART in $(virt-filesystems -a "$DISK" --partitions 2>/dev/null); do',
+          '    HAS_BOOT=$(guestfish --ro -a "$DISK" -m "$PART" -- ls /EFI/Microsoft/Boot 2>/dev/null | grep -i "^bootmgfw.efi$" || true)',
+          '    if [ -n "$HAS_BOOT" ]; then',
+          '      guestfish --rw -a "$DISK" -m "$PART" <<GFEOF || { echo "GUESTFISH_COPY_FAILED:$DISK:$PART"; continue; }',
+          '-mkdir-p /EFI/Boot',
+          'cp /EFI/Microsoft/Boot/bootmgfw.efi /EFI/Boot/BOOTX64.EFI',
+          'GFEOF',
+          '      echo "EFI_FALLBACK_FIXED:$DISK:$PART"',
+          '      FIXED="$DISK"',
+          '      break',
+          '    fi',
+          '  done',
+          '  [ -n "$FIXED" ] && break',
+          'done',
+          '[ -z "$FIXED" ] && echo "NO_ESP_FOUND"',
+        ].join("\n")
+
+        const fixResult = await executeSSH(
+          config.targetConnectionId,
+          nodeIp,
+          `bash -c ${shellEscape(fixScript)}`,
+          // guestfish spin-up + copy is fast but can take up to ~30s per
+          // partition checked on slow storage; give it 3 min headroom.
+          180_000,
+        )
+        const fixOut = (fixResult.output || "").trim()
+        if (fixOut.includes("EFI_FALLBACK_FIXED:")) {
+          const match = fixOut.match(/EFI_FALLBACK_FIXED:([^:]+):(.+)/)
+          await appendLog(
+            jobId,
+            `EFI fallback fix applied: bootmgfw.efi copied to \\EFI\\Boot\\BOOTX64.EFI on ${match?.[2] || "ESP partition"}`,
+            "success",
+          )
+        } else if (fixOut.includes("NO_ESP_FOUND")) {
+          await appendLog(
+            jobId,
+            "EFI boot fallback fix: no ESP with /EFI/Microsoft/Boot/bootmgfw.efi found on any converted disk. " +
+            "Windows may still boot if virt-v2v preserved NVRAM metadata; if the VM boots to PXE, the user " +
+            "can do a one-time boot via UEFI Shell (Boot Maintenance Manager > Boot From File).",
+            "warn",
+          )
+        } else {
+          await appendLog(
+            jobId,
+            `EFI boot fallback fix: inconclusive. Output: ${fixOut.slice(0, 500)}`,
+            "warn",
+          )
+        }
+      }
     }
 
     // Build PVE creation params
@@ -2136,6 +2324,25 @@ export async function runV2vMigrationPipeline(
     const errorMsg = err?.message || String(err)
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
     await updateJob(jobId, "failed", { error: errorMsg })
+
+    // Live migration: we may have left a snapshot on the source VM. Remove it
+    // if possible so the source keeps running cleanly. Skip if the source is
+    // already powered off (livePoweredOff=true means cutover succeeded; the
+    // snapshot was either removed at that point or is a harmless leftover).
+    if (liveSnapshotMor && vmwareSession && !livePoweredOff) {
+      try {
+        await soapRemoveSnapshot(vmwareSession, liveSnapshotMor)
+        await appendLog(jobId, "Removed leftover live-migration snapshot on source VM", "info")
+      } catch (snapCleanupErr: any) {
+        await appendLog(
+          jobId,
+          `Warning: failed to remove live-migration snapshot on source VM: ${snapCleanupErr?.message || String(snapCleanupErr)}. ` +
+          `Remove it manually via vCenter (VM "${config.sourceVmName}" > Snapshots > Delete All).`,
+          "warn",
+        )
+      }
+      liveSnapshotMor = null
+    }
 
     // Cleanup: temp files. Use a longer SSH timeout because the PVE node is
     // often under stress from the same condition that caused the migration

@@ -146,7 +146,7 @@ export default function ClusterSdnTab({ connId }: Props) {
           <span>
             <Button
               variant="contained"
-              color="warning"
+              color="primary"
               size="small"
               disabled={applyDisabled}
               onClick={() => setApplyDialogOpen(true)}
@@ -184,7 +184,7 @@ export default function ClusterSdnTab({ connId }: Props) {
             {t('sdn.apply.dialog.cancel')}
           </Button>
           <Button
-            color="warning"
+            color="primary"
             variant="contained"
             disabled={applying}
             onClick={() => {

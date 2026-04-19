@@ -197,7 +197,7 @@ type TreeCluster = {
     cpu?: number      // node-level CPU usage (fraction 0-1)
     mem?: number      // node-level used memory (bytes)
     maxmem?: number   // node-level total memory (bytes)
-    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
+    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; maxcpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
   }[]
 }
 

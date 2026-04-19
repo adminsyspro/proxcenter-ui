@@ -13,9 +13,13 @@ const RBACContext = createContext({
   roles: [],
   isAdmin: false,
   loading: true,
-  hasPermission: () => false,
-  hasAnyPermission: () => false,
-  hasAllPermissions: () => false,
+  // Default stubs accept an argument so TypeScript consumers inferring the
+  // context type (e.g. `rbac.hasPermission('connection.manage')`) don't trip
+  // the "Expected 0 arguments" error. The real implementations below use the
+  // permission argument.
+  hasPermission: (_p) => false,
+  hasAnyPermission: (_perms) => false,
+  hasAllPermissions: (_perms) => false,
   refresh: () => {},
 })
 

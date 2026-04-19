@@ -77,7 +77,7 @@ type EditDiskDialogProps = {
     rawValue?: string
   } | null
   existingDisks?: string[]
-  availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number }>
+  availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number }>
 }
 
 export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMoveStorage, connId, node, disk, existingDisks, availableStorages }: EditDiskDialogProps) {
@@ -97,7 +97,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   const [targetStorage, setTargetStorage] = useState('')
   const [deleteSource, setDeleteSource] = useState(true)
   const [targetFormat, setTargetFormat] = useState('')
-  const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number }>>([])
+  const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number; used?: number }>>([])
   const [storagesLoading, setStoragesLoading] = useState(false)
 
   // Disk config (éditable)

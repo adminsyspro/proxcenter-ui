@@ -165,7 +165,7 @@ export function useHardwareHandlers({
   }, [selection, selectedDisk])
 
   // Supprimer un disque
-  const handleDeleteDisk = useCallback(async () => {
+  const handleDetachDisk = useCallback(async () => {
     if (!selection || selection.type !== 'vm' || !selectedDisk) throw new Error('No disk selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
@@ -1335,7 +1335,7 @@ return explorerFiles.filter((file: any) =>
     handleSaveNetwork,
     handleSaveScsiController,
     handleEditDisk,
-    handleDeleteDisk,
+    handleDetachDisk,
     handleResizeDisk,
     handleMoveDisk,
     handleDeleteNetwork,

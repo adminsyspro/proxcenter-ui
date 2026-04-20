@@ -972,7 +972,7 @@ export default function InventoryDetails({
     handleSaveNetwork,
     handleSaveScsiController,
     handleEditDisk,
-    handleDeleteDisk,
+    handleDetachDisk,
     handleResizeDisk,
     handleMoveDisk,
     handleDeleteNetwork,
@@ -4049,7 +4049,7 @@ return vm?.isCluster ?? false
         handleSaveNetwork={handleSaveNetwork}
         handleSaveScsiController={handleSaveScsiController}
         handleEditDisk={handleEditDisk}
-        handleDeleteDisk={handleDeleteDisk}
+        handleDetachDisk={handleDetachDisk}
         handleResizeDisk={handleResizeDisk}
         handleMoveDisk={handleMoveDisk}
         handleDeleteNetwork={handleDeleteNetwork}

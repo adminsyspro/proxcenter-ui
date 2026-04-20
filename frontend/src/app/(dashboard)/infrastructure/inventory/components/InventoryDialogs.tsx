@@ -117,7 +117,7 @@ export interface InventoryDialogsProps {
   handleSaveNetwork: (...args: any[]) => any
   handleSaveScsiController: (...args: any[]) => any
   handleEditDisk: (...args: any[]) => any
-  handleDeleteDisk: (...args: any[]) => any
+  handleDetachDisk: (...args: any[]) => any
   handleResizeDisk: (...args: any[]) => any
   handleMoveDisk: (...args: any[]) => any
   handleDeleteNetwork: (...args: any[]) => any
@@ -351,7 +351,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     editScsiControllerDialogOpen, setEditScsiControllerDialogOpen, editDiskDialogOpen, setEditDiskDialogOpen,
     editNetworkDialogOpen, setEditNetworkDialogOpen, addOtherHardwareDialogOpen, setAddOtherHardwareDialogOpen,
     selectedDisk, setSelectedDisk, selectedNetwork, setSelectedNetwork,
-    handleSaveDisk, handleSaveNetwork, handleSaveScsiController, handleEditDisk, handleDeleteDisk,
+    handleSaveDisk, handleSaveNetwork, handleSaveScsiController, handleEditDisk, handleDetachDisk,
     handleResizeDisk, handleMoveDisk, handleDeleteNetwork,
     migrateDialogOpen, setMigrateDialogOpen, cloneDialogOpen, setCloneDialogOpen,
     handleMigrateVm, handleCrossClusterMigrate, handleCloneVm, selectedVmIsCluster,
@@ -852,7 +852,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
                 setSelectedDisk(null)
               }}
               onSave={handleEditDisk}
-              onDelete={handleDeleteDisk}
+              onDelete={handleDetachDisk}
               onResize={handleResizeDisk}
               onMoveStorage={handleMoveDisk}
               connId={connId}

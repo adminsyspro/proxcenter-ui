@@ -2952,6 +2952,7 @@
       "deletePlan": "Wiederherstellungsplan löschen",
       "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
     },
+    "rpoTargetLabel": "RPO-Ziel",
     "createJob": {
       "title": "Replikationsauftrag erstellen",
       "sourceCluster": "Quell-Cluster",
@@ -2993,6 +2994,52 @@
       "pvNote": "Installieren Sie das <pv>pv</pv>-Paket auf Quell- und Ziel-Nodes, um den Replikationsfortschritt anzuzeigen.",
       "pvInstallLabel": "<pv>pv</pv> automatisch auf Quell-Nodes installieren",
       "pvInstallDesc": "Erforderlich zur Verfolgung des Replikationsfortschritts. Führt apt-get install pv via SSH aus."
+    },
+    "schedule": {
+      "modeRpo": "Kontinuierlich (RPO)",
+      "modeScheduled": "Geplant",
+      "freq": {
+        "hourly": "Stündlich",
+        "daily": "Täglich",
+        "weekly": "Wöchentlich",
+        "monthly": "Monatlich"
+      },
+      "everyNHours": "Alle N Stunden",
+      "hourWindow": "Auf Zeitfenster beschränken",
+      "startHour": "Startstunde",
+      "endHour": "Endstunde",
+      "atHours": "Um",
+      "onWeekdays": "Wochentage",
+      "dayOfMonth": "Tag im Monat",
+      "timezone": "Zeitzone",
+      "nextRuns": "Nächste {count} Läufe",
+      "previewError": "Vorschaufehler",
+      "days": {
+        "sun": "So",
+        "mon": "Mo",
+        "tue": "Di",
+        "wed": "Mi",
+        "thu": "Do",
+        "fri": "Fr",
+        "sat": "Sa"
+      },
+      "labels": {
+        "dailyAllDays": "Täglich um {time}",
+        "dailyWeekdays": "Werktags um {time}",
+        "dailyCustom": "{days} um {time}",
+        "weeklyOn": "Jeden {day} um {time}",
+        "monthlyOn": "Am {day}. jedes Monats um {time}",
+        "hourlyEvery": "Alle {n}h",
+        "hourlyEveryWindow": "Alle {n}h zwischen {start} und {end}",
+        "andTz": "{label} ({tz})"
+      }
+    },
+    "editJob": {
+      "title": "Replikationsjob bearbeiten",
+      "immutableTooltip": "VMs, Cluster, Pool und VMID-Präfix sind unveränderlich — löschen und neu erstellen, um sie zu ändern.",
+      "syncingAlert": "Der Job wird gerade synchronisiert. Bitte in einigen Sekunden erneut versuchen.",
+      "save": "Änderungen speichern",
+      "rateLimitHelp": "0 = unbegrenzt"
     },
     "createPlan": {
       "title": "erstellen Recovery Plan",

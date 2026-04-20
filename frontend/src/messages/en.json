@@ -2984,6 +2984,7 @@
       "deletePlan": "Delete Recovery Plan",
       "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone."
     },
+    "rpoTargetLabel": "RPO target",
     "createJob": {
       "title": "Create Replication Job",
       "sourceCluster": "Source Cluster",
@@ -3025,6 +3026,52 @@
       "pvNote": "Install the <pv>pv</pv> package on source and target nodes to display replication progress.",
       "pvInstallLabel": "Install <pv>pv</pv> automatically on source nodes",
       "pvInstallDesc": "Required to track replication progress. Will run apt-get install pv via SSH."
+    },
+    "schedule": {
+      "modeRpo": "Continuous (RPO)",
+      "modeScheduled": "Scheduled",
+      "freq": {
+        "hourly": "Hourly",
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly"
+      },
+      "everyNHours": "Every N hours",
+      "hourWindow": "Limit to time window",
+      "startHour": "Start hour",
+      "endHour": "End hour",
+      "atHours": "At",
+      "onWeekdays": "Days of week",
+      "dayOfMonth": "Day of month",
+      "timezone": "Timezone",
+      "nextRuns": "Next {count} runs",
+      "previewError": "Preview error",
+      "days": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "labels": {
+        "dailyAllDays": "Every day at {time}",
+        "dailyWeekdays": "Weekdays at {time}",
+        "dailyCustom": "{days} at {time}",
+        "weeklyOn": "Every {day} at {time}",
+        "monthlyOn": "On day {day} of each month at {time}",
+        "hourlyEvery": "Every {n}h",
+        "hourlyEveryWindow": "Every {n}h between {start} and {end}",
+        "andTz": "{label} ({tz})"
+      }
+    },
+    "editJob": {
+      "title": "Edit replication job",
+      "immutableTooltip": "VMs, clusters, pool and VMID prefix are immutable — delete and recreate the job to change them.",
+      "syncingAlert": "The job is currently syncing. Retry in a few seconds.",
+      "save": "Save changes",
+      "rateLimitHelp": "0 = unlimited"
     },
     "createPlan": {
       "title": "Create Recovery Plan",

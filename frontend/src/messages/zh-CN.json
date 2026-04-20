@@ -2955,6 +2955,7 @@
       "deletePlan": "删除恢复计划",
       "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。"
     },
+    "rpoTargetLabel": "RPO 目标",
     "createJob": {
       "title": "创建复制任务",
       "sourceCluster": "源集群",
@@ -2996,6 +2997,52 @@
       "pvNote": "在源和目标节点上安装 <pv>pv</pv> 包以显示复制进度。",
       "pvInstallLabel": "在源节点上自动安装 <pv>pv</pv>",
       "pvInstallDesc": "跟踪复制进度所需。将通过 SSH 运行 apt-get install pv。"
+    },
+    "schedule": {
+      "modeRpo": "持续（RPO）",
+      "modeScheduled": "计划",
+      "freq": {
+        "hourly": "每小时",
+        "daily": "每日",
+        "weekly": "每周",
+        "monthly": "每月"
+      },
+      "everyNHours": "每 N 小时",
+      "hourWindow": "限制在时间窗口",
+      "startHour": "开始时间",
+      "endHour": "结束时间",
+      "atHours": "在",
+      "onWeekdays": "星期",
+      "dayOfMonth": "每月几号",
+      "timezone": "时区",
+      "nextRuns": "接下来 {count} 次运行",
+      "previewError": "预览错误",
+      "days": {
+        "sun": "日",
+        "mon": "一",
+        "tue": "二",
+        "wed": "三",
+        "thu": "四",
+        "fri": "五",
+        "sat": "六"
+      },
+      "labels": {
+        "dailyAllDays": "每天 {time}",
+        "dailyWeekdays": "工作日 {time}",
+        "dailyCustom": "{days} {time}",
+        "weeklyOn": "每 {day} {time}",
+        "monthlyOn": "每月 {day} 号 {time}",
+        "hourlyEvery": "每 {n}h",
+        "hourlyEveryWindow": "每 {n}h 在 {start} 和 {end} 之间",
+        "andTz": "{label}（{tz}）"
+      }
+    },
+    "editJob": {
+      "title": "编辑复制任务",
+      "immutableTooltip": "VM、集群、池和 VMID 前缀不可修改。如需更改，请删除并重新创建任务。",
+      "syncingAlert": "任务正在同步，请稍后重试。",
+      "save": "保存更改",
+      "rateLimitHelp": "0 = 无限制"
     },
     "createPlan": {
       "title": "创建恢复计划",

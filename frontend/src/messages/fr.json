@@ -2984,6 +2984,7 @@
       "deletePlan": "Supprimer le plan de reprise",
       "deletePlanConfirm": "Êtes-vous sûr de vouloir supprimer ce plan de reprise ? Cette action est irréversible."
     },
+    "rpoTargetLabel": "RPO cible",
     "createJob": {
       "title": "Créer un job de réplication",
       "sourceCluster": "Cluster source",
@@ -3025,6 +3026,52 @@
       "pvNote": "Installez le paquet <pv>pv</pv> sur les nœuds source et cible pour afficher la progression des réplications.",
       "pvInstallLabel": "Installer <pv>pv</pv> automatiquement sur les nœuds source",
       "pvInstallDesc": "Nécessaire pour suivre la progression des réplications. Exécutera apt-get install pv via SSH."
+    },
+    "schedule": {
+      "modeRpo": "Continu (RPO)",
+      "modeScheduled": "Planifié",
+      "freq": {
+        "hourly": "Horaire",
+        "daily": "Quotidien",
+        "weekly": "Hebdomadaire",
+        "monthly": "Mensuel"
+      },
+      "everyNHours": "Toutes les N heures",
+      "hourWindow": "Limiter à une plage horaire",
+      "startHour": "Début",
+      "endHour": "Fin",
+      "atHours": "À",
+      "onWeekdays": "Jours de la semaine",
+      "dayOfMonth": "Jour du mois",
+      "timezone": "Fuseau horaire",
+      "nextRuns": "{count} prochaines exécutions",
+      "previewError": "Erreur d'aperçu",
+      "days": {
+        "sun": "Dim",
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mer",
+        "thu": "Jeu",
+        "fri": "Ven",
+        "sat": "Sam"
+      },
+      "labels": {
+        "dailyAllDays": "Tous les jours à {time}",
+        "dailyWeekdays": "Jours ouvrés à {time}",
+        "dailyCustom": "{days} à {time}",
+        "weeklyOn": "Chaque {day} à {time}",
+        "monthlyOn": "Le {day} de chaque mois à {time}",
+        "hourlyEvery": "Toutes les {n}h",
+        "hourlyEveryWindow": "Toutes les {n}h entre {start} et {end}",
+        "andTz": "{label} ({tz})"
+      }
+    },
+    "editJob": {
+      "title": "Modifier le job de réplication",
+      "immutableTooltip": "VMs, clusters, pool et préfixe VMID sont immuables. Supprimez puis recréez le job pour les modifier.",
+      "syncingAlert": "Le job est en cours de synchronisation. Réessayez dans quelques instants.",
+      "save": "Enregistrer",
+      "rateLimitHelp": "0 = illimité"
     },
     "createPlan": {
       "title": "Créer un plan de reprise",

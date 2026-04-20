@@ -434,9 +434,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
       let devicePath = pathResult.output.trim()
 
-      // RBD/Ceph: pvesm path returns "rbd:pool/image:conf=..." — not a block device
-      // We need to rbd map it to get a /dev/rbdN device
+      // RBD/Ceph — two path formats depending on the storage's `krbd` option:
+      //  - krbd 0 (librbd): pvesm path returns "rbd:pool/image:conf=..." — not a block device; map via `rbd map <pool>/<image>` → /dev/rbdN.
+      //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
       let rbdMapped = false
+      const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
       if (devicePath.startsWith('rbd:')) {
         const rbdSpec = devicePath.split(':')[1] // "CephStoragePool/vm-201-disk-0"
         if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
@@ -448,6 +450,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         devicePath = mapResult.output.trim() // e.g. /dev/rbd0
         rbdMapped = true
         await appendLog(jobId, `RBD mapped ${rbdSpec} → ${devicePath}`)
+      } else if (krbdMatch) {
+        const [, pool, image] = krbdMatch
+        const rbdSpec = `${pool}/${image}`
+        const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
+          `rbd device map "${rbdSpec}" 2>&1`)
+        if (!mapResult.success) {
+          throw new Error(`Failed to rbd device map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
+        }
+        // devicePath stays as /dev/rbd-pve/<fsid>/<pool>/<image> — the symlink now resolves.
+        rbdMapped = true
+        await appendLog(jobId, `RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
       }
 
       const result = { volumeId, devicePath, rbdMapped }

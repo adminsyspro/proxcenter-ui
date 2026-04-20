@@ -20,6 +20,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
   IconButton,
@@ -67,6 +68,8 @@ const AddNetworkDialog = dynamic(() => import('@/components/HardwareModals').the
 const EditDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditDiskDialog })), { ssr: false })
 const EditNetworkDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditNetworkDialog })), { ssr: false })
 const EditScsiControllerDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditScsiControllerDialog })), { ssr: false })
+const DetachConfirmDialog = dynamic(() => import('@/components/hardware/DetachConfirmDialog').then(mod => ({ default: mod.DetachConfirmDialog })), { ssr: false })
+const DeleteUnusedDiskDialog = dynamic(() => import('@/components/hardware/DeleteUnusedDiskDialog').then(mod => ({ default: mod.DeleteUnusedDiskDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
 import { formatBps, formatOsType, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
@@ -278,6 +281,8 @@ export default function VmDetailTabs(props: any) {
     setDeleteReplicationId,
     setDetailTab,
     setEditDiskDialogOpen,
+    setEditDiskInitialTab,
+    handleDetachDisk,
     setEditNetworkDialogOpen,
     setEditOptionDialog,
     setEditScsiControllerDialogOpen,
@@ -305,6 +310,7 @@ export default function VmDetailTabs(props: any) {
     setReplicationTargetNode,
     setSavingReplication,
     setSelectedBackup,
+    selectedDisk,
     setSelectedCephCluster,
     setSelectedDisk,
     setSelectedNetwork,
@@ -331,6 +337,11 @@ export default function VmDetailTabs(props: any) {
 
   const { hasFeature } = useLicense()
   const changeTrackingAvailable = hasFeature(Features.CHANGE_TRACKING)
+
+  const [diskMenuAnchor, setDiskMenuAnchor] = useState<HTMLElement | null>(null)
+  const [diskMenuTarget, setDiskMenuTarget] = useState<any | null>(null)
+  const [detachConfirmOpen, setDetachConfirmOpen] = useState(false)
+  const [deleteUnusedTarget, setDeleteUnusedTarget] = useState<any | null>(null)
 
   return (
     <>
@@ -1438,7 +1449,53 @@ export default function VmDetailTabs(props: any) {
                                       </Typography>
                                     }
                                   />
-                                  <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} />
+                                  {disk.isUnused ? (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                                      <MuiTooltip title={t('hardware.attach')}>
+                                        <IconButton
+                                          size="small"
+                                          color="primary"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedDisk(disk)
+                                            setEditDiskInitialTab(0)
+                                            setEditDiskDialogOpen(true)
+                                          }}
+                                          aria-label={t('hardware.attach')}
+                                        >
+                                          <i className="ri-link" style={{ fontSize: 18 }} />
+                                        </IconButton>
+                                      </MuiTooltip>
+                                      <MuiTooltip title={t('common.delete')}>
+                                        <IconButton
+                                          size="small"
+                                          color="error"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedDisk(disk)
+                                            setDeleteUnusedTarget(disk)
+                                          }}
+                                          aria-label={t('common.delete')}
+                                        >
+                                          <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
+                                        </IconButton>
+                                      </MuiTooltip>
+                                    </Box>
+                                  ) : (disk.isCdrom || disk.isEfi || disk.isTpm) ? (
+                                    <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} />
+                                  ) : (
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setDiskMenuTarget(disk)
+                                        setDiskMenuAnchor(e.currentTarget)
+                                      }}
+                                      aria-label="disk actions"
+                                    >
+                                      <i className="ri-more-2-fill" style={{ fontSize: 18, opacity: 0.6 }} />
+                                    </IconButton>
+                                  )}
                                 </ListItemButton>
                               ))}
                             </List>
@@ -1448,6 +1505,80 @@ export default function VmDetailTabs(props: any) {
                         </CardContent>
                           </Collapse>
                         </Card>
+
+                        {/* Menu + confirmation dialogs for disk actions */}
+                        <Menu
+                          anchorEl={diskMenuAnchor}
+                          open={Boolean(diskMenuAnchor)}
+                          onClose={() => setDiskMenuAnchor(null)}
+                        >
+                          <MenuItem
+                            onClick={() => {
+                              setDiskMenuAnchor(null)
+                              if (!diskMenuTarget) return
+                              setSelectedDisk(diskMenuTarget)
+                              setEditDiskInitialTab(0)
+                              setEditDiskDialogOpen(true)
+                            }}
+                          >
+                            <ListItemIcon><i className="ri-pencil-line" style={{ fontSize: 16 }} /></ListItemIcon>
+                            {t('common.edit')}
+                          </MenuItem>
+                          <MenuItem
+                            onClick={() => {
+                              setDiskMenuAnchor(null)
+                              if (!diskMenuTarget) return
+                              setSelectedDisk(diskMenuTarget)
+                              setEditDiskInitialTab(2)
+                              setEditDiskDialogOpen(true)
+                            }}
+                          >
+                            <ListItemIcon><i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} /></ListItemIcon>
+                            {t('hardware.resize')}
+                          </MenuItem>
+                          <MenuItem
+                            onClick={() => {
+                              setDiskMenuAnchor(null)
+                              if (!diskMenuTarget) return
+                              setSelectedDisk(diskMenuTarget)
+                              setEditDiskInitialTab(3)
+                              setEditDiskDialogOpen(true)
+                            }}
+                          >
+                            <ListItemIcon><i className="ri-folder-transfer-line" style={{ fontSize: 16 }} /></ListItemIcon>
+                            {t('hardware.moveStorage')}
+                          </MenuItem>
+                          <Divider />
+                          <MenuItem
+                            onClick={() => {
+                              setDiskMenuAnchor(null)
+                              if (!diskMenuTarget) return
+                              setSelectedDisk(diskMenuTarget)
+                              setDetachConfirmOpen(true)
+                            }}
+                            sx={{ color: 'warning.main' }}
+                          >
+                            <ListItemIcon><i className="ri-link-unlink" style={{ fontSize: 16, color: 'var(--mui-palette-warning-main)' }} /></ListItemIcon>
+                            {t('hardware.detach')}
+                          </MenuItem>
+                        </Menu>
+                        {selectedDisk && (
+                          <DetachConfirmDialog
+                            open={detachConfirmOpen}
+                            diskId={selectedDisk.id}
+                            onClose={() => setDetachConfirmOpen(false)}
+                            onConfirm={async () => { await handleDetachDisk() }}
+                          />
+                        )}
+                        {deleteUnusedTarget && (
+                          <DeleteUnusedDiskDialog
+                            open={Boolean(deleteUnusedTarget)}
+                            diskId={deleteUnusedTarget.id}
+                            volume={deleteUnusedTarget.rawValue || ''}
+                            onClose={() => setDeleteUnusedTarget(null)}
+                            onConfirm={async () => { await handleDetachDisk() }}
+                          />
+                        )}
 
                         {/* Interfaces réseau */}
                         <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>

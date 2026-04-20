@@ -131,13 +131,16 @@ export function useHardwareHandlers({
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    // String value (CDROM): wrap as { diskId: value }
-    // Object with 'delete' key (unused disk reassign): send directly
-    // Object with 'options' key (regular disk edit): wrap as { diskId: value }
+    // String value (regular disk / CDROM save): wrap as { diskId: value }
+    // Object with 'delete' key: send directly (e.g., unused cleanup)
+    // Object with a bus-slot key (scsi0, virtio1, ...): send directly (reassignment)
+    // Any other object: wrap as { diskId: value }
+    const hasBusKey = diskConfig && typeof diskConfig === 'object' &&
+      Object.keys(diskConfig).some(k => /^(scsi|virtio|sata|ide)\d+$/.test(k))
     let body: any
     if (typeof diskConfig === 'string') {
       body = { [selectedDisk.id]: diskConfig }
-    } else if (diskConfig?.delete) {
+    } else if (diskConfig?.delete || hasBusKey) {
       body = diskConfig
     } else {
       body = { [selectedDisk.id]: diskConfig }

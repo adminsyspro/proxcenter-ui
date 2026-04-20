@@ -448,6 +448,7 @@ export default function InventoryDetails({
   }, [activeDialog])
 
   const [selectedDisk, setSelectedDisk] = useState<any>(null)
+  const [editDiskInitialTab, setEditDiskInitialTab] = useState<number>(0)
   const [selectedNetwork, setSelectedNetwork] = useState<any>(null)
   
   // État pour le dialog de confirmation d'action VM
@@ -3259,7 +3260,7 @@ return vm?.isCluster ?? false
                 setSwap, swap,
                 setNewSnapshotRam, setNotesEditing, setNumaEnabled, setReplicationComment, setReplicationLoaded, setReplicationRateLimit,
                 setReplicationSchedule, setReplicationTargetNode, setSavingReplication, setSelectedBackup, setSelectedCephCluster,
-                setSelectedDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
+                selectedDisk, setSelectedDisk, setEditDiskInitialTab, editDiskInitialTab, handleDetachDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
                 setTf, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshots,
                 snapshotsError, snapshotsLoading, sourceCephAvailable, tags,
                 refreshData, tasks, tasksError, tasksLoading, tf, vmNotes}}
@@ -4043,6 +4044,8 @@ return vm?.isCluster ?? false
         setAddOtherHardwareDialogOpen={setAddOtherHardwareDialogOpen}
         selectedDisk={selectedDisk}
         setSelectedDisk={setSelectedDisk}
+        editDiskInitialTab={editDiskInitialTab}
+        setEditDiskInitialTab={setEditDiskInitialTab}
         selectedNetwork={selectedNetwork}
         setSelectedNetwork={setSelectedNetwork}
         handleSaveDisk={handleSaveDisk}

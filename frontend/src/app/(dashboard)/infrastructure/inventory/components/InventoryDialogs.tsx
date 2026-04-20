@@ -111,6 +111,8 @@ export interface InventoryDialogsProps {
   setAddOtherHardwareDialogOpen: (v: boolean) => void
   selectedDisk: any
   setSelectedDisk: (v: any) => void
+  editDiskInitialTab: number
+  setEditDiskInitialTab: (v: number) => void
   selectedNetwork: any
   setSelectedNetwork: (v: any) => void
   handleSaveDisk: (...args: any[]) => any
@@ -350,7 +352,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     addDiskDialogOpen, setAddDiskDialogOpen, addNetworkDialogOpen, setAddNetworkDialogOpen,
     editScsiControllerDialogOpen, setEditScsiControllerDialogOpen, editDiskDialogOpen, setEditDiskDialogOpen,
     editNetworkDialogOpen, setEditNetworkDialogOpen, addOtherHardwareDialogOpen, setAddOtherHardwareDialogOpen,
-    selectedDisk, setSelectedDisk, selectedNetwork, setSelectedNetwork,
+    selectedDisk, setSelectedDisk, editDiskInitialTab, setEditDiskInitialTab, selectedNetwork, setSelectedNetwork,
     handleSaveDisk, handleSaveNetwork, handleSaveScsiController, handleEditDisk, handleDetachDisk,
     handleResizeDisk, handleMoveDisk, handleDeleteNetwork,
     migrateDialogOpen, setMigrateDialogOpen, cloneDialogOpen, setCloneDialogOpen,
@@ -859,6 +861,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
               node={node}
               disk={selectedDisk}
               existingDisks={data?.disksInfo?.map((d: any) => d.id) || []}
+              initialTab={editDiskInitialTab}
             />
 
             <EditNetworkDialog

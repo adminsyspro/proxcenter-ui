@@ -436,8 +436,21 @@ return
     setError(null)
     try {
       const targetId = reassignBus === 'virtio' ? `virtio${reassignIndex}` : `${reassignBus}${reassignIndex}`
-      // Send the volume ID as the value for the target bus slot
-      await onSave({ [targetId]: disk.rawValue, delete: disk.id })
+      // Two-step to avoid orphaning the volume: if we send both assignment
+      // and `delete: unusedN` in a single PUT and PVE fails mid-way (e.g.
+      // volume not found on storage), the unused entry is already gone AND
+      // the new assignment never lands — volume becomes orphaned on disk.
+      // Step 1: assign to the new bus. On success, PVE auto-removes the
+      // unused entry in most cases. On failure, unused stays intact so
+      // the user can retry.
+      await onSave({ [targetId]: disk.rawValue })
+      // Step 2: best-effort cleanup. If PVE already removed the unused
+      // entry, this errors harmlessly.
+      try {
+        await onSave({ delete: disk.id })
+      } catch {
+        // non-fatal: volume is already assigned to the new bus
+      }
       onClose()
     } catch (e: any) {
       setError(e.message || 'Error')

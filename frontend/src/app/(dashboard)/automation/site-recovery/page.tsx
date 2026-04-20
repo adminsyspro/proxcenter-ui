@@ -30,10 +30,11 @@ import {
   SimulationTab,
   CreateJobDialog,
   CreatePlanDialog,
+  EditJobDialog,
   FailoverDialog
 } from '@/components/automation/site-recovery'
 
-import type { RecoveryPlan, RecoveryExecution } from '@/lib/orchestrator/site-recovery.types'
+import type { RecoveryPlan, RecoveryExecution, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
@@ -52,6 +53,7 @@ export default function SiteRecoveryPage() {
   // Dialog states
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [createPlanOpen, setCreatePlanOpen] = useState(false)
+  const [editJobId, setEditJobId] = useState<string | null>(null)
   const [failoverDialog, setFailoverDialog] = useState<{
     open: boolean
     planId: string | null
@@ -135,6 +137,9 @@ export default function SiteRecoveryPage() {
     (plans || []).find((p: RecoveryPlan) => p.id === failoverDialog.planId) || null
   , [plans, failoverDialog.planId])
 
+  // Selected job for edit dialog
+  const editJob = editJobId ? (jobs || []).find((j: any) => j.id === editJobId) ?? null : null
+
   // ── Handlers ──────────────────────────────────────────────────────
 
   const handleCreateJob = useCallback(async (data: any) => {
@@ -149,6 +154,21 @@ export default function SiteRecoveryPage() {
       console.error('Failed to create job:', e)
     }
   }, [mutateJobs])
+
+  const handleUpdateJob = async (id: string, req: UpdateReplicationJobRequest) => {
+    const res = await fetch(`/api/v1/orchestrator/replication/jobs/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    })
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({ error: res.statusText }))
+      const err = new Error(errBody.error || res.statusText) as Error & { status?: number }
+      err.status = res.status
+      throw err
+    }
+    mutateJobs()
+  }
 
   const handleCreatePlan = useCallback(async (data: any) => {
     try {
@@ -376,6 +396,7 @@ export default function SiteRecoveryPage() {
             onPauseJob={handlePauseJob}
             onResumeJob={handleResumeJob}
             onDeleteJob={handleDeleteJob}
+            onEditJob={setEditJobId}
             selectedJobId={selectedJobId}
             onSelectJob={setSelectedJobId}
           />
@@ -422,6 +443,13 @@ export default function SiteRecoveryPage() {
           onSubmit={handleCreateJob}
           connections={connections}
           allVMs={allVMs}
+        />
+
+        <EditJobDialog
+          open={editJobId !== null}
+          job={editJob}
+          onClose={() => setEditJobId(null)}
+          onSubmit={handleUpdateJob}
         />
 
         <CreatePlanDialog

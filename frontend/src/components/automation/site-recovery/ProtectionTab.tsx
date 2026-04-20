@@ -15,6 +15,7 @@ import EmptyState from '@/components/EmptyState'
 import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
 
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
+import { scheduleToLabel } from './schedule/scheduleToLabel'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -285,13 +286,14 @@ interface ProtectionTabProps {
   onPauseJob: (id: string) => void
   onResumeJob: (id: string) => void
   onDeleteJob: (id: string) => void
+  onEditJob: (id: string) => void
   selectedJobId: string | null
   onSelectJob: (id: string | null) => void
 }
 
 export default function ProtectionTab({
   jobs, loading, logs, logsLoading, connections, vmNameMap,
-  onSyncJob, onPauseJob, onResumeJob, onDeleteJob,
+  onSyncJob, onPauseJob, onResumeJob, onDeleteJob, onEditJob,
   selectedJobId, onSelectJob
 }: ProtectionTabProps) {
   const t = useTranslations()
@@ -414,6 +416,20 @@ export default function ProtectionTab({
     setTimeout(() => setCopied(false), 2000)
   }, [logs])
 
+  const formatRPO = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+    if (seconds < 86400) return `${Math.round(seconds / 3600)}h`
+    return `${Math.round(seconds / 86400)}d`
+  }
+
+  const planningLabel = (j: typeof jobs[0]) => {
+    if (j.schedule_spec) {
+      return scheduleToLabel(j.schedule_spec, j.timezone || '', t)
+    }
+    return `${t('siteRecovery.rpoTargetLabel')}: ${formatRPO(j.rpo_target)}`
+  }
+
   if (loading) {
     return (
       <Stack spacing={2}>
@@ -527,7 +543,7 @@ export default function ProtectionTab({
               </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto' }}>
-                <DetailRow icon='ri-time-line' label={t('siteRecovery.protection.schedule')} value={selected.schedule} />
+                <DetailRow icon='ri-time-line' label={t('siteRecovery.protection.schedule')} value={planningLabel(selected)} />
                 <DetailRow icon='ri-timer-line' label={t('siteRecovery.protection.rpoTarget')} value={formatDuration(selected.rpo_target)} />
                 <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(computeRpoActual(selected.last_sync))} />
                 <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
@@ -593,6 +609,9 @@ export default function ProtectionTab({
                       {t('siteRecovery.protection.pause')}
                     </Button>
                   )}
+                  <IconButton size='small' onClick={() => onEditJob(selected.id)} title={t('common.edit')}>
+                    <i className='ri-edit-line' />
+                  </IconButton>
                   <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => { onDeleteJob(selected.id); closeDrawer() }}>
                     {t('common.delete')}
                   </Button>

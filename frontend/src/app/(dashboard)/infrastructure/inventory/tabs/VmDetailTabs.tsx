@@ -1823,6 +1823,7 @@ export default function VmDetailTabs(props: any) {
                                       key: 'vga',
                                       icon: 'ri-monitor-line',
                                       label: t('inventory.display'),
+                                      type: 'vga',
                                       value: (() => {
                                         const vga = data.systemInfo.vga || 'std'
                                         const vgaLabels: Record<string, string> = {
@@ -1831,9 +1832,14 @@ export default function VmDetailTabs(props: any) {
                                           serial2: 'Serial terminal 2', serial3: 'Serial terminal 3',
                                           virtio: 'VirtIO-GPU', 'virtio-gl': 'VirtIO-GPU (virgl)', none: 'None',
                                         }
-                                        return vgaLabels[vga.split(',')[0]] || vga
+                                        const parts = vga.split(',').map((p: string) => p.trim()).filter(Boolean)
+                                        const typeKey = parts[0] || 'std'
+                                        const label = vgaLabels[typeKey] || typeKey
+                                        const memPart = parts.slice(1).find((p: string) => p.startsWith('memory='))
+                                        const mem = memPart ? parseInt(memPart.split('=')[1], 10) : NaN
+                                        return Number.isFinite(mem) ? `${label} · ${mem} MB` : label
                                       })(),
-                                      editValue: (data.systemInfo.vga || 'std').split(',')[0],
+                                      editValue: data.systemInfo.vga || 'std',
                                       options: [
                                         { value: 'std', label: 'Default (std)' }, { value: 'cirrus', label: 'Cirrus Logic' },
                                         { value: 'vmware', label: 'VMware compatible' }, { value: 'qxl', label: 'SPICE (qxl)' },
@@ -1881,7 +1887,7 @@ export default function VmDetailTabs(props: any) {
                                       </td>
                                       <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center', width: 48 }}>
                                         <MuiTooltip title={t('common.edit')}>
-                                          <IconButton size="small" onClick={() => setEditOptionDialog({ key: row.key, label: row.label, value: row.editValue, type: 'select', options: row.options })}>
+                                          <IconButton size="small" onClick={() => setEditOptionDialog({ key: row.key, label: row.label, value: row.editValue, type: (row as any).type || 'select', options: row.options })}>
                                             <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                           </IconButton>
                                         </MuiTooltip>

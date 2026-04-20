@@ -22,6 +22,7 @@ import {
   FormControl,
   FormControlLabel,
   IconButton,
+  InputAdornment,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -144,7 +145,7 @@ export interface InventoryDialogsProps {
   handleTableCloneVm: (...args: any[]) => any
 
   // Edit option dialog
-  editOptionDialog: { key: string; label: string; value: any; type: 'text' | 'boolean' | 'select' | 'hotplug'; options?: { value: string; label: string }[] } | null
+  editOptionDialog: { key: string; label: string; value: any; type: 'text' | 'boolean' | 'select' | 'vga' | 'hotplug'; options?: { value: string; label: string }[] } | null
   setEditOptionDialog: (v: any) => void
   editOptionValue: any
   setEditOptionValue: (v: any) => void
@@ -1019,6 +1020,91 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
                       label={fieldLabels[field] || field}
                     />
                   ))}
+                </Stack>
+              )
+            })()}
+            {editOptionDialog?.type === 'vga' && (() => {
+              const MEMORY_CAPABLE = new Set(['std', 'cirrus', 'vmware', 'qxl', 'virtio', 'virtio-gl'])
+              const raw = typeof editOptionValue === 'string' ? editOptionValue : ''
+              const parts = raw.split(',').map((p: string) => p.trim()).filter(Boolean)
+              const vgaType = parts[0] || 'std'
+              const memMatch = parts.slice(1).find((p: string) => p.startsWith('memory='))
+              const memory = memMatch ? parseInt(memMatch.split('=')[1], 10) : NaN
+              const memoryCapable = MEMORY_CAPABLE.has(vgaType)
+              const memoryValue = memoryCapable ? (Number.isFinite(memory) ? memory : 16) : undefined
+              const clipboardMatch = parts.slice(1).find((p: string) => p.startsWith('clipboard='))
+              // MUI Select doesn't handle empty-string values cleanly, so we use
+              // "default" as the sentinel for "no explicit clipboard" (which
+              // means SPICE if the display is SPICE, per PVE).
+              const clipboard = clipboardMatch ? clipboardMatch.split('=')[1] : 'default'
+              // Build the PVE VGA string. Omit `memory=16` (PVE default) and
+              // `clipboard=default` (our sentinel) to keep configs clean.
+              const buildValue = (nextType: string, nextMemory: number | undefined, nextClipboard: string): string => {
+                const segments = [nextType]
+                if (MEMORY_CAPABLE.has(nextType) && typeof nextMemory === 'number' && nextMemory !== 16) {
+                  segments.push(`memory=${nextMemory}`)
+                }
+                if (MEMORY_CAPABLE.has(nextType) && nextClipboard && nextClipboard !== 'default') {
+                  segments.push(`clipboard=${nextClipboard}`)
+                }
+                return segments.join(',')
+              }
+              return (
+                <Stack spacing={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>{editOptionDialog.label}</InputLabel>
+                    <Select
+                      value={vgaType}
+                      onChange={(e) => {
+                        const nextType = String(e.target.value)
+                        const nextMem = MEMORY_CAPABLE.has(nextType) ? (memoryValue ?? 16) : undefined
+                        const nextClip = MEMORY_CAPABLE.has(nextType) ? clipboard : ''
+                        setEditOptionValue(buildValue(nextType, nextMem, nextClip))
+                      }}
+                      label={editOptionDialog.label}
+                    >
+                      {(editOptionDialog.options || []).map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {memoryCapable && (
+                    <>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="number"
+                        label={t('inventory.displayMemory')}
+                        helperText={t('inventory.displayMemoryHelper')}
+                        inputProps={{ min: 4, max: 512, step: 1 }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">MB</InputAdornment> }}
+                        value={memoryValue ?? ''}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value, 10)
+                          if (Number.isFinite(n)) setEditOptionValue(buildValue(vgaType, n, clipboard))
+                        }}
+                        onBlur={(e) => {
+                          const n = parseInt(e.target.value, 10)
+                          const clamped = Number.isFinite(n) ? Math.max(4, Math.min(512, n)) : 16
+                          setEditOptionValue(buildValue(vgaType, clamped, clipboard))
+                        }}
+                      />
+                      <FormControl fullWidth size="small">
+                        <InputLabel>{t('inventory.displayClipboard')}</InputLabel>
+                        <Select
+                          value={clipboard}
+                          onChange={(e) => setEditOptionValue(buildValue(vgaType, memoryValue, String(e.target.value)))}
+                          label={t('inventory.displayClipboard')}
+                        >
+                          <MenuItem value="default">{t('inventory.displayClipboardDefault')}</MenuItem>
+                          <MenuItem value="vnc">{t('inventory.displayClipboardVnc')}</MenuItem>
+                        </Select>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {t('inventory.displayClipboardHelper')}
+                        </Typography>
+                      </FormControl>
+                    </>
+                  )}
                 </Stack>
               )
             })()}

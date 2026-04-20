@@ -1,5 +1,7 @@
 // Site Recovery Types - Ceph RBD cross-cluster replication & disaster recovery
 
+import type { ScheduleSpec } from '@/components/automation/site-recovery/schedule/types'
+
 // ============================================
 // Replication Jobs
 // ============================================
@@ -17,6 +19,8 @@ export interface ReplicationJob {
   vmid_prefix: number
   status: ReplicationJobStatus
   schedule: string
+  schedule_spec: ScheduleSpec | null   // null = RPO mode
+  timezone: string                     // IANA, "" = UTC
   rpo_target: number      // seconds
   last_sync?: string | null
   next_sync?: string | null
@@ -35,8 +39,10 @@ export interface CreateReplicationJobRequest {
   source_cluster: string
   target_cluster: string
   target_pool: string
-  schedule: string
-  rpo_target: number
+  schedule?: string
+  rpo_target?: number
+  schedule_spec?: ScheduleSpec | null
+  timezone?: string
   rate_limit_mbps: number
   vmid_prefix?: number
   install_pv?: boolean
@@ -44,10 +50,11 @@ export interface CreateReplicationJobRequest {
 }
 
 export interface UpdateReplicationJobRequest {
-  schedule?: string
+  schedule_spec?: ScheduleSpec | null
+  clear_schedule_spec?: boolean
+  timezone?: string
   rpo_target?: number
   rate_limit_mbps?: number
-  online_mode?: boolean
   network_mapping?: Record<string, string>
 }
 

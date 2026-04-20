@@ -31,17 +31,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const body = await req.json()
     const { serverId, type, ...params } = body
 
-    const updateParams = new URLSearchParams()
-    updateParams.set('id', serverId)
-    updateParams.set('type', type)
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== '') updateParams.set(k, String(v))
+    if (!serverId) {
+      return NextResponse.json({ error: "Missing serverId" }, { status: 400 })
     }
 
-    await pveFetch<any>(conn, "/cluster/metrics/server", {
+    // PVE: POST /cluster/metrics/server/{id} — the server id goes in the URL,
+    // not in the form body. Posting to /cluster/metrics/server returns 501.
+    const createParams = new URLSearchParams()
+    createParams.set('type', type)
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null || v === '') continue
+      // PVE rejects JS booleans ('true'/'false'); it wants 1/0 for boolean fields.
+      const serialized = typeof v === 'boolean' ? (v ? '1' : '0') : String(v)
+      createParams.set(k, serialized)
+    }
+
+    await pveFetch<any>(conn, `/cluster/metrics/server/${encodeURIComponent(serverId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: updateParams.toString(),
+      body: createParams.toString(),
     })
     return NextResponse.json({ data: { success: true } })
   } catch (e: any) {

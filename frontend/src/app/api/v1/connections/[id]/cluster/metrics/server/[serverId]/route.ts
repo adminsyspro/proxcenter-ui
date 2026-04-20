@@ -31,10 +31,12 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; ser
     const body = await req.json()
 
     const updateParams = new URLSearchParams()
-    const deleteFields: string[] = []
     for (const [k, v] of Object.entries(body)) {
       if (k === 'delete' || k === 'serverId' || k === 'id') continue
-      if (v !== undefined && v !== '') updateParams.set(k, String(v))
+      if (v === undefined || v === null || v === '') continue
+      // PVE rejects JS booleans ('true'/'false'); it wants 1/0 for boolean fields.
+      const serialized = typeof v === 'boolean' ? (v ? '1' : '0') : String(v)
+      updateParams.set(k, serialized)
     }
     if (body.delete) updateParams.set('delete', String(body.delete))
 

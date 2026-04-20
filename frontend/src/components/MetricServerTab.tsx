@@ -56,7 +56,7 @@ const TYPE_ICONS: Record<string, string> = {
 
 const TYPE_DEFAULTS: Record<string, Record<string, any>> = {
   graphite: { port: 2003, path: 'proxmox', proto: 'udp', mtu: 1500, timeout: 1 },
-  influxdb: { port: 8089, proto: 'udp', organization: 'proxmox', bucket: 'proxmox', 'batch-size': 25000000, timeout: 1, mtu: 1500, 'verify-certificate': true },
+  influxdb: { port: 8089, influxdbproto: 'udp', organization: 'proxmox', bucket: 'proxmox', 'max-body-size': 25000000, timeout: 1, mtu: 1500, 'verify-certificate': 1 },
   opentelemetry: { port: 4318, proto: 'https', path: '/v1/metrics', timeout: 5, 'verify-certificate': true, 'max-body-size': 10000000, compression: 'gzip' },
 }
 
@@ -281,9 +281,9 @@ export default function MetricServerTab({ connectionId }: Props) {
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                   <FormControl size="small">
                     <InputLabel>Protocol</InputLabel>
-                    <Select value={dialogData.proto || 'udp'} label="Protocol" onChange={e => setField('proto', e.target.value)}>
+                    <Select value={dialogData.influxdbproto || 'udp'} label="Protocol" onChange={e => setField('influxdbproto', e.target.value)}>
                       <MenuItem value="udp">UDP</MenuItem>
-                      <MenuItem value="tcp">TCP</MenuItem>
+                      <MenuItem value="http">HTTP</MenuItem>
                       <MenuItem value="https">HTTPS</MenuItem>
                     </Select>
                   </FormControl>
@@ -295,7 +295,7 @@ export default function MetricServerTab({ connectionId }: Props) {
                 </Box>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                   <TextField size="small" label="API Path Prefix" value={dialogData['api-path-prefix'] || ''} onChange={e => setField('api-path-prefix', e.target.value)} />
-                  <TextField size="small" label="Batch Size (b)" value={dialogData['batch-size'] || ''} onChange={e => setField('batch-size', e.target.value)} type="number" />
+                  <TextField size="small" label="Max Body Size (b)" value={dialogData['max-body-size'] || ''} onChange={e => setField('max-body-size', e.target.value)} type="number" />
                 </Box>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
                   <TextField size="small" label="Timeout (s)" value={dialogData.timeout || ''} onChange={e => setField('timeout', e.target.value)} type="number" />

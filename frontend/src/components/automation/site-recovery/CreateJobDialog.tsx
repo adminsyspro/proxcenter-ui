@@ -12,6 +12,8 @@ import {
 
 import { useTagColors } from '@/contexts/TagColorContext'
 import type { CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
+import ScheduleBuilder from './schedule/ScheduleBuilder'
+import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -56,7 +58,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
   const [targetCluster, setTargetCluster] = useState('')
   const [targetPool, setTargetPool] = useState('')
-  const [rpoTarget, setRpoTarget] = useState(900)
+  const [scheduleValue, setScheduleValue] = useState<ScheduleBuilderValue>({
+    mode: 'rpo',
+    rpoTargetSeconds: 900,
+    scheduleSpec: null,
+    timezone: defaultTimezone(),
+  })
   const [vmSearch, setVmSearch] = useState('')
   const [selectionMode, setSelectionMode] = useState<'vms' | 'tags'>('vms')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -184,17 +191,6 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     )
   , [cephData])
 
-  // ── Presets ───────────────────────────────────────────────────────────
-
-  const rpoPresets = [
-    { value: 30, label: '30s' },
-    { value: 60, label: '1m' },
-    { value: 300, label: '5m' },
-    { value: 900, label: '15m' },
-    { value: 3600, label: '1h' },
-    { value: 86400, label: '24h' },
-  ]
-
   // ── Handlers ──────────────────────────────────────────────────────────
 
   const handleSourceClusterChange = (value: string) => {
@@ -220,30 +216,27 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectedVMs(prev => prev.includes(vmid) ? prev.filter(id => id !== vmid) : [...prev, vmid])
   }
 
-  // Derive cron schedule from RPO target (run at ~RPO/3 for safety margin)
-  const scheduleFromRPO = (rpo: number): string => {
-    const interval = Math.max(1, Math.floor(rpo / 180)) // RPO/3 in minutes, min 1
-    if (interval <= 1) return '* * * * *'
-    if (interval < 60) return `*/${interval} * * * *`
-    const hours = Math.floor(interval / 60)
-    if (hours < 24) return `0 */${hours} * * *`
-    return '0 0 * * *'
-  }
-
   const handleSubmit = () => {
-    onSubmit({
+    const base = {
       vm_ids: selectionMode === 'vms' ? selectedVMs : [],
       tags: selectionMode === 'tags' ? selectedTags : [],
       source_cluster: sourceCluster,
       target_cluster: targetCluster,
       target_pool: targetPool,
-      schedule: scheduleFromRPO(rpoTarget),
-      rpo_target: rpoTarget,
       rate_limit_mbps: 0,
       vmid_prefix: vmidPrefix || undefined,
       install_pv: installPv || undefined,
-      network_mapping: {}
-    })
+      network_mapping: {},
+    }
+    if (scheduleValue.mode === 'rpo') {
+      onSubmit({ ...base, rpo_target: scheduleValue.rpoTargetSeconds })
+    } else {
+      onSubmit({
+        ...base,
+        schedule_spec: scheduleValue.scheduleSpec,
+        timezone: scheduleValue.timezone,
+      })
+    }
     handleClose()
   }
 
@@ -254,7 +247,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectionMode('vms')
     setTargetCluster('')
     setTargetPool('')
-    setRpoTarget(900)
+    setScheduleValue({
+      mode: 'rpo',
+      rpoTargetSeconds: 900,
+      scheduleSpec: null,
+      timezone: defaultTimezone(),
+    })
     setVmidPrefix(0)
     setInstallPv(true)
     setVmSearch('')
@@ -264,7 +262,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   }
 
   const hasSelection = selectionMode === 'vms' ? selectedVMs.length > 0 : selectedTags.length > 0
-  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success'
+  const scheduleValid = scheduleValue.mode === 'rpo' || scheduleValue.scheduleSpec !== null
+  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success' && scheduleValid
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
@@ -514,18 +513,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             </Select>
           </Box>
 
-          {/* RPO Target */}
-          <Box>
-            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.rpoTarget')}</Typography>
-            <Select value={rpoTarget} onChange={e => setRpoTarget(Number(e.target.value))} size='small' fullWidth>
-              {rpoPresets.map(p => (
-                <MenuItem key={p.value} value={p.value}>
-                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-timer-line' /></ListItemIcon>
-                  {p.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
+          <ScheduleBuilder value={scheduleValue} onChange={setScheduleValue} />
 
           {/* VMID Prefix */}
           <Box>

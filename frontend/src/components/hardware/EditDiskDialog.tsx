@@ -31,6 +31,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { DetachConfirmDialog } from './DetachConfirmDialog'
 
 // Storage types that support multiple disk image formats (file-based storages)
 // Block-based storages (lvm, lvmthin, rbd, zfspool, iscsi, iscsidirect) only support raw
@@ -78,11 +79,16 @@ type EditDiskDialogProps = {
   } | null
   existingDisks?: string[]
   availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number }>
+  initialTab?: number
 }
 
-export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMoveStorage, connId, node, disk, existingDisks, availableStorages }: EditDiskDialogProps) {
+export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMoveStorage, connId, node, disk, existingDisks, availableStorages, initialTab }: EditDiskDialogProps) {
   const t = useTranslations()
-  const [tab, setTab] = useState(0)
+  const [tab, setTab] = useState(initialTab ?? 0)
+
+  useEffect(() => {
+    if (open) setTab(initialTab ?? 0)
+  }, [open, initialTab])
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [resizing, setResizing] = useState(false)
@@ -213,9 +219,9 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
       setDeleteSource(true)
       setTargetFormat('')
       setError(null)
-      setTab(0)
+      setTab(initialTab ?? 0)
     }
-  }, [open, disk])
+  }, [open, disk, initialTab])
 
   // Load ISO storages for CDROM
   useEffect(() => {
@@ -441,6 +447,7 @@ return
   }
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [confirmDetachOpen, setConfirmDetachOpen] = useState(false)
 
   const handleDeleteClick = useCallback(() => {
     if (!disk) return
@@ -470,6 +477,15 @@ return
   if (!disk) return null
 
   const isWorking = saving || deleting || resizing || moving || cdromSaving || reassigning
+
+  const detachConfirmDialog = disk ? (
+    <DetachConfirmDialog
+      open={confirmDetachOpen}
+      diskId={disk.id}
+      onClose={() => setConfirmDetachOpen(false)}
+      onConfirm={async () => { await onDelete() }}
+    />
+  ) : null
 
   // MUI confirmation dialog for disk deletion (replaces native confirm()).
   // Rendered as a sibling to every main dialog variant below via a Fragment.
@@ -672,7 +688,7 @@ return
 
   // ── Regular disk Dialog ───────────────────────────────────
   return (
-    <>{deleteConfirmDialog}<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <>{detachConfirmDialog}<Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <AppDialogTitle onClose={onClose} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 24 }} />}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{t('common.edit')}: {disk.id}</span>
@@ -937,12 +953,12 @@ return
 
       <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
         <Button
-          color="error"
-          onClick={handleDelete}
+          color="warning"
+          onClick={() => setConfirmDetachOpen(true)}
           disabled={isWorking}
-          startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
+          startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-link-unlink" />}
         >
-          {t('common.delete')}
+          {t('hardware.detach')}
         </Button>
         <Box>
           <Button onClick={onClose} disabled={isWorking} sx={{ mr: 1 }}>{t('common.cancel')}</Button>

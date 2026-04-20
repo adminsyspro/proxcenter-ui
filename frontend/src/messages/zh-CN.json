@@ -3485,6 +3485,15 @@
     "qemuArgsHelper": "直接传递给 QEMU 的参数（危险）"
   },
   "hardware": {
+    "detach": "分离",
+    "detachTitle": "分离磁盘",
+    "detachConfirm": "磁盘 {id} 将从虚拟机分离并保留为未使用卷。数据将被保留。",
+    "attach": "附加",
+    "deleteUnusedTitle": "删除未使用的磁盘",
+    "deleteUnusedConfirm": "永久销毁卷 {volume}？此操作不可撤销。",
+    "slotTaken": "插槽 {target} 已被占用。",
+    "resize": "调整大小",
+    "moveStorage": "移动存储",
     "bandwidthLimits": "带宽限制（留空表示无限制）",
     "addNetworkInterface": "添加：网络接口",
     "reassignTo": "重新分配到总线插槽",

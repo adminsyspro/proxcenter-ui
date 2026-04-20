@@ -3482,6 +3482,15 @@
     "qemuArgsHelper": "Argumente, die direkt an QEMU übergeben werden (gefährlich)"
   },
   "hardware": {
+    "detach": "Trennen",
+    "detachTitle": "Festplatte trennen",
+    "detachConfirm": "Die Festplatte {id} wird von der VM getrennt und als nicht verwendetes Volume beibehalten. Die Daten bleiben erhalten.",
+    "attach": "Verbinden",
+    "deleteUnusedTitle": "Nicht verwendete Festplatte löschen",
+    "deleteUnusedConfirm": "Volume {volume} dauerhaft löschen? Dies kann nicht rückgängig gemacht werden.",
+    "slotTaken": "Slot {target} ist bereits belegt.",
+    "resize": "Größe ändern",
+    "moveStorage": "Speicher verschieben",
     "bandwidthLimits": "Bandbreitenlimits (leer für unbegrenzt)",
     "addNetworkInterface": "hinzufügen: Network interface",
     "reassignTo": "Dem Bus-Slot neu zuweisen",

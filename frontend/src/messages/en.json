@@ -3514,6 +3514,15 @@
     "qemuArgsHelper": "Arguments passed directly to QEMU (dangerous)"
   },
   "hardware": {
+    "detach": "Detach",
+    "detachTitle": "Detach disk",
+    "detachConfirm": "The disk {id} will be detached from the VM and kept as an unused volume. Data is preserved.",
+    "attach": "Attach",
+    "deleteUnusedTitle": "Delete unused disk",
+    "deleteUnusedConfirm": "Permanently destroy volume {volume}? This cannot be undone.",
+    "slotTaken": "Slot {target} is already in use.",
+    "resize": "Resize",
+    "moveStorage": "Move storage",
     "bandwidthLimits": "Bandwidth limits (leave empty for unlimited)",
     "addNetworkInterface": "Add: Network interface",
     "reassignTo": "Reassign to bus slot",

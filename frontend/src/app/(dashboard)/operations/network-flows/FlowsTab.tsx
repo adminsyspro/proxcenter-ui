@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts'
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import {
   Alert,
@@ -685,7 +686,7 @@ export default function FlowsTab() {
                             </TableCell>
                             <TableCell align="right" sx={{ py: 0.75, px: 0.5, width: 70 }}>
                               {sparklineData.get(talker.vmid)?.length ? (
-                                <ResponsiveContainer minWidth={0} width={60} height={24}>
+                                <ChartContainer width={60} height={24}>
                                   <AreaChart data={sparklineData.get(talker.vmid)} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                     <defs>
                                       <linearGradient id={`spark-${talker.vmid}`} x1="0" y1="0" x2="0" y2="1">
@@ -702,7 +703,7 @@ export default function FlowsTab() {
                                       isAnimationActive={false}
                                     />
                                   </AreaChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                               ) : (
                                 <Typography variant="caption" color="text.disabled">—</Typography>
                               )}
@@ -797,7 +798,7 @@ export default function FlowsTab() {
                 </Box>
               ) : (
                 <Box sx={{ height: Math.max(200, topPorts.length * 32 + 40) }}>
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                  <ChartContainer>
                     <BarChart
                       data={topPorts.map(p => ({
                         name: `${p.port}/${p.protocol}${p.service ? ` (${p.service})` : ''}`,
@@ -828,7 +829,7 @@ export default function FlowsTab() {
                         ))}
                       </Bar>
                     </BarChart>
-                  </ResponsiveContainer>
+                  </ChartContainer>
                 </Box>
               )}
             </CardContent>
@@ -895,7 +896,7 @@ export default function FlowsTab() {
                   </Box>
                 ) : (
                   <Box sx={{ height: 160 }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <ChartContainer>
                       <AreaChart data={vmTimeSeries.map(p => ({ time: p.time * 1000, in: p.bytes_in || 0, out: p.bytes_out || 0 }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                         <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} tick={{ fontSize: 10 }} />
@@ -908,7 +909,7 @@ export default function FlowsTab() {
                         <Area type="monotone" dataKey="in" stroke={theme.palette.success.main} fill={`${theme.palette.success.main}30`} strokeWidth={1.5} isAnimationActive={false} />
                         <Area type="monotone" dataKey="out" stroke={theme.palette.warning.main} fill={`${theme.palette.warning.main}30`} strokeWidth={1.5} isAnimationActive={false} />
                       </AreaChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </Box>
                 )}
               </Box>
@@ -987,7 +988,7 @@ export default function FlowsTab() {
                   </Box>
                 ) : (
                   <Box sx={{ height: 180 }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <ChartContainer>
                       <AreaChart data={pairTimeSeries.map(p => ({ time: p.time * 1000, bytes: p.bytes_in || 0 }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                         <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} tick={{ fontSize: 10 }} />
@@ -999,7 +1000,7 @@ export default function FlowsTab() {
                         />
                         <Area type="monotone" dataKey="bytes" stroke={theme.palette.primary.main} fill={`${theme.palette.primary.main}30`} strokeWidth={1.5} />
                       </AreaChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </Box>
                 )}
               </Box>

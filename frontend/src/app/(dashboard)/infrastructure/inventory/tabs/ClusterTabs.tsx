@@ -44,7 +44,8 @@ import {
   useTheme,
   alpha,
 } from '@mui/material'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import ExpandableChart from '../components/ExpandableChart'
@@ -1439,7 +1440,7 @@ export default function ClusterTabs(props: any) {
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
                         <ExpandableChart title={t('inventory.cpuUsage')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1474,12 +1475,12 @@ export default function ClusterTabs(props: any) {
                                 <Area key={name} type="monotone" dataKey={`cpu_${name}`} stroke={nodeColors[name]} fill={`url(#cGradCpu_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               ))}
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Memory Usage */}
                         <ExpandableChart title={t('inventory.memoryUsage')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1514,12 +1515,12 @@ export default function ClusterTabs(props: any) {
                                 <Area key={name} type="monotone" dataKey={`ram_${name}`} stroke={nodeColors[name]} fill={`url(#cGradRam_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               ))}
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Network Traffic */}
                         <ExpandableChart title={t('inventory.networkTrafficChart')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1561,12 +1562,12 @@ export default function ClusterTabs(props: any) {
                                 <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} stroke={nodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
                               ))}
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Server Load */}
                         <ExpandableChart title={t('inventory.serverLoad')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
@@ -1601,7 +1602,7 @@ export default function ClusterTabs(props: any) {
                                 <Area key={name} type="monotone" dataKey={`load_${name}`} stroke={nodeColors[name]} fill={`url(#cGradLoad_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               ))}
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
                       </Box>
                     </>)}
@@ -2898,7 +2899,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -2937,7 +2938,7 @@ export default function ClusterTabs(props: any) {
                                       isAnimationActive={false}
                                     />
                                   </AreaChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                               </ExpandableChart>
 
                               {/* Writes Graph */}
@@ -2956,7 +2957,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -2995,7 +2996,7 @@ export default function ClusterTabs(props: any) {
                                       isAnimationActive={false}
                                     />
                                   </AreaChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                               </ExpandableChart>
 
                               {/* IOPS Reads Graph */}
@@ -3014,7 +3015,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
@@ -3053,7 +3054,7 @@ export default function ClusterTabs(props: any) {
                                       isAnimationActive={false}
                                     />
                                   </AreaChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                               </ExpandableChart>
 
                               {/* IOPS Writes Graph */}
@@ -3072,7 +3073,7 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                 }
                               >
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                     <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
@@ -3111,7 +3112,7 @@ export default function ClusterTabs(props: any) {
                                       isAnimationActive={false}
                                     />
                                   </AreaChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                               </ExpandableChart>
                             </Box>
                           </CardContent>

@@ -15,7 +15,8 @@ import {
   useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import { formatBps, fetchDetails } from '../helpers'
@@ -252,7 +253,7 @@ export default function StorageDetailPanel({
                       </Box>
                     }
                   >
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <ChartContainer>
                       <AreaChart data={storageRrdHistory}>
                         <XAxis dataKey="time" tickFormatter={(v: any) => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
                         <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={30} />
@@ -296,7 +297,7 @@ export default function StorageDetailPanel({
                           name="usedPct"
                         />
                       </AreaChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </ExpandableChart>
                 </Box>
               )}
@@ -318,7 +319,7 @@ export default function StorageDetailPanel({
                         </Box>
                       }
                     >
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <ChartContainer>
                         <AreaChart data={storageCephPerfHistory}>
                           <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tickFormatter={(v: any) => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
@@ -350,7 +351,7 @@ export default function StorageDetailPanel({
                           <Area type="monotone" dataKey="read_bytes_sec" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="read_bytes_sec" />
                           <Area type="monotone" dataKey="write_bytes_sec" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write_bytes_sec" />
                         </AreaChart>
-                      </ResponsiveContainer>
+                      </ChartContainer>
                     </ExpandableChart>
                   </Box>
 
@@ -368,7 +369,7 @@ export default function StorageDetailPanel({
                         </Box>
                       }
                     >
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <ChartContainer>
                         <AreaChart data={storageCephPerfHistory}>
                           <XAxis dataKey="time" tickFormatter={(v: any) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
                           <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
@@ -400,7 +401,7 @@ export default function StorageDetailPanel({
                           <Area type="monotone" dataKey="read_op_per_sec" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="read_op_per_sec" />
                           <Area type="monotone" dataKey="write_op_per_sec" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="write_op_per_sec" />
                         </AreaChart>
-                      </ResponsiveContainer>
+                      </ChartContainer>
                     </ExpandableChart>
                   </Box>
                 </>

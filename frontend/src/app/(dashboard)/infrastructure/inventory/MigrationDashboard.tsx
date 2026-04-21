@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Box, Card, CardContent, Typography, Stack, Chip, LinearProgress, alpha, useTheme } from '@mui/material'
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 type ExternalHypervisor = {
   id: string
@@ -227,7 +228,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
             <Stack direction="row" alignItems="center" spacing={3}>
               {/* Donut */}
               <Box sx={{ width: 120, height: 120, flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <ChartContainer>
                   <PieChart>
                     <Pie
                       data={donutData}
@@ -244,7 +245,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
                       ))}
                     </Pie>
                   </PieChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </Box>
 
               {/* Legend */}

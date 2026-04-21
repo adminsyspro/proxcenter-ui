@@ -4,7 +4,8 @@ import React, { useEffect, useState, useMemo } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Box, CircularProgress, Typography, useTheme } from '@mui/material'
-import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { useLicense } from '@/contexts/LicenseContext'
@@ -269,13 +270,13 @@ return (
         <Box>
           <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>CPU / RAM</Typography>
           <Box sx={{ height: 36, width: '100%' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <AreaChart data={trends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <RTooltip content={<CpuRamTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#f97316', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="cpu" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="ram" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </Box>
         </Box>
       )}

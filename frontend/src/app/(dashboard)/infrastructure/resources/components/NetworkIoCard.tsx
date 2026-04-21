@@ -11,14 +11,8 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip as RTooltip,
-} from 'recharts'
+import { ComposedChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import type { NetworkMetrics } from '../types'
 import { COLORS } from '../constants'
@@ -41,7 +35,7 @@ export default function NetworkIoCard({ metrics, loading }: { metrics: NetworkMe
         </Stack>
 
         <Box sx={{ width: '100%', height: 200 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ChartContainer>
             <ComposedChart data={metrics.trends}>
               <defs>
                 <linearGradient id="netInGrad" x1="0" y1="0" x2="0" y2="1">
@@ -62,7 +56,7 @@ export default function NetworkIoCard({ metrics, loading }: { metrics: NetworkMe
               <Area type="monotone" dataKey="netin" name={t('resources.netIn')} stroke={COLORS.info} fill="url(#netInGrad)" strokeWidth={2} dot={false} />
               <Area type="monotone" dataKey="netout" name={t('resources.netOut')} stroke={COLORS.network} fill="url(#netOutGrad)" strokeWidth={2} dot={false} />
             </ComposedChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </Box>
       </CardContent>
     </Card>

@@ -7,9 +7,8 @@ import {
   Box, Checkbox, CircularProgress, IconButton, ListItemText, Menu, MenuItem,
   Tooltip, Typography, useTheme,
 } from '@mui/material'
-import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid,
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { mapTimeRange, formatTime } from './timeRangeUtils'
@@ -289,7 +288,7 @@ return json.data || {}
 
       {/* Chart */}
       <Box sx={{ flex: 1, minHeight: 100, width: '100%' }}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <ChartContainer>
           <AreaChart data={trendsData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
               {nodeNames.map((name, i) => {
@@ -329,7 +328,7 @@ return (
               )
             })}
           </AreaChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </Box>
 
     </Box>

@@ -404,6 +404,18 @@
       "goToEntity": "Go to entity",
       "close": "Close"
     },
+    "messages": {
+      "nodeOffline": "Node {node}: OFFLINE",
+      "ramCritical": "Node {node}: RAM critical ({value}%)",
+      "ramHigh": "Node {node}: RAM high ({value}%)",
+      "cpuCritical": "Node {node}: CPU critical ({value}%)",
+      "cpuHigh": "Node {node}: CPU high ({value}%)",
+      "cephHealth": "Ceph {cluster}: {status}",
+      "quorumLost": "Cluster {cluster}: Quorum lost!",
+      "pbsStorageCritical": "PBS {server}: Storage critical ({value}%)",
+      "pbsStorageHigh": "PBS {server}: Storage high ({value}%)",
+      "pbsBackupFailed": "PBS {server}: {count} backup(s) failed (24h)"
+    },
     "resolveConfirm": "Resolve {count} alert(s)?",
     "deleteConfirm": "Delete {count} alert(s)? This will resolve and remove them.",
     "resolveSelected": "Resolve selected",
@@ -485,6 +497,11 @@
     "snapshotDisabled": "Disabled"
   },
   "inventory": {
+    "alertsDialog": {
+      "title": "Active alerts",
+      "realAlertsSection": "Real-time alerts",
+      "predictiveAlertsSection": "Capacity forecasts"
+    },
     "title": "Inventory",
     "vms": "Virtual machines",
     "containers": "Containers",

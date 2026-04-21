@@ -13,18 +13,8 @@ import {
   useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from 'recharts'
+import { PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import type { DetailsPayload, InventorySelection } from '../types'
 
@@ -111,13 +101,13 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ width: 100, height: 100, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ChartContainer>
                 <PieChart>
                   <Pie data={vmStatusData} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={45} paddingAngle={2} strokeWidth={0}>
                     {vmStatusData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Pie>
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
             <Stack spacing={0.75} sx={{ flex: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -154,13 +144,13 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box sx={{ width: 100, height: 100, flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                <ChartContainer>
                   <PieChart>
                     <Pie data={migStatusData} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={45} paddingAngle={2} strokeWidth={0}>
                       {migStatusData.map((d, i) => <Cell key={i} fill={d.color} />)}
                     </Pie>
                   </PieChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </Box>
               <Stack spacing={0.75} sx={{ flex: 1 }}>
                 {migCompleted > 0 && (
@@ -205,7 +195,7 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
             {t('inventoryPage.extDashboard.resourcesPerHost')}
           </Typography>
           <Box sx={{ height: 180 }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <BarChart data={hostBarData} margin={{ top: 5, right: 5, bottom: 5, left: -15 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.5)} />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
@@ -215,7 +205,7 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
                 <Bar dataKey="cpu" name="vCPU" fill={theme.palette.warning.main} radius={[3, 3, 0, 0]} />
                 <Bar dataKey="ram" name="RAM (GB)" fill={theme.palette.info.main} radius={[3, 3, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </Box>
         </CardContent>
       </Card>

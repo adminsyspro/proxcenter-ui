@@ -373,6 +373,18 @@
     "resolve": "Beheben",
     "resolveAll": "Alle beheben",
     "viewAll": "View all Warnmeldungen",
+    "messages": {
+      "nodeOffline": "Node {node}: OFFLINE",
+      "ramCritical": "Node {node}: RAM kritisch ({value}%)",
+      "ramHigh": "Node {node}: RAM hoch ({value}%)",
+      "cpuCritical": "Node {node}: CPU kritisch ({value}%)",
+      "cpuHigh": "Node {node}: CPU hoch ({value}%)",
+      "cephHealth": "Ceph {cluster}: {status}",
+      "quorumLost": "Cluster {cluster}: Quorum verloren!",
+      "pbsStorageCritical": "PBS {server}: Speicher kritisch ({value}%)",
+      "pbsStorageHigh": "PBS {server}: Speicher hoch ({value}%)",
+      "pbsBackupFailed": "PBS {server}: {count} Backup(s) fehlgeschlagen (24h)"
+    },
     "resolveConfirm": "{count} Warnmeldung(en) beheben?",
     "deleteConfirm": "{count} Warnmeldung(en) loschen? Sie werden behoben und entfernt.",
     "resolveSelected": "Auswahl beheben",
@@ -454,6 +466,11 @@
     "snapshotDisabled": "Deaktiviert"
   },
   "inventory": {
+    "alertsDialog": {
+      "title": "Aktive Warnmeldungen",
+      "realAlertsSection": "Echtzeit-Warnmeldungen",
+      "predictiveAlertsSection": "Kapazitätsprognosen"
+    },
     "title": "Inventar",
     "vms": "Virtuelle Maschinen",
     "containers": "Container",

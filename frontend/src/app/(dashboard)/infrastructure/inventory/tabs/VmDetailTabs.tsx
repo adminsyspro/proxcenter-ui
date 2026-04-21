@@ -56,7 +56,8 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import { formatDateTime } from '@/lib/i18n/date'
@@ -532,7 +533,7 @@ export default function VmDetailTabs(props: any) {
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                           {/* CPU Usage */}
                           <ExpandableChart title={t('inventory.cpuUsage')} height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="gradCpu" x1="0" y1="0" x2="0" y2="1">
@@ -565,12 +566,12 @@ export default function VmDetailTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="cpuPct" stroke="#2196f3" fill="url(#gradCpu)" strokeWidth={1.5} isAnimationActive={false} />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
 
                           {/* Memory Usage */}
                           <ExpandableChart title={t('inventory.memoryUsage')} height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="gradRam" x1="0" y1="0" x2="0" y2="1">
@@ -603,12 +604,12 @@ export default function VmDetailTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="ramPct" stroke="#10b981" fill="url(#gradRam)" strokeWidth={1.5} isAnimationActive={false} />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
 
                           {/* Network Traffic */}
                           <ExpandableChart title={t('inventoryPage.networkTraffic')} height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="gradNetIn" x1="0" y1="0" x2="0" y2="1">
@@ -646,12 +647,12 @@ export default function VmDetailTabs(props: any) {
                                 <Area type="monotone" dataKey="netInBps" stroke="#06b6d4" fill="url(#gradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
                                 <Area type="monotone" dataKey="netOutBps" stroke="#67e8f9" fill="url(#gradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
 
                           {/* Disk I/O (VMs) */}
                           <ExpandableChart title={t('inventory.diskIo')} height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="gradDiskRead" x1="0" y1="0" x2="0" y2="1">
@@ -689,7 +690,7 @@ export default function VmDetailTabs(props: any) {
                                 <Area type="monotone" dataKey="diskReadBps" stroke="#ef4444" fill="url(#gradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
                                 <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#gradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
                         </Box>
                       </CardContent>

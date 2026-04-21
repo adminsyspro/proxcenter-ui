@@ -29,7 +29,8 @@ import {
   useTheme
 } from '@mui/material'
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ReferenceLine, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import { computeDrsHealthScore, type DrsHealthBreakdown } from '@/lib/utils/drs-health'
@@ -579,7 +580,7 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                 {t('siteRecovery.simulation.perNodeRam')}
               </Typography>
-              <ResponsiveContainer minWidth={0} width="100%" height={160}>
+              <ChartContainer height={160}>
                 <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                   <XAxis
                     dataKey="name"
@@ -615,7 +616,7 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
           )}
         </Box>

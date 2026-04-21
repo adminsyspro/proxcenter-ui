@@ -7,7 +7,8 @@ import { getDateLocale } from '@/lib/i18n/date'
 
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -2156,7 +2157,7 @@ return next
               {nodeBarData.length > 0 ? (
                 <>
                   <Box sx={{ height: 180 }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <ChartContainer>
                       <BarChart data={nodeBarData} barCategoryGap="20%">
                         <defs>
                           {lineColors.map((color, i) => (
@@ -2193,7 +2194,7 @@ return next
                           ))}
                         </Bar>
                       </BarChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </Box>
                   {clusters.length > 1 && (
                     <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" sx={{ mt: 1 }}>
@@ -2525,7 +2526,7 @@ return next
                   <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
                     {t('drsPage.clusterBalance')}
                   </Typography>
-                  <ResponsiveContainer minWidth={0} width="100%" height={140}>
+                  <ChartContainer height={140}>
                     <BarChart data={chartNodes} barCategoryGap="20%">
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
@@ -2540,7 +2541,7 @@ return next
                         ))}
                       </Bar>
                     </BarChart>
-                  </ResponsiveContainer>
+                  </ChartContainer>
                   <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 0.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Box sx={{ width: 8, height: 8, borderRadius: 1, bgcolor: theme.palette.error.main }} />

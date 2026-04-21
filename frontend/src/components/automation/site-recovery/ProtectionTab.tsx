@@ -10,7 +10,8 @@ import {
   alpha, useTheme
 } from '@mui/material'
 
-import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import EmptyState from '@/components/EmptyState'
 import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
@@ -103,7 +104,7 @@ const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[];
 
   return (
     <Box sx={{ width: isLarge ? '100%' : 80, height: isLarge ? 120 : 24, flexShrink: 0, minWidth: 0, minHeight: 0 }}>
-      <ResponsiveContainer width='100%' height='100%' minWidth={1} minHeight={1}>
+      <ChartContainer>
         <AreaChart data={chartData} margin={isLarge ? { top: 4, right: 4, left: 4, bottom: 4 } : { top: 2, right: 2, left: 2, bottom: 2 }}>
           <defs>
             <linearGradient id={gradientId} x1='0' y1='0' x2='0' y2='1'>
@@ -142,7 +143,7 @@ const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[];
             isAnimationActive={false}
           />
         </AreaChart>
-      </ResponsiveContainer>
+      </ChartContainer>
     </Box>
   )
 }
@@ -771,7 +772,7 @@ export default function ProtectionTab({
                   <LinearProgress sx={{ mb: 1 }} />
                 ) : (thSamples && thSamples.length >= 2) ? (
                   <Box sx={{ width: '100%', height: 140 }}>
-                    <ResponsiveContainer width='100%' height='100%'>
+                    <ChartContainer>
                       <AreaChart data={thSamples.map(s => ({ ts: new Date(s.timestamp).getTime(), bps: s.bytes_per_sec }))} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                         <defs>
                           <linearGradient id='thGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -813,7 +814,7 @@ export default function ProtectionTab({
                           isAnimationActive={false}
                         />
                       </AreaChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </Box>
                 ) : (
                   <Typography variant='caption' sx={{ color: 'text.disabled', fontStyle: 'italic' }}>

@@ -31,7 +31,8 @@ import {
   Typography
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const ErrorIcon = (props) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
@@ -614,7 +615,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ChartContainer>
                 <PieChart>
                   <Pie
                     data={[
@@ -635,7 +636,7 @@ export default function JobsPage() {
                     <Cell fill="#4caf50" />
                   </Pie>
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
             <Box>
               <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.total')}</Typography>
@@ -648,7 +649,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ChartContainer>
                 <PieChart>
                   <Pie
                     data={[
@@ -665,7 +666,7 @@ export default function JobsPage() {
                     <Cell fill="rgba(255,255,255,0.08)" />
                   </Pie>
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
             <Box>
               <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.running')}</Typography>
@@ -678,7 +679,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ChartContainer>
                 <PieChart>
                   <Pie
                     data={[
@@ -695,7 +696,7 @@ export default function JobsPage() {
                     <Cell fill="rgba(255,255,255,0.08)" />
                   </Pie>
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
             <Box>
               <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.pending')}</Typography>
@@ -708,7 +709,7 @@ export default function JobsPage() {
         <Card variant='outlined'>
           <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ChartContainer>
                 <PieChart>
                   <Pie
                     data={[
@@ -725,7 +726,7 @@ export default function JobsPage() {
                     <Cell fill="rgba(255,255,255,0.08)" />
                   </Pie>
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
             <Box>
               <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('jobsPage.failed')}</Typography>

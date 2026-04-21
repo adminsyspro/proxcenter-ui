@@ -377,6 +377,18 @@
     "resolve": "解决",
     "resolveAll": "全部解决",
     "viewAll": "查看所有告警",
+    "messages": {
+      "nodeOffline": "节点 {node}: 离线",
+      "ramCritical": "节点 {node}: 内存严重 ({value}%)",
+      "ramHigh": "节点 {node}: 内存偏高 ({value}%)",
+      "cpuCritical": "节点 {node}: CPU 严重 ({value}%)",
+      "cpuHigh": "节点 {node}: CPU 偏高 ({value}%)",
+      "cephHealth": "Ceph {cluster}: {status}",
+      "quorumLost": "集群 {cluster}: 仲裁丢失！",
+      "pbsStorageCritical": "PBS {server}: 存储严重 ({value}%)",
+      "pbsStorageHigh": "PBS {server}: 存储偏高 ({value}%)",
+      "pbsBackupFailed": "PBS {server}: {count} 个备份失败 (24h)"
+    },
     "resolveConfirm": "解决 {count} 条告警？",
     "deleteConfirm": "删除 {count} 条告警？将被解决并移除。",
     "resolveSelected": "解决选中",
@@ -458,6 +470,11 @@
     "snapshotDisabled": "已禁用"
   },
   "inventory": {
+    "alertsDialog": {
+      "title": "活跃告警",
+      "realAlertsSection": "实时告警",
+      "predictiveAlertsSection": "容量预测"
+    },
     "title": "资源清单",
     "vms": "虚拟机",
     "containers": "容器",

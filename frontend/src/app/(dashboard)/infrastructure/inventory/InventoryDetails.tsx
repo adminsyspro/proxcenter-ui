@@ -75,7 +75,8 @@ import {
 } from '@mui/material'
 import { lighten, alpha } from '@mui/material/styles'
 // RemixIcon replacements for @mui/icons-material
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import VmsTable, { VmRow } from '@/components/VmsTable'
 import VmFirewallTab from '@/components/VmFirewallTab'
@@ -3909,7 +3910,7 @@ return vm?.isCluster ?? false
                             return (
                               <Box sx={{ mt: 2 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mb: 0.5, display: 'block' }}>{t('inventoryPage.esxiMigration.progressOverTime')}</Typography>
-                                <ResponsiveContainer minWidth={0} width="100%" height={70}>
+                                <ChartContainer height={70}>
                                   <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                                     <defs>
                                       <linearGradient id="migGradChart" x1="0" y1="0" x2="0" y2="1">
@@ -3939,7 +3940,7 @@ return vm?.isCluster ?? false
                                     />
                                     <Area type="monotone" dataKey="pct" stroke={theme.palette.primary.main} strokeWidth={2} fill="url(#migGradChart)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                                   </AreaChart>
-                                </ResponsiveContainer>
+                                </ChartContainer>
                               </Box>
                             )
                           })()}

@@ -4,7 +4,8 @@ import React from 'react'
 
 import { Box, Card, CardContent, Typography, useTheme } from '@mui/material'
 import { lighten, alpha } from '@mui/material/styles'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import type { SeriesPoint } from '../types'
 import { formatTime, formatBps } from '../helpers'
@@ -35,7 +36,7 @@ function AreaPctChart({
         </Typography>
 
         <Box sx={{ width: '100%', height }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ChartContainer>
             <AreaChart data={data}>
               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
@@ -78,7 +79,7 @@ function AreaPctChart({
                 isAnimationActive={false}
               />
             </AreaChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </Box>
       </CardContent>
     </Card>
@@ -119,7 +120,7 @@ function AreaBpsChart2({
         </Typography>
 
         <Box sx={{ width: '100%', height }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ChartContainer>
             <AreaChart data={data}>
               <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 10 }} width={50} />
@@ -170,7 +171,7 @@ function AreaBpsChart2({
                 isAnimationActive={false}
               />
             </AreaChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </Box>
       </CardContent>
     </Card>

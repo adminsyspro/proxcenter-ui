@@ -47,7 +47,8 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
@@ -590,7 +591,7 @@ export default function NodeTabs(props: any) {
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
                         <ExpandableChart title={t('inventory.cpuUsage')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 <linearGradient id="nGradCpu" x1="0" y1="0" x2="0" y2="1">
@@ -623,12 +624,12 @@ export default function NodeTabs(props: any) {
                               }} />
                               <Area type="monotone" dataKey="cpuPct" stroke="#2196f3" fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Memory Usage */}
                         <ExpandableChart title={t('inventory.memoryUsage')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 <linearGradient id="nGradRam" x1="0" y1="0" x2="0" y2="1">
@@ -661,12 +662,12 @@ export default function NodeTabs(props: any) {
                               }} />
                               <Area type="monotone" dataKey="ramPct" stroke="#10b981" fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Network Traffic */}
                         <ExpandableChart title={t('inventory.networkTrafficChart')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                               <defs>
                                 <linearGradient id="nGradNetIn" x1="0" y1="0" x2="0" y2="1">
@@ -704,12 +705,12 @@ export default function NodeTabs(props: any) {
                               <Area type="monotone" dataKey="netInBps" stroke="#06b6d4" fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
                               <Area type="monotone" dataKey="netOutBps" stroke="#67e8f9" fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
                             </AreaChart>
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Server Load (nodes) ou Disk I/O (VMs) */}
                         <ExpandableChart title={selection?.type === 'node' ? t('inventory.serverLoad') : t('inventory.diskIo')} height={185}>
-                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <ChartContainer>
                             {selection?.type === 'node' ? (
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
@@ -782,13 +783,13 @@ export default function NodeTabs(props: any) {
                                 <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
                               </AreaChart>
                             )}
-                          </ResponsiveContainer>
+                          </ChartContainer>
                         </ExpandableChart>
 
                         {/* Memory Available & ZFS ARC (nodes only) */}
                         {selection?.type === 'node' && series.some(p => p.memAvailable != null || p.arcSize != null) && (
                           <ExpandableChart title="Memory Available / ZFS ARC" height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="nGradMemAvail" x1="0" y1="0" x2="0" y2="1">
@@ -826,14 +827,14 @@ export default function NodeTabs(props: any) {
                                 <Area type="monotone" dataKey="memAvailable" stroke="#10b981" fill="url(#nGradMemAvail)" strokeWidth={1.5} isAnimationActive={false} name="Available" connectNulls />
                                 <Area type="monotone" dataKey="arcSize" stroke="#8b5cf6" fill="url(#nGradArc)" strokeWidth={1.5} isAnimationActive={false} name="ZFS ARC" connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
                         )}
 
                         {/* IO Wait (nodes only) */}
                         {selection?.type === 'node' && series.some(p => p.iowait != null) && (
                           <ExpandableChart title="IO Wait" height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="nGradIoWait" x1="0" y1="0" x2="0" y2="1">
@@ -866,14 +867,14 @@ export default function NodeTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="iowait" stroke="#f59e0b" fill="url(#nGradIoWait)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
                         )}
 
                         {/* PSI - Pressure Stall Information (nodes only, kernel 4.20+) */}
                         {selection?.type === 'node' && series.some(p => p.psiCpuSome != null) && (
                           <ExpandableChart title="Pressure Stall Information (PSI)" height={185}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <ChartContainer>
                               <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis domain={[0, 'auto']} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={35} />
@@ -907,7 +908,7 @@ export default function NodeTabs(props: any) {
                                 <Area type="monotone" dataKey="psiIoFull" stroke="#d97706" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
                                 <Area type="monotone" dataKey="psiMemFull" stroke="#059669" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
                               </AreaChart>
-                            </ResponsiveContainer>
+                            </ChartContainer>
                           </ExpandableChart>
                         )}
                       </Box>

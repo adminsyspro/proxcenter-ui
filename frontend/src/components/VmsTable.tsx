@@ -29,7 +29,8 @@ import {
   useMediaQuery
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 // XLSX is dynamically imported in handleExportExcel to reduce bundle size
 
 // RemixIcon replacements for @mui/icons-material
@@ -1226,47 +1227,40 @@ return (
           const ramColor = '#b35500'  // Orange foncé
           
           return (
-            <Box 
-              sx={{ height: 32, width: '100%', position: 'relative' }} 
-              key={chartKey}
-            >
-              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
-                <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                  <defs>
-                    <linearGradient id={`cpuGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>
-                      <stop offset='0%' stopColor={cpuColor} stopOpacity={0.25} />
-                      <stop offset='100%' stopColor={cpuColor} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey='t' hide />
-                  <YAxis hide domain={[yMin, yMax]} />
-                  <RTooltip 
-                    content={<TrendTooltip />} 
-                    cursor={{ stroke: cpuColor, strokeWidth: 1, strokeDasharray: '3 3' }} 
-                  />
-                  {/* Ligne CPU - orange vif */}
-                  <Area
-                    type='monotone'
-                    dataKey='cpu'
-                    stroke={cpuColor}
-                    strokeWidth={1.5}
-                    fill={`url(#cpuGradient-${vm.id})`}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  {/* Ligne RAM - orange foncé */}
-                  <Area
-                    type='monotone'
-                    dataKey='ram'
-                    stroke={ramColor}
-                    strokeWidth={1.5}
-                    fill='transparent'
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
+            <ChartContainer key={chartKey} height={32} sx={{ position: 'relative' }}>
+              <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                <defs>
+                  <linearGradient id={`cpuGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%' stopColor={cpuColor} stopOpacity={0.25} />
+                    <stop offset='100%' stopColor={cpuColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey='t' hide />
+                <YAxis hide domain={[yMin, yMax]} />
+                <RTooltip
+                  content={<TrendTooltip />}
+                  cursor={{ stroke: cpuColor, strokeWidth: 1, strokeDasharray: '3 3' }}
+                />
+                <Area
+                  type='monotone'
+                  dataKey='cpu'
+                  stroke={cpuColor}
+                  strokeWidth={1.5}
+                  fill={`url(#cpuGradient-${vm.id})`}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                <Area
+                  type='monotone'
+                  dataKey='ram'
+                  stroke={ramColor}
+                  strokeWidth={1.5}
+                  fill='transparent'
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ChartContainer>
           )
         }
       })
@@ -1319,28 +1313,26 @@ return (
           const netColor = '#4caf50'
 
           return (
-            <Box sx={{ height: 32, width: '100%', position: 'relative' }} key={chartKey}>
-              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
-                <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                  <defs>
-                    <linearGradient id={`diskGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>
-                      <stop offset='0%' stopColor={diskColor} stopOpacity={0.2} />
-                      <stop offset='100%' stopColor={diskColor} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey='t' hide />
-                  <YAxis hide />
-                  <RTooltip
-                    content={<IoNetTooltip />}
-                    cursor={{ stroke: diskColor, strokeWidth: 1, strokeDasharray: '3 3' }}
-                  />
-                  <Area type='monotone' dataKey='diskread' stroke={diskColor} strokeWidth={1.5} fill={`url(#diskGradient-${vm.id})`} dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='diskwrite' stroke='#1565c0' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='netin' stroke={netColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='netout' stroke='#2e7d32' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
+            <ChartContainer key={chartKey} height={32} sx={{ position: 'relative' }}>
+              <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                <defs>
+                  <linearGradient id={`diskGradient-${vm.id}`} x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%' stopColor={diskColor} stopOpacity={0.2} />
+                    <stop offset='100%' stopColor={diskColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey='t' hide />
+                <YAxis hide />
+                <RTooltip
+                  content={<IoNetTooltip />}
+                  cursor={{ stroke: diskColor, strokeWidth: 1, strokeDasharray: '3 3' }}
+                />
+                <Area type='monotone' dataKey='diskread' stroke={diskColor} strokeWidth={1.5} fill={`url(#diskGradient-${vm.id})`} dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='diskwrite' stroke='#1565c0' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='netin' stroke={netColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='netout' stroke='#2e7d32' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+              </AreaChart>
+            </ChartContainer>
           )
         }
       })

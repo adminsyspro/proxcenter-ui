@@ -15,7 +15,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import type { InventoryCluster, InventoryNode } from '../types'
 
@@ -85,7 +86,7 @@ function MiniSparkline({ data, id }: { data: TrendPoint[]; id: string }) {
 
   return (
     <Box sx={{ height: 32, width: '100%' }}>
-      <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+      <ChartContainer>
         <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
           <defs>
             <linearGradient id={`cpuG-${id}`} x1='0' y1='0' x2='0' y2='1'>
@@ -99,7 +100,7 @@ function MiniSparkline({ data, id }: { data: TrendPoint[]; id: string }) {
           <Area type='monotone' dataKey='cpu' stroke={cpuColor} strokeWidth={1.5} fill={`url(#cpuG-${id})`} dot={false} isAnimationActive={false} />
           <Area type='monotone' dataKey='ram' stroke={ramColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
         </AreaChart>
-      </ResponsiveContainer>
+      </ChartContainer>
     </Box>
   )
 }

@@ -12,7 +12,8 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import type { TreeClusterStorage, TreeStorageItem } from './InventoryTree'
@@ -166,7 +167,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                 Usage
               </Typography>
             </Stack>
-            <ResponsiveContainer minWidth={0} width="100%" height={120}>
+            <ChartContainer height={120}>
               <PieChart>
                 <Pie
                   data={[
@@ -207,7 +208,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                   }}
                 />
               </PieChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </CardContent>
         </Card>
 
@@ -230,7 +231,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                   By Type
                 </Typography>
               </Stack>
-              <ResponsiveContainer minWidth={0} width="100%" height={120}>
+              <ChartContainer height={120}>
                 <PieChart>
                   <Pie
                     data={chartData}
@@ -269,7 +270,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                     }}
                   />
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
         )}

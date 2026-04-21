@@ -13,21 +13,8 @@ import {
   useTheme,
   alpha,
 } from '@mui/material'
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts'
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 import { formatBytes } from '@/utils/format'
 
 const CustomTooltip = ({ active, payload, label, t, mode }) => {
@@ -156,7 +143,7 @@ export default function BackupTrendsChart({ pbsId }) {
           <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' } }}>
             {/* Main chart */}
             <Box sx={{ flex: 1, height: 280 }}>
-              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+              <ChartContainer>
                 {mode === 'count' ? (
                   <BarChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray='3 3' stroke={alpha(theme.palette.divider, 0.4)} />
@@ -214,7 +201,7 @@ export default function BackupTrendsChart({ pbsId }) {
                     <Bar dataKey='unverified' name={t('backups.notVerified')} stackId='a' fill={alpha(theme.palette.text.disabled, 0.3)} radius={[2, 2, 0, 0]} />
                   </BarChart>
                 )}
-              </ResponsiveContainer>
+              </ChartContainer>
             </Box>
 
             {/* Pie chart */}
@@ -223,7 +210,7 @@ export default function BackupTrendsChart({ pbsId }) {
                 <Typography variant='caption' fontWeight={700} sx={{ opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1 }}>
                   {t('backups.trendsDistribution')}
                 </Typography>
-                <ResponsiveContainer minWidth={0} width='100%' height={200}>
+                <ChartContainer height={200}>
                   <PieChart>
                     <Pie
                       data={pieData}
@@ -251,7 +238,7 @@ export default function BackupTrendsChart({ pbsId }) {
                     />
                     <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                   </PieChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               </Box>
             )}
           </Box>

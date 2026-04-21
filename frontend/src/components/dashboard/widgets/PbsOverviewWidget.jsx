@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
-import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
@@ -181,7 +182,7 @@ function PbsCard({ server, theme, t, rrdData }) {
         <Typography sx={{ fontSize: 8, opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>IO / NET</Typography>
         <Box sx={{ height: 80, width: '100%', mb: 1 }}>
           {hasRrd ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <AreaChart data={rrdData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <RTooltip content={<IoTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="diskread" name="Disk R" stroke="#ab47bc" fill="#ab47bc" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
@@ -189,7 +190,7 @@ function PbsCard({ server, theme, t, rrdData }) {
                 <Area type="monotone" dataKey="netin" name="Net In" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="netout" name="Net Out" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1} dot={false} isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           ) : (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}>
               <Typography sx={{ fontSize: 9 }}>...</Typography>

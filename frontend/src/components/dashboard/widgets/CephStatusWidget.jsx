@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
-import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { formatTime } from './timeRangeUtils'
@@ -227,13 +228,13 @@ function CephClusterCard({ cluster, isDark, perfData }) {
         </Typography>
         <Box sx={{ height: 36, width: '100%' }}>
           {hasPerfData ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <AreaChart data={perfData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <RTooltip content={<ThroughputTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="read" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="write" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           ) : (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}>
               <Typography sx={{ fontSize: 9 }}>...</Typography>
@@ -249,13 +250,13 @@ function CephClusterCard({ cluster, isDark, perfData }) {
         </Typography>
         <Box sx={{ height: 36, width: '100%' }}>
           {hasPerfData ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <AreaChart data={perfData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <RTooltip content={<IopsTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#8b5cf6', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="readIops" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="writeIops" stroke="#ec4899" fill="#ec4899" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           ) : (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}>
               <Typography sx={{ fontSize: 9 }}>...</Typography>

@@ -40,6 +40,7 @@ import { useLicense } from '@/contexts/LicenseContext'
 import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
@@ -49,6 +50,7 @@ import { useResourceData } from '../resources/hooks/useResourceData'
 import { calculateImprovedPredictions } from '../resources/algorithms/improvedPrediction'
 import { calculateHealthScoreWithDetails } from '../resources/algorithms/healthScore'
 import type { PredictiveAlert } from '../resources/types'
+import AlertsDrillDownDialog from './AlertsDrillDownDialog'
 
 function RootInventoryView({
   allVms,
@@ -118,6 +120,8 @@ function RootInventoryView({
     const raw = activeAlertsData?.data || activeAlertsData || []
     return Array.isArray(raw) ? raw : []
   }, [activeAlertsData])
+
+  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false)
 
   // Health score (includes real alerts from orchestrator)
   const { healthScore, healthBreakdown } = useMemo(() => {
@@ -618,14 +622,30 @@ function RootInventoryView({
                     const warnings = realWarnings + predWarnings
                     if (criticals > 0 || warnings > 0) {
                       return (
-                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(criticals > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
-                          <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: criticals > 0 ? theme.palette.error.main : theme.palette.warning.main }} />
-                          <Typography variant="caption" fontWeight={600} sx={{ color: criticals > 0 ? 'error.main' : 'warning.main', fontSize: 11 }}>
-                            {criticals > 0 && `${criticals} critical`}
-                            {criticals > 0 && warnings > 0 && ', '}
-                            {warnings > 0 && `${warnings} warning${warnings > 1 ? 's' : ''}`}
-                          </Typography>
-                        </Stack>
+                        <MuiTooltip title={t('inventory.alertsDialog.title')} arrow>
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            spacing={0.5}
+                            onClick={() => setAlertsDialogOpen(true)}
+                            sx={{
+                              bgcolor: alpha(criticals > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.1),
+                              px: 1,
+                              py: 0.25,
+                              borderRadius: 1,
+                              cursor: 'pointer',
+                              transition: 'background-color 0.15s',
+                              '&:hover': { bgcolor: alpha(criticals > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.18) },
+                            }}
+                          >
+                            <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: criticals > 0 ? theme.palette.error.main : theme.palette.warning.main }} />
+                            <Typography variant="caption" fontWeight={600} sx={{ color: criticals > 0 ? 'error.main' : 'warning.main', fontSize: 11 }}>
+                              {criticals > 0 && `${criticals} critical`}
+                              {criticals > 0 && warnings > 0 && ', '}
+                              {warnings > 0 && `${warnings} warning${warnings > 1 ? 's' : ''}`}
+                            </Typography>
+                          </Stack>
+                        </MuiTooltip>
                       )
                     }
                     return (
@@ -791,17 +811,16 @@ function RootInventoryView({
                   <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
                 </IconButton>
               </Box>
-              <Box sx={{ height: 170 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
-                    <defs>
-                      {infraRrdNodeNames.map(name => (
-                        <linearGradient key={`gcpu_${name}`} id={`infraGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
-                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
-                        </linearGradient>
-                      ))}
-                    </defs>
+              <ChartContainer height={170}>
+                <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    {infraRrdNodeNames.map(name => (
+                      <linearGradient key={`gcpu_${name}`} id={`infraGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                      </linearGradient>
+                    ))}
+                  </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                     <RechartsTooltip
@@ -833,12 +852,11 @@ function RootInventoryView({
                         )
                       }}
                     />
-                    {infraRrdNodeNames.map(name => (
-                      <Area key={name} type="monotone" dataKey={`cpu_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Box>
+                  {infraRrdNodeNames.map(name => (
+                    <Area key={name} type="monotone" dataKey={`cpu_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`cpu_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradCpu_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                  ))}
+                </AreaChart>
+              </ChartContainer>
             </Box>
             {/* Server Load per node */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.75, pr: 0.5 }}>
@@ -848,17 +866,16 @@ function RootInventoryView({
                   <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
                 </IconButton>
               </Box>
-              <Box sx={{ height: 170 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
-                    <defs>
-                      {infraRrdNodeNames.map(name => (
-                        <linearGradient key={`gload_${name}`} id={`infraGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.25} />
-                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
-                        </linearGradient>
-                      ))}
-                    </defs>
+              <ChartContainer height={170}>
+                <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    {infraRrdNodeNames.map(name => (
+                      <linearGradient key={`gload_${name}`} id={`infraGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                      </linearGradient>
+                    ))}
+                  </defs>
                     <XAxis dataKey="t" tickFormatter={v => { const d = new Date(Number(v)); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }} minTickGap={40} tick={{ fontSize: 8 }} />
                     <YAxis tick={{ fontSize: 8 }} width={30} domain={[0, 'auto']} />
                     <RechartsTooltip
@@ -886,12 +903,11 @@ function RootInventoryView({
                         )
                       }}
                     />
-                    {infraRrdNodeNames.map(name => (
-                      <Area key={`load_${name}`} type="monotone" dataKey={`load_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`load_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradLoad_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Box>
+                  {infraRrdNodeNames.map(name => (
+                    <Area key={`load_${name}`} type="monotone" dataKey={`load_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`load_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradLoad_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                  ))}
+                </AreaChart>
+              </ChartContainer>
             </Box>
 
             {/* RAM per node */}
@@ -902,17 +918,16 @@ function RootInventoryView({
                   <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
                 </IconButton>
               </Box>
-              <Box sx={{ height: 170 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
-                    <defs>
-                      {infraRrdNodeNames.map(name => (
-                        <linearGradient key={`gram_${name}`} id={`infraGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
-                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
-                        </linearGradient>
-                      ))}
-                    </defs>
+              <ChartContainer height={170}>
+                <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    {infraRrdNodeNames.map(name => (
+                      <linearGradient key={`gram_${name}`} id={`infraGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                      </linearGradient>
+                    ))}
+                  </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                     <RechartsTooltip
@@ -944,12 +959,11 @@ function RootInventoryView({
                         )
                       }}
                     />
-                    {infraRrdNodeNames.map(name => (
-                      <Area key={name} type="monotone" dataKey={`ram_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Box>
+                  {infraRrdNodeNames.map(name => (
+                    <Area key={name} type="monotone" dataKey={`ram_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`ram_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradRam_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                  ))}
+                </AreaChart>
+              </ChartContainer>
             </Box>
             {/* Network per node (In + Out stacked) */}
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.75, pr: 0.5 }}>
@@ -959,19 +973,18 @@ function RootInventoryView({
                   <i className="ri-expand-diagonal-line" style={{ fontSize: 14 }} />
                 </IconButton>
               </Box>
-              <Box sx={{ height: 170 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
-                    <defs>
-                      {infraRrdNodeNames.map(name => (
-                        <React.Fragment key={`gnet_${name}`}>
-                          <linearGradient id={`infraGradNetIn_${name}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
-                            <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
-                          </linearGradient>
-                        </React.Fragment>
-                      ))}
-                    </defs>
+              <ChartContainer height={170}>
+                <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    {infraRrdNodeNames.map(name => (
+                      <React.Fragment key={`gnet_${name}`}>
+                        <linearGradient id={`infraGradNetIn_${name}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={infraNodeColors[name]} stopOpacity={0.15} />
+                          <stop offset="100%" stopColor={infraNodeColors[name]} stopOpacity={0} />
+                        </linearGradient>
+                      </React.Fragment>
+                    ))}
+                  </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={45} />
                     <RechartsTooltip
@@ -1003,15 +1016,14 @@ function RootInventoryView({
                         )
                       }}
                     />
-                    {infraRrdNodeNames.map(name => (
-                      <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`netIn_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradNetIn_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
-                    ))}
-                    {infraRrdNodeNames.map(name => (
-                      <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`netOut_${name}`} stroke={infraNodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} connectNulls />
-                    ))}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Box>
+                  {infraRrdNodeNames.map(name => (
+                    <Area key={`in_${name}`} type="monotone" dataKey={`netIn_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`netIn_${name}`} stroke={infraNodeColors[name]} fill={`url(#infraGradNetIn_${name})`} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                  ))}
+                  {infraRrdNodeNames.map(name => (
+                    <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} hide={infraRrdHiddenNodes.has(name)} name={`netOut_${name}`} stroke={infraNodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} connectNulls />
+                  ))}
+                </AreaChart>
+              </ChartContainer>
             </Box>
 
           </Box>
@@ -1049,9 +1061,8 @@ function RootInventoryView({
                 <i className="ri-close-line" style={{ fontSize: 18 }} />
               </IconButton>
             </Box>
-            <Box sx={{ height: 500 }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                {expandedGraph === 'cpu' ? (
+            <ChartContainer height={500}>
+              {expandedGraph === 'cpu' ? (
                   <AreaChart data={infraRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
                     <defs>
                       {infraRrdNodeNames.map(name => (
@@ -1217,8 +1228,7 @@ function RootInventoryView({
                     ))}
                   </AreaChart>
                 )}
-              </ResponsiveContainer>
-            </Box>
+            </ChartContainer>
           </Box>
         </Box>
       )}
@@ -1229,6 +1239,13 @@ function RootInventoryView({
           <Typography variant="caption">{t('inventory.performances')}...</Typography>
         </Box>
       )}
+
+      <AlertsDrillDownDialog
+        open={alertsDialogOpen}
+        onClose={() => setAlertsDialogOpen(false)}
+        activeAlerts={activeAlerts}
+        predictiveAlerts={predictiveAlerts}
+      />
 
     </Box>
   )

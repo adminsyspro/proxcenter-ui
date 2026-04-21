@@ -15,16 +15,8 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useLocale, useTranslations } from 'next-intl'
-import {
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip as RTooltip,
-  ReferenceLine,
-  ComposedChart,
-  Line,
-  Area,
-} from 'recharts'
+import { XAxis, YAxis, Tooltip as RTooltip, ReferenceLine, ComposedChart, Line, Area } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import type { ResourceTrend } from '../types'
@@ -86,7 +78,7 @@ export default function ProjectionChart({ data, loading, period }: {
         </Stack>
 
         <Box sx={{ width: '100%', height: 320 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ChartContainer>
             <ComposedChart data={data}>
               <defs>
                 <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
@@ -127,7 +119,7 @@ export default function ProjectionChart({ data, loading, period }: {
                 </>
               )}
             </ComposedChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </Box>
 
         <Stack direction="row" spacing={3} justifyContent="center" sx={{ mt: 2 }}>

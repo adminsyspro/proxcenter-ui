@@ -1205,84 +1205,80 @@ return () => window.removeEventListener('keydown', onKeyDown)
           )}
         </Box>
 
+        {isEnterprise && <Divider />}
         {isEnterprise && (
-          <>
-            <Divider />
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', fontSize: '0.65rem' }}>
-                Backend Status
+          <Box sx={{ px: 2, py: 1 }}>
+            <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', fontSize: '0.65rem' }}>
+              Backend Status
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  bgcolor: pxcoreInfo.color,
+                  boxShadow: `0 0 6px ${pxcoreInfo.color}`,
+                  flexShrink: 0,
+                  animation: pxcoreStatus.syncing
+                    ? 'pxcore-sync 0.8s ease-in-out infinite'
+                    : pxcoreStatus.status === 'healthy'
+                      ? 'pxcore-glow 2s ease-in-out infinite'
+                      : 'none',
+                  '@keyframes pxcore-glow': {
+                    '0%, 100%': { opacity: 1, boxShadow: `0 0 6px ${pxcoreInfo.color}` },
+                    '50%': { opacity: 0.6, boxShadow: `0 0 2px ${pxcoreInfo.color}` }
+                  },
+                  '@keyframes pxcore-sync': {
+                    '0%, 100%': { transform: 'scale(1)', opacity: 1 },
+                    '50%': { transform: 'scale(1.3)', opacity: 0.5 }
+                  },
+                }}
+              />
+              <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>
+                {pxcoreStatus.status === 'healthy' ? t('pxcore.operational') :
+                 pxcoreStatus.status === 'degraded' ? t('pxcore.degraded') :
+                 pxcoreStatus.status === 'error' ? t('pxcore.error') :
+                 pxcoreStatus.status === 'offline' ? t('pxcore.offline') :
+                 t('pxcore.unknown')}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    bgcolor: pxcoreInfo.color,
-                    boxShadow: `0 0 6px ${pxcoreInfo.color}`,
-                    flexShrink: 0,
-                    animation: pxcoreStatus.syncing
-                      ? 'pxcore-sync 0.8s ease-in-out infinite'
-                      : pxcoreStatus.status === 'healthy'
-                        ? 'pxcore-glow 2s ease-in-out infinite'
-                        : 'none',
-                    '@keyframes pxcore-glow': {
-                      '0%, 100%': { opacity: 1, boxShadow: `0 0 6px ${pxcoreInfo.color}` },
-                      '50%': { opacity: 0.6, boxShadow: `0 0 2px ${pxcoreInfo.color}` }
-                    },
-                    '@keyframes pxcore-sync': {
-                      '0%, 100%': { transform: 'scale(1)', opacity: 1 },
-                      '50%': { transform: 'scale(1.3)', opacity: 0.5 }
-                    },
-                  }}
-                />
-                <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>
-                  {pxcoreStatus.status === 'healthy' ? t('pxcore.operational') :
-                   pxcoreStatus.status === 'degraded' ? t('pxcore.degraded') :
-                   pxcoreStatus.status === 'error' ? t('pxcore.error') :
-                   pxcoreStatus.status === 'offline' ? t('pxcore.offline') :
-                   t('pxcore.unknown')}
-                </Typography>
-              </Box>
             </Box>
-          </>
+          </Box>
         )}
 
+        {isMultiTenant && availableTenants.length > 1 && <Divider />}
         {isMultiTenant && availableTenants.length > 1 && (
-          <>
-            <Divider />
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', fontSize: '0.65rem' }}>
-                {t('settings.tenant', { defaultMessage: 'Tenant' })}
-              </Typography>
-              <Select
-                size='small'
-                fullWidth
-                value={currentTenant?.id || ''}
-                onChange={(e) => {
-                  if (e.target.value !== currentTenant?.id) {
-                    switchTenant(e.target.value)
-                  }
-                }}
-                sx={{ mt: 0.5, height: 32, fontSize: '0.8rem' }}
-                renderValue={(val) => (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <i className='ri-building-line' style={{ fontSize: 14, opacity: 0.7 }} />
-                    {availableTenants.find(tn => tn.id === val)?.name || val}
-                  </Box>
-                )}
-              >
-                {availableTenants.map((tenant) => (
-                  <MenuItem key={tenant.id} value={tenant.id}>
-                    <ListItemIcon sx={{ minWidth: 28 }}>
-                      <i className={tenant.id === currentTenant?.id ? 'ri-checkbox-circle-fill' : 'ri-building-line'} style={{ fontSize: 16 }} />
-                    </ListItemIcon>
-                    {tenant.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-          </>
+          <Box sx={{ px: 2, py: 1 }}>
+            <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', fontSize: '0.65rem' }}>
+              {t('settings.tenant', { defaultMessage: 'Tenant' })}
+            </Typography>
+            <Select
+              size='small'
+              fullWidth
+              value={currentTenant?.id || ''}
+              onChange={(e) => {
+                if (e.target.value !== currentTenant?.id) {
+                  switchTenant(e.target.value)
+                }
+              }}
+              sx={{ mt: 0.5, height: 32, fontSize: '0.8rem' }}
+              renderValue={(val) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className='ri-building-line' style={{ fontSize: 14, opacity: 0.7 }} />
+                  {availableTenants.find(tn => tn.id === val)?.name || val}
+                </Box>
+              )}
+            >
+              {availableTenants.map((tenant) => (
+                <MenuItem key={tenant.id} value={tenant.id}>
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    <i className={tenant.id === currentTenant?.id ? 'ri-checkbox-circle-fill' : 'ri-building-line'} style={{ fontSize: 16 }} />
+                  </ListItemIcon>
+                  {tenant.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </Box>
         )}
 
         <Divider />

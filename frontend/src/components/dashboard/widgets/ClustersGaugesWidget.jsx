@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Box, Checkbox, Chip, IconButton, ListItemText, Menu, MenuItem, Tooltip, Typography, useTheme } from '@mui/material'
-import { AreaChart, Area, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
@@ -237,13 +238,13 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
         <Typography sx={{ fontSize: 9, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>CPU / RAM</Typography>
         <Box sx={{ height: 40, width: '100%' }}>
           {hasTrends ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <AreaChart data={mergedTrends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <RTooltip content={<CpuRamTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#f97316', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="cpu" stroke={theme.palette.warning.main} fill={theme.palette.warning.main} fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="ram" stroke={theme.palette.info.main} fill={theme.palette.info.main} fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}
         </Box>
       </Box>
@@ -252,13 +253,13 @@ function ClusterCard({ cluster, clusterNodes, theme, allTrends, vmList, lxcList 
         <Typography sx={{ fontSize: 9, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>IO / NET</Typography>
         <Box sx={{ height: 40, width: '100%' }}>
           {hasTrends ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ChartContainer>
               <AreaChart data={mergedTrends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <RTooltip content={<IoNetTooltip isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} cursor={{ stroke: '#ab47bc', strokeWidth: 1, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="netin" name="Net In" stroke="#4caf50" fill="#4caf50" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="netout" name="Net Out" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}
         </Box>
       </Box>

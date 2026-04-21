@@ -8,10 +8,8 @@ import {
   Skeleton, Stack, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
-import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
-  Tooltip as RTooltip, Legend, CartesianGrid
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, Legend, CartesianGrid } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import EmptyState from '@/components/EmptyState'
 import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIllustration'
@@ -414,7 +412,7 @@ const BandwidthChart = ({ jobs, connections, t }: {
           </Box>
         ) : (
           <Box sx={{ width: '100%', height: 260 }}>
-            <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+            <ChartContainer>
               <AreaChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <defs>
                   {seriesKeys.map((key, i) => (
@@ -473,7 +471,7 @@ const BandwidthChart = ({ jobs, connections, t }: {
                   />
                 ))}
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </Box>
         )}
       </CardContent>

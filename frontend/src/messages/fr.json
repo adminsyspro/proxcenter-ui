@@ -404,6 +404,18 @@
       "goToEntity": "Voir l'entité",
       "close": "Fermer"
     },
+    "messages": {
+      "nodeOffline": "Node {node} : OFFLINE",
+      "ramCritical": "Node {node} : RAM critique ({value}%)",
+      "ramHigh": "Node {node} : RAM élevée ({value}%)",
+      "cpuCritical": "Node {node} : CPU critique ({value}%)",
+      "cpuHigh": "Node {node} : CPU élevé ({value}%)",
+      "cephHealth": "Ceph {cluster} : {status}",
+      "quorumLost": "Cluster {cluster} : Quorum perdu !",
+      "pbsStorageCritical": "PBS {server} : Stockage critique ({value}%)",
+      "pbsStorageHigh": "PBS {server} : Stockage élevé ({value}%)",
+      "pbsBackupFailed": "PBS {server} : {count} backup(s) échoué(s) (24h)"
+    },
     "resolveConfirm": "Résoudre {count} alerte(s) ?",
     "deleteConfirm": "Supprimer {count} alerte(s) ? Elles seront resolues et supprimees.",
     "resolveSelected": "Resoudre la selection",
@@ -485,6 +497,11 @@
     "snapshotDisabled": "Désactivé"
   },
   "inventory": {
+    "alertsDialog": {
+      "title": "Alertes actives",
+      "realAlertsSection": "Alertes temps réel",
+      "predictiveAlertsSection": "Prévisions de capacité"
+    },
     "title": "Inventaire",
     "vms": "Machines virtuelles",
     "containers": "Containers",

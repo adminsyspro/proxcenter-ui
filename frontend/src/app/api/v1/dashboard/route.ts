@@ -417,7 +417,9 @@ return null
       if (node.status !== 'online') {
         alerts.push({
           severity: 'crit',
-          message: `Node ${node.name} : OFFLINE`,
+          message: `Node ${node.name}: OFFLINE`,
+          i18nKey: 'alerts.messages.nodeOffline',
+          i18nParams: { node: node.name },
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
@@ -432,7 +434,9 @@ return null
       if (node.memPct > 90) {
         alerts.push({
           severity: 'crit',
-          message: `Node ${node.name} : RAM critique (${node.memPct}%)`,
+          message: `Node ${node.name}: RAM critical (${node.memPct}%)`,
+          i18nKey: 'alerts.messages.ramCritical',
+          i18nParams: { node: node.name, value: node.memPct },
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
@@ -447,7 +451,9 @@ return null
       } else if (node.memPct > 80) {
         alerts.push({
           severity: 'warn',
-          message: `Node ${node.name} : RAM élevée (${node.memPct}%)`,
+          message: `Node ${node.name}: RAM high (${node.memPct}%)`,
+          i18nKey: 'alerts.messages.ramHigh',
+          i18nParams: { node: node.name, value: node.memPct },
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
@@ -464,7 +470,9 @@ return null
       if (node.cpuPct > 90) {
         alerts.push({
           severity: 'crit',
-          message: `Node ${node.name} : CPU critique (${node.cpuPct}%)`,
+          message: `Node ${node.name}: CPU critical (${node.cpuPct}%)`,
+          i18nKey: 'alerts.messages.cpuCritical',
+          i18nParams: { node: node.name, value: node.cpuPct },
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
@@ -479,7 +487,9 @@ return null
       } else if (node.cpuPct > 80) {
         alerts.push({
           severity: 'warn',
-          message: `Node ${node.name} : CPU élevé (${node.cpuPct}%)`,
+          message: `Node ${node.name}: CPU high (${node.cpuPct}%)`,
+          i18nKey: 'alerts.messages.cpuHigh',
+          i18nParams: { node: node.name, value: node.cpuPct },
           source: node.connection,
           sourceType: 'pve',
           entityType: 'node',
@@ -499,7 +509,9 @@ return null
       if (cluster.cephHealth && cluster.cephHealth !== 'HEALTH_OK') {
         alerts.push({
           severity: cluster.cephHealth === 'HEALTH_WARN' ? 'warn' : 'crit',
-          message: `Ceph ${cluster.name} : ${cluster.cephHealth}`,
+          message: `Ceph ${cluster.name}: ${cluster.cephHealth}`,
+          i18nKey: 'alerts.messages.cephHealth',
+          i18nParams: { cluster: cluster.name, status: cluster.cephHealth },
           source: cluster.name,
           sourceType: 'ceph',
           entityType: 'cluster',
@@ -515,16 +527,18 @@ return null
     // Alertes Quorum
     for (const cluster of clusterInfos) {
       if (cluster.quorum && !cluster.quorum.quorate) {
-        alerts.push({ 
-          severity: 'crit', 
-          message: `Cluster ${cluster.name} : Quorum perdu !`, 
+        alerts.push({
+          severity: 'crit',
+          message: `Cluster ${cluster.name}: Quorum lost!`,
+          i18nKey: 'alerts.messages.quorumLost',
+          i18nParams: { cluster: cluster.name },
           source: cluster.name,
           sourceType: 'pve',
           entityType: 'cluster',
           entityId: cluster.id,
           entityName: cluster.name,
           metric: 'quorum',
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       }
     }
@@ -532,9 +546,11 @@ return null
     // Alertes PBS
     for (const pbs of pbsServers) {
       if (pbs.usagePct > 90) {
-        alerts.push({ 
-          severity: 'crit', 
-          message: `PBS ${pbs.name} : Stockage critique (${pbs.usagePct}%)`, 
+        alerts.push({
+          severity: 'crit',
+          message: `PBS ${pbs.name}: Storage critical (${pbs.usagePct}%)`,
+          i18nKey: 'alerts.messages.pbsStorageCritical',
+          i18nParams: { server: pbs.name, value: pbs.usagePct },
           source: pbs.name,
           sourceType: 'pbs',
           entityType: 'server',
@@ -543,12 +559,14 @@ return null
           metric: 'storage',
           currentValue: pbs.usagePct,
           threshold: 90,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       } else if (pbs.usagePct > 80) {
-        alerts.push({ 
-          severity: 'warn', 
-          message: `PBS ${pbs.name} : Stockage élevé (${pbs.usagePct}%)`, 
+        alerts.push({
+          severity: 'warn',
+          message: `PBS ${pbs.name}: Storage high (${pbs.usagePct}%)`,
+          i18nKey: 'alerts.messages.pbsStorageHigh',
+          i18nParams: { server: pbs.name, value: pbs.usagePct },
           source: pbs.name,
           sourceType: 'pbs',
           entityType: 'server',
@@ -557,14 +575,16 @@ return null
           metric: 'storage',
           currentValue: pbs.usagePct,
           threshold: 80,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       }
 
       if (pbs.backupsError > 0) {
-        alerts.push({ 
-          severity: 'warn', 
-          message: `PBS ${pbs.name} : ${pbs.backupsError} backup(s) échoué(s) (24h)`, 
+        alerts.push({
+          severity: 'warn',
+          message: `PBS ${pbs.name}: ${pbs.backupsError} backup(s) failed (24h)`,
+          i18nKey: 'alerts.messages.pbsBackupFailed',
+          i18nParams: { server: pbs.name, count: pbs.backupsError },
           source: pbs.name,
           sourceType: 'pbs',
           entityType: 'server',
@@ -572,7 +592,7 @@ return null
           entityName: pbs.name,
           metric: 'backup',
           currentValue: pbs.backupsError,
-          time: new Date().toISOString() 
+          time: new Date().toISOString()
         })
       }
     }

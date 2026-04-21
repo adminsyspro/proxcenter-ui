@@ -20,7 +20,8 @@ import {
   useTheme
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 // RemixIcon replacements for @mui/icons-material
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -359,23 +360,21 @@ function NodesTable({
           const allValues = data.flatMap(d => [d.cpu || 0, d.ram || 0])
           const yMax = Math.min(100, Math.max(...allValues, 10) + 10)
           return (
-            <Box sx={{ height: 32, width: '100%' }}>
-              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
-                <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                  <defs>
-                    <linearGradient id={`ncpu-${node.id}`} x1='0' y1='0' x2='0' y2='1'>
-                      <stop offset='0%' stopColor={cpuColor} stopOpacity={0.25} />
-                      <stop offset='100%' stopColor={cpuColor} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey='t' hide />
-                  <YAxis hide domain={[0, yMax]} />
-                  <RTooltip content={<NodeTrendTooltip />} cursor={{ stroke: cpuColor, strokeWidth: 1, strokeDasharray: '3 3' }} />
-                  <Area type='monotone' dataKey='cpu' stroke={cpuColor} strokeWidth={1.5} fill={`url(#ncpu-${node.id})`} dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='ram' stroke={ramColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
+            <ChartContainer height={32}>
+              <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                <defs>
+                  <linearGradient id={`ncpu-${node.id}`} x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%' stopColor={cpuColor} stopOpacity={0.25} />
+                    <stop offset='100%' stopColor={cpuColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey='t' hide />
+                <YAxis hide domain={[0, yMax]} />
+                <RTooltip content={<NodeTrendTooltip />} cursor={{ stroke: cpuColor, strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type='monotone' dataKey='cpu' stroke={cpuColor} strokeWidth={1.5} fill={`url(#ncpu-${node.id})`} dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='ram' stroke={ramColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+              </AreaChart>
+            </ChartContainer>
           )
         }
       })
@@ -400,25 +399,23 @@ function NodesTable({
           const diskColor = '#2196f3'
           const netColor = '#4caf50'
           return (
-            <Box sx={{ height: 32, width: '100%' }}>
-              <ResponsiveContainer width='100%' height='100%' minWidth={0}>
-                <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                  <defs>
-                    <linearGradient id={`ndisk-${node.id}`} x1='0' y1='0' x2='0' y2='1'>
-                      <stop offset='0%' stopColor={diskColor} stopOpacity={0.2} />
-                      <stop offset='100%' stopColor={diskColor} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey='t' hide />
-                  <YAxis hide />
-                  <RTooltip content={<NodeIoNetTooltip />} cursor={{ stroke: diskColor, strokeWidth: 1, strokeDasharray: '3 3' }} />
-                  <Area type='monotone' dataKey='diskread' stroke={diskColor} strokeWidth={1.5} fill={`url(#ndisk-${node.id})`} dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='diskwrite' stroke='#1565c0' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='netin' stroke={netColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                  <Area type='monotone' dataKey='netout' stroke='#2e7d32' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
+            <ChartContainer height={32}>
+              <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                <defs>
+                  <linearGradient id={`ndisk-${node.id}`} x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%' stopColor={diskColor} stopOpacity={0.2} />
+                    <stop offset='100%' stopColor={diskColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey='t' hide />
+                <YAxis hide />
+                <RTooltip content={<NodeIoNetTooltip />} cursor={{ stroke: diskColor, strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type='monotone' dataKey='diskread' stroke={diskColor} strokeWidth={1.5} fill={`url(#ndisk-${node.id})`} dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='diskwrite' stroke='#1565c0' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='netin' stroke={netColor} strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+                <Area type='monotone' dataKey='netout' stroke='#2e7d32' strokeWidth={1.5} fill='transparent' dot={false} isAnimationActive={false} />
+              </AreaChart>
+            </ChartContainer>
           )
         }
       })
@@ -544,16 +541,14 @@ function NodesTable({
             <ListItemText>{t('bulkActions.stopAllVms')}</ListItemText>
           </MenuItem>
 
+          {showMigrateOption && <Divider />}
           {showMigrateOption && (
-            <>
-              <Divider />
-              <MenuItem onClick={() => handleBulkAction('migrate-all')}>
-                <ListItemIcon>
-                  <MoveUpIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
-              </MenuItem>
-            </>
+            <MenuItem onClick={() => handleBulkAction('migrate-all')}>
+              <ListItemIcon>
+                <MoveUpIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
+            </MenuItem>
           )}
         </Menu>
       )}

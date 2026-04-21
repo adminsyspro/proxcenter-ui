@@ -21,7 +21,8 @@ import {
   Typography,
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -204,7 +205,7 @@ function StatsCards({ logs, t }) {
       <Card variant='outlined'>
         <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-            <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+            <ChartContainer>
               <PieChart>
                 <Pie
                   data={[{ value: value || 0 }, { value: remainder || 1 }]}
@@ -218,7 +219,7 @@ function StatsCards({ logs, t }) {
                   <Cell fill='rgba(255,255,255,0.08)' />
                 </Pie>
               </PieChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </Box>
           <Box>
             <Typography variant='caption' sx={{ opacity: 0.6 }}>{title}</Typography>
@@ -243,7 +244,7 @@ function StatsCards({ logs, t }) {
       <Card variant='outlined'>
         <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-            <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+            <ChartContainer>
               <PieChart>
                 <Pie
                   data={totalSegments}
@@ -256,7 +257,7 @@ function StatsCards({ logs, t }) {
                   {totalSegments.map((s, i) => <Cell key={i} fill={s.color} />)}
                 </Pie>
               </PieChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </Box>
           <Box>
             <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('audit.totalEvents')}</Typography>

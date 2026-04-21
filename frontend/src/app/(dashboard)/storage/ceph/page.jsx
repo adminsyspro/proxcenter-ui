@@ -30,20 +30,8 @@ import {
 } from '@mui/material'
 
 import { DataGrid } from '@mui/x-data-grid'
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area, 
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip as RTooltip,
-  Legend
-} from 'recharts'
+import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -972,7 +960,7 @@ return updated.slice(-30)
 
                       // Mode LIVE : afficher le graphique IOPS temps réel
                       iopsHistory.length > 1 ? (
-                        <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+                        <ChartContainer>
                           <AreaChart data={iopsHistory} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                             <defs>
                               <linearGradient id='readIopsGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -994,7 +982,7 @@ return updated.slice(-30)
                             <Area type='monotone' dataKey='readIops' name='readIops' stroke='#2196f3' fill='url(#readIopsGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='writeIops' name='writeIops' stroke='#ff9800' fill='url(#writeIopsGrad)' strokeWidth={2} />
                           </AreaChart>
-                        </ResponsiveContainer>
+                        </ChartContainer>
                       ) : (
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', bgcolor: 'action.hover', borderRadius: 2 }}>
                           <CircularProgress size={24} sx={{ mb: 1 }} />
@@ -1069,7 +1057,7 @@ return updated.slice(-30)
 
                       // Mode LIVE : afficher le throughput Ceph temps réel
                       throughputHistory.length > 1 ? (
-                        <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+                        <ChartContainer>
                           <AreaChart data={throughputHistory} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                             <defs>
                               <linearGradient id='readBytesGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -1091,7 +1079,7 @@ return updated.slice(-30)
                             <Area type='monotone' dataKey='readBytes' name={t('ceph.read')} stroke='#2196f3' fill='url(#readBytesGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='writeBytes' name={t('ceph.write')} stroke='#ff9800' fill='url(#writeBytesGrad)' strokeWidth={2} />
                           </AreaChart>
-                        </ResponsiveContainer>
+                        </ChartContainer>
                       ) : (
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', bgcolor: 'action.hover', borderRadius: 2 }}>
                           <CircularProgress size={24} sx={{ mb: 1 }} />
@@ -1102,7 +1090,7 @@ return updated.slice(-30)
 
                       // Mode historique : afficher le réseau du node depuis les RRD
                       rrdData?.rrd?.length > 0 ? (
-                        <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+                        <ChartContainer>
                           <AreaChart data={rrdData.rrd} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                             <defs>
                               <linearGradient id='ioInGrad' x1='0' y1='0' x2='0' y2='1'>
@@ -1129,7 +1117,7 @@ return updated.slice(-30)
                             <Area type='monotone' dataKey='netIn' name={t('ceph.incoming')} stroke='#2196f3' fill='url(#ioInGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='netOut' name={t('ceph.outgoing')} stroke='#ff9800' fill='url(#ioOutGrad)' strokeWidth={2} />
                           </AreaChart>
-                        </ResponsiveContainer>
+                        </ChartContainer>
                       ) : (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
                           <Typography variant='body2'>{t('ceph.noRrdData')}</Typography>
@@ -1146,7 +1134,7 @@ return updated.slice(-30)
                   </Typography>
                   <Box sx={{ height: 200 }}>
                     {rrdData?.rrd?.length > 0 ? (
-                      <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+                      <ChartContainer>
                         <LineChart data={rrdData.rrd} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                           <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                           <XAxis dataKey='timeFormatted' tick={{ fontSize: 10 }} interval='preserveStartEnd' />
@@ -1164,7 +1152,7 @@ return updated.slice(-30)
                           <Line type='monotone' dataKey='memPct' name={t('ceph.memory')} stroke='#9c27b0' strokeWidth={2} dot={false} />
                           <Line type='monotone' dataKey='iowait' name={t('ceph.ioWait')} stroke='#f44336' strokeWidth={1.5} dot={false} strokeDasharray='3 3' />
                         </LineChart>
-                      </ResponsiveContainer>
+                      </ChartContainer>
                     ) : (
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
                         <Typography variant='body2'>{t('ceph.noRrdData')}</Typography>
@@ -1181,7 +1169,7 @@ return updated.slice(-30)
                     {t('ceph.osdLatency')}
                   </Typography>
                   <Box sx={{ height: 180 }}>
-                    <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+                    <ChartContainer>
                       <BarChart 
                         data={(rrdData?.osds?.length > 0 ? rrdData.osds : cephData?.osds?.list || []).slice(0, 24)} 
                         margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
@@ -1205,7 +1193,7 @@ return updated.slice(-30)
                           radius={[4, 4, 0, 0]}
                         />
                       </BarChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </Box>
                   {(rrdData?.latency || cephData?.osds?.list?.length > 0) && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mt: 1 }}>

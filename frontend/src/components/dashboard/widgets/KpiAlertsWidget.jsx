@@ -12,6 +12,17 @@ import {
 
 import { widgetColors } from './themeColors'
 
+function translateAlertMessage(alert, t) {
+  if (alert?.i18nKey) {
+    try {
+      return t(alert.i18nKey, alert.i18nParams || {})
+    } catch {
+      return alert.message
+    }
+  }
+  return alert?.message
+}
+
 function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
   if (!alert) return null
 
@@ -50,7 +61,7 @@ return null
   ) : alert.source
 
   const details = [
-    { label: t('alerts.detail.message'), value: alert.message },
+    { label: t('alerts.detail.message'), value: translateAlertMessage(alert, t) },
     { label: t('alerts.detail.source'), value: sourceValue },
     { label: t('alerts.detail.sourceType'), value: (alert.sourceType || 'pve').toUpperCase() },
     alert.entityName && { label: t('alerts.detail.entity'), value: alert.entityName },
@@ -171,7 +182,7 @@ return t('time.daysAgo', { count: Math.floor(diff / 86400) })
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 20, fontSize: 10, minWidth: 44 }} />
                           <Typography variant='body2' sx={{ fontWeight: 600, fontSize: 13 }}>
-                            {alert.message}
+                            {translateAlertMessage(alert, t)}
                           </Typography>
                         </Box>
                       }

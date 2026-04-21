@@ -22,7 +22,8 @@ import type {
   InventoryGuest,
 } from '../types'
 import { getStatusColor, getVmStatusColor, getResourceStatus } from '../lib/topologyColors'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 
 import { fetchRrd, buildSeriesFromRrd, formatTime } from '../../inventory/helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../../inventory/components/RrdCharts'
@@ -222,7 +223,7 @@ function HostRrdCharts({ connectionId, nodeName }: {
           {t('serverLoad')}
         </Typography>
         <Box sx={{ width: '100%', height: 130 }}>
-          <ResponsiveContainer width='100%' height='100%' minWidth={0}>
+          <ChartContainer>
             <AreaChart data={series}>
               <XAxis dataKey='t' tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} width={35} />
@@ -247,7 +248,7 @@ function HostRrdCharts({ connectionId, nodeName }: {
                 isAnimationActive={false}
               />
             </AreaChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </Box>
       </Box>
     </Box>

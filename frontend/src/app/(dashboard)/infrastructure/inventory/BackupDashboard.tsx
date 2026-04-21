@@ -13,14 +13,8 @@ import {
   useTheme,
   IconButton,
 } from '@mui/material'
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip } from 'recharts'
+import ChartContainer from '@/components/ChartContainer'
 import { formatBytes } from '@/utils/format'
 import { buildSeriesFromRrd } from './helpers'
 
@@ -143,7 +137,7 @@ function MetricGraph({
         )}
       </Box>
       <Box sx={{ height }}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <ChartContainer>
           <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
             <defs>
               {serverNames.map(name => (
@@ -198,7 +192,7 @@ function MetricGraph({
               />
             ))}
           </AreaChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </Box>
     </Box>
   )
@@ -233,7 +227,7 @@ function NetworkGraph({
         )}
       </Box>
       <Box sx={{ height }}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <ChartContainer>
           <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 0 }}>
             <defs>
               {serverNames.map(name => (
@@ -283,7 +277,7 @@ function NetworkGraph({
               <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} hide={hiddenServers.has(name)} name={`netOut_${name}`} stroke={serverColors[name]} fill="none" strokeWidth={1} strokeDasharray="4 2" dot={false} isAnimationActive={false} connectNulls />
             ))}
           </AreaChart>
-        </ResponsiveContainer>
+        </ChartContainer>
       </Box>
     </Box>
   )

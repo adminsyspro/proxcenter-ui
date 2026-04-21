@@ -58,6 +58,7 @@ jobs:
           category: 'trivy-frontend'
 
   trivy-orchestrator:
+    if: github.actor != 'dependabot[bot]'
     name: Trivy — Orchestrator Image
     runs-on: ubuntu-latest
     permissions:

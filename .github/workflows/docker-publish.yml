@@ -167,8 +167,11 @@ jobs:
 
   # ========================================
   # Run Backend Tests
+  # Skipped for Dependabot PRs: they cannot access ORCHESTRATOR_PAT
+  # and don't modify backend code.
   # ========================================
   test-backend:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -211,6 +214,7 @@ jobs:
   # Build Orchestrator Image
   # ========================================
   build-orchestrator:
+    if: github.actor != 'dependabot[bot]'
     needs: [test-backend]
     runs-on: ubuntu-latest
     permissions:

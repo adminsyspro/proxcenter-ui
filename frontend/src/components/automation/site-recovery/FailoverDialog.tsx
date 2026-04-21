@@ -24,9 +24,10 @@ interface FailoverDialogProps {
   execution: RecoveryExecution | null
   targetConnId?: string
   connections?: { id: string; name: string }[]
+  vmNameMap?: Record<number, string>
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, targetConnId, connections }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, targetConnId, connections, vmNameMap }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const isDestructive = type === 'failover' || type === 'failback'
@@ -38,7 +39,6 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
 
   if (!plan) return null
 
-  const tierCounts = [1, 2, 3].map(tier => plan.vms.filter(v => v.tier === tier).length)
   const confirmRequired = isDestructive ? plan.name : null
   const canConfirm = !isDestructive || confirmText === confirmRequired
 
@@ -89,28 +89,74 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             />
           )}
 
-          {/* Plan Summary */}
-          <Box sx={{ p: 2, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant='subtitle2' sx={{ fontWeight: 600, mb: 1 }}>{plan.name}</Typography>
-            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-              {connections?.find(c => c.id === plan.source_cluster)?.name || plan.source_cluster} → {connections?.find(c => c.id === plan.target_cluster)?.name || plan.target_cluster}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1.5 }}>
-              {[1, 2, 3].map((tier, i) => tierCounts[i] > 0 && (
-                <Box key={tier} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Chip
-                    size='small'
-                    label={`Tier ${tier}`}
-                    color={tier === 1 ? 'error' : tier === 2 ? 'warning' : 'default'}
-                    variant='outlined'
-                    sx={{ height: 20, fontSize: '0.65rem' }}
-                  />
-                  <Typography variant='caption' sx={{ fontWeight: 600 }}>
-                    {tierCounts[i]} VM{tierCounts[i] > 1 ? 's' : ''}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
+          {/* Plan Summary — VM list with per-VM status + noVNC console button */}
+          <Box sx={{ p: 1, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+            {/* VM list with per-VM status + noVNC console button */}
+            {(() => {
+              const resultsByVMID: Record<number, RecoveryVMResult> = {}
+              for (const r of (execution?.vm_results || [])) resultsByVMID[r.vm_id] = r
+              const sortedVMs = [...plan.vms].sort((a, b) => (a.boot_order || 0) - (b.boot_order || 0))
+              return (
+                <Stack spacing={0.5} sx={{ maxHeight: 260, overflow: 'auto' }}>
+                  {sortedVMs.map(vm => {
+                    const res = resultsByVMID[vm.vm_id]
+                    const statusIcon = res
+                      ? res.status === 'completed' ? { icon: 'ri-check-line', color: 'success.main' }
+                        : res.status === 'failed' ? { icon: 'ri-close-line', color: 'error.main' }
+                        : res.status === 'running' ? { icon: 'ri-loader-4-line', color: 'primary.main' }
+                        : { icon: 'ri-time-line', color: 'text.disabled' }
+                      : null
+                    const canConsole = type === 'test'
+                      && targetConnId
+                      && res
+                      && res.target_node
+                      && res.target_vmid != null
+                      && (res.status === 'running' || res.status === 'completed')
+                    return (
+                      <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, px: 0.75, borderRadius: 0.5, '&:hover': { bgcolor: 'action.hover' } }}>
+                        {statusIcon && (
+                          <Box sx={{ width: 16, textAlign: 'center', color: statusIcon.color, fontSize: 14, display: 'inline-flex', justifyContent: 'center' }}>
+                            <i className={statusIcon.icon} style={{ animation: statusIcon.icon === 'ri-loader-4-line' ? 'spin 1.5s linear infinite' : 'none' }} />
+                            <Box sx={{ '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+                          </Box>
+                        )}
+                        <Chip
+                          size='small'
+                          label={`T${vm.tier}`}
+                          color={vm.tier === 1 ? 'error' : vm.tier === 2 ? 'warning' : 'default'}
+                          variant='outlined'
+                          sx={{ height: 18, fontSize: '0.6rem', minWidth: 32 }}
+                        />
+                        <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {vmNameMap?.[vm.vm_id] || (vm.vm_name && !vm.vm_name.startsWith('VM ') ? vm.vm_name : `VM ${vm.vm_id}`)}
+                        </Typography>
+                        <Typography variant='caption' sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                          {vm.vm_id}
+                        </Typography>
+                        {canConsole && (
+                          <Tooltip title={t('siteRecovery.failover.openConsole')} arrow>
+                            <IconButton
+                              size='small'
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(
+                                  `/novnc/console.html?connId=${encodeURIComponent(targetConnId!)}&type=qemu&node=${encodeURIComponent(res!.target_node!)}&vmid=${res!.target_vmid}`,
+                                  `console-dr-${res!.target_vmid}`,
+                                  'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
+                                )
+                              }}
+                              sx={{ color: 'primary.main', p: 0.5 }}
+                            >
+                              <i className='ri-terminal-box-line' style={{ fontSize: 14 }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Box>
+                    )
+                  })}
+                </Stack>
+              )
+            })()}
           </Box>
 
           {/* Confirm field for destructive operations */}
@@ -131,21 +177,24 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           )}
 
           {/* Cleanup result */}
-          {cleanupResult && (
-            <Alert severity={cleanupResult.errors.length > 0 ? 'warning' : 'success'}>
-              <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
-                {t('siteRecovery.failover.cleanupDone')}
-              </Typography>
-              <Typography variant='caption' component='div'>
-                {cleanupResult.vms_stopped > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
-                {cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
-                {cleanupResult.jobs_resumed > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
-              </Typography>
-              {cleanupResult.errors.length > 0 && cleanupResult.errors.map((err, i) => (
-                <Typography key={i} variant='caption' sx={{ color: 'error.main', display: 'block', mt: 0.5 }}>{err}</Typography>
-              ))}
-            </Alert>
-          )}
+          {cleanupResult && (() => {
+            const errs = cleanupResult.errors || []
+            return (
+              <Alert severity={errs.length > 0 ? 'warning' : 'success'}>
+                <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
+                  {t('siteRecovery.failover.cleanupDone')}
+                </Typography>
+                <Typography variant='caption' component='div'>
+                  {cleanupResult.vms_stopped > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
+                  {cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
+                  {cleanupResult.jobs_resumed > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
+                </Typography>
+                {errs.length > 0 && errs.map((err: string, i: number) => (
+                  <Typography key={i} variant='caption' sx={{ color: 'error.main', display: 'block', mt: 0.5 }}>{err}</Typography>
+                ))}
+              </Alert>
+            )
+          })()}
 
           {/* Execution progress */}
           {isExecuting && execution && (

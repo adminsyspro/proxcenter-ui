@@ -519,11 +519,172 @@ const SiteEndpoint = ({ site, t }: { site: SiteInfo; t: any }) => {
   )
 }
 
-const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, t }: {
-  sites: SiteInfo[]; connectivity: string; latencyMs: number; jobs?: ReplicationJob[]; t: any
+// Compact single-pair row shown when 2+ replication couples are active.
+const PairRow = ({ source, target, jobs, sitesMap, connectionsMap, t }: {
+  source: string
+  target: string
+  jobs: ReplicationJob[]
+  sitesMap: Map<string, SiteInfo>
+  connectionsMap: Map<string, string>
+  t: any
 }) => {
   const theme = useTheme()
+  const srcSite = sitesMap.get(source)
+  const tgtSite = sitesMap.get(target)
+  const srcName = srcSite?.name || connectionsMap.get(source) || source
+  const tgtName = tgtSite?.name || connectionsMap.get(target) || target
+
+  const syncing = jobs.filter(j => j.status === 'syncing')
+  const errors = jobs.filter(j => j.status === 'error')
+  const totalBps = syncing.reduce((sum, j) => sum + (j.throughput_bps || 0), 0)
+  let latestSync: number | null = null
+  for (const j of jobs) {
+    if (j.last_sync) {
+      const ts = new Date(j.last_sync).getTime()
+      if (latestSync === null || ts > latestSync) latestSync = ts
+    }
+  }
+
+  const pairState = errors.length > 0 ? 'error' : syncing.length > 0 ? 'syncing' : 'idle'
+  const linkColor = pairState === 'error' ? theme.palette.error.main
+    : pairState === 'syncing' ? theme.palette.primary.main
+      : theme.palette.success.main
+
+  const statusDot = (site: SiteInfo | undefined) => {
+    const c = !site ? theme.palette.text.disabled
+      : site.status === 'online' ? theme.palette.success.main
+      : site.status === 'degraded' ? theme.palette.warning.main
+      : theme.palette.error.main
+    return c
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 1, px: 1.25, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>
+      {/* Source */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0 }}>
+        <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+          <img src='/images/ceph-logo.svg' alt='' width={18} height={18} />
+          <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: statusDot(srcSite), border: '1.5px solid', borderColor: 'background.paper' }} />
+        </Box>
+        <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {srcName}
+        </Typography>
+      </Box>
+
+      {/* Animated link */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, width: { xs: 60, sm: 80 }, flexShrink: 0 }}>
+        <Box sx={{
+          flex: 1, height: 2, borderRadius: 1,
+          background: `repeating-linear-gradient(90deg, ${linkColor} 0 4px, transparent 4px 8px)`,
+          backgroundSize: '8px 2px',
+          animation: pairState !== 'error' ? `pairFlow ${pairState === 'syncing' ? 1 : 2.5}s linear infinite` : 'none',
+          '@keyframes pairFlow': {
+            '0%': { backgroundPosition: '0 0' },
+            '100%': { backgroundPosition: '8px 0' },
+          },
+        }} />
+        <Box sx={{ color: linkColor, fontSize: 12, display: 'inline-flex' }}>
+          <i className='ri-arrow-right-line' />
+        </Box>
+      </Box>
+
+      {/* Target */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0 }}>
+        <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+          <img src='/images/ceph-logo.svg' alt='' width={18} height={18} />
+          <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: statusDot(tgtSite), border: '1.5px solid', borderColor: 'background.paper' }} />
+        </Box>
+        <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {tgtName}
+        </Typography>
+      </Box>
+
+      {/* Stats chips */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+        <Chip size='small' label={t('siteRecovery.dashboard.flowJobs', { count: jobs.length })} variant='outlined' sx={{ height: 18, fontSize: '0.6rem' }} />
+        {syncing.length > 0 && totalBps > 0 && (
+          <Chip size='small' label={`${formatBytes(totalBps)}/s`} color='primary' sx={{ height: 18, fontSize: '0.6rem' }} />
+        )}
+        {errors.length > 0 && (
+          <Chip size='small' icon={<i className='ri-error-warning-line' style={{ fontSize: 12 }} />} label={errors.length} color='error' sx={{ height: 18, fontSize: '0.6rem' }} />
+        )}
+        {latestSync && (
+          <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem', minWidth: { xs: 40, sm: 60 }, textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
+            {timeAgo(new Date(latestSync).toISOString())}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t }: {
+  sites: SiteInfo[]; connectivity: string; latencyMs: number; jobs?: ReplicationJob[]; connections?: { id: string; name: string }[]; t: any
+}) => {
+  const theme = useTheme()
+  const [showAll, setShowAll] = useState(false)
   if (!sites || sites.length === 0) return null
+
+  // Detect source→target pairs from jobs (a "replication couple")
+  const pairs = useMemo(() => {
+    const map = new Map<string, { source: string; target: string; jobs: ReplicationJob[] }>()
+    for (const j of (jobs || [])) {
+      if (!j.source_cluster || !j.target_cluster) continue
+      const key = `${j.source_cluster}::${j.target_cluster}`
+      if (!map.has(key)) map.set(key, { source: j.source_cluster, target: j.target_cluster, jobs: [] })
+      map.get(key)!.jobs.push(j)
+    }
+    return Array.from(map.values())
+  }, [jobs])
+
+  const sitesMap = useMemo(() => {
+    const m = new Map<string, SiteInfo>()
+    for (const s of sites) m.set(s.cluster_id, s)
+    return m
+  }, [sites])
+
+  const connectionsMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of (connections || [])) m.set(c.id, c.name)
+    return m
+  }, [connections])
+
+  // Compact pair-by-pair list when 2+ pairs exist (MSP / multi-couple scaling)
+  if (pairs.length >= 2) {
+    const visiblePairs = showAll ? pairs : pairs.slice(0, 5)
+    return (
+      <Card variant='outlined' sx={{ borderRadius: 2 }}>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant='subtitle2' sx={{ fontWeight: 600 }}>
+              {t('siteRecovery.dashboard.replicationPairs', { count: pairs.length })}
+            </Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', textTransform: 'capitalize' }}>
+              {connectivity}{latencyMs > 0 ? ` · ${latencyMs.toFixed(1)}ms` : ''}
+            </Typography>
+          </Box>
+          <Stack divider={<Box sx={{ borderBottom: 1, borderColor: 'divider' }} />}>
+            {visiblePairs.map(p => (
+              <PairRow
+                key={`${p.source}::${p.target}`}
+                source={p.source} target={p.target} jobs={p.jobs}
+                sitesMap={sitesMap} connectionsMap={connectionsMap} t={t}
+              />
+            ))}
+          </Stack>
+          {pairs.length > 5 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+              <Button size='small' onClick={() => setShowAll(v => !v)} sx={{ fontSize: '0.7rem' }}>
+                {showAll
+                  ? t('siteRecovery.dashboard.pairsShowLess')
+                  : t('siteRecovery.dashboard.pairsShowAll', { count: pairs.length - 5 })}
+              </Button>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
 
   const primary = sites.find(s => s.role === 'primary')
   const dr = sites.find(s => s.role === 'dr')
@@ -792,7 +953,7 @@ export default function DashboardTab({ health, loading, jobs, connections, vmNam
   return (
     <Stack spacing={2.5} sx={{ flex: 1 }}>
       {/* Replication flow: source → DR */}
-      <ReplicationFlow sites={health.sites} connectivity={health.connectivity} latencyMs={health.latency_ms} jobs={jobs} t={t} />
+      <ReplicationFlow sites={health.sites} connectivity={health.connectivity} latencyMs={health.latency_ms} jobs={jobs} connections={connections} t={t} />
 
       {/* KPI Row */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(7, 1fr)' } }}>

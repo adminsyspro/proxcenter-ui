@@ -485,6 +485,7 @@ export default function SiteRecoveryPage() {
           execution={activeExecution}
           targetConnId={failoverPlan?.target_cluster}
           connections={connections}
+          vmNameMap={vmNameMap}
         />
       </Box>
     </EnterpriseGuard>

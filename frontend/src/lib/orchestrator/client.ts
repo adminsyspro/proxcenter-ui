@@ -443,6 +443,10 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any[]>(`/replication/jobs/${id}/vms`)
   }
 
+  getReplicationJobThroughput(id: string, window: string) {
+    return this.get<any[]>(`/replication/jobs/${id}/throughput?window=${encodeURIComponent(window)}`)
+  }
+
   preflightReplication(body: { source_cluster: string; target_cluster: string; target_pool: string; estimated_size_bytes: number }) {
     return this.post<any>('/replication/preflight', body)
   }

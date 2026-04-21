@@ -389,7 +389,7 @@ export default function SiteRecoveryPage() {
 
         {/* Tab Content */}
         {tab === 0 && hasEnoughCephClusters && (
-          <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} />
+          <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} vmNameMap={vmNameMap} onSyncJob={handleSyncJob} />
         )}
 
         {tab === 1 && hasEnoughCephClusters && (

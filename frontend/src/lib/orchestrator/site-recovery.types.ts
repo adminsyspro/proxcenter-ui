@@ -32,6 +32,8 @@ export interface ReplicationJob {
   rpo_target: number      // seconds
   last_sync?: string | null
   next_sync?: string | null
+  retry_count: number
+  next_retry_at?: string | null
   throughput_bps: number
   rate_limit_mbps: number
   bandwidth_windows: BandwidthWindow[]
@@ -180,7 +182,9 @@ export interface ReplicationHealthKPIs {
   replicated_bytes: number
   error_count: number
   total_jobs: number
-  rpo_compliance: number  // 0-100 percentage
+  rpo_compliance: number   // 0-100 percentage
+  concurrent_jobs: number
+  max_concurrent_jobs: number
 }
 
 export interface JobStatusSummary {

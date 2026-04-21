@@ -282,8 +282,21 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
             </Box>
           )}
 
-          {/* Status */}
-          <StatusChip status={job.status} t={t} />
+          {/* Status + retry indicator */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.25 }}>
+            <StatusChip status={job.status} t={t} />
+            {job.status === 'error' && job.next_retry_at && (job.retry_count || 0) < 3 && (
+              <Tooltip title={t('siteRecovery.protection.retryTooltip', { count: job.retry_count, max: 3, at: new Date(job.next_retry_at).toLocaleString() })} arrow>
+                <Chip
+                  size='small'
+                  icon={<i className='ri-refresh-line' style={{ fontSize: 12 }} />}
+                  label={t('siteRecovery.protection.retryBadge', { count: job.retry_count, max: 3, in: formatDuration(Math.max(0, Math.round((new Date(job.next_retry_at).getTime() - Date.now()) / 1000))) })}
+                  variant='outlined'
+                  sx={{ height: 18, fontSize: '0.6rem', borderColor: 'warning.main', color: 'warning.main' }}
+                />
+              </Tooltip>
+            )}
+          </Box>
 
           {/* Edit (does not open the drawer) */}
           <Tooltip title={t('common.edit')} arrow>
@@ -357,6 +370,12 @@ export default function ProtectionTab({
   }
   const [vmStatuses, setVmStatuses] = useState<VMStatusRow[] | null>(null)
   const [vmStatusesLoading, setVmStatusesLoading] = useState(false)
+
+  // Historical throughput from the server
+  type ThroughputSample = { timestamp: string; bytes_per_sec: number }
+  const [thSamples, setThSamples] = useState<ThroughputSample[] | null>(null)
+  const [thLoading, setThLoading] = useState(false)
+  const [thWindow, setThWindow] = useState<'1h' | '6h' | '24h' | '7d'>('24h')
 
   // Throughput history — persisted in localStorage, 24h rolling window
   const STORAGE_KEY = 'sr-throughput-history'
@@ -480,6 +499,22 @@ export default function ProtectionTab({
       .finally(() => { if (!cancelled) setVmStatusesLoading(false) })
     return () => { cancelled = true }
   }, [drawerOpen, selectedJobId, jobs])
+
+  // Fetch throughput history when drawer opens or window changes
+  useEffect(() => {
+    if (!drawerOpen || !selectedJobId) {
+      setThSamples(null)
+      return
+    }
+    let cancelled = false
+    setThLoading(true)
+    fetch(`/api/v1/orchestrator/replication/jobs/${selectedJobId}/throughput?window=${thWindow}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => { if (!cancelled) setThSamples(Array.isArray(data) ? data : []) })
+      .catch(() => { if (!cancelled) setThSamples([]) })
+      .finally(() => { if (!cancelled) setThLoading(false) })
+    return () => { cancelled = true }
+  }, [drawerOpen, selectedJobId, thWindow])
 
   const closeDrawer = () => {
     setDrawerOpen(false)
@@ -712,15 +747,78 @@ export default function ProtectionTab({
                   </>
                 )}
 
-                {/* Bandwidth chart */}
-                {(throughputHistoryRef.current.get(selected.id)?.length || 0) >= 2 && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
-                      {t('siteRecovery.protection.bandwidth')}
-                    </Typography>
-                    <BandwidthSparkline data={throughputHistoryRef.current.get(selected.id)!} size='large' />
-                  </>
+                {/* Bandwidth history (server-sourced) */}
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                    {t('siteRecovery.protection.bandwidthHistory')}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 0.25 }}>
+                    {(['1h', '6h', '24h', '7d'] as const).map(w => (
+                      <Button
+                        key={w}
+                        size='small'
+                        variant={thWindow === w ? 'contained' : 'outlined'}
+                        onClick={() => setThWindow(w)}
+                        sx={{ minWidth: 32, px: 0.75, py: 0.25, fontSize: '0.65rem' }}
+                      >
+                        {w}
+                      </Button>
+                    ))}
+                  </Box>
+                </Box>
+                {thLoading && !thSamples ? (
+                  <LinearProgress sx={{ mb: 1 }} />
+                ) : (thSamples && thSamples.length >= 2) ? (
+                  <Box sx={{ width: '100%', height: 140 }}>
+                    <ResponsiveContainer width='100%' height='100%'>
+                      <AreaChart data={thSamples.map(s => ({ ts: new Date(s.timestamp).getTime(), bps: s.bytes_per_sec }))} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                        <defs>
+                          <linearGradient id='thGrad' x1='0' y1='0' x2='0' y2='1'>
+                            <stop offset='0%' stopColor='currentColor' stopOpacity={0.3} />
+                            <stop offset='100%' stopColor='currentColor' stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <YAxis hide domain={[0, 'dataMax']} />
+                        <RTooltip
+                          wrapperStyle={{ backgroundColor: 'transparent' }}
+                          content={({ active, payload }) => {
+                            if (!active || !payload?.[0]) return null
+                            const p = payload[0].payload as { ts: number; bps: number }
+                            return (
+                              <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, px: 1.25, py: 0.75, boxShadow: 2 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
+                                  <i className='ri-speed-line' style={{ fontSize: 14, opacity: 0.7 }} />
+                                  <Typography variant='caption' sx={{ fontWeight: 700, fontSize: '0.7rem' }}>
+                                    {t('siteRecovery.protection.throughput')}
+                                  </Typography>
+                                </Box>
+                                <Typography variant='caption' sx={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 600, display: 'block' }}>
+                                  {formatBytes(p.bps)}/s
+                                </Typography>
+                                <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', fontSize: '0.6rem' }}>
+                                  {new Date(p.ts).toLocaleString()}
+                                </Typography>
+                              </Box>
+                            )
+                          }}
+                        />
+                        <Area
+                          type='monotone'
+                          dataKey='bps'
+                          stroke='currentColor'
+                          strokeWidth={1.5}
+                          fill='url(#thGrad)'
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </Box>
+                ) : (
+                  <Typography variant='caption' sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                    {t('siteRecovery.protection.bandwidthHistoryEmpty')}
+                  </Typography>
                 )}
 
                 {/* Logs */}

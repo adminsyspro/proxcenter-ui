@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Card, CardContent, Chip,
-  Skeleton, Stack, Typography, alpha, useTheme
+  Alert, Box, Button, Card, CardContent, Chip,
+  Skeleton, Stack, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
 import {
@@ -18,7 +18,7 @@ import SiteRecoveryIllustration from '@/components/illustrations/SiteRecoveryIll
 
 import type {
   ReplicationHealthStatus, ReplicationActivity, JobStatusSummary,
-  ReplicationJob
+  ReplicationJob, SiteInfo
 } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -483,21 +483,279 @@ const BandwidthChart = ({ jobs, connections, t }: {
 
 // ── Main Component ─────────────────────────────────────────────────────
 
+// ── Sites health: source → target replication flow visual ──────────────
+
+const SiteEndpoint = ({ site, t }: { site: SiteInfo; t: any }) => {
+  const theme = useTheme()
+  const statusColor = site.status === 'online' ? theme.palette.success.main
+    : site.status === 'degraded' ? theme.palette.warning.main
+      : theme.palette.error.main
+  const roleLabel = site.role === 'primary' ? t('siteRecovery.dashboard.primarySite') : t('siteRecovery.dashboard.drSite')
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, textAlign: 'center' }}>
+      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+        <img src='/images/ceph-logo.svg' alt='Ceph' width={36} height={36} />
+        <Box sx={{
+          position: 'absolute', bottom: -2, right: -3,
+          width: 12, height: 12, borderRadius: '50%',
+          bgcolor: statusColor,
+          border: '2px solid', borderColor: 'background.paper',
+          boxShadow: site.status === 'online' ? `0 0 8px ${statusColor}` : 'none',
+        }} />
+      </Box>
+      <Box sx={{ minWidth: 0, maxWidth: '100%' }}>
+        <Typography variant='subtitle2' sx={{ fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {site.name || site.cluster_id}
+        </Typography>
+        <Chip size='small' label={roleLabel} variant='outlined' sx={{ height: 18, fontSize: '0.6rem', mt: 0.5 }} />
+        <Typography variant='caption' sx={{ display: 'block', color: 'text.secondary', mt: 0.5, fontSize: '0.7rem' }}>
+          {site.node_count} {t('siteRecovery.dashboard.nodes')} · {site.vm_count} {t('siteRecovery.dashboard.vms')}
+        </Typography>
+        <Typography variant='caption' sx={{ display: 'block', color: statusColor, fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase' }}>
+          {site.status}
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
+
+const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, t }: {
+  sites: SiteInfo[]; connectivity: string; latencyMs: number; jobs?: ReplicationJob[]; t: any
+}) => {
+  const theme = useTheme()
+  if (!sites || sites.length === 0) return null
+
+  const primary = sites.find(s => s.role === 'primary')
+  const dr = sites.find(s => s.role === 'dr')
+
+  // Aggregated link stats (across syncing jobs)
+  const stats = useMemo(() => {
+    const list = jobs || []
+    const syncing = list.filter(j => j.status === 'syncing')
+    const totalBps = syncing.reduce((sum, j) => sum + (j.throughput_bps || 0), 0)
+    let latestSync: number | null = null
+    for (const j of list) {
+      if (j.last_sync) {
+        const ts = new Date(j.last_sync).getTime()
+        if (latestSync === null || ts > latestSync) latestSync = ts
+      }
+    }
+    return {
+      activeCount: syncing.length,
+      totalJobs: list.length,
+      totalBps,
+      latestSync,
+    }
+  }, [jobs])
+
+  const linkColor = connectivity === 'connected' ? theme.palette.success.main
+    : connectivity === 'degraded' ? theme.palette.warning.main
+      : theme.palette.error.main
+  const isSyncing = stats.activeCount > 0
+  const animDuration = isSyncing ? 1.2 : 3
+  const linkOpacity = connectivity === 'disconnected' ? 0.3 : 1
+
+  // Fallback grid if not exactly one primary + one DR
+  if (!primary || !dr) {
+    return (
+      <Card variant='outlined' sx={{ borderRadius: 2 }}>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Typography variant='subtitle2' sx={{ fontWeight: 600, mb: 1.25 }}>
+            {t('siteRecovery.dashboard.sitesHealth')}
+          </Typography>
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+            {sites.map(site => (
+              <Box key={site.cluster_id} sx={{ display: 'flex', justifyContent: 'center', p: 1, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                <SiteEndpoint site={site} t={t} />
+              </Box>
+            ))}
+          </Box>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card variant='outlined' sx={{ borderRadius: 2 }}>
+      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 } }}>
+          <SiteEndpoint site={primary} t={t} />
+
+          {/* Animated link */}
+          <Box sx={{ flex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, minWidth: 0, opacity: linkOpacity }}>
+            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {stats.activeCount > 0
+                ? t('siteRecovery.dashboard.flowSyncing', { count: stats.activeCount })
+                : t('siteRecovery.dashboard.flowIdle')}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%' }}>
+              <Box sx={{
+                flex: 1, height: 2, borderRadius: 1,
+                background: `repeating-linear-gradient(90deg, ${linkColor} 0 6px, transparent 6px 12px)`,
+                backgroundSize: '12px 2px',
+                animation: connectivity !== 'disconnected' ? `flowDash ${animDuration}s linear infinite` : 'none',
+                '@keyframes flowDash': {
+                  '0%': { backgroundPosition: '0 0' },
+                  '100%': { backgroundPosition: '12px 0' },
+                },
+              }} />
+              <Box sx={{
+                width: 28, height: 28, borderRadius: '50%',
+                bgcolor: linkColor, color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                boxShadow: `0 0 0 4px ${alpha(linkColor, 0.2)}`,
+                animation: isSyncing ? 'flowPulse 1.4s ease-in-out infinite' : 'none',
+                '@keyframes flowPulse': {
+                  '0%, 100%': { boxShadow: `0 0 0 4px ${alpha(linkColor, 0.2)}` },
+                  '50%': { boxShadow: `0 0 0 8px ${alpha(linkColor, 0.1)}` },
+                },
+              }}>
+                <i className={isSyncing ? 'ri-loader-4-line' : connectivity === 'disconnected' ? 'ri-link-unlink' : 'ri-arrow-right-line'} style={{ fontSize: 16, animation: isSyncing ? 'spin 1.5s linear infinite' : 'none' }} />
+                <Box sx={{ '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+              </Box>
+              <Box sx={{
+                flex: 1, height: 2, borderRadius: 1,
+                background: `repeating-linear-gradient(90deg, ${linkColor} 0 6px, transparent 6px 12px)`,
+                backgroundSize: '12px 2px',
+                animation: connectivity !== 'disconnected' ? `flowDash ${animDuration}s linear infinite` : 'none',
+              }} />
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5, mt: 0.5 }}>
+              <Chip
+                size='small'
+                icon={<i className='ri-shield-check-line' style={{ fontSize: 12 }} />}
+                label={t('siteRecovery.dashboard.flowJobs', { count: stats.totalJobs })}
+                variant='outlined'
+                sx={{ height: 20, fontSize: '0.65rem' }}
+              />
+              {isSyncing && stats.totalBps > 0 && (
+                <Chip
+                  size='small'
+                  icon={<i className='ri-speed-line' style={{ fontSize: 12 }} />}
+                  label={`${formatBytes(stats.totalBps)}/s`}
+                  variant='filled' color='primary'
+                  sx={{ height: 20, fontSize: '0.65rem' }}
+                />
+              )}
+              {latencyMs > 0 && (
+                <Chip
+                  size='small'
+                  icon={<i className='ri-pulse-line' style={{ fontSize: 12 }} />}
+                  label={`${latencyMs.toFixed(1)} ms`}
+                  variant='outlined'
+                  sx={{ height: 20, fontSize: '0.65rem' }}
+                />
+              )}
+              {stats.latestSync && (
+                <Chip
+                  size='small'
+                  icon={<i className='ri-refresh-line' style={{ fontSize: 12 }} />}
+                  label={t('siteRecovery.dashboard.flowLastSync', { time: timeAgo(new Date(stats.latestSync).toISOString()) })}
+                  variant='outlined'
+                  sx={{ height: 20, fontSize: '0.65rem' }}
+                />
+              )}
+            </Box>
+          </Box>
+
+          <SiteEndpoint site={dr} t={t} />
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Failed jobs widget ─────────────────────────────────────────────────
+
+const FailedJobsWidget = ({ jobs, vmNameMap, onSyncJob, t }: {
+  jobs: ReplicationJob[]
+  vmNameMap?: Record<number, string>
+  onSyncJob?: (id: string) => void
+  t: any
+}) => {
+  const failed = useMemo(
+    () => (jobs || []).filter(j => j.status === 'error').slice(0, 5),
+    [jobs]
+  )
+  if (failed.length === 0) return null
+  return (
+    <Card variant='outlined' sx={{ borderRadius: 2, borderColor: 'error.main' }}>
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className='ri-error-warning-fill' style={{ color: 'var(--mui-palette-error-main)' }} />
+            <Typography variant='subtitle2' sx={{ fontWeight: 700 }}>
+              {t('siteRecovery.dashboard.failedJobsTitle')}
+            </Typography>
+          </Box>
+          <Chip size='small' label={failed.length} color='error' sx={{ height: 20, fontSize: '0.7rem' }} />
+        </Box>
+        <Stack spacing={1}>
+          {failed.map(j => {
+            const label = j.name || (
+              j.tags?.length
+                ? j.tags.map(tag => `#${tag}`).join(', ')
+                : (j.vm_ids || []).slice(0, 2).map(id => vmNameMap?.[id] || `VM ${id}`).join(', ')
+            )
+            const retryInfo = j.next_retry_at && (j.retry_count || 0) < 3
+              ? t('siteRecovery.dashboard.retryIn', { in: Math.max(0, Math.round((new Date(j.next_retry_at).getTime() - Date.now()) / 1000 / 60)) })
+              : null
+            return (
+              <Box key={j.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </Typography>
+                  {j.error_message && (
+                    <Typography variant='caption' sx={{ color: 'error.main', display: 'block', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {j.error_message}
+                    </Typography>
+                  )}
+                  {retryInfo && (
+                    <Typography variant='caption' sx={{ color: 'warning.main', display: 'block', lineHeight: 1.3, fontSize: '0.65rem' }}>
+                      {retryInfo}
+                    </Typography>
+                  )}
+                </Box>
+                {onSyncJob && (
+                  <Tooltip title={t('siteRecovery.protection.syncNow')} arrow>
+                    <Button
+                      size='small' variant='outlined' color='warning'
+                      onClick={() => onSyncJob(j.id)}
+                      sx={{ minWidth: 0, px: 1, py: 0.25, fontSize: '0.65rem' }}
+                      startIcon={<i className='ri-refresh-line' style={{ fontSize: 12 }} />}
+                    >
+                      {t('siteRecovery.protection.syncNow')}
+                    </Button>
+                  </Tooltip>
+                )}
+              </Box>
+            )
+          })}
+        </Stack>
+      </CardContent>
+    </Card>
+  )
+}
+
 interface DashboardTabProps {
   health: ReplicationHealthStatus | undefined
   loading: boolean
   jobs?: ReplicationJob[]
   connections?: { id: string; name: string }[]
+  vmNameMap?: Record<number, string>
+  onSyncJob?: (id: string) => void
 }
 
-export default function DashboardTab({ health, loading, jobs, connections }: DashboardTabProps) {
+export default function DashboardTab({ health, loading, jobs, connections, vmNameMap, onSyncJob }: DashboardTabProps) {
   const t = useTranslations()
   const theme = useTheme()
 
   const kpis = useMemo(() => health?.kpis || {
     protected_vms: 0, unprotected_vms: 0, avg_rpo_seconds: 0,
     last_sync: '', replicated_bytes: 0, error_count: 0,
-    total_jobs: 0, rpo_compliance: 0
+    total_jobs: 0, rpo_compliance: 0,
+    concurrent_jobs: 0, max_concurrent_jobs: 0,
   }, [health])
 
   const jobSummary = useMemo(() => health?.job_summary || {
@@ -533,8 +791,11 @@ export default function DashboardTab({ health, loading, jobs, connections }: Das
 
   return (
     <Stack spacing={2.5} sx={{ flex: 1 }}>
+      {/* Replication flow: source → DR */}
+      <ReplicationFlow sites={health.sites} connectivity={health.connectivity} latencyMs={health.latency_ms} jobs={jobs} t={t} />
+
       {/* KPI Row */}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' } }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(7, 1fr)' } }}>
         <KPICard
           icon='ri-shield-check-line'
           label={t('siteRecovery.dashboard.protectedVms')}
@@ -564,7 +825,23 @@ export default function DashboardTab({ health, loading, jobs, connections }: Das
           value={kpis.error_count}
           color={kpis.error_count > 0 ? 'error' : 'default'}
         />
+        <KPICard
+          icon='ri-loader-4-line'
+          label={t('siteRecovery.dashboard.concurrentJobs')}
+          value={`${kpis.concurrent_jobs}/${kpis.max_concurrent_jobs || '—'}`}
+          subtitle={t('siteRecovery.dashboard.concurrentJobsSubtitle')}
+          color={kpis.concurrent_jobs > 0 ? 'primary' : 'default'}
+        />
+        <KPICard
+          icon='ri-database-2-line'
+          label={t('siteRecovery.dashboard.replicated24h')}
+          value={kpis.replicated_bytes > 0 ? formatBytes(kpis.replicated_bytes) : '—'}
+          color='primary'
+        />
       </Box>
+
+      {/* Failed jobs (only when error_count > 0) */}
+      <FailedJobsWidget jobs={jobs || []} vmNameMap={vmNameMap} onSyncJob={onSyncJob} t={t} />
 
       {/* Charts Row */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>

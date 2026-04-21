@@ -44,7 +44,7 @@
     "d3-array": "^3.2.4",
     "d3-sankey": "^0.12.3",
     "dequal": "^2.0.3",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.0",
     "exceljs": "^4.4.0",
     "flatted": "^3.4.0",
     "form-data": "^4.0.5",
@@ -54,9 +54,9 @@
     "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "nanoid": "^5.1.7",
-    "next": "^16.1.7",
+    "next": "^16.2.3",
     "next-auth": "^4.24.13",
-    "next-intl": "^4.8.0",
+    "next-intl": "^4.9.1",
     "react": "19.2.4",
     "react-colorful": "5.6.1",
     "react-dom": "19.2.4",
@@ -112,7 +112,7 @@
     "eslint": "8.57.1",
     "eslint-config-next": "15.1.2",
     "confbox": "0.2.4",
-    "hono": ">=4.12.12",
+    "hono": ">=4.12.14",
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5"
   },
@@ -126,7 +126,7 @@
       "react": "19.2.4"
     },
     "effect": "^3.20.0",
-    "hono": ">=4.12.12",
+    "hono": ">=4.12.14",
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5"
   }

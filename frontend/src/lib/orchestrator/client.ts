@@ -407,7 +407,20 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   deleteReplicationJob(id: string) {
-    return this.delete<{ status: string }>(`/replication/jobs/${id}`)
+    return this.delete<{ status: string; purged_snapshots?: number }>(`/replication/jobs/${id}`)
+  }
+
+  listMirrorSnapshots() {
+    return this.get<any[]>('/replication/snapshots')
+  }
+
+  getSnapshotUsage(cluster: string, pool: string, image: string, snap: string) {
+    const q = new URLSearchParams({ cluster, pool, image, snap }).toString()
+    return this.get<any>(`/replication/snapshots/usage?${q}`)
+  }
+
+  deleteMirrorSnapshots(items: Array<{ cluster_id: string; pool: string; image: string; snapshot: string }>) {
+    return this.post<any>('/replication/snapshots/delete', { items })
   }
 
   syncReplicationJob(id: string) {

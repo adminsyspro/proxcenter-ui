@@ -10,6 +10,7 @@ export type ReplicationJobStatus = 'synced' | 'syncing' | 'error' | 'paused' | '
 
 export interface ReplicationJob {
   id: string
+  name: string
   vm_ids: number[]
   vm_names: string[]
   tags: string[]            // stored tags for dynamic resolution (empty = VM-based job)
@@ -34,6 +35,7 @@ export interface ReplicationJob {
 }
 
 export interface CreateReplicationJobRequest {
+  name?: string
   vm_ids: number[]
   tags?: string[]
   source_cluster: string
@@ -50,6 +52,7 @@ export interface CreateReplicationJobRequest {
 }
 
 export interface UpdateReplicationJobRequest {
+  name?: string
   schedule_spec?: ScheduleSpec | null
   clear_schedule_spec?: boolean
   timezone?: string

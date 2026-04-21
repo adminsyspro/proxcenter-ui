@@ -6,7 +6,7 @@ import useSWR from 'swr'
 
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, InputAdornment, ListItemIcon, MenuItem, Select, Stack,
+  FormControlLabel, InputAdornment, MenuItem, Select, Stack,
   TextField, ToggleButton, ToggleButtonGroup, Typography
 } from '@mui/material'
 
@@ -53,6 +53,7 @@ const fetcher = (url: string) => fetch(url).then(res => {
 
 export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs }: CreateJobDialogProps) {
   const t = useTranslations()
+  const [name, setName] = useState('')
   const [sourceCluster, setSourceCluster] = useState('')
   const { getColor: getTagColor } = useTagColors(sourceCluster || undefined)
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
@@ -218,6 +219,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   const handleSubmit = () => {
     const base = {
+      name: name.trim() || undefined,
       vm_ids: selectionMode === 'vms' ? selectedVMs : [],
       tags: selectionMode === 'tags' ? selectedTags : [],
       source_cluster: sourceCluster,
@@ -241,6 +243,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   }
 
   const handleClose = () => {
+    setName('')
     setSourceCluster('')
     setSelectedVMs([])
     setSelectedTags([])
@@ -270,14 +273,17 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       <DialogTitle sx={{ fontWeight: 700 }}>{t('siteRecovery.createJob.title')}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
-          {/* Replication Engine */}
+          {/* Job Name */}
           <Box>
-            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.engine')}</Typography>
-            <Chip
-              icon={<i className='ri-database-2-line' />}
-              label={t('siteRecovery.createJob.engineCeph')}
-              color='primary'
-              variant='outlined'
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.name')}</Typography>
+            <TextField
+              value={name}
+              onChange={e => setName(e.target.value)}
+              size='small'
+              fullWidth
+              placeholder={t('siteRecovery.createJob.namePlaceholder')}
+              helperText={t('siteRecovery.createJob.nameHelp')}
+              InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-bookmark-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
             />
           </Box>
 
@@ -288,8 +294,10 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectCluster')}</MenuItem>
               {cephConnections.map(c => (
                 <MenuItem key={c.id} value={c.id}>
-                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-server-line' /></ListItemIcon>
-                  {c.name}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className='ri-server-line' style={{ fontSize: 16, opacity: 0.7 }} />
+                    <span>{c.name}</span>
+                  </Box>
                 </MenuItem>
               ))}
             </Select>
@@ -340,18 +348,29 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                     ) : (
                       filteredVMs.map(vm => {
                         const diskGb = cephVMMap.get(vm.vmid)
+                        const dotColor = vm.status === 'running' ? '#4caf50' : vm.status === 'paused' ? '#ed6c02' : '#f44336'
                         return (
                           <FormControlLabel
                             key={vm.vmid}
                             control={<Checkbox size='small' checked={selectedVMs.includes(vm.vmid)} onChange={() => toggleVM(vm.vmid)} />}
                             label={
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                                <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0, mr: 0.25 }}>
+                                  <i className='ri-computer-fill' style={{ fontSize: 16, opacity: 0.7 }} />
+                                  <Box sx={{
+                                    position: 'absolute', bottom: -1, right: -2,
+                                    width: 7, height: 7, borderRadius: '50%',
+                                    bgcolor: dotColor,
+                                    border: '1.5px solid', borderColor: 'background.paper',
+                                    boxShadow: vm.status === 'running' ? `0 0 4px ${dotColor}` : 'none',
+                                  }} />
+                                </Box>
                                 <Typography variant='body2'>{vm.name}</Typography>
                                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>({vm.vmid})</Typography>
                                 {diskGb != null && (
                                   <Chip label={`${diskGb} GB`} size='small' variant='outlined' sx={{ height: 18, fontSize: '0.6rem' }} />
                                 )}
-                                {vm.tags?.map(tag => (
+                                {vm.tags?.filter(tag => tag && tag.trim()).map(tag => (
                                   <Chip key={tag} label={tag} size='small' sx={{ height: 18, fontSize: '0.6rem', bgcolor: getTagColor(tag).bg, color: '#fff' }} />
                                 ))}
                               </Box>
@@ -445,8 +464,10 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectCluster')}</MenuItem>
               {targetConnections.map(c => (
                 <MenuItem key={c.id} value={c.id}>
-                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-server-line' /></ListItemIcon>
-                  {c.name}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className='ri-server-line' style={{ fontSize: 16, opacity: 0.7 }} />
+                    <span>{c.name}</span>
+                  </Box>
                 </MenuItem>
               ))}
             </Select>
@@ -499,14 +520,16 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectPool')}</MenuItem>
               {cephPools.map((p: any) => (
                 <MenuItem key={p.name} value={p.name}>
-                  <ListItemIcon sx={{ minWidth: 28 }}><i className='ri-database-2-line' /></ListItemIcon>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                    <span>{p.name}</span>
-                    {p.maxAvail > 0 && (
-                      <Typography variant='caption' sx={{ color: 'text.secondary', ml: 2 }}>
-                        {p.bytesUsedFormatted} used &middot; {p.maxAvailFormatted} avail
-                      </Typography>
-                    )}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                    <i className='ri-database-2-line' style={{ fontSize: 16, opacity: 0.7, flexShrink: 0 }} />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                      <span>{p.name}</span>
+                      {p.maxAvail > 0 && (
+                        <Typography variant='caption' sx={{ color: 'text.secondary', ml: 2 }}>
+                          {p.bytesUsedFormatted} used &middot; {p.maxAvailFormatted} avail
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
                 </MenuItem>
               ))}

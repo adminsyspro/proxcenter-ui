@@ -1,5 +1,6 @@
 export { default as DashboardTab } from './DashboardTab'
 export { default as ProtectionTab } from './ProtectionTab'
+export { default as SnapshotsTab } from './SnapshotsTab'
 export { default as RecoveryPlansTab } from './RecoveryPlansTab'
 export { default as CreateJobDialog } from './CreateJobDialog'
 export { default as EditJobDialog } from './EditJobDialog'

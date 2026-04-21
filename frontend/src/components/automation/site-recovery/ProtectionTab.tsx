@@ -146,7 +146,7 @@ const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[];
   )
 }
 
-const JobCard = ({ job, onClick, vmNameMap, throughputHistory, t }: { job: ReplicationJob; onClick: () => void; vmNameMap?: Record<number, string>; throughputHistory?: ThroughputPoint[]; t: any }) => {
+const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { job: ReplicationJob; onClick: () => void; onEdit: () => void; vmNameMap?: Record<number, string>; throughputHistory?: ThroughputPoint[]; t: any }) => {
   const theme = useTheme()
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
@@ -198,6 +198,13 @@ const JobCard = ({ job, onClick, vmNameMap, throughputHistory, t }: { job: Repli
     >
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, position: 'relative', zIndex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* Ceph engine indicator */}
+          <Tooltip title='Ceph RBD' arrow>
+            <Box sx={{ display: 'inline-flex', flexShrink: 0, alignItems: 'center' }}>
+              <img src='/images/ceph-logo.svg' alt='Ceph' width={18} height={18} />
+            </Box>
+          </Tooltip>
+
           {/* Sync icon */}
           {isSyncing && (
             <Box sx={{
@@ -210,13 +217,26 @@ const JobCard = ({ job, onClick, vmNameMap, throughputHistory, t }: { job: Repli
             </Box>
           )}
 
-          {/* VM names */}
-          <Typography variant='body2' sx={{
-            fontWeight: 600, flex: 1, minWidth: 0,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-          }}>
-            {jobLabel(job, vmNameMap)}
-          </Typography>
+          {/* Name (if set) + VM names */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {job.name && (
+              <Typography variant='body2' sx={{
+                fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5, lineHeight: 1.25,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>
+                <i className='ri-bookmark-line' style={{ fontSize: 14, opacity: 0.7 }} />
+                {job.name}
+              </Typography>
+            )}
+            <Typography variant={job.name ? 'caption' : 'body2'} sx={{
+              fontWeight: job.name ? 400 : 600,
+              color: job.name ? 'text.secondary' : 'text.primary',
+              display: 'block', lineHeight: 1.3,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+            }}>
+              {jobLabel(job, vmNameMap)}
+            </Typography>
+          </Box>
 
           {/* Syncing progress + throughput + sparkline */}
           {isSyncing && (
@@ -251,8 +271,29 @@ const JobCard = ({ job, onClick, vmNameMap, throughputHistory, t }: { job: Repli
             </Box>
           )}
 
+          {/* Next Sync */}
+          {!isSyncing && (
+            <Box sx={{ textAlign: 'center', minWidth: 100, display: { xs: 'none', md: 'block' } }}>
+              <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.2 }}>{t('siteRecovery.protection.nextSync')}</Typography>
+              <Typography variant='body2' sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                {job.next_sync && job.status !== 'paused' ? new Date(job.next_sync).toLocaleString() : '—'}
+              </Typography>
+            </Box>
+          )}
+
           {/* Status */}
           <StatusChip status={job.status} t={t} />
+
+          {/* Edit (does not open the drawer) */}
+          <Tooltip title={t('common.edit')} arrow>
+            <IconButton
+              size='small'
+              onClick={e => { e.stopPropagation(); onEdit() }}
+              sx={{ p: 0.5, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+            >
+              <i className='ri-edit-line' style={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </CardContent>
 
@@ -377,6 +418,7 @@ export default function ProtectionTab({
     return (jobs || []).filter(j => {
       const label = jobLabel(j, vmNameMap)
       const matchQ = !qq || label.toLowerCase().includes(qq) ||
+        (j.name || '').toLowerCase().includes(qq) ||
         connName(j.source_cluster).toLowerCase().includes(qq) || connName(j.target_cluster).toLowerCase().includes(qq)
 
       return matchQ && (statusFilter === 'all' || j.status === statusFilter)
@@ -499,7 +541,7 @@ export default function ProtectionTab({
                 {/* Group jobs */}
                 <Stack spacing={1}>
                   {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} vmNameMap={vmNameMap} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
+                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNameMap} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
                   ))}
                 </Stack>
               </Box>
@@ -515,9 +557,21 @@ export default function ProtectionTab({
             <Alert severity='info'>{t('siteRecovery.protection.selectJob')}</Alert>
           ) : (
             <>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                <Box>
-                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>{jobLabel(selected, vmNameMap)}</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 1.5 }}>
+                <Tooltip title='Ceph RBD' arrow>
+                  <Box sx={{ display: 'inline-flex', flexShrink: 0, alignItems: 'center', mt: 0.5 }}>
+                    <img src='/images/ceph-logo.svg' alt='Ceph' width={24} height={24} />
+                  </Box>
+                </Tooltip>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>
+                    {selected.name || jobLabel(selected, vmNameMap)}
+                  </Typography>
+                  {selected.name && (
+                    <Typography variant='body2' sx={{ color: 'text.primary', fontWeight: 500, mb: 0.25 }}>
+                      {jobLabel(selected, vmNameMap)}
+                    </Typography>
+                  )}
                   <Typography variant='caption' sx={{ color: 'text.secondary' }}>
                     {(selected.vm_ids || []).length} VM(s) — {(selected.vm_ids || []).map(id => {
                       const name = vmNameMap?.[id]
@@ -528,13 +582,37 @@ export default function ProtectionTab({
                 <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
               </Box>
 
-              <StatusChip status={selected.status} t={t} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+                <StatusChip status={selected.status} t={t} />
+              </Box>
+
+              {/* Actions — top placement for visibility, full-width equal split */}
+              <Box sx={{ display: 'flex', gap: 1, mb: 2, '& > *': { flex: 1, minWidth: 0 } }}>
+                <Button variant='contained' size='small' startIcon={<i className='ri-refresh-line' />} onClick={() => onSyncJob(selected.id)}>
+                  {t('siteRecovery.protection.syncNow')}
+                </Button>
+                {selected.status === 'paused' ? (
+                  <Button variant='outlined' size='small' startIcon={<i className='ri-play-circle-line' />} onClick={() => onResumeJob(selected.id)}>
+                    {t('siteRecovery.protection.resume')}
+                  </Button>
+                ) : (
+                  <Button variant='outlined' size='small' startIcon={<i className='ri-pause-line' />} onClick={() => onPauseJob(selected.id)}>
+                    {t('siteRecovery.protection.pause')}
+                  </Button>
+                )}
+                <Button variant='outlined' size='small' startIcon={<i className='ri-edit-line' />} onClick={() => onEditJob(selected.id)}>
+                  {t('common.edit')}
+                </Button>
+                <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => { onDeleteJob(selected.id); closeDrawer() }}>
+                  {t('common.delete')}
+                </Button>
+              </Box>
 
               {selected.status === 'error' && selected.error_message && (
-                <Alert severity='error' sx={{ mt: 2 }} icon={<i className='ri-error-warning-line' />}>{selected.error_message}</Alert>
+                <Alert severity='error' sx={{ mb: 2 }} icon={<i className='ri-error-warning-line' />}>{selected.error_message}</Alert>
               )}
 
-              <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', my: 2, textAlign: 'center' }}>
+              <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, textAlign: 'center' }}>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.source')}</Typography>
                 <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>{connName(selected.source_cluster)}</Typography>
                 <Box sx={{ color: 'text.disabled', my: 0.5 }}><i className='ri-arrow-down-line' /></Box>
@@ -548,6 +626,7 @@ export default function ProtectionTab({
                 <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(computeRpoActual(selected.last_sync))} />
                 <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
                 <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
+                <DetailRow icon='ri-calendar-schedule-line' label={t('siteRecovery.protection.nextSync')} value={selected.next_sync && selected.status !== 'paused' ? new Date(selected.next_sync).toLocaleString() : '—'} mono />
 
                 {/* Bandwidth chart */}
                 {(throughputHistoryRef.current.get(selected.id)?.length || 0) >= 2 && (
@@ -591,31 +670,6 @@ export default function ProtectionTab({
                   </Typography>
                 )}
 
-                <Divider sx={{ my: 2 }} />
-
-                <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1.5, display: 'block' }}>
-                  {t('siteRecovery.protection.actions')}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Button variant='contained' size='small' startIcon={<i className='ri-refresh-line' />} onClick={() => onSyncJob(selected.id)}>
-                    {t('siteRecovery.protection.syncNow')}
-                  </Button>
-                  {selected.status === 'paused' ? (
-                    <Button variant='outlined' size='small' startIcon={<i className='ri-play-circle-line' />} onClick={() => onResumeJob(selected.id)}>
-                      {t('siteRecovery.protection.resume')}
-                    </Button>
-                  ) : (
-                    <Button variant='outlined' size='small' startIcon={<i className='ri-pause-line' />} onClick={() => onPauseJob(selected.id)}>
-                      {t('siteRecovery.protection.pause')}
-                    </Button>
-                  )}
-                  <IconButton size='small' onClick={() => onEditJob(selected.id)} title={t('common.edit')}>
-                    <i className='ri-edit-line' />
-                  </IconButton>
-                  <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => { onDeleteJob(selected.id); closeDrawer() }}>
-                    {t('common.delete')}
-                  </Button>
-                </Box>
               </Box>
             </>
           )}

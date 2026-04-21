@@ -4,21 +4,28 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  Stack, TextField, Tooltip, Typography
+  InputAdornment, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import type { ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
+
+interface Connection {
+  id: string
+  name: string
+}
 
 interface Props {
   open: boolean
   job: ReplicationJob | null
   onClose: () => void
   onSubmit: (id: string, req: UpdateReplicationJobRequest) => Promise<void>
+  connections?: Connection[]
 }
 
-export default function EditJobDialog({ open, job, onClose, onSubmit }: Props) {
+export default function EditJobDialog({ open, job, onClose, onSubmit, connections }: Props) {
   const t = useTranslations()
+  const [name, setName] = useState('')
   const [scheduleValue, setScheduleValue] = useState<ScheduleBuilderValue>({
     mode: 'rpo', rpoTargetSeconds: 900, scheduleSpec: null, timezone: defaultTimezone(),
   })
@@ -29,6 +36,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit }: Props) {
 
   useEffect(() => {
     if (!job) return
+    setName(job.name || '')
     setScheduleValue({
       mode: job.schedule_spec ? 'scheduled' : 'rpo',
       rpoTargetSeconds: job.rpo_target || 900,
@@ -42,12 +50,15 @@ export default function EditJobDialog({ open, job, onClose, onSubmit }: Props) {
 
   if (!job) return null
 
+  const connName = (id: string) => connections?.find(c => c.id === id)?.name || id
+
   const handleSave = async () => {
     setSubmitting(true)
     setError('')
     setIs409(false)
     try {
       const req: UpdateReplicationJobRequest = {
+        name: name.trim(),
         rate_limit_mbps: rateLimit,
       }
       if (scheduleValue.mode === 'scheduled' && scheduleValue.scheduleSpec) {
@@ -73,6 +84,20 @@ export default function EditJobDialog({ open, job, onClose, onSubmit }: Props) {
       <DialogTitle sx={{ fontWeight: 700 }}>{t('siteRecovery.editJob.title')}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
+          {/* Job Name */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.name')}</Typography>
+            <TextField
+              value={name}
+              onChange={e => setName(e.target.value)}
+              size='small'
+              fullWidth
+              placeholder={t('siteRecovery.createJob.namePlaceholder')}
+              helperText={t('siteRecovery.createJob.nameHelp')}
+              InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-bookmark-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
+            />
+          </Box>
+
           {/* Immutable block */}
           <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 2, bgcolor: 'action.hover' }}>
             <Tooltip title={t('siteRecovery.editJob.immutableTooltip')} placement='top-start'>
@@ -86,7 +111,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit }: Props) {
                 <b>VMs:</b> {(job.vm_names || []).join(', ') || `(${job.vm_ids.length} VMs)`}
               </Typography>
               <Typography variant='body2'>
-                <b>Source → Target:</b> {job.source_cluster} → {job.target_cluster}
+                <b>Source → Target:</b> {connName(job.source_cluster)} → {connName(job.target_cluster)}
               </Typography>
               <Typography variant='body2'>
                 <b>Pool:</b> <Chip label={job.target_pool} size='small' variant='outlined' />

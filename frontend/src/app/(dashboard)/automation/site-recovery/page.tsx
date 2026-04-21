@@ -25,6 +25,7 @@ import {
 import {
   DashboardTab,
   ProtectionTab,
+  SnapshotsTab,
   RecoveryPlansTab,
   EmergencyDRTab,
   SimulationTab,
@@ -46,7 +47,7 @@ export default function SiteRecoveryPage() {
   const { isEnterprise } = useLicense()
   const { setPageInfo } = usePageTitle()
 
-  // Tab state — default to Simulation (4) when not enough Ceph clusters
+  // Tab state — default to Simulation (5) when not enough Ceph clusters
   const [tab, setTab] = useState(0)
   const [tabInitialized, setTabInitialized] = useState(false)
 
@@ -106,7 +107,7 @@ export default function SiteRecoveryPage() {
   // Default to Simulation tab when not enough Ceph clusters
   useEffect(() => {
     if (connectionsLoaded && !tabInitialized) {
-      if (!hasEnoughCephClusters) setTab(4)
+      if (!hasEnoughCephClusters) setTab(5)
       setTabInitialized(true)
     }
   }, [connectionsLoaded, hasEnoughCephClusters, tabInitialized])
@@ -121,7 +122,8 @@ export default function SiteRecoveryPage() {
       type: vm.type,
       status: vm.status,
       diskGb: vm.diskGb || 0,
-      tags: Array.isArray(vm.tags) ? vm.tags : vm.tags ? String(vm.tags).split(';').filter(Boolean) : []
+      tags: (Array.isArray(vm.tags) ? vm.tags : vm.tags ? String(vm.tags).split(';') : [])
+        .map((t: string) => t.trim()).filter(Boolean)
     }))
   , [allVMsData])
 
@@ -315,7 +317,7 @@ export default function SiteRecoveryPage() {
             value={tab}
             onChange={(_, v) => {
               // Only allow switching to disabled tabs if they require Ceph
-              if (!hasEnoughCephClusters && v !== 4) return
+              if (!hasEnoughCephClusters && v !== 5) return
               setTab(v)
             }}
             sx={{ flex: 1 }}
@@ -338,6 +340,12 @@ export default function SiteRecoveryPage() {
                 )}
               </Box>
             }
+          />
+          <Tab
+            icon={<i className='ri-camera-line' style={{ fontSize: 18 }} />}
+            iconPosition='start'
+            label={t('siteRecovery.tabs.snapshots')}
+            disabled={!hasEnoughCephClusters}
           />
           <Tab
             icon={<i className='ri-file-shield-2-line' style={{ fontSize: 18 }} />}
@@ -403,6 +411,10 @@ export default function SiteRecoveryPage() {
         )}
 
         {tab === 2 && hasEnoughCephClusters && (
+          <SnapshotsTab connections={connections} vmNameMap={vmNameMap} />
+        )}
+
+        {tab === 3 && hasEnoughCephClusters && (
           <RecoveryPlansTab
             plans={plans || []}
             loading={plansLoading}
@@ -418,7 +430,7 @@ export default function SiteRecoveryPage() {
           />
         )}
 
-        {tab === 3 && hasEnoughCephClusters && (
+        {tab === 4 && hasEnoughCephClusters && (
           <EmergencyDRTab
             jobs={jobs || []}
             plans={plans || []}
@@ -432,7 +444,7 @@ export default function SiteRecoveryPage() {
           />
         )}
 
-        {tab === 4 && (
+        {tab === 5 && (
           <SimulationTab connections={connections} isEnterprise={isEnterprise} />
         )}
 
@@ -450,6 +462,7 @@ export default function SiteRecoveryPage() {
           job={editJob}
           onClose={() => setEditJobId(null)}
           onSubmit={handleUpdateJob}
+          connections={connections}
         />
 
         <CreatePlanDialog

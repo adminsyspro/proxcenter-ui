@@ -3005,6 +3005,8 @@
       "volume": "Volume",
       "lastSync": "Dernière sync",
       "nextSync": "Prochaine sync",
+      "perVmTitle": "Statut par VM",
+      "perVmEmpty": "Aucun statut par VM pour l'instant. Les statuts sont enregistrés à partir de la prochaine sync.",
       "deleteConfirmTitle": "Supprimer le job de réplication",
       "deleteConfirmDesc": "Cela supprime le job et son historique local. Les VMs et leurs disques ne sont pas touchés.",
       "deleteOrphansNote": "Les snapshots RBD mirror-* sur source et cible ne sont PAS supprimés automatiquement. Ouvre l'onglet Snapshots après la suppression pour vérifier et purger les orphelins.",

@@ -344,6 +344,19 @@ export default function ProtectionTab({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDeleteJob, setConfirmDeleteJob] = useState<ReplicationJob | null>(null)
+  type VMStatusRow = {
+    job_id: string
+    vmid: number
+    vm_name?: string
+    status: 'pending' | 'syncing' | 'synced' | 'error'
+    last_sync?: string | null
+    last_error?: string
+    bytes_sent: number
+    duration_ms: number
+    updated_at: string
+  }
+  const [vmStatuses, setVmStatuses] = useState<VMStatusRow[] | null>(null)
+  const [vmStatusesLoading, setVmStatusesLoading] = useState(false)
 
   // Throughput history — persisted in localStorage, 24h rolling window
   const STORAGE_KEY = 'sr-throughput-history'
@@ -446,6 +459,27 @@ export default function ProtectionTab({
     onSelectJob(id)
     setDrawerOpen(true)
   }
+
+  // Fetch per-VM status when drawer opens on a job with multiple VMs.
+  useEffect(() => {
+    if (!drawerOpen || !selectedJobId) {
+      setVmStatuses(null)
+      return
+    }
+    const job = (jobs || []).find(j => j.id === selectedJobId)
+    if (!job || (job.vm_ids || []).length <= 1) {
+      setVmStatuses(null)
+      return
+    }
+    let cancelled = false
+    setVmStatusesLoading(true)
+    fetch(`/api/v1/orchestrator/replication/jobs/${selectedJobId}/vms`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => { if (!cancelled) setVmStatuses(Array.isArray(data) ? data : []) })
+      .catch(() => { if (!cancelled) setVmStatuses([]) })
+      .finally(() => { if (!cancelled) setVmStatusesLoading(false) })
+    return () => { cancelled = true }
+  }, [drawerOpen, selectedJobId, jobs])
 
   const closeDrawer = () => {
     setDrawerOpen(false)
@@ -629,6 +663,54 @@ export default function ProtectionTab({
                 <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
                 <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
                 <DetailRow icon='ri-calendar-schedule-line' label={t('siteRecovery.protection.nextSync')} value={selected.next_sync && selected.status !== 'paused' ? new Date(selected.next_sync).toLocaleString() : '—'} mono />
+
+                {/* Per-VM breakdown — only shown for multi-VM jobs */}
+                {(selected.vm_ids || []).length > 1 && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
+                      {t('siteRecovery.protection.perVmTitle')}
+                    </Typography>
+                    {vmStatusesLoading && !vmStatuses && <LinearProgress sx={{ mb: 1 }} />}
+                    {vmStatuses && vmStatuses.length === 0 ? (
+                      <Typography variant='caption' sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                        {t('siteRecovery.protection.perVmEmpty')}
+                      </Typography>
+                    ) : vmStatuses && (
+                      <Box sx={{ maxHeight: 280, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                        {vmStatuses.map(row => {
+                          const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : 'default'
+                          return (
+                            <Box key={row.vmid} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 1.25, py: 1, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.25 }}>
+                                  {row.vm_name ? `${row.vmid} · ${row.vm_name}` : `VM ${row.vmid}`}
+                                </Typography>
+                                <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.3 }}>
+                                  {row.last_sync ? new Date(row.last_sync).toLocaleString() : '—'}
+                                  {row.bytes_sent > 0 && ` · ${formatBytes(row.bytes_sent)}`}
+                                  {row.duration_ms > 0 && ` · ${formatDuration(Math.round(row.duration_ms / 1000))}`}
+                                </Typography>
+                                {row.status === 'error' && row.last_error && (
+                                  <Typography variant='caption' sx={{ color: 'error.main', display: 'block', mt: 0.25 }}>
+                                    {row.last_error}
+                                  </Typography>
+                                )}
+                              </Box>
+                              <Chip
+                                size='small'
+                                label={t(`siteRecovery.status.${row.status}`)}
+                                color={color as any}
+                                variant={row.status === 'pending' ? 'outlined' : 'filled'}
+                                sx={{ height: 20, fontSize: '0.65rem' }}
+                              />
+                            </Box>
+                          )
+                        })}
+                      </Box>
+                    )}
+                  </>
+                )}
 
                 {/* Bandwidth chart */}
                 {(throughputHistoryRef.current.get(selected.id)?.length || 0) >= 2 && (

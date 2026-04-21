@@ -2976,6 +2976,8 @@
       "volume": "卷",
       "lastSync": "最近同步",
       "nextSync": "下次同步",
+      "perVmTitle": "单机状态",
+      "perVmEmpty": "暂无单机状态。将在下次同步时开始记录。",
       "deleteConfirmTitle": "删除复制任务",
       "deleteConfirmDesc": "这将删除复制任务及其本地历史记录。虚拟机及其磁盘不会受到影响。",
       "deleteOrphansNote": "源端和目标端的 mirror-* RBD 快照不会自动删除。删除后请打开快照选项卡，查看并清理产生的孤立快照。",

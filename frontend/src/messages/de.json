@@ -2973,6 +2973,8 @@
       "volume": "Volume",
       "lastSync": "Letzte Synchronisierung",
       "nextSync": "Nächste Synchronisierung",
+      "perVmTitle": "Status pro VM",
+      "perVmEmpty": "Noch kein Status pro VM. Die Erfassung beginnt bei der nächsten Synchronisierung.",
       "deleteConfirmTitle": "Replikationsauftrag löschen",
       "deleteConfirmDesc": "Der Replikationsauftrag und sein lokaler Verlauf werden entfernt. VMs und deren Festplatten bleiben unberührt.",
       "deleteOrphansNote": "Mirror-* RBD-Snapshots auf Quelle und Ziel werden NICHT automatisch entfernt. Öffnen Sie nach dem Löschen den Snapshots-Tab, um die entstehenden verwaisten Snapshots zu prüfen und zu bereinigen.",

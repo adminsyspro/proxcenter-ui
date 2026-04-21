@@ -3774,7 +3774,7 @@ return
             variant="contained"
             color="warning"
             startIcon={<i className="ri-vip-crown-line" />}
-            onClick={() => { setUpgradeDialogOpen(false); window.open('https://www.proxcenter.io/', '_blank') }}
+            onClick={() => { setUpgradeDialogOpen(false); window.open('https://www.proxcenter.io/', '_blank', 'noopener,noreferrer') }}
             sx={{ textTransform: 'none' }}
           >
             {t('inventoryPage.esxiMigration.upgradePlan')}

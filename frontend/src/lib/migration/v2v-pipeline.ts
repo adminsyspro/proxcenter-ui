@@ -317,7 +317,7 @@ async function downloadDiskViaNfc(
         `head -c 4 ${shellEscape(localPath)} 2>/dev/null | od -An -c | tr -d ' \\n\\t' || echo missing`,
       )
       const magicDump = (magicRes.output || "").trim()
-      if (!/K.*D.*M.*V/.test(magicDump)) {
+      if (!/K[^K]{0,10}D[^D]{0,10}M[^M]{0,10}V/.test(magicDump)) {
         await cleanupCtrl()
         throw new Error(
           `NFC disk download did not produce a valid VMDK sparse stream at ${localPath} ` +

@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   # ========================================
@@ -19,6 +18,9 @@ jobs:
   trivy-frontend:
     name: Trivy — Frontend Image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -58,6 +60,9 @@ jobs:
   trivy-orchestrator:
     name: Trivy — Orchestrator Image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -106,6 +111,9 @@ jobs:
   trivy-fs:
     name: Trivy — Filesystem (deps + secrets)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6

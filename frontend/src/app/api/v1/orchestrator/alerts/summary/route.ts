@@ -18,7 +18,7 @@ function buildOrchestratorFingerprint(alert: {
 }): string {
   const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
   const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}`
-  return crypto.createHash('md5').update(data).digest('hex')
+  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
 }
 
 /**

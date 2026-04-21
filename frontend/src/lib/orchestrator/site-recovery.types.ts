@@ -8,6 +8,13 @@ import type { ScheduleSpec } from '@/components/automation/site-recovery/schedul
 
 export type ReplicationJobStatus = 'synced' | 'syncing' | 'error' | 'paused' | 'pending'
 
+export interface BandwidthWindow {
+  days: number[]          // 0=Sun, 1=Mon, …, 6=Sat
+  start_hour: number      // 0-23
+  end_hour: number        // 0-23, wraparound if end <= start
+  rate_limit_mbps: number
+}
+
 export interface ReplicationJob {
   id: string
   name: string
@@ -27,6 +34,7 @@ export interface ReplicationJob {
   next_sync?: string | null
   throughput_bps: number
   rate_limit_mbps: number
+  bandwidth_windows: BandwidthWindow[]
   network_mapping: Record<string, string>  // source bridge → target bridge
   progress_percent: number
   error_message?: string
@@ -46,6 +54,7 @@ export interface CreateReplicationJobRequest {
   schedule_spec?: ScheduleSpec | null
   timezone?: string
   rate_limit_mbps: number
+  bandwidth_windows?: BandwidthWindow[]
   vmid_prefix?: number
   install_pv?: boolean
   network_mapping: Record<string, string>
@@ -58,6 +67,7 @@ export interface UpdateReplicationJobRequest {
   timezone?: string
   rpo_target?: number
   rate_limit_mbps?: number
+  bandwidth_windows?: BandwidthWindow[]
   network_mapping?: Record<string, string>
 }
 

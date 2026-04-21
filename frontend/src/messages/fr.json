@@ -2900,12 +2900,32 @@
       "emergencyDR": "DR d'urgence",
       "simulation": "Simulation"
     },
+    "preflight": {
+      "title": "Vérifications préalables",
+      "blocked": "Vérifications critiques en échec. Résolvez les problèmes ci-dessus avant de créer le job.",
+      "checks": {
+        "source_health": "Santé Ceph source",
+        "target_health": "Santé Ceph cible",
+        "target_space": "Capacité pool cible"
+      }
+    },
+    "bandwidth": {
+      "title": "Fenêtres de bande passante",
+      "help": "Remplace la limite statique ({rate} Mbps) durant des jours / heures spécifiques. Première fenêtre qui matche l'emporte ; hors fenêtre, c'est la limite statique qui s'applique.",
+      "empty": "Aucune fenêtre configurée. La limite statique s'applique à tout moment.",
+      "addWindow": "Ajouter une fenêtre",
+      "startHour": "De",
+      "endHour": "Jusqu'à",
+      "rate": "Débit",
+      "unlimited": "illimité",
+      "preview": "{days} · {start}:00 → {end}:00 · {rate}"
+    },
     "snapshots": {
       "title": "Snapshot",
       "totalSnaps": "Total snapshots",
       "orphans": "Orphelins",
       "clusters": "Clusters Ceph",
-      "searchPlaceholder": "Rechercher cluster, pool, image, snap, VMID…",
+      "searchPlaceholder": "Rechercher cluster, pool, image, snap, VMID, nom VM…",
       "allClusters": "Tous les clusters",
       "allStatuses": "Tous les statuts",
       "activeJobs": "Jobs actifs",
@@ -2926,6 +2946,7 @@
       "activeSource": "Source",
       "activeTarget": "Cible",
       "orphan": "Orphelin",
+      "cannotDeleteActive": "Suppression impossible : snapshot utilisé par un job de réplication actif",
       "viewDetails": "Voir les détails",
       "none": "Aucun snapshot mirror",
       "noneDesc": "Aucun snapshot mirror-* trouvé sur vos clusters Ceph.",
@@ -2984,6 +3005,9 @@
       "volume": "Volume",
       "lastSync": "Dernière sync",
       "nextSync": "Prochaine sync",
+      "deleteConfirmTitle": "Supprimer le job de réplication",
+      "deleteConfirmDesc": "Cela supprime le job et son historique local. Les VMs et leurs disques ne sont pas touchés.",
+      "deleteOrphansNote": "Les snapshots RBD mirror-* sur source et cible ne sont PAS supprimés automatiquement. Ouvre l'onglet Snapshots après la suppression pour vérifier et purger les orphelins.",
       "source": "Source",
       "target": "Cible",
       "schedule": "Planification",

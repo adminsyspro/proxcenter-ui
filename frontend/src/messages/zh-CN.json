@@ -2871,12 +2871,32 @@
       "emergencyDR": "紧急灾难恢复",
       "simulation": "模拟"
     },
+    "preflight": {
+      "title": "预检检查",
+      "blocked": "关键检查失败。请先修复上述问题再创建任务。",
+      "checks": {
+        "source_health": "源端 Ceph 健康",
+        "target_health": "目标端 Ceph 健康",
+        "target_space": "目标池容量"
+      }
+    },
+    "bandwidth": {
+      "title": "带宽时段",
+      "help": "在特定日期 / 小时内覆盖静态带宽限制（{rate} Mbps）。第一个匹配的时段生效；未命中任何时段时使用静态限制。",
+      "empty": "未配置任何时段。静态限制始终适用。",
+      "addWindow": "添加时段",
+      "startHour": "起始",
+      "endHour": "截止",
+      "rate": "速率",
+      "unlimited": "不限",
+      "preview": "{days} · {start}:00 → {end}:00 · {rate}"
+    },
     "snapshots": {
       "title": "快照",
       "totalSnaps": "快照总数",
       "orphans": "孤立快照",
       "clusters": "Ceph 集群",
-      "searchPlaceholder": "搜索集群、池、镜像、快照、VMID…",
+      "searchPlaceholder": "搜索集群、池、镜像、快照、VMID、虚拟机名称…",
       "allClusters": "所有集群",
       "allStatuses": "所有状态",
       "activeJobs": "活动任务",
@@ -2897,6 +2917,7 @@
       "activeSource": "源",
       "activeTarget": "目标",
       "orphan": "孤立",
+      "cannotDeleteActive": "无法删除：该快照正被活动的复制任务使用",
       "viewDetails": "查看详情",
       "none": "无 mirror 快照",
       "noneDesc": "未在 Ceph 集群中找到任何 mirror-* 快照。",
@@ -2955,6 +2976,9 @@
       "volume": "卷",
       "lastSync": "最近同步",
       "nextSync": "下次同步",
+      "deleteConfirmTitle": "删除复制任务",
+      "deleteConfirmDesc": "这将删除复制任务及其本地历史记录。虚拟机及其磁盘不会受到影响。",
+      "deleteOrphansNote": "源端和目标端的 mirror-* RBD 快照不会自动删除。删除后请打开快照选项卡，查看并清理产生的孤立快照。",
       "source": "源",
       "target": "目标",
       "schedule": "计划",

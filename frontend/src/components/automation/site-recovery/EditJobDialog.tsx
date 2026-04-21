@@ -8,7 +8,8 @@ import {
 } from '@mui/material'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
-import type { ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
+import BandwidthWindowsEditor from './BandwidthWindowsEditor'
+import type { BandwidthWindow, ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
 interface Connection {
   id: string
@@ -30,6 +31,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
     mode: 'rpo', rpoTargetSeconds: 900, scheduleSpec: null, timezone: defaultTimezone(),
   })
   const [rateLimit, setRateLimit] = useState(0)
+  const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [is409, setIs409] = useState(false)
@@ -44,6 +46,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
       timezone: job.timezone || defaultTimezone(),
     })
     setRateLimit(job.rate_limit_mbps || 0)
+    setBandwidthWindows(job.bandwidth_windows || [])
     setError('')
     setIs409(false)
   }, [job])
@@ -60,6 +63,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
       const req: UpdateReplicationJobRequest = {
         name: name.trim(),
         rate_limit_mbps: rateLimit,
+        bandwidth_windows: bandwidthWindows,
       }
       if (scheduleValue.mode === 'scheduled' && scheduleValue.scheduleSpec) {
         req.schedule_spec = scheduleValue.scheduleSpec
@@ -137,6 +141,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
               helperText={t('siteRecovery.editJob.rateLimitHelp')}
             />
           </Box>
+
+          <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={rateLimit} />
 
           {is409 && <Alert severity='warning'>{t('siteRecovery.editJob.syncingAlert')}</Alert>}
           {error && <Alert severity='error'>{error}</Alert>}

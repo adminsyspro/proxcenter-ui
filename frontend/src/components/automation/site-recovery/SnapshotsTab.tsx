@@ -98,15 +98,17 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
       if (statusFilter === 'orphan' && !s.is_orphan) return false
       if (statusFilter === 'active' && s.is_orphan) return false
       if (!qq) return true
+      const vmName = s.vmid ? vmNameMap?.[s.vmid] : undefined
       return (
         s.cluster_name?.toLowerCase().includes(qq) ||
         s.pool?.toLowerCase().includes(qq) ||
         s.image?.toLowerCase().includes(qq) ||
         s.snapshot?.toLowerCase().includes(qq) ||
-        String(s.vmid || '').includes(qq)
+        String(s.vmid || '').includes(qq) ||
+        (vmName?.toLowerCase().includes(qq) ?? false)
       )
     })
-  }, [snaps, q, clusterFilter, statusFilter])
+  }, [snaps, q, clusterFilter, statusFilter, vmNameMap])
 
   // Reset page when filters change and current page would be out of range
   useEffect(() => {
@@ -137,9 +139,12 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
     })
   }
 
+  // Only orphan snapshots are selectable / deletable
+  const selectableFiltered = useMemo(() => filtered.filter(s => s.is_orphan), [filtered])
+
   const toggleSelectAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set())
-    else setSelected(new Set(filtered.map(key)))
+    if (selected.size === selectableFiltered.length) setSelected(new Set())
+    else setSelected(new Set(selectableFiltered.map(key)))
   }
 
   const openDetail = useCallback(async (s: MirrorSnapshot) => {
@@ -288,9 +293,10 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
                 <TableCell padding='checkbox'>
                   <Checkbox
                     size='small'
-                    indeterminate={selected.size > 0 && selected.size < filtered.length}
-                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    indeterminate={selected.size > 0 && selected.size < selectableFiltered.length}
+                    checked={selectableFiltered.length > 0 && selected.size === selectableFiltered.length}
                     onChange={toggleSelectAll}
+                    disabled={selectableFiltered.length === 0}
                   />
                 </TableCell>
                 <TableCell>{t('siteRecovery.snapshots.cluster')}</TableCell>
@@ -311,7 +317,16 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
                 return (
                   <TableRow key={k} hover selected={selected.has(k)}>
                     <TableCell padding='checkbox'>
-                      <Checkbox size='small' checked={selected.has(k)} onChange={() => toggleSelect(s)} />
+                      <Tooltip title={!s.is_orphan ? t('siteRecovery.snapshots.cannotDeleteActive') : ''} arrow disableHoverListener={s.is_orphan}>
+                        <span>
+                          <Checkbox
+                            size='small'
+                            checked={selected.has(k)}
+                            onChange={() => toggleSelect(s)}
+                            disabled={!s.is_orphan}
+                          />
+                        </span>
+                      </Tooltip>
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -344,11 +359,13 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
                             <i className='ri-information-line' style={{ fontSize: 14 }} />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title={t('common.delete')} arrow>
-                          <IconButton size='small' color='error' onClick={() => setConfirmDelete([s])} sx={{ p: 0.5 }}>
-                            <i className='ri-delete-bin-line' style={{ fontSize: 14 }} />
-                          </IconButton>
-                        </Tooltip>
+                        {s.is_orphan && (
+                          <Tooltip title={t('common.delete')} arrow>
+                            <IconButton size='small' color='error' onClick={() => setConfirmDelete([s])} sx={{ p: 0.5 }}>
+                              <i className='ri-delete-bin-line' style={{ fontSize: 14 }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -446,15 +463,17 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
                 )}
               </Box>
 
-              <Box sx={{ pt: 1 }}>
-                <Button
-                  fullWidth variant='outlined' color='error'
-                  startIcon={<i className='ri-delete-bin-line' />}
-                  onClick={() => { setConfirmDelete([detail]); setDetail(null) }}
-                >
-                  {t('common.delete')}
-                </Button>
-              </Box>
+              {detail.is_orphan && (
+                <Box sx={{ pt: 1 }}>
+                  <Button
+                    fullWidth variant='outlined' color='error'
+                    startIcon={<i className='ri-delete-bin-line' />}
+                    onClick={() => { setConfirmDelete([detail]); setDetail(null) }}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                </Box>
+              )}
             </Stack>
           </Box>
         )}

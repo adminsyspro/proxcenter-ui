@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Divider, Drawer, IconButton,
+  Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
+  Divider, Drawer, IconButton,
   InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography,
   alpha, useTheme
 } from '@mui/material'
@@ -342,6 +343,7 @@ export default function ProtectionTab({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState<ReplicationJob | null>(null)
 
   // Throughput history — persisted in localStorage, 24h rolling window
   const STORAGE_KEY = 'sr-throughput-history'
@@ -603,7 +605,7 @@ export default function ProtectionTab({
                 <Button variant='outlined' size='small' startIcon={<i className='ri-edit-line' />} onClick={() => onEditJob(selected.id)}>
                   {t('common.edit')}
                 </Button>
-                <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => { onDeleteJob(selected.id); closeDrawer() }}>
+                <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => setConfirmDeleteJob(selected)}>
                   {t('common.delete')}
                 </Button>
               </Box>
@@ -675,6 +677,37 @@ export default function ProtectionTab({
           )}
         </Box>
       </Drawer>
+
+      {/* Delete confirmation */}
+      <Dialog open={!!confirmDeleteJob} onClose={() => setConfirmDeleteJob(null)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('siteRecovery.protection.deleteConfirmTitle')}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ py: 2 }}>
+            <Alert severity='warning' sx={{ py: 1.5 }}>
+              {t('siteRecovery.protection.deleteConfirmDesc')}
+            </Alert>
+            <Alert severity='info' sx={{ py: 1.5 }} icon={<i className='ri-information-line' />}>
+              {t('siteRecovery.protection.deleteOrphansNote')}
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmDeleteJob(null)}>{t('common.cancel')}</Button>
+          <Button
+            variant='contained' color='error'
+            startIcon={<i className='ri-delete-bin-line' />}
+            onClick={() => {
+              if (confirmDeleteJob) {
+                onDeleteJob(confirmDeleteJob.id)
+                setConfirmDeleteJob(null)
+                closeDrawer()
+              }
+            }}
+          >
+            {t('common.delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

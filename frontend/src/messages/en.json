@@ -2900,12 +2900,32 @@
       "emergencyDR": "Emergency DR",
       "simulation": "Simulation"
     },
+    "preflight": {
+      "title": "Pre-flight checks",
+      "blocked": "Critical checks failed. Resolve the issues above before creating the job.",
+      "checks": {
+        "source_health": "Source Ceph health",
+        "target_health": "Target Ceph health",
+        "target_space": "Target pool capacity"
+      }
+    },
+    "bandwidth": {
+      "title": "Bandwidth windows",
+      "help": "Override the static rate limit ({rate} Mbps) during specific days / hours. First matching window wins; outside any window the static rate applies.",
+      "empty": "No window configured — the static rate limit applies at all times.",
+      "addWindow": "Add window",
+      "startHour": "From",
+      "endHour": "Until",
+      "rate": "Rate",
+      "unlimited": "unlimited",
+      "preview": "{days} · {start}:00 → {end}:00 · {rate}"
+    },
     "snapshots": {
       "title": "Snapshot",
       "totalSnaps": "Total snapshots",
       "orphans": "Orphans",
       "clusters": "Ceph clusters",
-      "searchPlaceholder": "Search cluster, pool, image, snap, VMID…",
+      "searchPlaceholder": "Search cluster, pool, image, snap, VMID, VM name…",
       "allClusters": "All clusters",
       "allStatuses": "All statuses",
       "activeJobs": "Active jobs",
@@ -2926,6 +2946,7 @@
       "activeSource": "Source",
       "activeTarget": "Target",
       "orphan": "Orphan",
+      "cannotDeleteActive": "Cannot delete: snapshot is in use by an active replication job",
       "viewDetails": "View details",
       "none": "No mirror snapshots",
       "noneDesc": "No mirror-* snapshots were found across your Ceph clusters.",
@@ -2984,6 +3005,9 @@
       "volume": "Volume",
       "lastSync": "Last sync",
       "nextSync": "Next sync",
+      "deleteConfirmTitle": "Delete replication job",
+      "deleteConfirmDesc": "This will remove the replication job and its local history. VMs and their disks are not touched.",
+      "deleteOrphansNote": "Mirror-* RBD snapshots on source and target are NOT removed automatically. Open the Snapshots tab after deletion to review and purge the resulting orphans.",
       "source": "Source",
       "target": "Target",
       "schedule": "Schedule",

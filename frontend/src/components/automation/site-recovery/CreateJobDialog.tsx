@@ -6,14 +6,15 @@ import useSWR from 'swr'
 
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, InputAdornment, MenuItem, Select, Stack,
+  FormControlLabel, InputAdornment, LinearProgress, MenuItem, Select, Stack,
   TextField, ToggleButton, ToggleButtonGroup, Typography
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
-import type { CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
+import type { BandwidthWindow, CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
+import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [vmidPrefix, setVmidPrefix] = useState<number>(0)
   const [installPv, setInstallPv] = useState(true)
+  const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
 
   // Ceph VM IDs for the source cluster (only VMs with disks on RBD storage)
   const { data: cephVMsData } = useSWR(
@@ -87,6 +89,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [sshError, setSshError] = useState('')
   const [sshSourceNode, setSshSourceNode] = useState('')
   const [sshTargetIP, setSshTargetIP] = useState('')
+
+  // Pre-flight checks state
+  type PreflightCheck = { id: string; status: 'ok' | 'warn' | 'error'; label: string; detail?: string }
+  const [preflight, setPreflight] = useState<{ checks: PreflightCheck[]; can_create: boolean } | null>(null)
+  const [preflightLoading, setPreflightLoading] = useState(false)
 
   // Auto-trigger SSH check when both clusters are selected
   const runSSHCheck = useCallback(async (src: string, tgt: string) => {
@@ -179,6 +186,48 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     })
   , [sourceVMs, vmSearch])
 
+  // Estimate total source disk size based on the selection (GB → bytes)
+  const estimatedSizeBytes = useMemo(() => {
+    if (selectionMode === 'vms') {
+      return selectedVMs.reduce((sum, vmid) => sum + (cephVMMap.get(vmid) || 0), 0) * 1024 * 1024 * 1024
+    }
+    if (selectedTags.length === 0) return 0
+    const matched = new Set<number>()
+    for (const vm of sourceVMs) {
+      if (vm.tags?.some(tag => selectedTags.includes(tag))) matched.add(vm.vmid)
+    }
+    let total = 0
+    matched.forEach(vmid => { total += cephVMMap.get(vmid) || 0 })
+    return total * 1024 * 1024 * 1024
+  }, [selectionMode, selectedVMs, selectedTags, sourceVMs, cephVMMap])
+
+  // Pre-flight checks run once source/target/pool are chosen
+  const runPreflight = useCallback(async (src: string, tgt: string, pool: string, sizeBytes: number) => {
+    if (!src || !tgt || !pool) {
+      setPreflight(null)
+      return
+    }
+    setPreflightLoading(true)
+    try {
+      const res = await fetch('/api/v1/orchestrator/replication/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_cluster: src, target_cluster: tgt, target_pool: pool, estimated_size_bytes: sizeBytes }),
+      })
+      if (!res.ok) { setPreflight(null); return }
+      const data = await res.json()
+      setPreflight(data)
+    } catch {
+      setPreflight(null)
+    } finally {
+      setPreflightLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    runPreflight(sourceCluster, targetCluster, targetPool, estimatedSizeBytes)
+  }, [sourceCluster, targetCluster, targetPool, estimatedSizeBytes, runPreflight])
+
   // Fetch Ceph pools for the selected target cluster
   const { data: cephData, isLoading: cephLoading } = useSWR(
     targetCluster ? `/api/v1/connections/${targetCluster}/ceph` : null,
@@ -226,6 +275,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       target_cluster: targetCluster,
       target_pool: targetPool,
       rate_limit_mbps: 0,
+      bandwidth_windows: bandwidthWindows.length > 0 ? bandwidthWindows : undefined,
       vmid_prefix: vmidPrefix || undefined,
       install_pv: installPv || undefined,
       network_mapping: {},
@@ -258,6 +308,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     })
     setVmidPrefix(0)
     setInstallPv(true)
+    setBandwidthWindows([])
     setVmSearch('')
     setSshCheck('idle')
     setSshError('')
@@ -266,7 +317,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   const hasSelection = selectionMode === 'vms' ? selectedVMs.length > 0 : selectedTags.length > 0
   const scheduleValid = scheduleValue.mode === 'rpo' || scheduleValue.scheduleSpec !== null
-  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success' && scheduleValid
+  const preflightOk = !preflight || preflight.can_create
+  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success' && scheduleValid && preflightOk
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
@@ -482,9 +534,74 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 </Alert>
               )}
               {sshCheck === 'success' && (
-                <Alert severity='success'>
-                  {t('siteRecovery.createJob.sshSuccess', { source: sshSourceNode, target: sshTargetIP })}
-                </Alert>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 1,
+                    border: 1,
+                    borderColor: 'success.main',
+                    bgcolor: theme => `${theme.palette.success.main}14`, // 8% opacity
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                  }}
+                >
+                  {/* Source node */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                    <i className='ri-server-line' style={{ fontSize: 22, opacity: 0.75 }} />
+                    <Typography variant='caption' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.7rem', fontWeight: 600, mt: 0.25, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      {sshSourceNode}
+                    </Typography>
+                    <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.6rem' }}>
+                      {t('siteRecovery.protection.source')}
+                    </Typography>
+                  </Box>
+
+                  {/* Animated link with check in the middle */}
+                  <Box sx={{ flex: 2, display: 'flex', alignItems: 'center', gap: 0.75, position: 'relative', minWidth: 0 }}>
+                    <Box sx={{
+                      flex: 1, height: 2, borderRadius: 1,
+                      background: theme => `repeating-linear-gradient(90deg, ${theme.palette.success.main} 0 6px, transparent 6px 12px)`,
+                      backgroundSize: '12px 2px',
+                      animation: 'sshFlow 1.2s linear infinite',
+                      '@keyframes sshFlow': {
+                        '0%': { backgroundPosition: '0 0' },
+                        '100%': { backgroundPosition: '12px 0' },
+                      },
+                    }} />
+                    <Box sx={{
+                      width: 26, height: 26, borderRadius: '50%',
+                      bgcolor: 'success.main', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: theme => `0 0 0 4px ${theme.palette.success.main}33`,
+                      animation: 'sshPulse 2s ease-in-out infinite',
+                      '@keyframes sshPulse': {
+                        '0%, 100%': { boxShadow: theme => `0 0 0 4px ${theme.palette.success.main}33` },
+                        '50%': { boxShadow: theme => `0 0 0 8px ${theme.palette.success.main}1a` },
+                      },
+                    }}>
+                      <i className='ri-check-line' style={{ fontSize: 16 }} />
+                    </Box>
+                    <Box sx={{
+                      flex: 1, height: 2, borderRadius: 1,
+                      background: theme => `repeating-linear-gradient(90deg, ${theme.palette.success.main} 0 6px, transparent 6px 12px)`,
+                      backgroundSize: '12px 2px',
+                      animation: 'sshFlow 1.2s linear infinite',
+                    }} />
+                  </Box>
+
+                  {/* Target IP */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                    <i className='ri-server-line' style={{ fontSize: 22, opacity: 0.75 }} />
+                    <Typography variant='caption' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.7rem', fontWeight: 600, mt: 0.25, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      {sshTargetIP}
+                    </Typography>
+                    <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.6rem' }}>
+                      {t('siteRecovery.protection.target')}
+                    </Typography>
+                  </Box>
+                </Box>
               )}
               {sshCheck === 'failed' && (
                 <Alert
@@ -518,25 +635,84 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               startAdornment={cephLoading ? <CircularProgress size={16} sx={{ mr: 1 }} /> : undefined}
             >
               <MenuItem value='' disabled>{t('siteRecovery.createJob.selectPool')}</MenuItem>
-              {cephPools.map((p: any) => (
-                <MenuItem key={p.name} value={p.name}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                    <i className='ri-database-2-line' style={{ fontSize: 16, opacity: 0.7, flexShrink: 0 }} />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                      <span>{p.name}</span>
-                      {p.maxAvail > 0 && (
-                        <Typography variant='caption' sx={{ color: 'text.secondary', ml: 2 }}>
-                          {p.bytesUsedFormatted} used &middot; {p.maxAvailFormatted} avail
-                        </Typography>
-                      )}
+              {cephPools.map((p: any) => {
+                // Ceph's percent_used is usually a 0..1 float; some versions return 0..100.
+                const rawPct = typeof p.percentUsed === 'number' ? p.percentUsed : 0
+                const pct = rawPct <= 1 ? Math.round(rawPct * 100) : Math.min(100, Math.round(rawPct))
+                const hasStats = (p.bytesUsed || 0) > 0 || (p.maxAvail || 0) > 0
+                const barColor = pct >= 90 ? 'error' : pct >= 75 ? 'warning' : 'primary'
+                return (
+                  <MenuItem key={p.name} value={p.name}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, width: '100%', py: 0.5 }}>
+                      <img src='/images/ceph-logo.svg' alt='Ceph' width={16} height={16} style={{ flexShrink: 0 }} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1 }}>
+                          <span>{p.name}</span>
+                          {hasStats && (
+                            <Typography variant='caption' sx={{ color: 'text.secondary', fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem' }}>
+                              {p.bytesUsedFormatted} used{(p.maxAvail || 0) > 0 ? ` · ${p.maxAvailFormatted} free` : ''}
+                            </Typography>
+                          )}
+                        </Box>
+                        {hasStats && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                            <LinearProgress
+                              variant='determinate'
+                              value={pct}
+                              color={barColor as any}
+                              sx={{ flex: 1, height: 4, borderRadius: 2 }}
+                            />
+                            <Typography variant='caption' sx={{ color: `${barColor}.main`, fontWeight: 600, minWidth: 30, textAlign: 'right', fontSize: '0.65rem' }}>
+                              {pct}%
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
                     </Box>
-                  </Box>
-                </MenuItem>
-              ))}
+                  </MenuItem>
+                )
+              })}
             </Select>
           </Box>
 
+          {/* Pre-flight checks — run once source/target/pool are selected */}
+          {(preflight || preflightLoading) && (
+            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <i className='ri-shield-check-line' style={{ opacity: 0.7 }} />
+                <Typography variant='subtitle2'>{t('siteRecovery.preflight.title')}</Typography>
+                {preflightLoading && <CircularProgress size={14} sx={{ ml: 'auto' }} />}
+              </Box>
+              <Stack spacing={0.5}>
+                {(preflight?.checks || []).map(c => {
+                  const color = c.status === 'ok' ? 'success.main' : c.status === 'warn' ? 'warning.main' : 'error.main'
+                  const icon = c.status === 'ok' ? 'ri-check-line' : c.status === 'warn' ? 'ri-error-warning-line' : 'ri-close-circle-line'
+                  return (
+                    <Box key={c.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <i className={icon} style={{ color: `var(--mui-palette-${c.status === 'ok' ? 'success' : c.status === 'warn' ? 'warning' : 'error'}-main)`, fontSize: 16, marginTop: 2 }} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant='body2' sx={{ fontWeight: 500 }}>{t(`siteRecovery.preflight.checks.${c.id}`)}</Typography>
+                        {c.detail && (
+                          <Typography variant='caption' sx={{ color, display: 'block', lineHeight: 1.3 }}>
+                            {c.detail}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )
+                })}
+              </Stack>
+              {preflight && !preflight.can_create && (
+                <Alert severity='error' sx={{ mt: 1.5, py: 0.5 }} icon={false}>
+                  <Typography variant='caption'>{t('siteRecovery.preflight.blocked')}</Typography>
+                </Alert>
+              )}
+            </Box>
+          )}
+
           <ScheduleBuilder value={scheduleValue} onChange={setScheduleValue} />
+
+          <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={0} />
 
           {/* VMID Prefix */}
           <Box>

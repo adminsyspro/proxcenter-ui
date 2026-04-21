@@ -2868,12 +2868,32 @@
       "emergencyDR": "Notfall-DR",
       "simulation": "Simulation"
     },
+    "preflight": {
+      "title": "Vorabprüfungen",
+      "blocked": "Kritische Prüfungen fehlgeschlagen. Beheben Sie die Probleme oben, bevor Sie den Auftrag anlegen.",
+      "checks": {
+        "source_health": "Ceph-Zustand Quelle",
+        "target_health": "Ceph-Zustand Ziel",
+        "target_space": "Kapazität Zielpool"
+      }
+    },
+    "bandwidth": {
+      "title": "Bandbreitenfenster",
+      "help": "Überschreibt die statische Bandbreitenbegrenzung ({rate} Mbps) an bestimmten Tagen / Stunden. Das erste passende Fenster gewinnt; außerhalb der Fenster gilt die statische Rate.",
+      "empty": "Kein Fenster konfiguriert. Die statische Rate gilt durchgehend.",
+      "addWindow": "Fenster hinzufügen",
+      "startHour": "Ab",
+      "endHour": "Bis",
+      "rate": "Rate",
+      "unlimited": "unbegrenzt",
+      "preview": "{days} · {start}:00 → {end}:00 · {rate}"
+    },
     "snapshots": {
       "title": "Snapshot",
       "totalSnaps": "Snapshots gesamt",
       "orphans": "Verwaist",
       "clusters": "Ceph-Cluster",
-      "searchPlaceholder": "Suche Cluster, Pool, Image, Snap, VMID…",
+      "searchPlaceholder": "Suche Cluster, Pool, Image, Snap, VMID, VM-Name…",
       "allClusters": "Alle Cluster",
       "allStatuses": "Alle Status",
       "activeJobs": "Aktive Jobs",
@@ -2894,6 +2914,7 @@
       "activeSource": "Quelle",
       "activeTarget": "Ziel",
       "orphan": "Verwaist",
+      "cannotDeleteActive": "Löschen nicht möglich: Snapshot wird von einem aktiven Replikationsauftrag verwendet",
       "viewDetails": "Details anzeigen",
       "none": "Keine Mirror-Snapshots",
       "noneDesc": "Keine mirror-* Snapshots auf den Ceph-Clustern gefunden.",
@@ -2952,6 +2973,9 @@
       "volume": "Volume",
       "lastSync": "Letzte Synchronisierung",
       "nextSync": "Nächste Synchronisierung",
+      "deleteConfirmTitle": "Replikationsauftrag löschen",
+      "deleteConfirmDesc": "Der Replikationsauftrag und sein lokaler Verlauf werden entfernt. VMs und deren Festplatten bleiben unberührt.",
+      "deleteOrphansNote": "Mirror-* RBD-Snapshots auf Quelle und Ziel werden NICHT automatisch entfernt. Öffnen Sie nach dem Löschen den Snapshots-Tab, um die entstehenden verwaisten Snapshots zu prüfen und zu bereinigen.",
       "source": "Quelle",
       "target": "Ziel",
       "schedule": "Zeitplan",

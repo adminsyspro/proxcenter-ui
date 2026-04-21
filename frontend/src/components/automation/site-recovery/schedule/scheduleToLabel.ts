@@ -23,7 +23,7 @@ function baseLabel(spec: ScheduleSpec, t: TFn): string {
       })
     }
     case 'daily': {
-      const time = spec.times.slice().sort().join(', ')
+      const time = spec.times.slice().sort((a, b) => a.localeCompare(b)).join(', ')
       if (spec.weekdays.length === 7) {
         return t('siteRecovery.schedule.labels.dailyAllDays', { time })
       }

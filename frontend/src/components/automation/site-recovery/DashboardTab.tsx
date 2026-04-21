@@ -608,7 +608,7 @@ const PairRow = ({ source, target, jobs, sitesMap, connectionsMap, t }: {
         {errors.length > 0 && (
           <Chip size='small' icon={<i className='ri-error-warning-line' style={{ fontSize: 12 }} />} label={errors.length} color='error' sx={{ height: 18, fontSize: '0.6rem' }} />
         )}
-        {latestSync && (
+        {latestSync !== null && (
           <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem', minWidth: { xs: 40, sm: 60 }, textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
             {timeAgo(new Date(latestSync).toISOString())}
           </Typography>
@@ -623,7 +623,6 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
 }) => {
   const theme = useTheme()
   const [showAll, setShowAll] = useState(false)
-  if (!sites || sites.length === 0) return null
 
   // Detect source→target pairs from jobs (a "replication couple")
   const pairs = useMemo(() => {
@@ -639,7 +638,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
 
   const sitesMap = useMemo(() => {
     const m = new Map<string, SiteInfo>()
-    for (const s of sites) m.set(s.cluster_id, s)
+    for (const s of (sites || [])) m.set(s.cluster_id, s)
     return m
   }, [sites])
 
@@ -648,6 +647,29 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
     for (const c of (connections || [])) m.set(c.id, c.name)
     return m
   }, [connections])
+
+  // Aggregated link stats across syncing jobs (used by the single-pair view below)
+  const stats = useMemo(() => {
+    const list = jobs || []
+    const syncing = list.filter(j => j.status === 'syncing')
+    const totalBps = syncing.reduce((sum, j) => sum + (j.throughput_bps || 0), 0)
+    let latestSync: number | null = null
+    for (const j of list) {
+      if (j.last_sync) {
+        const ts = new Date(j.last_sync).getTime()
+        if (latestSync === null || ts > latestSync) latestSync = ts
+      }
+    }
+    return {
+      activeCount: syncing.length,
+      totalJobs: list.length,
+      totalBps,
+      latestSync,
+    }
+  }, [jobs])
+
+  // Early exit AFTER all hooks to respect the rules-of-hooks
+  if (!sites || sites.length === 0) return null
 
   // Compact pair-by-pair list when 2+ pairs exist (MSP / multi-couple scaling)
   if (pairs.length >= 2) {
@@ -688,26 +710,6 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
 
   const primary = sites.find(s => s.role === 'primary')
   const dr = sites.find(s => s.role === 'dr')
-
-  // Aggregated link stats (across syncing jobs)
-  const stats = useMemo(() => {
-    const list = jobs || []
-    const syncing = list.filter(j => j.status === 'syncing')
-    const totalBps = syncing.reduce((sum, j) => sum + (j.throughput_bps || 0), 0)
-    let latestSync: number | null = null
-    for (const j of list) {
-      if (j.last_sync) {
-        const ts = new Date(j.last_sync).getTime()
-        if (latestSync === null || ts > latestSync) latestSync = ts
-      }
-    }
-    return {
-      activeCount: syncing.length,
-      totalJobs: list.length,
-      totalBps,
-      latestSync,
-    }
-  }, [jobs])
 
   const linkColor = connectivity === 'connected' ? theme.palette.success.main
     : connectivity === 'degraded' ? theme.palette.warning.main
@@ -807,7 +809,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
                   sx={{ height: 20, fontSize: '0.65rem' }}
                 />
               )}
-              {stats.latestSync && (
+              {stats.latestSync !== null && (
                 <Chip
                   size='small'
                   icon={<i className='ri-refresh-line' style={{ fontSize: 12 }} />}

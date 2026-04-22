@@ -117,7 +117,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
               <Typography variant='body2'>
                 <b>Source → Target:</b> {connName(job.source_cluster)} → {connName(job.target_cluster)}
               </Typography>
-              <Typography variant='body2'>
+              <Typography variant='body2' component='div'>
                 <b>Pool:</b> <Chip label={job.target_pool} size='small' variant='outlined' />
               </Typography>
               {job.vmid_prefix > 0 && (

@@ -476,18 +476,19 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
             console.warn(`[task-api] Could not auto-unlock VM ${vmid}:`, unlockErr?.message)
           }
 
-          // Delete source VM only if requested
+          // Delete source VM only if requested.
+          // PVE rejects a body on DELETE ("Unexpected content for method 'DELETE'"),
+          // so purge/destroy-unreferenced-disks must travel as query params.
           if (deleteSource) {
             try {
-              await pveFetch(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}`, {
+              await pveFetch(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}?purge=1&destroy-unreferenced-disks=1`, {
                 method: 'DELETE',
-                body: new URLSearchParams({ purge: '1', 'destroy-unreferenced-disks': '1' }).toString(),
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               })
               console.log(`[task-api] Deleted source VM ${vmid} on ${node} after clean cross-cluster migration`)
               message = 'Migration completed, source VM deleted'
             } catch (deleteErr: any) {
               console.warn(`[task-api] Could not delete source VM ${vmid}:`, deleteErr?.message)
+              message = 'Migration completed (source VM could not be deleted, please remove manually)'
             }
           }
         }
@@ -526,10 +527,8 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
 
             if (deleteSource && unlocked) {
               try {
-                await pveFetch(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}`, {
+                await pveFetch(connection, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}?purge=1&destroy-unreferenced-disks=1`, {
                   method: 'DELETE',
-                  body: new URLSearchParams({ purge: '1', 'destroy-unreferenced-disks': '1' }).toString(),
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 })
                 console.log(`[task-api] Deleted source VM ${vmid} on ${node} after cross-cluster migration`)
                 message = 'Migration completed, source VM deleted'

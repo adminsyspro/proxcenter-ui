@@ -121,14 +121,47 @@ export async function POST(
       }
     }
 
-    // 5. Vérifier CPU type host
-    if (vmConfig.cpu && vmConfig.cpu.includes('host')) {
-      issues.push({
-        type: 'warning',
-        code: 'CPU_HOST',
-        message: 'VM uses CPU type "host"',
-        details: 'Live migration may fail if target CPU is different. Consider using a generic CPU type.'
-      })
+    // 5. Vérifier CPU type host / max — live-migration cross-CPU crash le guest
+    // Quand le cputype est "host" (ou "max"), qemu expose le CPU physique réel
+    // de l'hôte au guest. En live migration vers un host de modèle CPU différent,
+    // le contrat CPUID change au moment du state handover et qemu exit proprement
+    // sur la cible (même symptôme qu'un vMotion sans EVC). La seule vraie parade
+    // est un cputype nommé portable (ex: x86-64-v3).
+    const cpuTypeRaw = (vmConfig.cpu ? String(vmConfig.cpu).split(',')[0] : '').trim().toLowerCase()
+    if (cpuTypeRaw === 'host' || cpuTypeRaw === 'max') {
+      let sourceCpuModel: string | undefined
+      let targetCpuModel: string | undefined
+      try {
+        const srcStatus = await pveFetch<any>(sourceConn, `/nodes/${node}/status`)
+        sourceCpuModel = srcStatus?.cpuinfo?.model?.trim()
+      } catch {
+        // can't read source status — degrade to a warning below
+      }
+      try {
+        const tgtStatus = await pveFetch<any>(targetConn, `/nodes/${targetNode}/status`)
+        targetCpuModel = tgtStatus?.cpuinfo?.model?.trim()
+      } catch {
+        // can't read target status — degrade to a warning below
+      }
+
+      if (sourceCpuModel && targetCpuModel && sourceCpuModel !== targetCpuModel) {
+        issues.push({
+          type: 'error',
+          code: 'CPU_HOST_MISMATCH',
+          message: `VM uses CPU type "${cpuTypeRaw}" and source/target CPU models differ`,
+          details: `Source: ${sourceCpuModel} — Target: ${targetCpuModel}. Live migration will crash the VM on the target right after state transfer (same mechanism as vMotion without EVC). Set the VM CPU type to a portable named type (e.g. "x86-64-v3") on the source and cold-reboot the VM, then retry the migration.`
+        })
+      } else {
+        const matchDetail = sourceCpuModel && targetCpuModel
+          ? `Source and target CPUs match (${sourceCpuModel}), so live migration should work — but any difference in microcode, flags or errata between the two hosts can still crash the guest at handover.`
+          : `Could not verify source or target CPU model to compare them. Live migration will crash the VM if the physical CPUs differ.`
+        issues.push({
+          type: 'warning',
+          code: 'CPU_HOST',
+          message: `VM uses CPU type "${cpuTypeRaw}"`,
+          details: `${matchDetail} Consider switching the VM CPU type to a portable named type like "x86-64-v3" before migrating.`
+        })
+      }
     }
 
     // ========== VÉRIFICATIONS CIBLE ==========

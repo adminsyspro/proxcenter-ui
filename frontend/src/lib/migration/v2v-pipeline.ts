@@ -591,7 +591,7 @@ function buildSynthesizedLibvirtXml(
   // sdaa/sdab but no real VM ever has that many. Cap defensively.
   const maxDisks = Math.min(diskFilePaths.length, 26)
   const diskNodes = diskFilePaths.slice(0, maxDisks).map((p, i) => {
-    const dev = `sd${String.fromCharCode(0x61 + i)}` // 0x61 = 'a'
+    const dev = `sd${String.fromCodePoint(0x61 + i)}` // 0x61 = 'a'
     return (
       `    <disk type='file' device='disk'>\n` +
       `      <driver name='qemu' type='vmdk'/>\n` +

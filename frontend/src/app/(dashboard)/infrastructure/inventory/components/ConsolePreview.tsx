@@ -20,7 +20,7 @@ function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
     try {
       const binary = atob(b64Data)
       const bytes = new Uint8Array(binary.length)
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.codePointAt(i) ?? 0
 
       // Parse PPM P6 header: "P6\n<width> <height>\n<maxval>\n"
       let offset = 0
@@ -29,7 +29,7 @@ function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
         while (offset < bytes.length) {
           const ch = bytes[offset++]
           if (ch === 10) break // \n
-          line += String.fromCharCode(ch)
+          line += String.fromCodePoint(ch)
         }
         // Skip comment lines
         if (line.startsWith('#')) return readLine()

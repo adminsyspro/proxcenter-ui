@@ -2291,9 +2291,8 @@ return
                   which surprises users whose VM wasn't actually ready for shutdown. */}
               {migType === 'cold' && (esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn') && (
                 <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
-                  Offline migration requires the source VM to be powered off. Please stop
-                  <strong> {esxiMigrateVm.name || esxiMigrateVm.vmid}</strong> before starting
-                  the migration, or switch to Live migration.
+                  Offline migration requires the source VM to be powered off. Please stop{' '}
+                  <strong>{esxiMigrateVm.name || esxiMigrateVm.vmid}</strong> before starting the migration, or switch to Live migration.
                 </Alert>
               )}
               {/* Live-on-stopped warning: Live migration snapshots the running VM so
@@ -3325,7 +3324,7 @@ return
                       Live migration of Windows guests requires VMware Tools installed AND running
                       (VSS quiesce is the only way to capture a clean NTFS snapshot while the VM keeps running).
                       The following selected Windows VM(s) do not have Tools running. Install / repair Tools
-                      in each guest and retry, or switch the batch to Offline migration (with
+                      in each guest and retry, or switch the batch to Offline migration (with{' '}
                       <code>powercfg /h off</code> + <code>shutdown /s /f /t 0</code> on each guest):
                       <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
                         {winNoTools.map((vm: any) => (

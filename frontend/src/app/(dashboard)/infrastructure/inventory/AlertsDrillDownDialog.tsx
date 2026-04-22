@@ -241,7 +241,7 @@ export default function AlertsDrillDownDialog({
                   {t('inventory.alertsDialog.realAlertsSection')}
                 </Typography>
                 <List dense disablePadding>
-                  {[...criticalActive, ...warningActive].map(renderActiveAlert)}
+                  {[...criticalActive, ...warningActive].map((alert, idx) => renderActiveAlert(alert, idx))}
                 </List>
               </Box>
             )}
@@ -254,7 +254,7 @@ export default function AlertsDrillDownDialog({
                   {t('inventory.alertsDialog.predictiveAlertsSection')}
                 </Typography>
                 <List dense disablePadding>
-                  {[...criticalPred, ...warningPred].map(renderPredictiveAlert)}
+                  {[...criticalPred, ...warningPred].map((alert, idx) => renderPredictiveAlert(alert, idx))}
                 </List>
               </Box>
             )}

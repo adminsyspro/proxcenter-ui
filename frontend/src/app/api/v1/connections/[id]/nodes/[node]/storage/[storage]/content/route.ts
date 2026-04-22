@@ -23,9 +23,14 @@ export async function GET(
     const contentType = url.searchParams.get("content") || ""
 
     const query = contentType ? `?content=${encodeURIComponent(contentType)}` : ""
+    // NFS/SMB stores enumerate every file and can be slow on large shares.
+    // This endpoint is user-triggered (click on storage), not polled, so we
+    // can afford a generous timeout. Default 8s is too short for big NFS.
     const data = await pveFetch<any[]>(
       conn,
-      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content${query}`
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content${query}`,
+      {},
+      { timeoutMs: 30_000 }
     )
 
     return NextResponse.json({ data: data || [] })

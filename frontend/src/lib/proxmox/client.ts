@@ -39,22 +39,22 @@ export type ProxmoxClientOptions = {
 function isHardNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
   const codes = ["ECONNREFUSED", "EHOSTUNREACH", "ECONNRESET", "ENETUNREACH", "ENOTFOUND"]
-  const msg = err.message || ""
-  const errCode = (err as any).code || ""
+  const msg = String(err.message || "")
+  const errCode = String((err as any).code || "")
   const cause = (err as any).cause
-  const causeCode = cause?.code || cause?.message || ""
+  const causeCode = String(cause?.code || cause?.message || "")
   return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
 /** Timeout errors - node may just be slow, not dead */
 function isTimeoutError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
-  if (err.name === "TimeoutError" || err.name === "ConnectTimeoutError") return true
+  if (err.name === "TimeoutError" || err.name === "ConnectTimeoutError" || err.name === "AbortError") return true
   const codes = ["ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"]
-  const msg = err.message || ""
-  const errCode = (err as any).code || ""
+  const msg = String(err.message || "")
+  const errCode = String((err as any).code || "")
   const cause = (err as any).cause
-  const causeCode = cause?.code || cause?.message || ""
+  const causeCode = String(cause?.code || cause?.message || "")
   return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
@@ -128,10 +128,13 @@ async function updateConnectionBaseUrl(connId: string, newUrl: string): Promise<
 export async function pveFetch<T>(
   opts: ProxmoxClientOptions,
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  fetchOpts: { timeoutMs?: number } = {}
 ): Promise<T> {
   if (!opts?.baseUrl) throw new Error("pveFetch: missing baseUrl")
   if (!opts?.apiToken) throw new Error("pveFetch: missing apiToken")
+
+  const primaryTimeoutMs = fetchOpts.timeoutMs ?? 8_000
 
   const dispatcher = opts.insecureDev
     ? getInsecureAgent()
@@ -229,7 +232,7 @@ export async function pveFetch<T>(
 
     // OPEN: use cached failover
     try {
-      const result = await doRequest(cachedFailoverUrl)
+      const result = await doRequest(cachedFailoverUrl, primaryTimeoutMs)
       return result
     } catch (cachedErr) {
       if (!isNetworkError(cachedErr)) {
@@ -250,7 +253,7 @@ export async function pveFetch<T>(
   let primaryErr: unknown
   if (!cachedFailoverUrl) {
     try {
-      const result = await doRequest(opts.baseUrl)
+      const result = await doRequest(opts.baseUrl, primaryTimeoutMs)
       if (opts.id) resetFailures(opts.id)
       return result
     } catch (err) {
@@ -365,7 +368,7 @@ export async function pveFetch<T>(
       // Don't reset failures — keep counter high so parallel requests
       // that miss the cache immediately trigger failover instead of
       // waiting for the threshold again.
-      return doRequest(newUrl, 8_000, true)
+      return doRequest(newUrl, primaryTimeoutMs, true)
     }
 
     // All nodes failed

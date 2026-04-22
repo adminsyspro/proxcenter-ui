@@ -12,6 +12,7 @@ import { authOptions } from "@/lib/auth/config"
 import { filterVmsByPermission, filterNodesByPermission } from "@/lib/rbac"
 import { alertsApi } from "@/lib/orchestrator/client"
 import { demoResponse } from "@/lib/demo/demo-api"
+import { getDb } from "@/lib/db/sqlite"
 
 export const runtime = "nodejs"
 
@@ -122,8 +123,8 @@ export async function GET(req: Request) {
     const userId = session.user.id
     const tenantId = (session as any).user?.tenantId || 'default'
 
-    // Thresholds configurés par l'utilisateur (via Operations > Alerts)
-    // Fallback aux valeurs par défaut si l'orchestrator est indisponible
+    // Thresholds configurés par l'utilisateur (via Settings > Alert thresholds)
+    // Stockés localement en SQLite, fonctionne sans orchestrator (Community + Enterprise).
     const thresholds = {
       cpu_warning: 80,
       cpu_critical: 90,
@@ -132,21 +133,20 @@ export async function GET(req: Request) {
       storage_warning: 80,
       storage_critical: 90,
     }
-    if (process.env.ORCHESTRATOR_URL) {
-      try {
-        const thResp = await alertsApi.getThresholds()
-        const thData = thResp?.data as any
-        if (thData && typeof thData === 'object') {
-          if (typeof thData.cpu_warning === 'number') thresholds.cpu_warning = thData.cpu_warning
-          if (typeof thData.cpu_critical === 'number') thresholds.cpu_critical = thData.cpu_critical
-          if (typeof thData.memory_warning === 'number') thresholds.memory_warning = thData.memory_warning
-          if (typeof thData.memory_critical === 'number') thresholds.memory_critical = thData.memory_critical
-          if (typeof thData.storage_warning === 'number') thresholds.storage_warning = thData.storage_warning
-          if (typeof thData.storage_critical === 'number') thresholds.storage_critical = thData.storage_critical
+    try {
+      const row = getDb()
+        .prepare('SELECT value FROM settings WHERE key = ? AND tenant_id = ?')
+        .get('alert_thresholds', tenantId) as { value: string } | undefined
+      if (row?.value) {
+        const stored = JSON.parse(row.value)
+        if (stored && typeof stored === 'object') {
+          for (const k of ['cpu_warning', 'cpu_critical', 'memory_warning', 'memory_critical', 'storage_warning', 'storage_critical'] as const) {
+            if (typeof stored[k] === 'number') thresholds[k] = stored[k]
+          }
         }
-      } catch {
-        // Orchestrator indisponible, on garde les défauts
       }
+    } catch {
+      // Pas de config stockée, on garde les défauts
     }
 
     // Récupérer toutes les connexions (PVE et PBS) en une seule requête

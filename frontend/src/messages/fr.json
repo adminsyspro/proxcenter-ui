@@ -1825,6 +1825,12 @@
     "saveChanges": "Enregistrer les modifications",
     "appearance": "Apparence",
     "appearanceDesc": "Personnalisez l'apparence globale de ProxCenter. Les modifications sont enregistrées automatiquement.",
+    "alertThresholds": {
+      "title": "Seuils d'alertes",
+      "description": "Définissez les niveaux d'utilisation CPU, RAM et stockage déclenchant les alertes warning et critical sur le dashboard.",
+      "saved": "Seuils enregistrés",
+      "saveError": "Échec de l'enregistrement des seuils"
+    },
     "displayMode": "Mode d'affichage",
     "light": "Clair",
     "dark": "Sombre",

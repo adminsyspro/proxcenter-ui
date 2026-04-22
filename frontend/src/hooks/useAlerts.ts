@@ -25,8 +25,8 @@ export function useAlertRules(enabled: boolean) {
   )
 }
 
-export function useAlertThresholds(enabled: boolean) {
+export function useAlertThresholds(enabled: boolean = true) {
   return useSWRFetch(
-    enabled ? '/api/v1/orchestrator/alerts/thresholds' : null
+    enabled ? '/api/v1/settings/alerts/thresholds' : null
   )
 }

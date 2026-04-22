@@ -1825,6 +1825,12 @@
     "saveChanges": "Save changes",
     "appearance": "Appearance",
     "appearanceDesc": "Customize the overall appearance of ProxCenter. Changes are saved automatically.",
+    "alertThresholds": {
+      "title": "Alert thresholds",
+      "description": "Set the usage levels at which CPU, RAM and storage trigger warning and critical alerts on the dashboard.",
+      "saved": "Thresholds saved",
+      "saveError": "Failed to save thresholds"
+    },
     "displayMode": "Display mode",
     "light": "Light",
     "dark": "Dark",

@@ -1793,6 +1793,12 @@
     "saveChanges": "Änderungen speichern",
     "appearance": "Darstellung",
     "appearanceDesc": "Passen Sie das Erscheinungsbild von ProxCenter an. Änderungen werden automatisch gespeichert.",
+    "alertThresholds": {
+      "title": "Warnungs-Schwellenwerte",
+      "description": "Legen Sie die CPU-, RAM- und Speicher-Auslastungsniveaus fest, die auf dem Dashboard Warnungen und kritische Meldungen auslösen.",
+      "saved": "Schwellenwerte gespeichert",
+      "saveError": "Fehler beim Speichern der Schwellenwerte"
+    },
     "displayMode": "Anzeigemodus",
     "light": "Hell",
     "dark": "Dunkel",

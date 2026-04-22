@@ -83,6 +83,11 @@ const TenantsTab = dynamic(() => import('@/components/settings/TenantsTab'), {
   loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
 })
 
+const AlertThresholdsTab = dynamic(() => import('@/components/settings/AlertThresholdsTab'), {
+  ssr: false,
+  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+})
+
 /* ==================== Utility ==================== */
 
 function MainTabPanel({ value, index, children }) {
@@ -2586,11 +2591,12 @@ export default function SettingsPage() {
     return hasFeature(tab.requiredFeature)
   }
 
-  const allTabNames = ['connections', 'appearance', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'tenants']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'tenants']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab },
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
+    { label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP },
     { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC },

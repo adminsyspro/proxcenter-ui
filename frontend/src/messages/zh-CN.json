@@ -1796,6 +1796,12 @@
     "saveChanges": "保存更改",
     "appearance": "外观",
     "appearanceDesc": "自定义 ProxCenter 的整体外观。更改会自动保存。",
+    "alertThresholds": {
+      "title": "告警阈值",
+      "description": "设置 CPU、内存和存储的使用率水平，以触发仪表板上的警告和严重告警。",
+      "saved": "阈值已保存",
+      "saveError": "保存阈值失败"
+    },
     "displayMode": "显示模式",
     "light": "浅色",
     "dark": "深色",

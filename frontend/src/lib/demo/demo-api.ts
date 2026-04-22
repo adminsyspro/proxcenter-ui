@@ -539,8 +539,11 @@ const EXTRA_MOCKS: MockDataMap = {
       ],
     }
   },
-  'GET:/api/v1/orchestrator/alerts/thresholds': {
-    data: { cpu: 80, ram: 90, storage: 85, iowait: 30 },
+  'GET:/api/v1/settings/alerts/thresholds': {
+    cpu_warning: 80, cpu_critical: 90,
+    memory_warning: 80, memory_critical: 90,
+    storage_warning: 80, storage_critical: 90,
+    snapshot_max_age_days: 7,
   },
   get 'GET:/api/v1/audit'() {
     const actions = [

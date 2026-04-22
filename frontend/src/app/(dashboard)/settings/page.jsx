@@ -1575,6 +1575,15 @@ function LicenseTab() {
             </Box>
           </Box>
 
+          {licenseStatus?.is_nfr && (
+            <Chip
+              size='small'
+              color='warning'
+              label='NFR / Not For Resale'
+              sx={{ mb: 2, fontWeight: 600 }}
+            />
+          )}
+
           {isLicensed && licenseStatus.license_id && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, px: 1.5, py: 0.75, borderRadius: 1, bgcolor: 'action.hover' }}>
               <i className='ri-fingerprint-line' style={{ fontSize: 16, opacity: 0.5 }} />

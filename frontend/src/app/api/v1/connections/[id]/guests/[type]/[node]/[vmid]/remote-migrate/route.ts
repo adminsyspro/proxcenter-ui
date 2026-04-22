@@ -3,6 +3,8 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { watchMigrationAndCleanup } from "@/lib/migration/cross-cluster-watcher"
 
 export const runtime = "nodejs"
 
@@ -217,6 +219,25 @@ export async function POST(
       resourceId: vmid,
       details: { sourceNode: node, targetNode, targetCluster: targetConn.name, connectionId: id, online },
     })
+
+    // Fire-and-forget server-side watcher. Guarantees post-migration cleanup
+    // (SSH unlock + optional source VM delete) even if the user closes the
+    // browser tab, navigates away, or the tab is throttled in the background.
+    // tenantId must be captured here while the request session is alive.
+    if (typeof result === 'string' && result.startsWith('UPID:')) {
+      const tenantId = await getCurrentTenantId()
+      void watchMigrationAndCleanup({
+        connectionId: id,
+        tenantId,
+        sourceConn,
+        sourceNode: node,
+        vmid,
+        upid: result,
+        deleteSource,
+      }).catch(err => {
+        console.warn('[remote-migrate] background watcher failed:', String(err?.message || err).replace(/[\r\n]/g, ''))
+      })
+    }
 
     return NextResponse.json({
       success: true,

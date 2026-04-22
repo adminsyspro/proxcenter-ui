@@ -122,6 +122,33 @@ export async function GET(req: Request) {
     const userId = session.user.id
     const tenantId = (session as any).user?.tenantId || 'default'
 
+    // Thresholds configurés par l'utilisateur (via Operations > Alerts)
+    // Fallback aux valeurs par défaut si l'orchestrator est indisponible
+    const thresholds = {
+      cpu_warning: 80,
+      cpu_critical: 90,
+      memory_warning: 80,
+      memory_critical: 90,
+      storage_warning: 80,
+      storage_critical: 90,
+    }
+    if (process.env.ORCHESTRATOR_URL) {
+      try {
+        const thResp = await alertsApi.getThresholds()
+        const thData = thResp?.data as any
+        if (thData && typeof thData === 'object') {
+          if (typeof thData.cpu_warning === 'number') thresholds.cpu_warning = thData.cpu_warning
+          if (typeof thData.cpu_critical === 'number') thresholds.cpu_critical = thData.cpu_critical
+          if (typeof thData.memory_warning === 'number') thresholds.memory_warning = thData.memory_warning
+          if (typeof thData.memory_critical === 'number') thresholds.memory_critical = thData.memory_critical
+          if (typeof thData.storage_warning === 'number') thresholds.storage_warning = thData.storage_warning
+          if (typeof thData.storage_critical === 'number') thresholds.storage_critical = thData.storage_critical
+        }
+      } catch {
+        // Orchestrator indisponible, on garde les défauts
+      }
+    }
+
     // Récupérer toutes les connexions (PVE et PBS) en une seule requête
     const allConnections = await prisma.connection.findMany({
       orderBy: { createdAt: "desc" },
@@ -431,7 +458,7 @@ return null
         })
       }
 
-      if (node.memPct > 90) {
+      if (node.memPct > thresholds.memory_critical) {
         alerts.push({
           severity: 'crit',
           message: `Node ${node.name}: RAM critical (${node.memPct}%)`,
@@ -445,10 +472,10 @@ return null
           connId: node.connId,
           metric: 'ram',
           currentValue: node.memPct,
-          threshold: 90,
+          threshold: thresholds.memory_critical,
           time: new Date().toISOString()
         })
-      } else if (node.memPct > 80) {
+      } else if (node.memPct > thresholds.memory_warning) {
         alerts.push({
           severity: 'warn',
           message: `Node ${node.name}: RAM high (${node.memPct}%)`,
@@ -462,12 +489,12 @@ return null
           connId: node.connId,
           metric: 'ram',
           currentValue: node.memPct,
-          threshold: 80,
+          threshold: thresholds.memory_warning,
           time: new Date().toISOString()
         })
       }
 
-      if (node.cpuPct > 90) {
+      if (node.cpuPct > thresholds.cpu_critical) {
         alerts.push({
           severity: 'crit',
           message: `Node ${node.name}: CPU critical (${node.cpuPct}%)`,
@@ -481,10 +508,10 @@ return null
           connId: node.connId,
           metric: 'cpu',
           currentValue: node.cpuPct,
-          threshold: 90,
+          threshold: thresholds.cpu_critical,
           time: new Date().toISOString()
         })
-      } else if (node.cpuPct > 80) {
+      } else if (node.cpuPct > thresholds.cpu_warning) {
         alerts.push({
           severity: 'warn',
           message: `Node ${node.name}: CPU high (${node.cpuPct}%)`,
@@ -498,7 +525,7 @@ return null
           connId: node.connId,
           metric: 'cpu',
           currentValue: node.cpuPct,
-          threshold: 80,
+          threshold: thresholds.cpu_warning,
           time: new Date().toISOString()
         })
       }
@@ -545,7 +572,7 @@ return null
 
     // Alertes PBS
     for (const pbs of pbsServers) {
-      if (pbs.usagePct > 90) {
+      if (pbs.usagePct > thresholds.storage_critical) {
         alerts.push({
           severity: 'crit',
           message: `PBS ${pbs.name}: Storage critical (${pbs.usagePct}%)`,
@@ -558,10 +585,10 @@ return null
           entityName: pbs.name,
           metric: 'storage',
           currentValue: pbs.usagePct,
-          threshold: 90,
+          threshold: thresholds.storage_critical,
           time: new Date().toISOString()
         })
-      } else if (pbs.usagePct > 80) {
+      } else if (pbs.usagePct > thresholds.storage_warning) {
         alerts.push({
           severity: 'warn',
           message: `PBS ${pbs.name}: Storage high (${pbs.usagePct}%)`,
@@ -574,7 +601,7 @@ return null
           entityName: pbs.name,
           metric: 'storage',
           currentValue: pbs.usagePct,
-          threshold: 80,
+          threshold: thresholds.storage_warning,
           time: new Date().toISOString()
         })
       }

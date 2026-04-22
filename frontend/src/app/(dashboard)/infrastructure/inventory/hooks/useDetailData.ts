@@ -171,6 +171,52 @@ export function useDetailData(selection: InventorySelection | null) {
     }
   }, [selection, refreshing])
 
+  // ---- Full-details polling (hardware config + pending flags every 30s) ----
+  // The metrics poll above only refreshes /status (live CPU/RAM/Storage); the
+  // hardware tab and the "pending restart" flag come from /config, so without
+  // this a reboot leaves the panel stale until the user clicks Refresh.
+  const refreshDataRef = useRef(refreshData)
+  useEffect(() => {
+    refreshDataRef.current = refreshData
+  }, [refreshData])
+
+  useEffect(() => {
+    if (!selection || !data) return
+    if (selection.type !== 'vm') return
+
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return
+      refreshDataRef.current?.()
+    }
+
+    function start() {
+      if (intervalId !== null) return
+      intervalId = setInterval(tick, 30000)
+    }
+
+    function stop() {
+      if (intervalId !== null) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
+    }
+
+    function onVisChange() {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+
+    document.addEventListener('visibilitychange', onVisChange)
+    if (document.visibilityState === 'visible') start()
+
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisChange)
+    }
+  }, [selection?.type, selection?.id, !!data])
+
   // ---- loadVmTrendsBatch callback ----
   const loadVmTrendsBatch = useCallback(async (vms: VmRow[]): Promise<Record<string, TrendPoint[]>> => {
     if (vms.length === 0) return {}

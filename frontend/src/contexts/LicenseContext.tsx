@@ -89,6 +89,7 @@ interface LicenseStatus {
   expired: boolean
   edition?: string
   features?: string[]
+  is_nfr?: boolean
   [key: string]: any
 }
 
@@ -104,6 +105,7 @@ interface LicenseContextValue {
   error: string | null
   isLicensed: boolean
   isEnterprise: boolean
+  isNFR: boolean
   features: Feature[]
   hasFeature: (featureId: FeatureId | string) => boolean
   refresh: () => Promise<void>
@@ -115,6 +117,7 @@ const LicenseContext = createContext<LicenseContextValue>({
   error: null,
   isLicensed: false,
   isEnterprise: false,
+  isNFR: false,
   features: [],
   hasFeature: () => false,
   refresh: async () => {},
@@ -176,6 +179,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       error,
       isLicensed,
       isEnterprise,
+      isNFR: Boolean(status?.is_nfr),
       features,
       hasFeature,
       refresh,

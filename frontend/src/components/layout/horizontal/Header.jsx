@@ -11,6 +11,7 @@ import BurgerMenu from './BurgerMenu'
 import Navbar from '@layouts/components/horizontal/Navbar'
 import LayoutHeader from '@layouts/components/horizontal/Header'
 import Logo from '@components/layout/shared/Logo'
+import NFRBadge from '@components/license/NFRBadge'
 
 // Hook Imports
 import useHorizontalNav from '@menu/hooks/useHorizontalNav'
@@ -55,6 +56,7 @@ const Header = () => {
             >
               <i className='ri-menu-line' style={{ fontSize: 20 }} />
             </Button>
+            <NFRBadge />
           </Box>
 
           {/* NavbarContent (search, icons, profile, etc.) */}

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
-import { decryptSecret } from "@/lib/crypto/secret"
-import { executeSSHDirect } from "@/lib/ssh/exec"
+import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -38,20 +37,8 @@ export async function GET() {
     for (const conn of connections) {
       if (!conn.sshKeyEnc && !conn.sshPassEnc) continue
 
-      const sshKey = conn.sshKeyEnc ? decryptSecret(conn.sshKeyEnc) : undefined
-      const sshPass = conn.sshPassEnc ? decryptSecret(conn.sshPassEnc) : undefined
-
       for (const host of conn.hosts) {
         if (!host.enabled || !host.ip) continue
-
-        const sshOpts = {
-          host: host.ip,
-          port: conn.sshPort || 22,
-          user: conn.sshUser || "root",
-          ...(conn.sshAuthMethod === "key" && sshKey ? { key: sshKey } : {}),
-          ...(conn.sshAuthMethod === "password" && sshPass ? { password: sshPass } : {}),
-          ...(conn.sshAuthMethod === "key" && sshPass ? { passphrase: sshPass } : {}),
-        }
 
         const nodeStatus: NodeSFlowStatus = {
           node: host.node,
@@ -69,19 +56,21 @@ export async function GET() {
 
         try {
           // Check if OVS is installed — try list-br first, fallback to which
-          const bridgesResult = await executeSSHDirect({
-            ...sshOpts,
-            command: "ovs-vsctl list-br 2>/dev/null || true",
-          })
+          const bridgesResult = await executeSSH(
+            conn.id,
+            host.ip,
+            "ovs-vsctl list-br 2>/dev/null || true"
+          )
 
           // Also try `which ovs-vsctl` as fallback if list-br returned empty
           let hasBridges = bridgesResult.success && !!bridgesResult.output?.trim()
 
           if (!hasBridges) {
-            const whichResult = await executeSSHDirect({
-              ...sshOpts,
-              command: "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br",
-            })
+            const whichResult = await executeSSH(
+              conn.id,
+              host.ip,
+              "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br"
+            )
             if (whichResult.success && whichResult.output?.trim()) {
               // Parse: first line is path, rest are bridges
               const lines = whichResult.output.trim().split("\n").filter(Boolean)
@@ -100,20 +89,22 @@ export async function GET() {
             }
 
             // Get OVS version
-            const versionResult = await executeSSHDirect({
-              ...sshOpts,
-              command: "ovs-vsctl --version 2>/dev/null | head -1 || true",
-            })
+            const versionResult = await executeSSH(
+              conn.id,
+              host.ip,
+              "ovs-vsctl --version 2>/dev/null | head -1 || true"
+            )
             if (versionResult.success && versionResult.output?.trim()) {
               const match = versionResult.output.match(/(\d+\.\d+\.\d+)/)
               if (match) nodeStatus.ovsVersion = match[1]
             }
 
             // Check if sFlow is configured on the first bridge
-            const sflowResult = await executeSSHDirect({
-              ...sshOpts,
-              command: "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true",
-            })
+            const sflowResult = await executeSSH(
+              conn.id,
+              host.ip,
+              "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true"
+            )
 
             if (sflowResult.success && sflowResult.output?.includes("targets")) {
               nodeStatus.sflowConfigured = true
@@ -176,26 +167,11 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      const sshKey = conn.sshKeyEnc ? decryptSecret(conn.sshKeyEnc) : undefined
-      const sshPass = conn.sshPassEnc ? decryptSecret(conn.sshPassEnc) : undefined
-
-      const sshOpts = {
-        host: ip,
-        port: conn.sshPort || 22,
-        user: conn.sshUser || "root",
-        ...(conn.sshAuthMethod === "key" && sshKey ? { key: sshKey } : {}),
-        ...(conn.sshAuthMethod === "password" && sshPass ? { password: sshPass } : {}),
-        ...(conn.sshAuthMethod === "key" && sshPass ? { passphrase: sshPass } : {}),
-      }
-
       try {
         // Configure sFlow on all OVS bridges
         const cmd = `for br in $(ovs-vsctl list-br); do ovs-vsctl -- clear Bridge $br sflow; ovs-vsctl -- set Bridge $br sflow=@s -- --id=@s create sflow agent=$br target=\\"${collectorTarget}\\" header=128 sampling=${samplingRate} polling=${pollingInterval}; done`
 
-        const result = await executeSSHDirect({
-          ...sshOpts,
-          command: cmd,
-        })
+        const result = await executeSSH(conn.id, ip, cmd)
 
         results.push({
           node: nodeReq.node,

@@ -2,8 +2,7 @@ import { NextResponse } from "next/server"
 
 import { orchestratorFetch } from "@/lib/orchestrator"
 import { getSessionPrisma } from "@/lib/tenant"
-import { decryptSecret } from "@/lib/crypto/secret"
-import { executeSSHDirect } from "@/lib/ssh/exec"
+import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -27,36 +26,26 @@ export async function POST() {
     for (const conn of connections) {
       if (!conn.sshKeyEnc && !conn.sshPassEnc) continue
 
-      const sshKey = conn.sshKeyEnc ? decryptSecret(conn.sshKeyEnc) : undefined
-      const sshPass = conn.sshPassEnc ? decryptSecret(conn.sshPassEnc) : undefined
-
       for (const host of conn.hosts) {
         if (!host.enabled || !host.ip) continue
 
-        const sshOpts = {
-          host: host.ip,
-          port: conn.sshPort || 22,
-          user: conn.sshUser || "root",
-          ...(conn.sshAuthMethod === "key" && sshKey ? { key: sshKey } : {}),
-          ...(conn.sshAuthMethod === "password" && sshPass ? { password: sshPass } : {}),
-          ...(conn.sshAuthMethod === "key" && sshPass ? { passphrase: sshPass } : {}),
-        }
-
         try {
           // List OVS bridges
-          const bridgesResult = await executeSSHDirect({
-            ...sshOpts,
-            command: "ovs-vsctl list-br 2>/dev/null",
-          })
+          const bridgesResult = await executeSSH(
+            conn.id,
+            host.ip,
+            "ovs-vsctl list-br 2>/dev/null"
+          )
 
           if (!bridgesResult.success || !bridgesResult.output) continue
 
           // Use ip -o link to get SNMP ifIndex (matches sFlow ifIndex)
           // ovs-ofctl ofport numbers do NOT match sFlow ifIndex
-          const ipLinkResult = await executeSSHDirect({
-            ...sshOpts,
-            command: "ip -o link 2>/dev/null",
-          })
+          const ipLinkResult = await executeSSH(
+            conn.id,
+            host.ip,
+            "ip -o link 2>/dev/null"
+          )
 
           if (!ipLinkResult.success || !ipLinkResult.output) continue
 

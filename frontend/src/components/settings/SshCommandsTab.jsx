@@ -1,9 +1,10 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { Box, Card, CardContent, Stack, Typography } from '@mui/material'
+import { Box, Stack, Typography } from '@mui/material'
 import ConnectionStatusCard from './ssh-commands/ConnectionStatusCard'
 import AllowlistCard from './ssh-commands/AllowlistCard'
+import SecurityRecommendationsCard from './ssh-commands/SecurityRecommendationsCard'
 
 export default function SshCommandsTab() {
   const t = useTranslations()
@@ -21,17 +22,7 @@ export default function SshCommandsTab() {
 
       <ConnectionStatusCard />
 
-      <Card variant='outlined'>
-        <CardContent>
-          <Typography variant='subtitle1' fontWeight={600} gutterBottom>
-            {t('settings.sshCommands.recs.heading')}
-          </Typography>
-          <Typography variant='body2' color='text.secondary'>
-            {/* SecurityRecommendationsCard placeholder — Task 8 */}
-            …
-          </Typography>
-        </CardContent>
-      </Card>
+      <SecurityRecommendationsCard />
 
       <AllowlistCard />
     </Stack>

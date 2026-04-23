@@ -161,6 +161,7 @@ export async function soapGetVmConfig(session: SoapSession, vmid: string): Promi
           <urn:pathSet>config.version</urn:pathSet>
           <urn:pathSet>config.uuid</urn:pathSet>
           <urn:pathSet>config.firmware</urn:pathSet>
+          <urn:pathSet>config.files.vmPathName</urn:pathSet>
           <urn:pathSet>config.hardware.device</urn:pathSet>
           <urn:pathSet>runtime.powerState</urn:pathSet>
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
@@ -587,6 +588,12 @@ export interface EsxiVmConfig {
   firmware: string // "bios" | "efi"
   uuid: string
   vmxVersion: string
+  /**
+   * VMX file path as stored by vSphere. Format: "[Datastore] folder/VmName.vmx".
+   * Used by the direct-ESXi virt-v2v pipeline (`-i vmx -it ssh`) to locate the
+   * VM's metadata file on the source host without guessing the folder layout.
+   */
+  vmPathName: string
   powerState: string
   committed: number
   disks: EsxiDiskInfo[]
@@ -614,6 +621,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   const firmware = extractProp(xml, "config.firmware") || "bios"
   const uuid = extractProp(xml, "config.uuid")
   const vmxVersion = extractProp(xml, "config.version")
+  const vmPathName = extractProp(xml, "config.files.vmPathName")
   const powerState = extractProp(xml, "runtime.powerState")
 
   // Storage
@@ -705,7 +713,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
 
   return {
     name, guestOS, guestId, numCPU, numCoresPerSocket, sockets, memoryMB,
-    firmware, uuid, vmxVersion, powerState, committed, disks, nics, snapshotCount,
+    firmware, uuid, vmxVersion, vmPathName, powerState, committed, disks, nics, snapshotCount,
     toolsStatus, toolsRunningStatus,
   }
 }

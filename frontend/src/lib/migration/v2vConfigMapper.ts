@@ -75,6 +75,28 @@ function convertMemoryToMB(value: number, unit: string): number {
 function detectOsType(xmlLower: string, nameLower: string): string {
   const text = xmlLower + ' ' + nameLower
 
+  // Modern virt-v2v embeds a libosinfo URL for the detected guest OS, eg:
+  //   <libosinfo:os id="http://microsoft.com/win/10"/>
+  //   <libosinfo:os id="http://microsoft.com/win/2k19"/>
+  //   <libosinfo:os id="http://microsoft.com/win/11"/>
+  // The slash in "win/10" means text.includes('win10') misses it, so we look
+  // for the full URL shape first. Do this BEFORE the text-substring checks
+  // because libosinfo is the most authoritative signal.
+  const libosWin = text.match(/microsoft\.com\/win\/(2k\d+|\d+)/)
+  if (libosWin) {
+    const v = libosWin[1]
+    if (v === '11' || v === '2k22' || v === '2022' || v === '2k25' || v === '2025') return 'win11'
+    if (v === '10' || v === '2k16' || v === '2016' || v === '2k19' || v === '2019') return 'win10'
+    if (v === '8' || v === '8.1') return 'win8'
+    if (v === '7' || v === '2k8') return 'win7'
+    return 'win10' // unknown Microsoft Windows variant — safe default
+  }
+  // Generic MS Windows signal (covers old/custom libosinfo URLs and the name
+  // metadata virt-v2v puts in the domain).
+  if (text.includes('microsoft.com/win') || text.includes('microsoft windows')) {
+    return 'win10'
+  }
+
   // Windows 11 / Server 2022 / Server 2025
   if (
     text.includes('win11') ||
@@ -142,10 +164,16 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
   const cores = vcpuMatch ? parseInt(vcpuMatch[1], 10) : 1
 
   // --- Firmware ---
+  // Modern virt-v2v emits `<os firmware="efi">` as an attribute on <os>,
+  // older/verbose builds emit `<loader type="pflash">...OVMF_CODE...</loader>`
+  // and an <nvram> element. Cover all three shapes.
   const isEfi =
+    /\bfirmware\s*=\s*["']efi["']/i.test(xmlString) ||
     xmlString.includes('type="pflash"') ||
     xmlString.includes("type='pflash'") ||
-    xmlString.includes('/OVMF_CODE')
+    xmlString.includes('OVMF_CODE') ||
+    xmlString.includes('OVMF_VARS') ||
+    /<nvram[^>]*>/i.test(xmlString)
   const firmware: 'bios' | 'efi' = isEfi ? 'efi' : 'bios'
 
   // --- OS type ---

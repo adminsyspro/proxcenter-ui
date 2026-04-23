@@ -53,7 +53,7 @@ export interface V2vMigrationConfig {
   sourceConnectionId: string
   sourceVmId: string
   sourceVmName: string
-  sourceType: "vcenter" | "hyperv" | "nutanix"
+  sourceType: "vcenter" | "hyperv" | "nutanix" | "esxi-direct"
   targetConnectionId: string
   targetNode: string
   targetStorage: string
@@ -80,6 +80,19 @@ export interface V2vMigrationConfig {
    *   Only supported for vcenter source; hyperv/nutanix ignore this field.
    */
   migrationType?: "cold" | "live"
+  /**
+   * POSIX VMX path on the source ESXi host for sourceType="esxi-direct".
+   * Example: "/vmfs/volumes/Datastore/MyVM/MyVM.vmx".
+   * Resolved server-side by the API route from SOAP `config.files.vmPathName`
+   * (format: "[Datastore] MyVM/MyVM.vmx") before dispatching to this pipeline.
+   */
+  vmxPath?: string
+  /**
+   * ESXi host (FQDN or IP) for the ssh:// input URI used in esxi-direct mode.
+   * Parsed from the source connection's baseUrl. virt-v2v connects with
+   * `-i vmx -it ssh ssh://<user>@<host>/<vmxPath>`.
+   */
+  esxiHost?: string
 }
 
 interface LogEntry {
@@ -983,6 +996,34 @@ function buildV2vCommand(
       v2vCmd = `virt-v2v -i disk ${diskArgs} ${v2vOpts}`
       break
     }
+    case "esxi-direct": {
+      // Direct ESXi migration without vCenter. virt-v2v reads the .vmx over SSH and
+      // pulls each referenced VMDK through the same channel. Requires SSH enabled
+      // with a private key on the source ESXi connection (password auth is not
+      // supported by virt-v2v's -it ssh module). The caller (credentials prep above)
+      // writes the key + a permissive ssh_config under a per-job HOME directory so
+      // ssh picks up the correct identity without mutating /root/.ssh.
+      if (!config.vmxPath || !config.esxiHost) {
+        throw new Error("esxi-direct source requires vmxPath and esxiHost in the config")
+      }
+      const userEnc = encodeURIComponent(username)
+      const hostEnc = encodeURIComponent(config.esxiHost)
+      // Encode each path segment (datastore names can contain spaces/parens like
+      // "Datastore (1)"). Leading slashes preserved so URL stays absolute.
+      const vmxEncoded = config.vmxPath.split('/').map(s => s ? encodeURIComponent(s) : s).join('/')
+      const sshUrl = `ssh://${userEnc}@${hostEnc}${vmxEncoded}`
+      const homeDir = `${tempBase}/v2v-home-${jobId}`
+      const agentSock = `${tempBase}/v2v-agent-${jobId}.sock`
+      // Prefix with `env HOME=... SSH_AUTH_SOCK=...` rather than bare assignments
+      // because the outer wrapper (runVirtV2vWithProgress) prepends `stdbuf -oL`
+      // to the command — and `stdbuf HOME=...` would try to exec the literal
+      // string "HOME=..." as a program. `env` handles the assignments and exec's
+      // virt-v2v. HOME is for the vmx read step (system ssh); SSH_AUTH_SOCK is
+      // for nbdkit-ssh/libssh which ignores $HOME and would otherwise look for
+      // identity files under /root/.ssh.
+      v2vCmd = `env HOME=${shellEscape(homeDir)} SSH_AUTH_SOCK=${shellEscape(agentSock)} virt-v2v -v -x -i vmx -it ssh ${shellEscape(sshUrl)} ${v2vOpts}`
+      break
+    }
     default:
       throw new Error(`Unsupported source type: ${config.sourceType}`)
   }
@@ -1052,6 +1093,19 @@ export async function runV2vMigrationPipeline(
   const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
   let nutanixImageUuids: string[] = []  // Track Nutanix images for cleanup
   let hypervMounted = false  // Track CIFS mount for cleanup
+  // When the esxi-direct path bootstrapped a one-shot SSH key onto the source
+  // ESXi host (because the connection was configured with password auth only),
+  // we record the pubkey + ESXi auth details so cleanup can sed it out of the
+  // remote authorized_keys files and not leave the key persisted after the job.
+  let esxiTempKeyBootstrap: { pubKey: string; esxiHost: string; esxiUser: string; esxiPort: number; esxiPass: string } | null = null
+  // When we had to seed /root/.ssh/known_hosts for libssh (used by nbdkit-ssh, which
+  // ignores $HOME and reads the system user's homedir via getpwuid), record the host
+  // so cleanup removes our entry via ssh-keygen -R and doesn't leave trust pinned.
+  let esxiKnownHostsSeeded: { esxiHost: string; esxiPort: number } | null = null
+  // Per-job ssh-agent spawned to hold the job's private key so nbdkit-ssh/libssh can
+  // authenticate without relying on /root/.ssh/id_* (which we don't want to clobber).
+  // We record the sock + pid paths for cleanup; virt-v2v gets SSH_AUTH_SOCK via env.
+  let esxiSshAgent: { sockPath: string; pidPath: string } | null = null
   // NFC transport state (used when source = vCenter and any disk is on vSAN).
   // We open a long-lived SOAP session for the duration of the NFC export and
   // logout in cleanup; the downloaded disks must also be removed in both
@@ -1204,6 +1258,181 @@ export async function runV2vMigrationPipeline(
         throw new Error(`Failed to write password file: ${writeResult.error}`)
       }
       await appendLog(jobId, "Credentials prepared on target node", "success")
+    }
+
+    // ── PHASE 2b: Prepare SSH credentials for esxi-direct source ──
+    // virt-v2v -i vmx -it ssh invokes the system `ssh` to pull the .vmx + VMDKs.
+    // We stage the source ESXi private key + a permissive ssh_config under a per-job
+    // HOME directory and pass `HOME=<jobdir>` to virt-v2v so ssh picks up the right
+    // identity without touching /root/.ssh.
+    //
+    // When the source connection was configured with password auth instead of a key,
+    // we fall back to the same bootstrap pattern as pipeline.ts SSHFS Boot: generate a
+    // one-shot keypair on the PVE node, ssh-copy-id-equivalent it via sshpass, verify
+    // the key works, and let virt-v2v use it. Cleanup removes the deployed public key
+    // from ESXi at job end (see cleanup section).
+    if (config.sourceType === "esxi-direct") {
+      await appendLog(jobId, "Preparing ESXi SSH credentials for virt-v2v...")
+      const sourceConn = await prisma.connection.findUnique({
+        where: { id: config.sourceConnectionId },
+        select: { baseUrl: true, sshUser: true, sshPort: true, sshEnabled: true, sshKeyEnc: true, sshPassEnc: true, sshAuthMethod: true },
+      })
+      if (!sourceConn?.sshEnabled) {
+        throw new Error("ESXi-direct migration via virt-v2v requires SSH enabled on the source ESXi connection.")
+      }
+      const hasStoredKey = !!sourceConn.sshKeyEnc
+      const hasStoredPass = !!sourceConn.sshPassEnc
+      if (!hasStoredKey && !hasStoredPass) {
+        throw new Error("ESXi-direct migration via virt-v2v requires either an SSH key or a password on the source ESXi connection.")
+      }
+      username = sourceConn.sshUser || "root"
+      try {
+        host = new URL(sourceConn.baseUrl).hostname
+      } catch {
+        host = sourceConn.baseUrl.replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").replace(/\/.*$/, "")
+      }
+      const esxiSshPort = sourceConn.sshPort || 22
+
+      const homeDir = `${tempBase}/v2v-home-${jobId}`
+      const sshDir = `${homeDir}/.ssh`
+      const keyPath = `${sshDir}/id_rsa`
+      const configPath = `${sshDir}/config`
+
+      // mkdir + chmod the per-job .ssh directory
+      const mkResult = await executeSSH(config.targetConnectionId, nodeIp,
+        `mkdir -p ${shellEscape(sshDir)} && chmod 700 ${shellEscape(sshDir)}`)
+      if (!mkResult.success) throw new Error(`Failed to create ssh dir: ${mkResult.error || mkResult.output}`)
+
+      if (hasStoredKey) {
+        // Path A: admin configured a private key → use it as-is.
+        const esxiKey = decryptSecret(sourceConn.sshKeyEnc!)
+        const keyEscaped = esxiKey.replace(/'/g, "'\\''")
+        const keyWrite = await executeSSH(config.targetConnectionId, nodeIp,
+          `printf '%s' '${keyEscaped}' > ${shellEscape(keyPath)} && chmod 600 ${shellEscape(keyPath)}`)
+        if (!keyWrite.success) throw new Error(`Failed to write SSH key: ${keyWrite.error || keyWrite.output}`)
+        await appendLog(jobId, "Using stored ESXi SSH key for virt-v2v", "info")
+      } else {
+        // Path B: only password auth stored → generate a one-shot keypair on the PVE
+        // node, deploy the pubkey to ESXi via sshpass, then point virt-v2v at the
+        // private key. Matches the SSHFS Boot bootstrap in pipeline.ts so admins who
+        // configured password SSH don't need to switch to key auth just for v2v.
+        await appendLog(jobId, "No SSH key stored — generating a one-shot keypair and deploying to ESXi...", "info")
+        const genResult = await executeSSH(config.targetConnectionId, nodeIp,
+          `ssh-keygen -t rsa -b 4096 -f ${shellEscape(keyPath)} -N '' -q -C ${shellEscape(`proxcenter-v2v-${jobId}`)} 2>&1 && echo KEYGEN_OK`)
+        if (!genResult.success || !genResult.output?.includes("KEYGEN_OK")) {
+          throw new Error(`Failed to generate temp SSH key: ${genResult.error || genResult.output}`)
+        }
+        const pubKeyResult = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(keyPath + ".pub")}`)
+        const pubKey = pubKeyResult.output?.trim()
+        if (!pubKey) throw new Error("Failed to read generated public key")
+
+        const esxiPass = decryptSecret(sourceConn.sshPassEnc!)
+        const safeEsxiPass = esxiPass.replace(/'/g, "'\\''")
+        const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+
+        // ESXi keeps per-user authorized_keys under /etc/ssh/keys-<user>/ by default.
+        // Some setups (nested ESXi, lab images) drop that dir and use ~/.ssh instead —
+        // try both so we don't fail on non-default layouts.
+        const deployCmd = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${esxiSshPort} ${username}@${host} "mkdir -p /etc/ssh/keys-${username} 2>/dev/null; echo '${pubKey}' >> /etc/ssh/keys-${username}/authorized_keys; echo DEPLOYED" 2>&1`
+        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd)
+        let deployed = !!deployResult.output?.includes("DEPLOYED")
+        if (!deployed) {
+          const deployCmd2 = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${esxiSshPort} ${username}@${host} "mkdir -p ~/.ssh 2>/dev/null; chmod 700 ~/.ssh; echo '${pubKey}' >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo DEPLOYED" 2>&1`
+          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2)
+          deployed = !!deployResult2.output?.includes("DEPLOYED")
+        }
+        if (!deployed) {
+          throw new Error(`Failed to deploy temp SSH key to ESXi. Check that the ESXi SSH user (${username}) is allowed to write to /etc/ssh/keys-${username}/authorized_keys or ~/.ssh/authorized_keys.`)
+        }
+
+        // Verify the new key actually logs in before we hand off to virt-v2v.
+        const verifyResult = await executeSSH(config.targetConnectionId, nodeIp,
+          `ssh -i ${shellEscape(keyPath)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519 -p ${esxiSshPort} ${username}@${host} 'echo KEYOK' 2>&1`)
+        if (!verifyResult.output?.includes("KEYOK")) {
+          throw new Error(`Deployed temp SSH key did not authenticate: ${verifyResult.output?.substring(0, 200) || verifyResult.error}`)
+        }
+        // Record what we pushed so cleanup can remove it from ESXi authorized_keys.
+        esxiTempKeyBootstrap = { pubKey, esxiHost: host, esxiUser: username, esxiPort: esxiSshPort, esxiPass }
+        await appendLog(jobId, "Temp SSH key deployed and verified on ESXi", "success")
+      }
+
+      // Permissive ssh config so the system `ssh` (used by virt-v2v for -i vmx)
+      // auto-picks the key, skips host key prompt, and negotiates ESXi-compatible
+      // algorithms (older ESXi requires ssh-rsa / DH-group14-sha1).
+      const sshConfig = [
+        `Host *`,
+        `    StrictHostKeyChecking no`,
+        `    UserKnownHostsFile /dev/null`,
+        `    IdentityFile ${keyPath}`,
+        `    IdentitiesOnly yes`,
+        `    LogLevel ERROR`,
+        `    HostKeyAlgorithms +ssh-rsa,ssh-ed25519`,
+        `    KexAlgorithms +diffie-hellman-group14-sha1,diffie-hellman-group14-sha256`,
+        `    PubkeyAcceptedAlgorithms +ssh-rsa,ssh-ed25519`,
+      ].join('\n')
+      const configEscaped = sshConfig.replace(/'/g, "'\\''")
+      const configWrite = await executeSSH(config.targetConnectionId, nodeIp,
+        `printf '%s' '${configEscaped}' > ${shellEscape(configPath)} && chmod 600 ${shellEscape(configPath)}`)
+      if (!configWrite.success) throw new Error(`Failed to write ssh config: ${configWrite.error || configWrite.output}`)
+
+      // virt-v2v reads the VMDK disks through `nbdkit ssh` which uses libssh, NOT the
+      // system `ssh` binary. libssh ignores $HOME and resolves the user's homedir via
+      // getpwuid(), so it always looks at /root/.ssh/known_hosts on the PVE node. If
+      // the file is missing or doesn't contain the ESXi host key, nbdkit fails with
+      // "the host key is unknown". We append the ESXi key there via ssh-keyscan, and
+      // cleanup removes exactly that entry at job end (no persistent trust pinning).
+      //
+      // We still write a per-job known_hosts inside $HOME for the system ssh used by
+      // virt-v2v's vmx-read step — belt + suspenders.
+      // Each step below is kept as a single-prefix executeSSH call so each command
+      // matches a prefix in the orchestrator SSH allowlist (ssh_allowlist.go). Long
+      // `;`-chained one-liners get 403'd when the first non-matching prefix hits.
+      const perJobKnownHosts = `${sshDir}/known_hosts`
+      const keyscanPerJob = await executeSSH(config.targetConnectionId, nodeIp,
+        `ssh-keyscan -T 10 -p ${esxiSshPort} ${shellEscape(host)} > ${shellEscape(perJobKnownHosts)} && chmod 600 ${shellEscape(perJobKnownHosts)}`)
+      if (!keyscanPerJob.success) {
+        throw new Error(`Failed to fetch ESXi host key via ssh-keyscan: ${keyscanPerJob.error || keyscanPerJob.output?.substring(0, 200)}`)
+      }
+
+      // Seed /root/.ssh/known_hosts with the same data for libssh/nbdkit.
+      await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p /root/.ssh && chmod 700 /root/.ssh`)
+      const seedRoot = await executeSSH(config.targetConnectionId, nodeIp,
+        `ssh-keyscan -T 10 -p ${esxiSshPort} ${shellEscape(host)} >> /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts`)
+      if (!seedRoot.success) {
+        throw new Error(`Failed to seed /root/.ssh/known_hosts: ${seedRoot.error || seedRoot.output?.substring(0, 200)}. Required for nbdkit (virt-v2v's SSH disk transport) to verify the remote host.`)
+      }
+      esxiKnownHostsSeeded = { esxiHost: host, esxiPort: esxiSshPort }
+
+      // Start a per-job ssh-agent holding the key. libssh (used by nbdkit-ssh)
+      // honours SSH_AUTH_SOCK and auths via the agent regardless of $HOME —
+      // avoiding a clobber of /root/.ssh/id_rsa if the admin already has one.
+      //
+      // `ssh-agent -a SOCK` (no -D) forks: child binds the socket, parent prints
+      // shell-eval lines with SSH_AGENT_PID=N and exits. We parse the PID from
+      // stdout and persist it to a pidfile for kill-on-cleanup.
+      const agentSock = `${tempBase}/v2v-agent-${jobId}.sock`
+      const agentPidFile = `${tempBase}/v2v-agent-${jobId}.pid`
+      const agentStart = await executeSSH(config.targetConnectionId, nodeIp,
+        `ssh-agent -a ${shellEscape(agentSock)}`)
+      if (!agentStart.success) {
+        throw new Error(`Failed to start ssh-agent: ${agentStart.error || agentStart.output?.substring(0, 200)}`)
+      }
+      const agentPidMatch = (agentStart.output || "").match(/SSH_AGENT_PID=(\d+)/)
+      if (!agentPidMatch) {
+        throw new Error(`ssh-agent did not report a PID in stdout: ${agentStart.output?.substring(0, 200)}`)
+      }
+      const agentPid = agentPidMatch[1]
+      await executeSSH(config.targetConnectionId, nodeIp,
+        `printf '%s' ${shellEscape(agentPid)} > ${shellEscape(agentPidFile)}`)
+
+      const addKey = await executeSSH(config.targetConnectionId, nodeIp,
+        `SSH_AUTH_SOCK=${shellEscape(agentSock)} ssh-add ${shellEscape(keyPath)}`)
+      if (!addKey.success) {
+        throw new Error(`Failed to load key into ssh-agent: ${addKey.error || addKey.output?.substring(0, 200)}`)
+      }
+      esxiSshAgent = { sockPath: agentSock, pidPath: agentPidFile }
+
+      await appendLog(jobId, `ESXi SSH identity loaded in per-job ssh-agent (for nbdkit/libssh)`, "success")
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -1940,12 +2169,28 @@ export async function runV2vMigrationPipeline(
         const realSockets = sourceVmwareConfig.sockets || vmConfig.sockets
         const realMemMB = sourceVmwareConfig.memoryMB || vmConfig.memory
         const realFirmware: 'bios' | 'efi' = sourceVmwareConfig.firmware === "efi" ? "efi" : "bios"
+        // Map VMware's guestOS / guestId strings to a Proxmox ostype. parseV2vXml
+        // sometimes returns "l26" for Windows guests when the virt-v2v output XML
+        // lacks obvious "windows" substrings (happens for some vmx/ova inputs).
+        // Falling back to SOAP's human-readable guestFullName ("Microsoft Windows
+        // Server 2019 (64-bit)") or VMware's guestId ("windows9srv_64Guest") is
+        // much more reliable. Without this, ostype=l26 can surprise downstream
+        // logic (EFI boot fallback fix gate, Windows-specific disk bus choice,
+        // etc.) even when virt-v2v itself injected the right VirtIO drivers.
+        const guestText = ((sourceVmwareConfig.guestOS || "") + " " + (sourceVmwareConfig.guestId || "")).toLowerCase()
+        let realOstype: string = vmConfig.ostype
+        if (/win(dows)?\s*(11|server\s*202[25])|win.?11|winserver20[2][25]|windows11srv/.test(guestText)) realOstype = 'win11'
+        else if (/win(dows)?\s*(10|server\s*20(16|19))|win.?10|winserver201[69]|windows9srv|windows10srv|win2k1[69]/.test(guestText)) realOstype = 'win10'
+        else if (/win(dows)?\s*8|win.?8/.test(guestText)) realOstype = 'win8'
+        else if (/win(dows)?\s*7|win.?7/.test(guestText)) realOstype = 'win7'
+        else if (/windows/.test(guestText)) realOstype = 'win10'
 
         await appendLog(
           jobId,
           `Overriding virt-v2v defaults with vCenter source values: ` +
           `cores ${vmConfig.cores}->${realCpu}, sockets ${vmConfig.sockets}->${realSockets}, ` +
           `memory ${vmConfig.memory}MB->${realMemMB}MB, firmware ${vmConfig.firmware}->${realFirmware}, ` +
+          `ostype ${vmConfig.ostype}->${realOstype}, ` +
           `NICs ${vmConfig.nics.length}->${sourceVmwareConfig.nics.length}`,
           "info",
         )
@@ -1953,6 +2198,7 @@ export async function runV2vMigrationPipeline(
         vmConfig.sockets = realSockets
         vmConfig.memory = realMemMB
         vmConfig.firmware = realFirmware
+        vmConfig.ostype = realOstype
 
         // NIC mapping: preserve MAC addresses for guest network continuity (DHCP
         // reservations, license activations tied to MAC, etc.). We map each source
@@ -2093,11 +2339,29 @@ export async function runV2vMigrationPipeline(
     // first boot because vioscsi.sys isn't registered as critical. Attach on
     // virtio0 instead so the injected viostor matches the bus.
     const useVirtioBlk = isWindowsVm && !supportsBlockDriver
+    // For Windows guests (any firmware), route the boot disk through SATA. Even when
+    // --block-driver is available, virt-v2v's viostor registry injection is fragile on
+    // modern Windows (Fast Startup residue, pending updates, tiered registry
+    // transactions) and can cause INACCESSIBLE_BOOT_DEVICE at first boot. Windows has
+    // AHCI built-in since Vista/Server 2008, so the boot disk on sata0 always loads.
+    // The firstboot `virtio-win-guest-tools.exe` we inject will then install the full
+    // VirtIO driver stack in the running OS; the admin can optionally switch the disk
+    // bus to virtio-scsi afterwards for better perf. Data disks (i > 0) stay on SCSI
+    // because by then Windows is running and viostor/vioscsi loads normally.
+    //
+    // If useVirtioBlk is already true (no --block-driver support) we keep that path —
+    // virtio0 with the injected viostor is the safer choice virt-v2v already planned.
+    const useWinSataBoot = isWindowsVm && !useVirtioBlk
 
     for (let i = 0; i < diskFiles.length; i++) {
       const diskFile = diskFiles[i]
       const diskPath = `${outputDir}/${diskFile}`
-      const diskSlot = useVirtioBlk ? `virtio${i}` : `scsi${i}`
+      // Boot disk of a Windows guest → sata0 (see useWinSataBoot rationale above).
+      // Data disks shift down to scsi0, scsi1... since the boot disk no longer
+      // occupies scsi0.
+      const diskSlot = useWinSataBoot
+        ? (i === 0 ? "sata0" : `scsi${i - 1}`)
+        : (useVirtioBlk ? `virtio${i}` : `scsi${i}`)
 
       await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Importing ${diskFile}...`)
       await updateJob(jobId, "transferring", {
@@ -2321,10 +2585,12 @@ export async function runV2vMigrationPipeline(
       nextDiskNum++
     }
 
-    // Set boot order — must match the slot of the first data disk, which on
-    // Windows-without-block-driver lives on virtio0 (see useVirtioBlk comment
-    // above).
-    const bootSlot = useVirtioBlk ? "virtio0" : "scsi0"
+    // Set boot order — must match the slot of the first data disk. Three cases:
+    //   - Windows (any firmware) → sata0 (see useWinSataBoot: AHCI built-in is the
+    //     robust way to survive a fragile viostor registry injection, VM always boots)
+    //   - Windows-without-block-driver → virtio0 (viostor/virtio-blk fallback)
+    //   - Everything else (Linux, etc.) → scsi0
+    const bootSlot = useWinSataBoot ? "sata0" : (useVirtioBlk ? "virtio0" : "scsi0")
     await pveFetch<any>(
       pveConn,
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
@@ -2442,6 +2708,54 @@ export async function runV2vMigrationPipeline(
       if (!rmOutput.success) failedCleanups.push(`${outputDir}: ${rmOutput.error || "unknown"}`)
       const rmPw = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`, CLEANUP_TIMEOUT_MS)
       if (!rmPw.success) failedCleanups.push(`${pwFile}: ${rmPw.error || "unknown"}`)
+      // If we bootstrapped a one-shot ESXi key (password-auth source), remove the
+      // corresponding line from ESXi's authorized_keys before we nuke the home dir —
+      // otherwise the key stays accepted on ESXi forever. We try both default
+      // locations since the deploy step also tried both.
+      if (esxiTempKeyBootstrap) {
+        const { pubKey, esxiHost: ehost, esxiUser: euser, esxiPort: eport, esxiPass } = esxiTempKeyBootstrap
+        // sed pattern: match on the first 40 chars of the base64 body, which is unique
+        // enough to not collide with other keys but short enough to escape safely.
+        const pubFingerprint = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
+        if (pubFingerprint) {
+          const safePub = pubFingerprint.replace(/[/\\&.]/g, '\\$&')
+          const safeEsxiPass = esxiPass.replace(/'/g, "'\\''")
+          const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+          const revokeCmd = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${eport} ${euser}@${ehost} "sed -i '/${safePub}/d' /etc/ssh/keys-${euser}/authorized_keys ~/.ssh/authorized_keys 2>/dev/null; echo REVOKED" 2>&1`
+          const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, CLEANUP_TIMEOUT_MS)
+          if (!revokeResult.output?.includes("REVOKED")) {
+            failedCleanups.push(`esxi-authorized-keys revoke: ${revokeResult.error || revokeResult.output?.substring(0, 150) || "unknown"}`)
+          }
+        }
+      }
+      // esxi-direct staged its SSH key under a per-job HOME; remove it whether we
+      // took that branch or not — rm -rf on a non-existent path succeeds silently.
+      const esxiHomeDir = `${tempBase}/v2v-home-${jobId}`
+      const rmHome = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(esxiHomeDir)}`, CLEANUP_TIMEOUT_MS)
+      if (!rmHome.success) failedCleanups.push(`${esxiHomeDir}: ${rmHome.error || "unknown"}`)
+      // Kill the per-job ssh-agent and remove its socket/pidfile. Each step is a
+      // single-prefix executeSSH call (cat ', kill , rm -f 'v2v-agent-...') so it
+      // matches the orchestrator SSH allowlist without needing a shell wrapper.
+      if (esxiSshAgent) {
+        const readPid = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(esxiSshAgent.pidPath)}`, CLEANUP_TIMEOUT_MS)
+        const rawPid = readPid.output?.trim() || ""
+        if (/^\d+$/.test(rawPid)) {
+          const killRes = await executeSSH(config.targetConnectionId, nodeIp, `kill ${rawPid}`, CLEANUP_TIMEOUT_MS)
+          if (!killRes.success) failedCleanups.push(`kill ssh-agent ${rawPid}: ${killRes.error || killRes.output?.substring(0, 150) || "unknown"}`)
+        }
+        const rmSock = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(esxiSshAgent.sockPath)} ${shellEscape(esxiSshAgent.pidPath)}`, CLEANUP_TIMEOUT_MS)
+        if (!rmSock.success) failedCleanups.push(`ssh-agent files: ${rmSock.error || rmSock.output?.substring(0, 150) || "unknown"}`)
+      }
+      // If we seeded /root/.ssh/known_hosts for libssh, strip the entries we added.
+      // Two separate calls because ssh-keygen -R only removes one host form per run
+      // and the allowlist prefers simple single-prefix commands over `;`-chained ones.
+      if (esxiKnownHostsSeeded) {
+        const hostBracket = `[${esxiKnownHostsSeeded.esxiHost}]:${esxiKnownHostsSeeded.esxiPort}`
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `ssh-keygen -R ${shellEscape(hostBracket)} -f /root/.ssh/known_hosts`, CLEANUP_TIMEOUT_MS).catch(() => {})
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `ssh-keygen -R ${shellEscape(esxiKnownHostsSeeded.esxiHost)} -f /root/.ssh/known_hosts`, CLEANUP_TIMEOUT_MS).catch(() => {})
+      }
       const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
       const rmNut = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`, CLEANUP_TIMEOUT_MS)
       if (!rmNut.success) failedCleanups.push(`${nutanixDownloadDir}: ${rmNut.error || "unknown"}`)

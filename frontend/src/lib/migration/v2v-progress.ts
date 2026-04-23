@@ -79,6 +79,14 @@ const V2V_JSON_PROGRESS_RE = /"offset"\s*:\s*(\d+)\s*,\s*"total"\s*:\s*(\d+)/
 const V2V_HUMAN_LINE_RE = /^\[\s*[\d.]+\]\s+(.+)$/
 const V2V_OLD_PROGRESS_RE = /\(([\d.]+)\/100%\)/
 const V2V_DISK_RE = /Copying disk (\d+)\/(\d+)/
+// virt-v2v delegates the actual bytes-to-bytes copy to nbdcopy, which prints its
+// own progress bar on stderr in the format:
+//   ▗  43% [******************----------------------]
+// The spinner character ahead of the percent is a box-drawing dot (▖/▘/▝/▗/etc);
+// we don't care about it — we just pick up the "NN% [***...---]" shape. Matching
+// the bracketed bar is what distinguishes this from the odd "43%" substring that
+// might appear inside a human log line.
+const V2V_NBDCOPY_RE = /(\d+(?:\.\d+)?)\s*%\s*\[[*\- ]+\]/
 
 /**
  * Parse a single virt-v2v output line into structured progress.
@@ -126,6 +134,13 @@ export function parseV2vLine(line: string): V2vProgress | null {
   const oldProg = trimmed.match(V2V_OLD_PROGRESS_RE)
   if (oldProg) {
     return { percent: parseFloat(oldProg[1]), currentDisk: 1, totalDisks: 1, step: "Copying disk" }
+  }
+
+  // 5. nbdcopy progress bar (during "Copying disk" phase on modern virt-v2v
+  //    where disk transfer is delegated to nbdcopy instead of v2v's own loop).
+  const nbdProg = trimmed.match(V2V_NBDCOPY_RE)
+  if (nbdProg) {
+    return { percent: parseFloat(nbdProg[1]), currentDisk: 1, totalDisks: 1, step: "Copying disk" }
   }
 
   return null

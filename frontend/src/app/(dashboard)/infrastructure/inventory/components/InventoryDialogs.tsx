@@ -1965,10 +1965,12 @@ return
                     </Alert>
                   )}
 
-                  {/* Windows guest: admin will need to install VirtIO drivers post-migration
-                      for optimal disk/network perf. The VM boots out of the box on SATA +
-                      e1000 via built-in Windows drivers; VirtIO is an optional upgrade. */}
-                  {!vsanBlocksMigration && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && (
+                  {/* Windows guest note — only shown for Live mode on direct ESXi.
+                      Direct-ESXi Cold is auto-routed through virt-v2v (see api route),
+                      which injects the VirtIO drivers + guest tools during conversion,
+                      so no manual install is needed on that path. Live stays on the
+                      in-house fast path without injection, hence the reminder. */}
+                  {!vsanBlocksMigration && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && migType === 'live' && (
                     <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
                       {t('inventoryPage.esxiMigration.windowsVirtioNote')}
                     </Alert>
@@ -1983,7 +1985,10 @@ return
 
 
                   {/*
-                    v2v dependency checklist — shown for vCenter/Hyper-V/Nutanix sources.
+                    v2v dependency checklist — shown for vCenter/Hyper-V/Nutanix sources,
+                    and also for direct-ESXi Windows guests in Cold mode (the API route
+                    auto-routes them through virt-v2v for automatic driver injection, so
+                    the same apt packages are needed on the target node).
                     Every required apt package that the v2v pipeline shells out to at
                     some phase gets its own line with a green ✓ or red ✗. The Install
                     button is a single action that apt-installs the whole bundle
@@ -1992,7 +1997,12 @@ return
                     is gated on the same condition via the isV2vDepsSatisfied derived
                     below — deps missing -> button disabled.
                   */}
-                  {(esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix') && vcenterPreflight?.checked && (() => {
+                  {(() => {
+                    const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                    const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
+                    const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
+                    return (isV2vVcenter || isDirectEsxiWinCold) && vcenterPreflight?.checked
+                  })() && (() => {
                     const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
                     // Describe the scope of the preflight check so the user understands
                     // that the dep status is aggregated across ALL nodes the batch
@@ -2510,7 +2520,12 @@ return
                 disabled={(() => {
                   // Base requirements (always apply)
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || migStarting) return true
-                  const isV2vSource = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                  const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                  const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
+                  // Direct-ESXi Windows Cold is auto-routed through virt-v2v by the API
+                  // for automatic driver injection, so we gate on the same deps as vCenter.
+                  const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
+                  const needsV2vDeps = isV2vVcenter || isDirectEsxiWinCold
                   // Power-state gates: cold needs the VM off, live needs it on.
                   // Applies to every source type. Auto-power-off/on is intentionally
                   // NOT done here - the user toggles VM state on the source hypervisor
@@ -2524,7 +2539,7 @@ return
                   // otherwise virt-v2v will fail on a dirty NTFS. Fail fast in
                   // the UI rather than 10 min into the migration.
                   if (migType === 'live' && esxiMigrateVm && (esxiMigrateVm.guestOS || '').toLowerCase().includes('windows') && esxiMigrateVm.toolsRunningStatus !== 'guestToolsRunning') return true
-                  if (isV2vSource) {
+                  if (needsV2vDeps) {
                     if (!vcenterPreflight?.checked) return false // preflight not run yet, don't pre-gate
                     if (!vcenterPreflight.virtV2vInstalled) return true
                     if (!vcenterPreflight.nbdkitInstalled) return true
@@ -2533,13 +2548,15 @@ return
                     if (!vcenterPreflight.ovmfInstalled) return true
                     // virtio-win is required for Windows guests — without it the
                     // VM will likely BSOD with INACCESSIBLE_BOOT_DEVICE.
-                    const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
                     if (isWindowsGuest && !vcenterPreflight.virtioWinInstalled) return true
                     // Temp storage must have at least 2x the source VM's committed
                     // space (rough heuristic: NFC download + virt-v2v converted output).
                     if (!migTempStorage) return true
                     const sel = vcenterPreflight.tempStorages?.find(s => s.path === migTempStorage)
                     if (!sel || sel.availableBytes < (esxiMigrateVm?.committed || 0) * 2) return true
+                    // Direct-ESXi via v2v also requires SSH + key on the source connection
+                    // (virt-v2v -it ssh doesn't do password auth).
+                    if (isDirectEsxiWinCold && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                     return false
                   }
                   // ESXi-direct path: SSH must be configured on the target Proxmox

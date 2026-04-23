@@ -88,6 +88,11 @@ const AlertThresholdsTab = dynamic(() => import('@/components/settings/AlertThre
   loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
 })
 
+const SshCommandsTab = dynamic(() => import('@/components/settings/SshCommandsTab'), {
+  ssr: false,
+  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+})
+
 /* ==================== Utility ==================== */
 
 function MainTabPanel({ value, index, children }) {
@@ -2600,7 +2605,7 @@ export default function SettingsPage() {
     return hasFeature(tab.requiredFeature)
   }
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'tenants']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'tenants', 'ssh-commands']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab },
@@ -2614,6 +2619,7 @@ export default function SettingsPage() {
     { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS },
     { label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL },
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, superAdminOnly: true },
+    { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab },
   ]
 
   // Hide tabs that require superAdmin when user is not superAdmin (e.g. Tenants tab)

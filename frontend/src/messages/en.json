@@ -2139,6 +2139,55 @@
       "security": "Security & Access Control",
       "monitoring": "Monitoring & Intelligence",
       "disaster_recovery": "Disaster Recovery"
+    },
+    "sshCommands": {
+      "tabLabel": "SSH Commands",
+      "page": {
+        "title": "SSH commands executed on your nodes",
+        "subtitle": "Full list of commands ProxCenter runs over SSH, grouped by purpose, with a sudoers template to run as a dedicated user."
+      },
+      "status": {
+        "heading": "Your PVE connections",
+        "loading": "Loading connections…",
+        "noConnections": "No PVE connection configured yet.",
+        "rootWarning": "All connections use root. Consider switching to a dedicated user with sudo for audit trails and reduced compromise scope.",
+        "partial": "Partially hardened: some connections still use root.",
+        "hardened": "Hardened: all connections use a dedicated user with sudo.",
+        "chipRoot": "All root",
+        "chipPartial": "Partially hardened",
+        "chipHardened": "Hardened",
+        "summary": "{total} PVE {total, plural, one {connection} other {connections}}: {root} use root, {sudo} use a dedicated user with sudo, {plain} use a dedicated user without sudo."
+      },
+      "recs": {
+        "heading": "Security recommendations",
+        "intro": "For lab or single-admin setups, root is acceptable if SSH keys are properly managed. For production, multi-admin, or compliance-sensitive environments, a dedicated user with sudo is recommended: you get an audit trail in /var/log/auth.log and compromise is scoped to the whitelisted commands.",
+        "step1Title": "Create a dedicated SSH user on each PVE node",
+        "step1Hint": "Run these commands on every PVE node (adapt the public key to yours).",
+        "step2Title": "Install the sudoers template",
+        "step2Hint": "Copy the template, paste it into /etc/sudoers.d/proxcenter on every PVE node, and validate with visudo -c.",
+        "step3Title": "Switch the ProxCenter connection to the new user",
+        "step3Hint": "In Settings > Connections > PVE, edit each connection, change the SSH user to proxcenter, and enable Use sudo.",
+        "copyTemplate": "Copy sudoers template",
+        "copyInstall": "Copy install command",
+        "copied": "Copied to clipboard",
+        "disclaimer": "Note: the command allowlist is applied when commands route through the embedded orchestrator. Some code paths (migrations, direct node operations) bypass this check today. A security-hardening task is tracked to extend strict enforcement; running ProxCenter under a dedicated user with sudo already provides OS-level audit trail (/var/log/auth.log) and scopes compromise impact.",
+        "shellWrapWarning": "A few commands use shell constructs (for-loops over OVS bridges) that cannot be expressed as simple sudoers exec rules. The template includes a scoped /bin/sh entry for these. If you prefer to avoid /bin/sh in sudoers, do not use the Network Flows sFlow configuration feature."
+      },
+      "allowlist": {
+        "heading": "Command allowlist",
+        "searchPlaceholder": "Filter commands…",
+        "columnPrefix": "Command",
+        "columnPurpose": "Purpose",
+        "columnUsedBy": "Used by",
+        "noResults": "No command matches your search.",
+        "loading": "Loading allowlist…",
+        "categoryCount": "{count} {count, plural, one {command} other {commands}}"
+      },
+      "errors": {
+        "fetchFailed": "Failed to load the SSH command list.",
+        "clipboardFailed": "Could not copy to clipboard.",
+        "retry": "Retry"
+      }
     }
   },
   "profile": {

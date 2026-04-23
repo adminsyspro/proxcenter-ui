@@ -2139,6 +2139,55 @@
       "security": "Sécurité & Contrôle d'accès",
       "monitoring": "Monitoring & Intelligence",
       "disaster_recovery": "Reprise après sinistre"
+    },
+    "sshCommands": {
+      "tabLabel": "Commandes SSH",
+      "page": {
+        "title": "Commandes SSH exécutées sur vos nœuds",
+        "subtitle": "Liste complète des commandes que ProxCenter exécute en SSH, regroupées par usage, avec un modèle sudoers pour tourner sous un utilisateur dédié."
+      },
+      "status": {
+        "heading": "Vos connexions PVE",
+        "loading": "Chargement des connexions…",
+        "noConnections": "Aucune connexion PVE configurée pour le moment.",
+        "rootWarning": "Toutes les connexions utilisent root. Passer à un utilisateur dédié avec sudo offre un journal d'audit et limite l'impact d'une compromission.",
+        "partial": "Partiellement durci : certaines connexions utilisent encore root.",
+        "hardened": "Durci : toutes les connexions utilisent un utilisateur dédié avec sudo.",
+        "chipRoot": "Tout en root",
+        "chipPartial": "Partiellement durci",
+        "chipHardened": "Durci",
+        "summary": "{total} {total, plural, one {connexion PVE} other {connexions PVE}} : {root} en root, {sudo} avec un utilisateur dédié et sudo, {plain} avec un utilisateur dédié sans sudo."
+      },
+      "recs": {
+        "heading": "Recommandations de sécurité",
+        "intro": "Pour un lab ou un environnement mono-administrateur, root est acceptable si la clé SSH est bien gérée. En production, en multi-administrateurs ou avec des enjeux de conformité, un utilisateur dédié avec sudo est recommandé : vous obtenez un journal d'audit dans /var/log/auth.log et une compromission est bornée aux commandes whitelistées.",
+        "step1Title": "Créer un utilisateur SSH dédié sur chaque nœud PVE",
+        "step1Hint": "Exécuter ces commandes sur chaque nœud PVE (adapter la clé publique à la vôtre).",
+        "step2Title": "Installer le modèle sudoers",
+        "step2Hint": "Copier le modèle, le coller dans /etc/sudoers.d/proxcenter sur chaque nœud, puis valider avec visudo -c.",
+        "step3Title": "Basculer la connexion ProxCenter vers le nouvel utilisateur",
+        "step3Hint": "Dans Réglages > Connexions > PVE, éditer chaque connexion, changer l'utilisateur SSH vers proxcenter et activer Use sudo.",
+        "copyTemplate": "Copier le modèle sudoers",
+        "copyInstall": "Copier la commande d'installation",
+        "copied": "Copié dans le presse-papiers",
+        "disclaimer": "Remarque : la whitelist de commandes est appliquée lorsque les commandes passent par l'orchestrateur embarqué. Certains chemins (migrations, opérations nœud directes) contournent cette vérification aujourd'hui. Un chantier de durcissement est suivi séparément ; exécuter ProxCenter sous un utilisateur dédié avec sudo fournit déjà un journal d'audit système (/var/log/auth.log) et limite l'impact d'une compromission.",
+        "shellWrapWarning": "Quelques commandes utilisent des constructions shell (boucles sur les bridges OVS) qui ne peuvent pas être exprimées comme de simples règles sudoers exec. Le modèle inclut une entrée /bin/sh pour ces cas. Si vous préférez éviter /bin/sh dans sudoers, n'utilisez pas la fonctionnalité de configuration sFlow des Network Flows."
+      },
+      "allowlist": {
+        "heading": "Liste des commandes autorisées",
+        "searchPlaceholder": "Filtrer les commandes…",
+        "columnPrefix": "Commande",
+        "columnPurpose": "Usage",
+        "columnUsedBy": "Utilisée par",
+        "noResults": "Aucune commande ne correspond à votre recherche.",
+        "loading": "Chargement de la liste…",
+        "categoryCount": "{count} {count, plural, one {commande} other {commandes}}"
+      },
+      "errors": {
+        "fetchFailed": "Impossible de charger la liste des commandes SSH.",
+        "clipboardFailed": "Impossible de copier dans le presse-papiers.",
+        "retry": "Réessayer"
+      }
     }
   },
   "profile": {

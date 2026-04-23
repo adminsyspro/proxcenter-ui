@@ -2107,6 +2107,55 @@
       "security": "Sicherheit & Access Control",
       "monitoring": "Überwachung & Intelligence",
       "disaster_recovery": "Notfallwiederherstellung"
+    },
+    "sshCommands": {
+      "tabLabel": "SSH-Befehle",
+      "page": {
+        "title": "SSH-Befehle, die auf Ihren Knoten ausgeführt werden",
+        "subtitle": "Vollständige Liste der Befehle, die ProxCenter über SSH ausführt, nach Verwendungszweck gruppiert, mit einer sudoers-Vorlage zum Betrieb unter einem dedizierten Benutzer."
+      },
+      "status": {
+        "heading": "Ihre PVE-Verbindungen",
+        "loading": "Verbindungen werden geladen…",
+        "noConnections": "Noch keine PVE-Verbindung konfiguriert.",
+        "rootWarning": "Alle Verbindungen verwenden root. Ein dedizierter Benutzer mit sudo liefert ein Audit-Log und begrenzt den Schaden einer Kompromittierung.",
+        "partial": "Teilweise gehärtet: Einige Verbindungen verwenden noch root.",
+        "hardened": "Gehärtet: Alle Verbindungen verwenden einen dedizierten Benutzer mit sudo.",
+        "chipRoot": "Alles root",
+        "chipPartial": "Teilweise gehärtet",
+        "chipHardened": "Gehärtet",
+        "summary": "{total} {total, plural, one {PVE-Verbindung} other {PVE-Verbindungen}}: {root} mit root, {sudo} mit dediziertem Benutzer und sudo, {plain} mit dediziertem Benutzer ohne sudo."
+      },
+      "recs": {
+        "heading": "Sicherheitsempfehlungen",
+        "intro": "Für Labor- oder Einzelbetreiber-Setups ist root akzeptabel, sofern der SSH-Schlüssel ordentlich verwaltet wird. Für Produktion, Mehrbenutzer- oder Compliance-sensitive Umgebungen wird ein dedizierter Benutzer mit sudo empfohlen: Sie erhalten ein Audit-Log in /var/log/auth.log und der Schaden einer Kompromittierung bleibt auf die erlaubten Befehle begrenzt.",
+        "step1Title": "Dedizierten SSH-Benutzer auf jedem PVE-Knoten anlegen",
+        "step1Hint": "Diese Befehle auf jedem PVE-Knoten ausführen (öffentlichen Schlüssel anpassen).",
+        "step2Title": "sudoers-Vorlage installieren",
+        "step2Hint": "Vorlage kopieren, in /etc/sudoers.d/proxcenter auf jedem Knoten einfügen und mit visudo -c prüfen.",
+        "step3Title": "ProxCenter-Verbindung auf den neuen Benutzer umstellen",
+        "step3Hint": "Unter Einstellungen > Verbindungen > PVE jede Verbindung bearbeiten, SSH-Benutzer auf proxcenter setzen und Use sudo aktivieren.",
+        "copyTemplate": "sudoers-Vorlage kopieren",
+        "copyInstall": "Installationsbefehl kopieren",
+        "copied": "In Zwischenablage kopiert",
+        "disclaimer": "Hinweis: Die Befehls-Allowlist wird angewendet, wenn Befehle über den eingebetteten Orchestrator laufen. Einige Pfade (Migrationen, direkte Knotenoperationen) umgehen diese Prüfung heute. Eine Härtung wird separat verfolgt; ProxCenter unter einem dedizierten Benutzer mit sudo zu betreiben liefert bereits ein Betriebssystem-Audit-Log (/var/log/auth.log) und begrenzt den Schaden einer Kompromittierung.",
+        "shellWrapWarning": "Einige Befehle verwenden Shell-Konstrukte (z. B. for-Schleifen über OVS-Bridges), die sich nicht als einfache sudoers-Exec-Regeln ausdrücken lassen. Die Vorlage enthält dafür einen /bin/sh-Eintrag. Wer /bin/sh in sudoers vermeiden möchte, sollte die sFlow-Konfiguration in Network Flows nicht verwenden."
+      },
+      "allowlist": {
+        "heading": "Befehls-Allowlist",
+        "searchPlaceholder": "Befehle filtern…",
+        "columnPrefix": "Befehl",
+        "columnPurpose": "Zweck",
+        "columnUsedBy": "Verwendet von",
+        "noResults": "Kein Befehl entspricht Ihrer Suche.",
+        "loading": "Allowlist wird geladen…",
+        "categoryCount": "{count} {count, plural, one {Befehl} other {Befehle}}"
+      },
+      "errors": {
+        "fetchFailed": "SSH-Befehlsliste konnte nicht geladen werden.",
+        "clipboardFailed": "Kopieren in die Zwischenablage fehlgeschlagen.",
+        "retry": "Erneut versuchen"
+      }
     }
   },
   "profile": {

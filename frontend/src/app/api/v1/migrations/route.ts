@@ -88,6 +88,10 @@ export async function POST(req: Request) {
       startAfterMigration,
       migrationType: migrationType as "cold" | "live" | "sshfs_boot",
       transferMode: transferMode as "https" | "sshfs",
+      // Pass through the user-selected Temporary Storage so the direct-ESXi pipeline
+      // keeps SSHFS mounts + VMDK dumps + clone targets off /tmp when the user has picked
+      // a proper filesystem in the dialog.
+      ...(body.tempStorage && { tempStorage: body.tempStorage as string }),
     }
 
     // Run appropriate pipeline in background after response (pass tenantId for scoped DB access)

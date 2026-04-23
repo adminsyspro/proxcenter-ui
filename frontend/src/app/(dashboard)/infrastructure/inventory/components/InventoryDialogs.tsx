@@ -236,8 +236,8 @@ export interface InventoryDialogsProps {
   setMigTempStorage: (v: string) => void
   migType: 'cold' | 'live' | 'sshfs_boot'
   setMigType: (v: 'cold' | 'live' | 'sshfs_boot') => void
-  migTransferMode: 'https' | 'sshfs'
-  setMigTransferMode: (v: 'https' | 'sshfs') => void
+  migTransferMode: 'https' | 'sshfs' | 'auto'
+  setMigTransferMode: (v: 'https' | 'sshfs' | 'auto') => void
   migPveConnections: any[]
   migNodes: any[]
   migStorages: any[]
@@ -400,6 +400,34 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   React.useEffect(() => {
     return () => { if (virtioWinPollRef.current) clearInterval(virtioWinPollRef.current) }
   }, [])
+
+  // Source datastore pre-flight: detect vSAN-backed source disks for direct-ESXi sources so
+  // we can block the migration upfront with a clear message rather than letting the user fill
+  // the form and hit submit before the backend throws. vCenter/Hyper-V/Nutanix sources go
+  // through v2v-pipeline which uses NFC and handles vSAN natively, so we skip the check for them.
+  const [sourceDatastores, setSourceDatastores] = useState<string[]>([])
+  const [sourceDatastoresLoading, setSourceDatastoresLoading] = useState(false)
+  React.useEffect(() => {
+    if (!esxiMigrateVm) { setSourceDatastores([]); return }
+    if (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') {
+      setSourceDatastores([])
+      return
+    }
+    setSourceDatastoresLoading(true)
+    fetch(`/api/v1/vmware/${esxiMigrateVm.connId}/vms/${esxiMigrateVm.vmid}`)
+      .then(r => r.json())
+      .then(d => {
+        const disks = (d?.data?.disks || []) as { fileName?: string }[]
+        const names = [...new Set(disks
+          .map(disk => (disk.fileName || '').match(/^\[([^\]]+)\]/)?.[1])
+          .filter((n): n is string => !!n))]
+        setSourceDatastores(names)
+      })
+      .catch(() => setSourceDatastores([]))
+      .finally(() => setSourceDatastoresLoading(false))
+  }, [esxiMigrateVm?.connId, esxiMigrateVm?.vmid, esxiMigrateVm?.hostType])
+  const sourceVsanDatastores = sourceDatastores.filter(n => n.toLowerCase().includes('vsan'))
+  const vsanBlocksMigration = sourceVsanDatastores.length > 0
 
   const startVirtioWinDownload = async () => {
     const installNodes = migTargetNode === '__auto__'
@@ -1893,8 +1921,7 @@ return
                     </Select>
                   </FormControl>
                   {/* Migration type selector — hidden for Hyper-V / Nutanix (cold only).
-                      vCenter supports cold + live (via NFC-on-snapshot); direct ESXi
-                      additionally supports sshfs_boot. */}
+                      vCenter and direct ESXi both support cold + live. */}
                   {esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -1904,8 +1931,7 @@ return
                       {([
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
                         { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
-                        { value: 'sshfs_boot' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeSshfsBoot', descKey: 'migrationTypeSshfsBootDesc' },
-                      ]).filter(opt => esxiMigrateVm?.hostType !== 'vcenter' || opt.value !== 'sshfs_boot').map(opt => (
+                      ]).map(opt => (
                         <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
                           <Box
                             onClick={() => setMigType(opt.value)}
@@ -1928,37 +1954,24 @@ return
                   </Box>
                   )}
 
-                  {/* Transfer mode selector — hidden for vCenter (virt-v2v handles transfer) */}
-                  {esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
-                  <Box>
-                    <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {t('inventoryPage.esxiMigration.transferMode')}
-                    </Typography>
-                    <Stack direction="row" spacing={1}>
-                      {([
-                        { value: 'sshfs' as const, icon: 'ri-folder-shared-line', color: 'warning.main', labelKey: 'transferModeSshfs', descKey: 'transferModeSshfsDesc' },
-                        { value: 'https' as const, icon: 'ri-download-cloud-line', color: 'info.main', labelKey: 'transferModeHttps', descKey: 'transferModeHttpsDesc' },
-                      ]).map(opt => (
-                        <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
-                          <Box
-                            onClick={() => setMigTransferMode(opt.value)}
-                            sx={{
-                              flex: 1, py: 1, px: 1.5, borderRadius: 1.5, border: '2px solid', cursor: 'pointer', transition: 'all 0.15s',
-                              borderColor: migTransferMode === opt.value ? `${opt.color}` : 'divider',
-                              bgcolor: migTransferMode === opt.value ? (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)') : 'transparent',
-                              '&:hover': { borderColor: `${opt.color}` },
-                              display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center',
-                            }}
-                          >
-                            <i className={opt.icon} style={{ fontSize: 16, color: migTransferMode === opt.value ? theme.palette[opt.color.split('.')[0] as 'warning' | 'info'].main : undefined, opacity: migTransferMode === opt.value ? 1 : 0.6 }} />
-                            <Typography variant="body2" fontWeight={migTransferMode === opt.value ? 700 : 500} fontSize={12} noWrap>
-                              {t(`inventoryPage.esxiMigration.${opt.labelKey}`)}
-                            </Typography>
-                          </Box>
-                        </MuiTooltip>
-                      ))}
-                    </Stack>
-                  </Box>
+                  {/* Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is
+                      available, HTTPS otherwise). No user-facing selector — the choice is an
+                      implementation detail and was confusing in practice. */}
+
+                  {/* vSAN source blocks direct-ESXi migration — requires vCenter (NFC protocol). */}
+                  {vsanBlocksMigration && (
+                    <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+                      {t('inventoryPage.esxiMigration.vsanRequiresVcenter', { datastores: sourceVsanDatastores.join(', ') })}
+                    </Alert>
+                  )}
+
+                  {/* Windows guest: admin will need to install VirtIO drivers post-migration
+                      for optimal disk/network perf. The VM boots out of the box on SATA +
+                      e1000 via built-in Windows drivers; VirtIO is an optional upgrade. */}
+                  {!vsanBlocksMigration && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && (
+                    <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
+                      {t('inventoryPage.esxiMigration.windowsVirtioNote')}
+                    </Alert>
                   )}
 
                   {/* sshfs not installed warning */}
@@ -1967,6 +1980,7 @@ return
                       {t('inventoryPage.esxiMigration.sshfsNotInstalled')}
                     </Alert>
                   )}
+
 
                   {/*
                     v2v dependency checklist — shown for vCenter/Hyper-V/Nutanix sources.
@@ -2165,8 +2179,11 @@ return
                     )
                   })()}
 
-                  {/* Temporary storage for virt-v2v */}
-                  {(esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix') && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
+                  {/* Temporary storage — used by virt-v2v for vcenter/hyperv/nutanix sources,
+                      and by the direct-ESXi pipeline for SSHFS mount root + VMDK dumps + clone
+                      targets. /tmp is often a tiny tmpfs on PVE; offering the selector lets the
+                      user pin the multi-GB work to a real filesystem. */}
+                  {vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
                     <Box>
                       <TextField
                         select
@@ -2529,6 +2546,8 @@ return
                   // connection and sshfs/pv must be available when those modes selected.
                   if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                   if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
+                  // vSAN source on direct-ESXi: blocked because vSAN objects need NFC via vCenter.
+                  if (vsanBlocksMigration) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}
@@ -2554,7 +2573,9 @@ return
                           : (esxiMigrateVm.hostType === 'vcenter' ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                         transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
                         startAfterMigration: migStartAfter,
-                        ...((esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') && migTempStorage !== '/tmp' && {
+                        // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
+                        // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
+                        ...(migTempStorage !== '/tmp' && {
                           tempStorage: migTempStorage,
                         }),
                         ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
@@ -2934,8 +2955,7 @@ return
                 </Box>
 
                 {/* Migration type — hidden for Hyper-V / Nutanix (cold only).
-                    vCenter supports cold + live (NFC-on-snapshot); direct ESXi
-                    additionally supports sshfs_boot. */}
+                    vCenter and direct ESXi both support cold + live. */}
                 {bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -2945,8 +2965,7 @@ return
                     {([
                       { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
                       { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
-                      { value: 'sshfs_boot' as const, icon: 'ri-speed-line', color: 'warning.main', labelKey: 'migrationTypeSshfsBoot', descKey: 'migrationTypeSshfsBootDesc' },
-                    ]).filter(opt => bulkMigHostInfo?.hostType !== 'vcenter' || opt.value !== 'sshfs_boot').map(opt => (
+                    ]).map(opt => (
                       <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
                         <Box
                           onClick={() => setMigType(opt.value)}
@@ -2969,38 +2988,9 @@ return
                 </Box>
                 )}
 
-                {/* Transfer mode — hidden for vCenter (virt-v2v handles transfer) */}
-                {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    {t('inventoryPage.esxiMigration.transferMode')}
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    {([
-                      { value: 'sshfs' as const, icon: 'ri-folder-shared-line', color: 'warning.main', labelKey: 'transferModeSshfs', descKey: 'transferModeSshfsDesc' },
-                      { value: 'https' as const, icon: 'ri-download-cloud-line', color: 'info.main', labelKey: 'transferModeHttps', descKey: 'transferModeHttpsDesc' },
-                    ]).map(opt => (
-                      <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
-                        <Box
-                          onClick={() => setMigTransferMode(opt.value)}
-                          sx={{
-                            flex: 1, py: 1, px: 1.5, borderRadius: 1.5, border: '2px solid', cursor: 'pointer', transition: 'all 0.15s',
-                            borderColor: migTransferMode === opt.value ? `${opt.color}` : 'divider',
-                            bgcolor: migTransferMode === opt.value ? (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)') : 'transparent',
-                            '&:hover': { borderColor: `${opt.color}` },
-                            display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center',
-                          }}
-                        >
-                          <i className={opt.icon} style={{ fontSize: 16, color: migTransferMode === opt.value ? theme.palette[opt.color.split('.')[0] as 'warning' | 'info'].main : undefined, opacity: migTransferMode === opt.value ? 1 : 0.6 }} />
-                          <Typography variant="body2" fontWeight={migTransferMode === opt.value ? 700 : 500} fontSize={12} noWrap>
-                            {t(`inventoryPage.esxiMigration.${opt.labelKey}`)}
-                          </Typography>
-                        </Box>
-                      </MuiTooltip>
-                    ))}
-                  </Stack>
-                </Box>
-                )}
+                {/* Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is
+                    available, HTTPS otherwise). No user-facing selector — the choice is an
+                    implementation detail and was confusing in practice. */}
 
                 {/* sshfs not installed warning */}
                 {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot') && (
@@ -3008,6 +2998,7 @@ return
                     {t('inventoryPage.esxiMigration.sshfsNotInstalled')}
                   </Alert>
                 )}
+
 
                 {/* vCenter/Hyper-V info banner for bulk */}
                 {bulkMigHostInfo?.hostType === 'vcenter' && (
@@ -3200,12 +3191,13 @@ return
                   )
                 })()}
 
-                {/* Temporary storage for virt-v2v (bulk). Without this, the
-                    API defaults to /tmp on the target node, which is often a
-                    small partition (tmpfs or root FS). For bulk jobs with
-                    several multi-GB VMs the dir fills up and subsequent
-                    migrations hang or fail with "no space left on device". */}
-                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
+                {/* Temporary storage (bulk). Used by virt-v2v and by the direct-ESXi
+                    pipeline (SSHFS mount root, VMDK dumps, vmkfstools clone targets).
+                    Without this, paths default to /tmp on the target node, which is
+                    often a small partition (tmpfs or root FS). For bulk jobs with
+                    several multi-GB VMs the dir fills up and subsequent migrations
+                    hang or fail with "no space left on device". */}
+                {vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
                   const selectedBulkVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
                   // Peak disk usage in bulk = biggest committed disk × 2 (source + converted).
                   // Sequential runs (BULK_MIG_CONCURRENCY=1) so only one VM occupies tempStorage at a time.
@@ -3668,10 +3660,12 @@ return
                             vcenterHost: (job as any).vcenterHost,
                           }),
                           // tempStorage lets the user pick where virt-v2v writes
-                          // temp files. Omit when it's the default /tmp so the
-                          // server-side default path is used and we don't
-                          // inadvertently pass an empty string.
-                          ...((isVcenterBulk || isHypervBulk || isNutanixBulk) && migTempStorage && migTempStorage !== '/tmp' && {
+                          // temp files (vcenter/hyperv/nutanix) OR where the
+                          // direct-ESXi pipeline mounts SSHFS + writes VMDK dumps.
+                          // Omit when it's the default /tmp so the server-side
+                          // default is used and we don't inadvertently pass an
+                          // empty string.
+                          ...(migTempStorage && migTempStorage !== '/tmp' && {
                             tempStorage: migTempStorage,
                           }),
                         }),
@@ -3711,7 +3705,8 @@ return
                     sourceType,
                     // Persisted across the queued-job poller so retries use the
                     // same temp storage the user selected when starting the batch.
-                    ...((isVcenterBulk || isHypervBulk || isNutanixBulk) && migTempStorage && migTempStorage !== '/tmp' && {
+                    // Applies to every source type (virt-v2v and direct-ESXi both honour it).
+                    ...(migTempStorage && migTempStorage !== '/tmp' && {
                       tempStorage: migTempStorage,
                     }),
                   }

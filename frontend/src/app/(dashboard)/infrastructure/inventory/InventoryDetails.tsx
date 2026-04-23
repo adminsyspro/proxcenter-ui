@@ -263,7 +263,9 @@ export default function InventoryDetails({
   const [migDiskPaths, setMigDiskPaths] = useState('')
   const [migTempStorage, setMigTempStorage] = useState('/tmp')
   const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot'>('cold')
-  const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs'>('sshfs')
+  // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
+  // Kept in state for the payload contract; no longer user-selectable in the UI.
+  const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs' | 'auto'>('auto')
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])

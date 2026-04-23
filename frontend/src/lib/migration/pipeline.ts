@@ -37,6 +37,11 @@ interface MigrationConfig {
   startAfterMigration: boolean
   migrationType?: "cold" | "live" | "sshfs_boot"
   transferMode?: "https" | "sshfs" | "auto"
+  // User-selected temp directory on the PVE node for large intermediate files
+  // (SSHFS mount root, VMDK dumps, vmkfstools clone targets). Defaults to /tmp
+  // when unset, but /tmp is typically a tiny tmpfs on PVE so the user should
+  // pick a real filesystem with enough free space.
+  tempStorage?: string
 }
 
 interface LogEntry {
@@ -164,6 +169,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = null
   let storageTempDir = ''
+  // Base directory for large intermediate files on the PVE node (SSHFS mount, VMDK dumps,
+  // vmkfstools clone targets). User-selectable; falls back to /tmp for backwards compat.
+  // /tmp is often a tiny tmpfs on Proxmox — a multi-GB disk transfer will saturate it.
+  const tempBase = (config.tempStorage && config.tempStorage.trim()) ? config.tempStorage.trim().replace(/\/+$/, '') : '/tmp'
 
   try {
     // ── STEP 0: Pre-flight ──
@@ -251,14 +260,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
     }
 
-    // Check for vSAN datastores — only supported with SSHFS transfer mode
+    // Check for vSAN datastores. This pipeline is the direct-ESXi path (vCenter sources
+    // route through v2v-pipeline which uses NFC leases and handles vSAN natively). On vSAN:
+    //   - `vmkfstools -i` clone fails ("Function not implemented") — blocks Live mode
+    //   - `-flat.vmdk` does not exist as a POSIX file, only the descriptor which references
+    //     `vsan://` URIs that neither qemu-img nor HTTP /folder/ can resolve — blocks Cold mode
+    // The only reliable path for vSAN is NFC via vCenter, so we refuse the direct-ESXi flow
+    // and point the user at their vCenter connection.
     const vsanDisks = vmConfig.disks.filter(d => d.datastoreName.toLowerCase().includes('vsan'))
-    if (vsanDisks.length > 0 && config.transferMode !== 'sshfs' && config.transferMode !== 'auto') {
+    if (vsanDisks.length > 0) {
       const dsNames = [...new Set(vsanDisks.map(d => d.datastoreName))].join(', ')
       throw new Error(
-        `vSAN datastores require SSHFS transfer mode (found: ${dsNames}). ` +
-        `SSHFS mounts the ESXi datastore via SSH, which works transparently with vSAN. ` +
-        `Please select "SSHFS" or "Auto" transfer mode, or move the VM to a VMFS/NFS datastore.`
+        `Source VM has disks on vSAN (${dsNames}). vSAN datastores are not supported through a direct ESXi connection ` +
+        `because vSAN objects require the NFC protocol, which is only available via vCenter. ` +
+        `Please add a vCenter connection that manages this ESXi host and run the migration from there.`
       )
     }
 
@@ -272,6 +287,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       throw new Error(`SSH to Proxmox node failed: ${sshTest.error}`)
     }
     await appendLog(jobId, "SSH connectivity OK", "success")
+
+    // Ensure the temp base dir exists on the PVE node. When the user picked a custom
+    // Temporary Storage path (tempStorage), this also validates it's writable before we
+    // start the migration and start writing multi-GB files into it.
+    if (tempBase !== '/tmp') {
+      const mkdirResult = await executeSSH(config.targetConnectionId, nodeIp,
+        `mkdir -p "${tempBase}" && test -w "${tempBase}" && echo OK || echo FAIL`)
+      if (!mkdirResult.output?.includes("OK")) {
+        throw new Error(`Temp storage "${tempBase}" is not writable on the target Proxmox node. Pick a different path or ensure the directory is writable by the SSH user.`)
+      }
+    }
 
     // Check sshpass on PVE node (needed when ESXi auth is password-based, for nested SSH)
     const esxiUsesPassword = esxiConn.sshAuthMethod !== "key" && esxiConn.sshPassEnc && !esxiConn.sshKeyEnc
@@ -312,8 +338,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (!sshfsCheck.success || !sshfsCheck.output?.trim()) {
         throw new Error("sshfs is not installed on the Proxmox node. Install it with: apt install sshfs")
       }
-      sshfsMountPath = `/tmp/proxcenter-sshfs-${jobId}`
+      sshfsMountPath = `${tempBase}/proxcenter-sshfs-${jobId}`
       await appendLog(jobId, `Transfer mode: SSHFS (mount ESXi datastore on PVE node)`, "success")
+      if (tempBase === '/tmp') {
+        await appendLog(jobId, "Using /tmp as temp base — on most Proxmox hosts this is a small tmpfs. If the VM disk is large, pick a custom Temporary Storage in the dialog to avoid filling /tmp.", "warn")
+      }
     }
     if (!useSSHFS) {
       await appendLog(jobId, `Transfer mode: HTTPS (download via ESXi API)`, "info")
@@ -471,7 +500,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Attach a pre-allocated block volume to a SCSI slot
     async function attachBlockDisk(i: number, volumeId: string) {
-      const scsiSlot = `scsi${i}`
+      // Same EFI SATA rule as convertAndImportDisk — OVMF has no LSI driver, boot disk must
+      // land on a bus OVMF can enumerate (AHCI/SATA). Data disks stay on SCSI.
+      const scsiSlot = (pveParams.bios === "ovmf" && i === 0) ? "sata0" : `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
       try {
         await pveFetch<any>(
@@ -777,7 +808,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, ${disk.thinProvisioned ? "thin" : "thick"})...`)
 
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
       const soapCookie = soapSession!.cookie
 
       // Strip double quotes from cookie value to avoid shell quoting issues
@@ -1137,7 +1168,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // qemu-img needs the flat file for direct raw access
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
       const sshfsDiskPath = `${sshfsMountPath}/${flatPath}`
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
 
       // Verify the disk file is accessible via SSHFS
       const checkFile = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${sshfsDiskPath}" && echo EXISTS || echo MISSING`)
@@ -1443,7 +1474,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     //       3) Cleanup clone on ESXi
     async function downloadDiskViaSsh(i: number, disk: EsxiDiskInfo, needsClone = false) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `/tmp/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
       const { esxiHost, esxiSshPort, esxiSshUser, setupCmd, sshPrefix, cleanupCmd } = buildEsxiSshPrefix(tmpFile)
 
       // Build the VMFS path
@@ -1662,8 +1693,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `/tmp/proxcenter-mig-${jobId}-disk${i}`
-      const scsiSlot = `scsi${i}`
+      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
+      // For EFI guests, attach the boot disk (i=0) as SATA: OVMF ships AHCI/VirtIO/NVMe/USB
+      // drivers but not LSI, so a disk attached to the default `scsihw: lsi` controller is
+      // invisible to the firmware. Windows has AHCI built-in, so this works without driver
+      // injection. Data disks (i>=1) stay on SCSI for performance.
+      const scsiSlot = (pveParams.bios === "ovmf" && i === 0) ? "sata0" : `scsi${i}`
 
       // Convert VMDK to target format
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting to ${importFormat} format...`)
@@ -1973,6 +2008,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await appendLog(jobId, `Boot method: ${bootMethod} - allocating local target volumes (${isFileBased ? 'file-based' : 'block'})...`, "info")
         const localVolumes: { volumeId: string, devicePath: string, isFileVol?: boolean }[] = []
 
+        // Seed used disk numbers from current VM config so efidisk0 (which occupies
+        // vm-<vmid>-disk-0.raw after `qm create --bios ovmf`) does not collide with data disks.
+        const fileBasedUsedNums = new Set<number>()
+        if (isFileBased) {
+          const vmConfForAlloc = await pveFetch<Record<string, any>>(pveConn,
+            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
+          for (const val of Object.values(vmConfForAlloc || {})) {
+            if (typeof val === 'string') {
+              const m = val.match(/vm-\d+-disk-(\d+)/)
+              if (m) fileBasedUsedNums.add(Number.parseInt(m[1]))
+            }
+          }
+        }
+
         for (let di = 0; di < vmConfig.disks.length; di++) {
           const diskSizeBytes = vmConfig.disks[di].capacityBytes
           if (isFileBased) {
@@ -1980,14 +2029,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const storagePath = storageConfig?.path || '/var/lib/vz'
             const imgDir = `${storagePath}/images/${targetVmid}`
             await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${imgDir}"`)
-            const imgPath = `${imgDir}/vm-${targetVmid}-disk-${di}.raw`
+
+            // Pick next free disk number, skipping slots already taken (efidisk0, tpmstate0, ...).
+            let diskNum = 0
+            while (fileBasedUsedNums.has(diskNum)) diskNum++
+            fileBasedUsedNums.add(diskNum)
+
+            const imgPath = `${imgDir}/vm-${targetVmid}-disk-${diskNum}.raw`
             const sizeGB = Math.ceil(diskSizeBytes / 1073741824)
             const createResult = await executeSSH(config.targetConnectionId, nodeIp,
               `qemu-img create -f raw "${imgPath}" ${sizeGB}G 2>&1`)
             if (!createResult.success) {
               throw new Error(`Failed to create disk image: ${createResult.error || createResult.output}`)
             }
-            localVolumes.push({ volumeId: `${config.targetStorage}:${targetVmid}/vm-${targetVmid}-disk-${di}.raw`, devicePath: imgPath, isFileVol: true })
+            localVolumes.push({ volumeId: `${config.targetStorage}:${targetVmid}/vm-${targetVmid}-disk-${diskNum}.raw`, devicePath: imgPath, isFileVol: true })
             await appendLog(jobId, `Disk ${di}: ${imgPath} (${sizeGB} GB raw image)`, "info")
           } else {
             // Block storage (LVM, ZFS, RBD): pre-allocate volume
@@ -2445,24 +2500,109 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (st?.status === "stopped") break
         }
 
-        // Remove args: line and add proper scsiN:/sataN: disk references
+        // ── UEFI fallback bootloader injection ──
+        // Fresh efidisk0 has no NVRAM boot entries, so OVMF only finds the bootloader if
+        // it lives at the UEFI removable/fallback path \EFI\Boot\bootx64.efi. Windows stores
+        // bootmgfw.efi under \EFI\Microsoft\Boot\ and doesn't always create the fallback copy.
+        // Copy it now (while VM is stopped) so the guest boots without needing NVRAM.
+        if (pveParams.bios === "ovmf" && isFileBased && localVolumes[0]) {
+          await appendLog(jobId, "Ensuring UEFI fallback bootloader is present on EFI partition...", "info")
+          const bootDiskPath = localVolumes[0].devicePath
+          const injectScript = [
+            'set +e',
+            'modprobe nbd max_part=16 2>/dev/null',
+            // Find a free nbd device (no pid file means unused)
+            'NBD=""',
+            'for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do',
+            '  if [ ! -s /sys/block/nbd$i/pid ] 2>/dev/null; then NBD=/dev/nbd$i; break; fi',
+            'done',
+            '[ -z "$NBD" ] && { echo "INJECT_RESULT=NO_FREE_NBD"; exit 0; }',
+            `qemu-nbd --connect="$NBD" --format=raw "${bootDiskPath}" 2>/dev/null || { echo "INJECT_RESULT=NBD_FAIL"; exit 0; }`,
+            'sleep 1',
+            'partprobe "$NBD" 2>/dev/null',
+            'sleep 1',
+            // Find EFI System Partition by GUID
+            `EFI_PART=$(lsblk -nr -o NAME,PARTTYPE "$NBD" 2>/dev/null | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print "/dev/"$1; exit}')`,
+            // Fallback: look for any FAT partition on the disk
+            'if [ -z "$EFI_PART" ]; then',
+            '  for p in ${NBD}p*; do',
+            '    [ -e "$p" ] && blkid -s TYPE -o value "$p" 2>/dev/null | grep -qi vfat && EFI_PART="$p" && break',
+            '  done',
+            'fi',
+            'if [ -z "$EFI_PART" ]; then',
+            '  qemu-nbd --disconnect "$NBD" >/dev/null 2>&1',
+            '  echo "INJECT_RESULT=NO_EFI_PART"; exit 0',
+            'fi',
+            'MNT=$(mktemp -d /tmp/efi-inject-XXXXXX)',
+            'if ! mount -t vfat -o rw "$EFI_PART" "$MNT" 2>/dev/null; then',
+            '  qemu-nbd --disconnect "$NBD" >/dev/null 2>&1; rmdir "$MNT"',
+            '  echo "INJECT_RESULT=MOUNT_FAIL"; exit 0',
+            'fi',
+            'RESULT=NO_BOOTLOADER',
+            // Windows: copy bootmgfw.efi to \EFI\Boot\bootx64.efi if missing
+            'if [ -f "$MNT/EFI/Microsoft/Boot/bootmgfw.efi" ]; then',
+            '  if [ -f "$MNT/EFI/Boot/bootx64.efi" ] || [ -f "$MNT/EFI/BOOT/BOOTX64.EFI" ]; then',
+            '    RESULT=ALREADY_PRESENT',
+            '  else',
+            '    mkdir -p "$MNT/EFI/Boot" && cp "$MNT/EFI/Microsoft/Boot/bootmgfw.efi" "$MNT/EFI/Boot/bootx64.efi" && RESULT=WINDOWS_INJECTED',
+            '  fi',
+            'elif [ -f "$MNT/EFI/Boot/bootx64.efi" ] || [ -f "$MNT/EFI/BOOT/BOOTX64.EFI" ]; then',
+            '  RESULT=ALREADY_PRESENT',
+            'fi',
+            'sync; umount "$MNT"; rmdir "$MNT"',
+            'qemu-nbd --disconnect "$NBD" >/dev/null 2>&1',
+            'echo "INJECT_RESULT=$RESULT"',
+          ].join('\n')
+          const injectResult = await executeSSH(config.targetConnectionId, nodeIp, injectScript)
+          const out = injectResult.output || ""
+          if (out.includes("INJECT_RESULT=WINDOWS_INJECTED")) {
+            await appendLog(jobId, "Windows UEFI fallback bootloader installed (\\EFI\\Boot\\bootx64.efi)", "success")
+          } else if (out.includes("INJECT_RESULT=ALREADY_PRESENT")) {
+            await appendLog(jobId, "UEFI fallback bootloader already present, no injection needed", "info")
+          } else if (out.includes("INJECT_RESULT=NO_BOOTLOADER")) {
+            await appendLog(jobId, "⚠ No recognized bootloader found on EFI partition — VM may not boot", "warn")
+          } else if (out.includes("INJECT_RESULT=NO_EFI_PART")) {
+            await appendLog(jobId, "⚠ No EFI system partition found on disk 0 — VM may not boot if it expects one", "warn")
+          } else {
+            await appendLog(jobId, `⚠ UEFI bootloader injection skipped: ${out.split('\n').find(l => l.startsWith('INJECT_RESULT=')) || out.substring(0, 150)}`, "warn")
+          }
+        }
+
+        // Remove args: via direct config edit — PVE API forbids non-root tokens from setting/deleting 'args'.
         await executeSSH(config.targetConnectionId, nodeIp,
           `sed -i '/^args:/d' "${confPath}"`)
 
+        // For EFI guests with a SCSI source controller, attach the boot disk as SATA.
+        // OVMF ships AHCI/VirtIO/NVMe/USB drivers but NOT an LSI SCSI driver, so it cannot
+        // enumerate (and therefore cannot boot) a disk attached via scsihw=lsi. Windows has
+        // AHCI in its built-in driver set, so moving the boot disk to SATA works without
+        // guest driver injection. Data disks stay on SCSI for performance.
+        const forceEfiSataForBoot = pveParams.bios === "ovmf" && diskBus === "scsi"
+        if (forceEfiSataForBoot) {
+          await appendLog(jobId, "EFI guest: attaching boot disk as SATA (OVMF lacks LSI SCSI driver)", "info")
+        }
+        const slotPerDisk: string[] = []
         for (let di = 0; di < localVolumes.length; di++) {
-          const scsiSlot = diskBus === "scsi" ? `scsi${di}` : `sata${di}`
-          const diskOpts = isFileBased ? ",discard=on" : ""
-          const attachBody = new URLSearchParams({ [scsiSlot]: `${localVolumes[di].volumeId}${diskOpts}` })
-          await pveFetch<any>(pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-            { method: "PUT", body: attachBody })
-          await appendLog(jobId, `Disk ${di} attached as ${scsiSlot} (${localVolumes[di].volumeId})`, "success")
+          let slot: string
+          if (forceEfiSataForBoot && di === 0) slot = "sata0"
+          else if (forceEfiSataForBoot) slot = `scsi${di - 1}`
+          else slot = diskBus === "scsi" ? `scsi${di}` : `sata${di}`
+          slotPerDisk.push(slot)
         }
 
-        // Set boot order
+        // Attach all disks + boot order atomically in a single PVE API PUT (replaces previous per-disk PUTs).
+        const reconfigBody = new URLSearchParams()
+        const diskOpts = isFileBased ? ",discard=on" : ""
+        for (let di = 0; di < localVolumes.length; di++) {
+          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${diskOpts}`)
+        }
+        reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
         await pveFetch<any>(pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: new URLSearchParams({ boot: `order=${diskBus === "scsi" ? "scsi0" : "sata0"}` }) })
+          { method: "PUT", body: reconfigBody })
+        for (let di = 0; di < localVolumes.length; di++) {
+          await appendLog(jobId, `Disk ${di} attached as ${slotPerDisk[di]} (${localVolumes[di].volumeId})`, "success")
+        }
 
         // Restart VM — always restart for SSHFS Boot (VM was running before reconfiguration)
         await appendLog(jobId, "Restarting VM with local disks...", "info")
@@ -2655,16 +2795,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await updateJob(jobId, "configuring", { progress: 90 })
       await appendLog(jobId, "Configuring VM (boot order, agent)...")
 
-      // Set boot order
+      // Set boot order — honour the EFI SATA rule applied in convertAndImportDisk/attachBlockDisk.
+      const finalBootSlot = pveParams.bios === "ovmf" ? "sata0" : "scsi0"
       await pveFetch<any>(
         pveConn,
         `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-        { method: "PUT", body: new URLSearchParams({ boot: "order=scsi0" }) }
+        { method: "PUT", body: new URLSearchParams({ boot: `order=${finalBootSlot}` }) }
       )
 
-      // For Windows VMs: add VirtIO ISO hint
+      // For Windows VMs: advise on post-migration driver work. The boot chain is correct
+      // out of the box (EFI guests get their boot disk on SATA — OVMF can boot it; BIOS
+      // guests stay on LSI SCSI which SeaBIOS reads natively) and the e1000 NIC uses
+      // Windows' built-in driver, so the VM comes up. Installing VirtIO afterwards gives
+      // better disk and network performance but is optional.
       if (isWindowsVm(vmConfig)) {
-        await appendLog(jobId, "Windows VM detected - using LSI SCSI + e1000 NIC for initial boot compatibility. Install VirtIO drivers from ISO for best performance.", "warn")
+        const bootBusLabel = pveParams.bios === "ovmf" ? "SATA (OVMF-compatible)" : "LSI SCSI"
+        await appendLog(jobId, `Windows VM detected - boot disk on ${bootBusLabel} + e1000 NIC (built-in Windows drivers). Install VirtIO drivers from the virtio-win ISO afterwards for better disk/network performance.`, "warn")
       }
 
       await appendLog(jobId, "VM configuration complete", "success")

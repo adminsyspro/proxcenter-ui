@@ -839,6 +839,8 @@
     "pbsUpdatesChangelogTitle": "Changelog",
     "pbsUpdatesChangelogEmpty": "Aucun changelog disponible",
     "pbsUpdatesChangelogError": "Échec du chargement du changelog",
+    "pbsUpdatesChangelogForbidden": "Permissions insuffisantes pour lire le changelog",
+    "pbsUpdatesChangelogRequiredPriv": "Requis : {priv}",
     "pbsUpdatesChangelogClose": "Fermer",
     "pbsUpdatesUpgrade": "Mettre à jour",
     "pbsUpdatesUpgradeTitle": "Mettre à jour les paquets",

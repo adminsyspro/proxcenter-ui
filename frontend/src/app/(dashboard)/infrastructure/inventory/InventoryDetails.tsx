@@ -2961,6 +2961,11 @@ return vm?.isCluster ?? false
                   : data.esxiVmInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg'
                   : '/images/esxi-logo.svg'
                 } alt="" width={22} height={22} />
+              ) : data.kindLabel === 'PBS' ? (
+                <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: 22, height: 22, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="ri-hard-drive-2-fill" style={{ opacity: 0.8, fontSize: 22 }} />
+                  <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 10, height: 10, borderRadius: '50%', bgcolor: data.status === 'ok' ? '#4caf50' : '#f44336', border: '2px solid', borderColor: 'background.paper' }} />
+                </Box>
               ) : data.kindLabel ? (
                 <Chip
                   size="small"

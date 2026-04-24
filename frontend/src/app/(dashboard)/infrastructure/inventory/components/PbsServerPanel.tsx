@@ -50,6 +50,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import type { InventorySelection, DetailsPayload } from '../types'
+import PbsServerTabs from '../tabs/PbsServerTabs'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -67,6 +68,8 @@ interface PbsServerPanelProps {
   // From useHardwareHandlers
   pbsTab: number
   setPbsTab: (v: number) => void
+  pbsServerTab: number
+  setPbsServerTab: (v: number) => void
   pbsBackupSearch: string
   setPbsBackupSearch: (v: string) => void
   pbsBackupPage: number
@@ -90,6 +93,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   data,
   onSelect,
   pbsTab, setPbsTab,
+  pbsServerTab, setPbsServerTab,
   pbsBackupSearch, setPbsBackupSearch,
   pbsBackupPage, setPbsBackupPage,
   pbsTimeframe, setPbsTimeframe,
@@ -454,366 +458,18 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
 
   return (
     <>
-      {/* Affichage PBS Server - Datastores puis graphiques en dessous */}
+      {/* PBS server selected - full tabbed detail view */}
       {selection?.type === 'pbs' && data?.pbsInfo && (
-        <Stack spacing={2} sx={{ flex: 1 }}>
-          {/* Liste des Datastores EN PREMIER */}
-          <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
-            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-              <Box sx={{
-                px: 2,
-                py: 1.5,
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-database-2-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                  Datastores ({data.pbsInfo.datastores.length})
-                </Typography>
-              </Box>
-              <Box sx={{ maxHeight: 250, overflow: 'auto' }}>
-                {data.pbsInfo.datastores.map((ds: any) => (
-                  <Box
-                    key={ds.name}
-                    sx={{
-                      px: 2,
-                      py: 1.5,
-                      borderBottom: '1px solid',
-                      borderColor: 'divider',
-                      '&:last-child': { borderBottom: 'none' },
-                      '&:hover': { bgcolor: 'action.hover' },
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => {
-                      onSelect?.({ type: 'datastore', id: `${selection.id}:${ds.name}` })
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <i className="ri-hard-drive-2-line" style={{ fontSize: 16, opacity: 0.7 }} />
-                        <Typography variant="body2" fontWeight={600}>{ds.name}</Typography>
-                        {ds.comment && (
-                          <Typography variant="caption" sx={{ opacity: 0.5 }}>({ds.comment})</Typography>
-                        )}
-                      </Box>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ flex: 1, height: 14, bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)', borderRadius: 0, overflow: 'hidden' }}>
-                        <Box
-                          sx={{
-                            width: `${ds.usagePercent || 0}%`,
-                            height: '100%',
-                            background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
-                            backgroundSize: (ds.usagePercent || 0) > 0 ? `${(100 / (ds.usagePercent || 1)) * 100}% 100%` : '100% 100%',
-                            transition: 'width 0.3s ease'
-                          }}
-                        />
-                      </Box>
-                      <Typography variant="caption" sx={{ opacity: 0.6, minWidth: 50 }}>
-                        {ds.usagePercent || 0}%
-                      </Typography>
-                      <Typography variant="caption" sx={{ opacity: 0.5, minWidth: 140, textAlign: 'right' }}>
-                        {ds.usedFormatted || formatBytes(ds.used || 0)} / {ds.totalFormatted || formatBytes(ds.total || 0)}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
-
-          {/* 6 Graphiques PBS Server comme dans Proxmox - EN DESSOUS des Datastores */}
-          {(() => {
-            const rrdDataToUse = pbsRrdData.length > 0 ? pbsRrdData : (data.pbsInfo?.rrdData || [])
-            return rrdDataToUse.length > 0 && (
-            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
-              <CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <i className="ri-line-chart-line" style={{ fontSize: 18 }} />{' '}
-                    Server Statistics
-                  </Typography>
-                  {/* Sélecteur de timeframe */}
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    {[
-                      { value: 'hour', label: '1h' },
-                      { value: 'day', label: '24h' },
-                      { value: 'week', label: t('inventory.pbsTimeWeek') },
-                      { value: 'month', label: t('inventory.pbsTimeMonth') },
-                      { value: 'year', label: t('inventory.pbsTimeYear') },
-                    ].map(opt => (
-                      <Chip
-                        key={opt.value}
-                        label={opt.label}
-                        size="small"
-                        onClick={() => setPbsTimeframe(opt.value as any)}
-                        sx={{
-                          height: 24,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          bgcolor: pbsTimeframe === opt.value ? 'primary.main' : 'action.hover',
-                          color: pbsTimeframe === opt.value ? 'primary.contrastText' : 'text.secondary',
-                          '&:hover': { bgcolor: pbsTimeframe === opt.value ? 'primary.dark' : 'action.selected' },
-                          cursor: 'pointer',
-                        }}
-                      />
-                    ))}
-                  </Box>
-                </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
-                  {/* 1. CPU Usage */}
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                      CPU Usage
-                    </Typography>
-                    <Box sx={{ height: 160 }}>
-                      <ChartContainer>
-                        <AreaChart data={rrdDataToUse}>
-                          <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
-                          <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
-                          <Tooltip
-                            wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
-                            content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null
-                              return (
-                                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
-                                  <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#2196f3', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>CPU</Typography>
-                                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label) * 1000).toLocaleTimeString()}</Typography>
-                                  </Box>
-                                  <Box sx={{ px: 1.5, py: 0.75 }}>
-                                    {payload.map(entry => (
-                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                        <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'cpu' ? 'CPU' : 'IO Wait'}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(1)}%</Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                </Box>
-                              )
-                            }}
-                          />
-                          <Area type="monotone" dataKey="cpu" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="cpu" />
-                          <Area type="monotone" dataKey="iowait" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="iowait" />
-                        </AreaChart>
-                      </ChartContainer>
-                    </Box>
-                  </Box>
-
-                  {/* 2. Server Load */}
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                      Server Load
-                    </Typography>
-                    <Box sx={{ height: 160 }}>
-                      <ChartContainer>
-                        <AreaChart data={rrdDataToUse}>
-                          <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
-                          <YAxis tick={{ fontSize: 9 }} width={30} />
-                          <Tooltip
-                            wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
-                            content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null
-                              return (
-                                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
-                                  <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-bar-chart-line" style={{ fontSize: 13, color: '#f59e0b' }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b' }}>Server Load</Typography>
-                                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label) * 1000).toLocaleTimeString()}</Typography>
-                                  </Box>
-                                  <Box sx={{ px: 1.5, py: 0.75 }}>
-                                    {payload.map(entry => (
-                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                        <Typography variant="caption" sx={{ flex: 1 }}>Load Average</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{Number(entry.value).toFixed(2)}</Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                </Box>
-                              )
-                            }}
-                          />
-                          <Area type="monotone" dataKey="loadavg" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} />
-                        </AreaChart>
-                      </ChartContainer>
-                    </Box>
-                  </Box>
-
-                  {/* 3. Memory Usage */}
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                      Memory Usage
-                    </Typography>
-                    <Box sx={{ height: 160 }}>
-                      <ChartContainer>
-                        <AreaChart data={rrdDataToUse}>
-                          <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
-                          <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
-                          <Tooltip
-                            wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
-                            content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null
-                              return (
-                                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
-                                  <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#10b981' }}>Memory</Typography>
-                                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label) * 1000).toLocaleTimeString()}</Typography>
-                                  </Box>
-                                  <Box sx={{ px: 1.5, py: 0.75 }}>
-                                    {payload.map(entry => (
-                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                        <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'memused' ? 'Usage' : 'Total'}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                </Box>
-                              )
-                            }}
-                          />
-                          <Area type="monotone" dataKey="memtotal" stroke={primaryColor} fill={primaryColor} fillOpacity={0.2} strokeWidth={1} isAnimationActive={false} name="memtotal" />
-                          <Area type="monotone" dataKey="memused" stroke={primaryColor} fill={primaryColor} fillOpacity={0.5} strokeWidth={1.5} isAnimationActive={false} name="memused" />
-                        </AreaChart>
-                      </ChartContainer>
-                    </Box>
-                  </Box>
-
-                  {/* 4. Swap Usage */}
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                      Swap Usage
-                    </Typography>
-                    <Box sx={{ height: 160 }}>
-                      <ChartContainer>
-                        <AreaChart data={rrdDataToUse}>
-                          <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
-                          <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
-                          <Tooltip
-                            wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
-                            content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null
-                              return (
-                                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
-                                  <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#8b5cf6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-swap-line" style={{ fontSize: 13, color: '#8b5cf6' }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#8b5cf6' }}>Swap</Typography>
-                                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label) * 1000).toLocaleTimeString()}</Typography>
-                                  </Box>
-                                  <Box sx={{ px: 1.5, py: 0.75 }}>
-                                    {payload.map(entry => (
-                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                        <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'swapused' ? 'Usage' : 'Total'}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                </Box>
-                              )
-                            }}
-                          />
-                          <Area type="monotone" dataKey="swaptotal" stroke={primaryColor} fill={primaryColor} fillOpacity={0.2} strokeWidth={1} isAnimationActive={false} name="swaptotal" />
-                          <Area type="monotone" dataKey="swapused" stroke={primaryColor} fill={primaryColor} fillOpacity={0.5} strokeWidth={1.5} isAnimationActive={false} name="swapused" />
-                        </AreaChart>
-                      </ChartContainer>
-                    </Box>
-                  </Box>
-
-                  {/* 5. Network Traffic */}
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                      Network Traffic
-                    </Typography>
-                    <Box sx={{ height: 160 }}>
-                      <ChartContainer>
-                        <AreaChart data={rrdDataToUse}>
-                          <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
-                          <YAxis tickFormatter={v => formatBytes(v) + '/s'} tick={{ fontSize: 9 }} width={55} />
-                          <Tooltip
-                            wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
-                            content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null
-                              return (
-                                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
-                                  <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#06b6d4' }}>Network</Typography>
-                                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label) * 1000).toLocaleTimeString()}</Typography>
-                                  </Box>
-                                  <Box sx={{ px: 1.5, py: 0.75 }}>
-                                    {payload.map(entry => (
-                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                        <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'netin' ? 'In' : 'Out'}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}/s</Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                </Box>
-                              )
-                            }}
-                          />
-                          <Area type="monotone" dataKey="netin" stroke={primaryColor} fill={primaryColor} fillOpacity={0.4} strokeWidth={1.5} isAnimationActive={false} name="netin" />
-                          <Area type="monotone" dataKey="netout" stroke={primaryColorLight} fill={primaryColorLight} fillOpacity={0.3} strokeWidth={1} isAnimationActive={false} name="netout" />
-                        </AreaChart>
-                      </ChartContainer>
-                    </Box>
-                  </Box>
-
-                  {/* 6. Root Disk Usage */}
-                  <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                    <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
-                      Root Disk Usage
-                    </Typography>
-                    <Box sx={{ height: 160 }}>
-                      <ChartContainer>
-                        <AreaChart data={rrdDataToUse}>
-                          <XAxis dataKey="time" tickFormatter={v => new Date(v * 1000).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
-                          <YAxis tickFormatter={v => formatBytes(v)} tick={{ fontSize: 9 }} width={45} />
-                          <Tooltip
-                            wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
-                            content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null
-                              return (
-                                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
-                                  <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: '#ef4444' }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#ef4444' }}>Root Disk</Typography>
-                                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label) * 1000).toLocaleTimeString()}</Typography>
-                                  </Box>
-                                  <Box sx={{ px: 1.5, py: 0.75 }}>
-                                    {payload.map(entry => (
-                                      <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                        <Typography variant="caption" sx={{ flex: 1 }}>{entry.name === 'rootused' ? 'Usage' : 'Total'}</Typography>
-                                        <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(Number(entry.value))}</Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                </Box>
-                              )
-                            }}
-                          />
-                          <Area type="monotone" dataKey="roottotal" stroke={primaryColor} fill={primaryColor} fillOpacity={0.2} strokeWidth={1} isAnimationActive={false} name="roottotal" />
-                          <Area type="monotone" dataKey="rootused" stroke={primaryColor} fill={primaryColor} fillOpacity={0.5} strokeWidth={1.5} isAnimationActive={false} name="rootused" />
-                        </AreaChart>
-                      </ChartContainer>
-                    </Box>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          )
-          })()}
-        </Stack>
+        <PbsServerTabs
+          selection={selection}
+          data={data}
+          onSelect={onSelect}
+          pbsServerTab={pbsServerTab}
+          setPbsServerTab={setPbsServerTab}
+          pbsTimeframe={pbsTimeframe}
+          setPbsTimeframe={setPbsTimeframe}
+          pbsRrdData={pbsRrdData}
+        />
       )}
 
       {/* Affichage Datastore - Onglets Summary / Backups */}

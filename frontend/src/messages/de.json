@@ -807,6 +807,8 @@
     "pbsUpdatesChangelogTitle": "Änderungsprotokoll",
     "pbsUpdatesChangelogEmpty": "Kein Änderungsprotokoll verfügbar",
     "pbsUpdatesChangelogError": "Änderungsprotokoll konnte nicht geladen werden",
+    "pbsUpdatesChangelogForbidden": "Unzureichende Berechtigungen zum Lesen des Änderungsprotokolls",
+    "pbsUpdatesChangelogRequiredPriv": "Benötigt: {priv}",
     "pbsUpdatesChangelogClose": "Schließen",
     "pbsUpdatesUpgrade": "Aktualisieren",
     "pbsUpdatesUpgradeTitle": "Pakete aktualisieren",

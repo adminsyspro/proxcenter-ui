@@ -811,6 +811,8 @@
     "pbsUpdatesChangelogTitle": "更新日志",
     "pbsUpdatesChangelogEmpty": "无可用更新日志",
     "pbsUpdatesChangelogError": "加载更新日志失败",
+    "pbsUpdatesChangelogForbidden": "权限不足，无法读取更新日志",
+    "pbsUpdatesChangelogRequiredPriv": "需要：{priv}",
     "pbsUpdatesChangelogClose": "关闭",
     "pbsUpdatesUpgrade": "升级",
     "pbsUpdatesUpgradeTitle": "升级软件包",

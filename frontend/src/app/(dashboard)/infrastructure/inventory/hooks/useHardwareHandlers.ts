@@ -352,6 +352,7 @@ export function useHardwareHandlers({
   const [cephReplicationJobs, setCephReplicationJobs] = useState<any[]>([])
   const [expandedClusterNodes, setExpandedClusterNodes] = useState<Set<string>>(new Set()) // Nodes expanded dans l'onglet VMs du cluster
   const [pbsTab, setPbsTab] = useState(0) // 0 = Summary, 1 = Backups (pour datastore)
+  const [pbsServerTab, setPbsServerTab] = useState(0) // 0 = Server Status, 1..16 = other PBS root tabs
   const [pbsBackupSearch, setPbsBackupSearch] = useState('')
   const [pbsBackupPage, setPbsBackupPage] = useState(0)
   const [pbsTimeframe, setPbsTimeframe] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('hour') // Timeframe pour les graphiques PBS
@@ -1370,6 +1371,7 @@ return explorerFiles.filter((file: any) =>
     cephReplicationJobs, setCephReplicationJobs,
     expandedClusterNodes, setExpandedClusterNodes,
     pbsTab, setPbsTab,
+    pbsServerTab, setPbsServerTab,
     pbsBackupSearch, setPbsBackupSearch,
     pbsBackupPage, setPbsBackupPage,
     pbsTimeframe, setPbsTimeframe,

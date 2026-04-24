@@ -839,6 +839,8 @@
     "pbsUpdatesChangelogTitle": "Changelog",
     "pbsUpdatesChangelogEmpty": "No changelog available",
     "pbsUpdatesChangelogError": "Failed to load changelog",
+    "pbsUpdatesChangelogForbidden": "Insufficient permissions to read the changelog",
+    "pbsUpdatesChangelogRequiredPriv": "Required: {priv}",
     "pbsUpdatesChangelogClose": "Close",
     "pbsUpdatesUpgrade": "Upgrade",
     "pbsUpdatesUpgradeTitle": "Upgrade packages",

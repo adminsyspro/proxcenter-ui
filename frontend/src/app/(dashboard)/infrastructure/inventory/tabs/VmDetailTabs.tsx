@@ -262,6 +262,8 @@ export default function VmDetailTabs(props: any) {
     setAddDiskDialogOpen,
     setAddNetworkDialogOpen,
     setAddOtherHardwareDialogOpen,
+    setEditOtherHardwareDialogOpen,
+    setSelectedOtherHardware,
     setAddReplicationDialogOpen,
     setBackupCompress,
     setBackupMode,
@@ -1735,15 +1737,42 @@ export default function VmDetailTabs(props: any) {
                                   audio: 'ri-volume-up-line',
                                   rng: 'ri-shuffle-line',
                                 }
+                                // efidisk and tpmstate are VM firmware devices — Proxmox does not
+                                // expose an edit UI for them either, so we keep them read-only here.
+                                const isEditable = ['usb', 'pci', 'serial', 'audio', 'rng'].includes(hw.type)
+                                const openEdit = () => {
+                                  setSelectedOtherHardware({
+                                    id: hw.id,
+                                    type: hw.type,
+                                    label: hw.label,
+                                    rawValue: hw.rawValue,
+                                  })
+                                  setEditOtherHardwareDialogOpen(true)
+                                }
                                 return (
                                   <ListItem
                                     key={idx}
+                                    onClick={isEditable ? openEdit : undefined}
                                     sx={{
                                       bgcolor: 'action.hover',
                                       borderRadius: 1,
                                       mb: 1,
-                                      '&:last-child': { mb: 0 }
+                                      '&:last-child': { mb: 0 },
+                                      ...(isEditable && {
+                                        cursor: 'pointer',
+                                        '&:hover': { bgcolor: 'action.selected' },
+                                      }),
                                     }}
+                                    secondaryAction={isEditable ? (
+                                      <MuiTooltip title={t('common.edit')}>
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => { e.stopPropagation(); openEdit() }}
+                                        >
+                                          <i className="ri-pencil-line" style={{ fontSize: 16 }} />
+                                        </IconButton>
+                                      </MuiTooltip>
+                                    ) : undefined}
                                   >
                                     <ListItemIcon sx={{ minWidth: 40 }}>
                                       <i className={iconMap[hw.type] || 'ri-settings-3-line'} style={{ fontSize: 24, opacity: 0.7 }} />

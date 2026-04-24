@@ -325,6 +325,9 @@ export default function InventoryDetails({
   const setEditScsiControllerDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'editScsiController' : 'none'), [])
   const addOtherHardwareDialogOpen = activeDialog === 'addOtherHardware'
   const setAddOtherHardwareDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'addOtherHardware' : 'none'), [])
+  const editOtherHardwareDialogOpen = activeDialog === 'editOtherHardware'
+  const setEditOtherHardwareDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'editOtherHardware' : 'none'), [])
+  const [selectedOtherHardware, setSelectedOtherHardware] = useState<any | null>(null)
   const setEditDiskDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'editDisk' : 'none'), [])
   const setEditNetworkDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'editNetwork' : 'none'), [])
   const setMigrateDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'migrate' : 'none'), [])
@@ -1008,6 +1011,7 @@ export default function InventoryDetails({
     cephReplicationJobs, setCephReplicationJobs,
     expandedClusterNodes, setExpandedClusterNodes,
     pbsTab, setPbsTab,
+    pbsServerTab, setPbsServerTab,
     pbsBackupSearch, setPbsBackupSearch,
     pbsBackupPage, setPbsBackupPage,
     pbsTimeframe, setPbsTimeframe,
@@ -3252,7 +3256,7 @@ return vm?.isCluster ?? false
                 replicationTargetNode, rollbackSnapshot, rrdError, rrdLoading, saveCpuConfig,
                 saveHaConfig, saveMemoryConfig, saveNotes, savingCpu, savingMemory,
                 savingReplication, selectedBackup, selectedCephCluster, selectedPveStorage, selectedVmIsCluster,
-                selection, series, setAddCephReplicationDialogOpen, setAddDiskDialogOpen, setAddNetworkDialogOpen, setAddOtherHardwareDialogOpen,
+                selection, series, setAddCephReplicationDialogOpen, setAddDiskDialogOpen, setAddNetworkDialogOpen, setAddOtherHardwareDialogOpen, setEditOtherHardwareDialogOpen, setSelectedOtherHardware,
                 setAddReplicationDialogOpen, setBackupCompress, setBackupMode, setBackupNote, setBackupStorage,
                 setBackupStorages, setBalloon, setBalloonEnabled, setCephClusters, setCephReplicationSchedule,
                 setCpuCores, setCpuFlags, setCpuLimit, setCpuLimitEnabled, setCpuSockets, setCpuType,
@@ -3338,6 +3342,8 @@ return vm?.isCluster ?? false
             onSelect={onSelect}
             pbsTab={pbsTab}
             setPbsTab={setPbsTab}
+            pbsServerTab={pbsServerTab}
+            setPbsServerTab={setPbsServerTab}
             pbsBackupSearch={pbsBackupSearch}
             setPbsBackupSearch={setPbsBackupSearch}
             pbsBackupPage={pbsBackupPage}
@@ -4045,6 +4051,10 @@ return vm?.isCluster ?? false
         setEditNetworkDialogOpen={setEditNetworkDialogOpen}
         addOtherHardwareDialogOpen={addOtherHardwareDialogOpen}
         setAddOtherHardwareDialogOpen={setAddOtherHardwareDialogOpen}
+        editOtherHardwareDialogOpen={editOtherHardwareDialogOpen}
+        setEditOtherHardwareDialogOpen={setEditOtherHardwareDialogOpen}
+        selectedOtherHardware={selectedOtherHardware}
+        setSelectedOtherHardware={setSelectedOtherHardware}
         selectedDisk={selectedDisk}
         setSelectedDisk={setSelectedDisk}
         editDiskInitialTab={editDiskInitialTab}

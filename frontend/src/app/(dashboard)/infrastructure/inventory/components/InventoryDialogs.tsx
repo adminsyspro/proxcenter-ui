@@ -44,6 +44,7 @@ const EditDiskDialog = dynamic(() => import('@/components/HardwareModals').then(
 const EditNetworkDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditNetworkDialog })), { ssr: false })
 const EditScsiControllerDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditScsiControllerDialog })), { ssr: false })
 const AddOtherHardwareDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddOtherHardwareDialog })), { ssr: false })
+const EditOtherHardwareDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditOtherHardwareDialog })), { ssr: false })
 const CloneVmDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.CloneVmDialog })), { ssr: false })
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 
@@ -110,6 +111,10 @@ export interface InventoryDialogsProps {
   setEditNetworkDialogOpen: (v: boolean) => void
   addOtherHardwareDialogOpen: boolean
   setAddOtherHardwareDialogOpen: (v: boolean) => void
+  editOtherHardwareDialogOpen: boolean
+  setEditOtherHardwareDialogOpen: (v: boolean) => void
+  selectedOtherHardware: any
+  setSelectedOtherHardware: (v: any) => void
   selectedDisk: any
   setSelectedDisk: (v: any) => void
   editDiskInitialTab: number
@@ -353,6 +358,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     addDiskDialogOpen, setAddDiskDialogOpen, addNetworkDialogOpen, setAddNetworkDialogOpen,
     editScsiControllerDialogOpen, setEditScsiControllerDialogOpen, editDiskDialogOpen, setEditDiskDialogOpen,
     editNetworkDialogOpen, setEditNetworkDialogOpen, addOtherHardwareDialogOpen, setAddOtherHardwareDialogOpen,
+    editOtherHardwareDialogOpen, setEditOtherHardwareDialogOpen, selectedOtherHardware, setSelectedOtherHardware,
     selectedDisk, setSelectedDisk, editDiskInitialTab, setEditDiskInitialTab, selectedNetwork, setSelectedNetwork,
     handleSaveDisk, handleSaveNetwork, handleSaveScsiController, handleEditDisk, handleDetachDisk,
     handleResizeDisk, handleMoveDisk, handleDeleteNetwork,
@@ -918,6 +924,19 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
                 ...(data?.otherHardwareInfo?.map((h: any) => h.id) || []),
                 ...(data?.cloudInitConfig?.drive ? ['cloudinit'] : []),
               ]}
+            />
+
+            <EditOtherHardwareDialog
+              open={editOtherHardwareDialogOpen}
+              onClose={() => {
+                setEditOtherHardwareDialogOpen(false)
+                setSelectedOtherHardware(null)
+              }}
+              onSave={handleSaveDisk}
+              onDelete={async (id: string) => { await handleSaveDisk({ delete: id }) }}
+              connId={connId}
+              node={node}
+              hardware={selectedOtherHardware}
             />
 
             {/* Dialog de migration */}

@@ -503,6 +503,7 @@ export type ActiveDialog =
   | 'addDisk'
   | 'addNetwork'
   | 'addOtherHardware'
+  | 'editOtherHardware'
   | 'editScsiController'
   | 'editDisk'
   | 'editNetwork'

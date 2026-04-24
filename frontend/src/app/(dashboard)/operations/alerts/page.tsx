@@ -91,6 +91,7 @@ interface EventRule {
   level: 'error' | 'warning' | 'info' | 'all'
   task_types: string
   pattern: string
+  exclude_pattern: string
   connection_id: string
   node_pattern: string
   severity: 'info' | 'warning' | 'critical'
@@ -281,7 +282,7 @@ export default function AlertsPage() {
   const [ruleForm, setRuleForm] = useState<Partial<EventRule>>({
     name: '', description: '', enabled: true,
     category: 'all', level: 'error', task_types: '',
-    pattern: '', connection_id: '', node_pattern: '',
+    pattern: '', exclude_pattern: '', connection_id: '', node_pattern: '',
     severity: 'warning', notify_email: true
   })
 
@@ -403,7 +404,7 @@ return true
     setRuleForm({
       name: '', description: '', enabled: true,
       category: 'all', level: 'error', task_types: '',
-      pattern: '', connection_id: '', node_pattern: '',
+      pattern: '', exclude_pattern: '', connection_id: '', node_pattern: '',
       severity: 'warning', notify_email: true
     })
     setRuleDialog(true)
@@ -903,6 +904,8 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
             />
             <TextField label={t('alerts.pattern')} value={ruleForm.pattern || ''} onChange={(e) => setRuleForm({ ...ruleForm, pattern: e.target.value })} fullWidth
               placeholder={t('alerts.patternPlaceholder')} helperText={t('alerts.optionalRegex')} />
+            <TextField label={t('alerts.excludePattern')} value={ruleForm.exclude_pattern || ''} onChange={(e) => setRuleForm({ ...ruleForm, exclude_pattern: e.target.value })} fullWidth
+              placeholder={t('alerts.excludePatternPlaceholder')} helperText={t('alerts.excludePatternHelp')} />
             <FormControl fullWidth>
               <InputLabel>{t('alerts.alertSeverity')}</InputLabel>
               <Select value={ruleForm.severity || 'warning'} label={t('alerts.alertSeverity')} onChange={(e) => setRuleForm({ ...ruleForm, severity: e.target.value as EventRule['severity'] })}>

@@ -1,0 +1,41 @@
+name: SonarCloud (PR gate)
+
+# Pre-merge analysis only. Goal: nothing degrades the rating on main, so
+# the public badge stays AAA. SonarCloud's automatic analysis on the
+# SonarCloud side keeps refreshing the main branch rating after merge,
+# this workflow gates the PR before it can land.
+#
+# Make this check required in branch protection ("Settings -> Branches ->
+# main -> Require status checks -> SonarCloud Code Analysis") so a failed
+# Quality Gate blocks the merge.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar:
+    name: SonarCloud Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          # Sonar needs full history for blame / SCM info / new-code detection.
+          fetch-depth: 0
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          # Wait for the Quality Gate result so the workflow status reflects
+          # pass/fail. With branch protection requiring this check, a failed
+          # gate blocks the merge before it can degrade main.
+          args: >
+            -Dsonar.qualitygate.wait=true

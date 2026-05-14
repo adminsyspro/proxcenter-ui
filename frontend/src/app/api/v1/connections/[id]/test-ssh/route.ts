@@ -35,12 +35,15 @@ export async function POST(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
     if (denied) return denied
 
-    // Optional form overrides — allow testing SSH against unsaved edits in the
-    // connection dialog. Missing fields fall back to the stored DB values so
-    // users can test without re-entering an already-configured key/password.
+    // Optional form overrides: allow testing SSH against unsaved edits in
+    // the connection dialog. Missing fields fall back to the stored DB
+    // values so users can test without re-entering an already-configured
+    // key/password.
     let body: any = null
+
     try {
       const text = await req.text()
+
       if (text) body = JSON.parse(text)
     } catch {
       body = null
@@ -70,6 +73,7 @@ export async function POST(
     const effectiveSshEnabled = typeof body?.sshEnabled === 'boolean' ? body.sshEnabled : connection.sshEnabled
     const effectiveSshPort = Number(body?.sshPort) > 0 ? Number(body.sshPort) : (connection.sshPort || 22)
     const effectiveSshUser = (typeof body?.sshUser === 'string' && body.sshUser.trim()) ? body.sshUser.trim() : (connection.sshUser || 'root')
+
     const effectiveAuthMethod = (body?.sshAuthMethod === 'key' || body?.sshAuthMethod === 'password')
       ? body.sshAuthMethod
       : connection.sshAuthMethod
@@ -81,10 +85,10 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Resolve SSH credentials: prefer form-provided values, fall back to stored
-    // (decrypted) values — but only fall back when the stored auth method
-    // matches the effective auth method, to avoid feeding a stored passphrase
-    // to a password login (or vice versa).
+    // Resolve SSH credentials: prefer form-provided values, fall back to
+    // stored (decrypted) values. Only fall back when the stored auth method
+    // matches the effective auth method, to avoid feeding a stored
+    // passphrase to a password login (or vice versa).
     let sshKey: string | undefined
     let sshPassword: string | undefined
     let sshPassphrase: string | undefined
@@ -101,12 +105,14 @@ export async function POST(
           sshKey = decryptSecret(connection.sshKeyEnc)
         } catch (e: any) {
           console.error('[test-ssh] Failed to decrypt SSH key:', e)
+
           return NextResponse.json({
             success: false,
             error: "Failed to decrypt SSH key: " + e.message
           }, { status: 500 })
         }
       }
+
       if (bodyPassphrase) {
         sshPassphrase = bodyPassphrase
       } else if (!bodyKey && connection.sshPassEnc && connection.sshAuthMethod === 'key') {
@@ -131,13 +137,14 @@ export async function POST(
     if (effectiveAuthMethod === 'key' && !sshKey) {
       return NextResponse.json({
         success: false,
-        error: "Missing SSH private key — enter a key in the form or save the connection first."
+        error: "Missing SSH private key. Enter a key in the form, or save the connection first."
       }, { status: 400 })
     }
+
     if (effectiveAuthMethod === 'password' && !sshPassword) {
       return NextResponse.json({
         success: false,
-        error: "Missing SSH password — enter a password in the form or save the connection first."
+        error: "Missing SSH password. Enter a password in the form, or save the connection first."
       }, { status: 400 })
     }
 

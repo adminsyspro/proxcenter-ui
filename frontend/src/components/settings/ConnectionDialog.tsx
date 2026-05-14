@@ -268,14 +268,16 @@ export default function ConnectionDialog({
     setSshTestResult(null)
 
     // Send the current (possibly unsaved) form values so the user can test
-    // before saving. The API merges these with any DB-stored credentials —
-    // empty key/password/passphrase fields fall back to what's already saved.
+    // before saving. The API merges these with any DB-stored credentials:
+    // empty key/password/passphrase fields fall back to what's already
+    // saved.
     const payload: Record<string, unknown> = {
       sshEnabled: form.sshEnabled,
       sshPort: form.sshPort,
       sshUser: form.sshUser,
       sshAuthMethod: form.sshAuthMethod,
     }
+
     if (form.sshKey.trim()) payload.sshKey = form.sshKey
     if (form.sshPassphrase) payload.sshPassphrase = form.sshPassphrase
     if (form.sshPassword) payload.sshPassword = form.sshPassword

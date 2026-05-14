@@ -15,16 +15,22 @@ import { NextResponse } from 'next/server'
 type Json = Record<string, unknown> | unknown[] | string | number | boolean | null
 
 export interface CallRouteOptions {
+
   /** Route param values, e.g. { id: 'conn-1' }. Will be wrapped as a Promise (App Router contract). */
   params?: Record<string, string>
+
   /** Request body. Object values are JSON-stringified and Content-Type is set automatically. */
   body?: Json | FormData | undefined
+
   /** Query string entries. */
   searchParams?: Record<string, string>
+
   /** Additional request headers. */
   headers?: Record<string, string>
+
   /** HTTP method. Defaults to POST when body is provided, otherwise GET. */
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+
   /** URL path used to construct the Request. Default: 'http://test.local/_'. */
   url?: string
 }
@@ -69,8 +75,10 @@ export async function callRoute(
   const finalMethod = method ?? (body !== undefined ? 'POST' : 'GET')
 
   let finalUrl = url
+
   if (searchParams) {
     const u = new URL(url)
+
     for (const [k, v] of Object.entries(searchParams)) u.searchParams.set(k, v)
     finalUrl = u.toString()
   }
@@ -90,8 +98,10 @@ export async function callRoute(
  */
 export async function readJson<T = unknown>(res: Response): Promise<T | undefined> {
   const text = await res.text()
+
   if (!text) return undefined
-  return JSON.parse(text) as T
+
+return JSON.parse(text) as T
 }
 
 /**

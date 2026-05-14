@@ -61,7 +61,9 @@ beforeEach(() => {
 
 async function importHandler() {
   const mod = await import('./route')
-  return mod.POST
+
+
+return mod.POST
 }
 
 describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', () => {
@@ -87,6 +89,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
     })
 
     const handler = await importHandler()
+
     const res = await callRoute(handler, {
       params: { id: 'conn-1' },
       body: {
@@ -100,11 +103,13 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
 
     expect(res.status).toBe(200)
     const json = await readJson<any>(res)
+
     expect(json.success).toBe(true)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [, init] = fetchMock.mock.calls[0]
     const orchBody = JSON.parse(init.body as string)
+
     expect(orchBody).toMatchObject({
       sshEnabled: true,
       sshUser: 'root',
@@ -151,6 +156,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
     })
 
     const handler = await importHandler()
+
     await callRoute(handler, {
       params: { id: 'conn-1' },
       body: { sshEnabled: true, sshAuthMethod: 'key', sshUser: 'root' },
@@ -158,6 +164,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
 
     expect(decryptSecretMock).toHaveBeenCalledWith('enc-key-blob')
     const orchBody = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
     expect(orchBody.sshKey).toBe('decrypted:enc-key-blob')
   })
 
@@ -179,6 +186,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
     })
 
     const handler = await importHandler()
+
     await callRoute(handler, {
       params: { id: 'conn-1' },
       body: {
@@ -190,6 +198,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
 
     expect(decryptSecretMock).not.toHaveBeenCalled()
     const orchBody = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
     expect(orchBody.sshKey).toContain('FROM-FORM')
   })
 
@@ -207,6 +216,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
     })
 
     const handler = await importHandler()
+
     const res = await callRoute(handler, {
       params: { id: 'conn-1' },
       body: { sshEnabled: true, sshAuthMethod: 'password' },
@@ -231,6 +241,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - the issue #303 regression', (
     })
 
     const handler = await importHandler()
+
     const res = await callRoute(handler, {
       params: { id: 'conn-1' },
       body: { sshEnabled: true, sshAuthMethod: 'key' },
@@ -252,6 +263,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
 
   it('honours an RBAC denial from checkPermission', async () => {
     const denied = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
+
     checkPermissionMock.mockResolvedValueOnce(denied as any)
 
     const handler = await importHandler()
@@ -286,6 +298,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
     executeSSHDirectMock.mockResolvedValueOnce({ success: true })
 
     const handler = await importHandler()
+
     const res = await callRoute(handler, {
       params: { id: 'esxi-1' },
       body: { sshEnabled: true, sshAuthMethod: 'password' },
@@ -293,6 +306,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
 
     expect(res.status).toBe(200)
     const json = await readJson<any>(res)
+
     expect(json.success).toBe(true)
     expect(json.nodes).toHaveLength(1)
     expect(json.nodes[0]).toMatchObject({ node: 'ESXi Lab', ip: 'esxi.lab.local', status: 'ok' })
@@ -323,6 +337,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
       sshPassEnc: 'enc-pw',
     })
     const connErr: any = new Error('fetch failed')
+
     connErr.cause = { code: 'ECONNREFUSED' }
     fetchMock.mockRejectedValueOnce(connErr)
 
@@ -336,6 +351,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
       .mockResolvedValueOnce({ success: false, error: 'timeout' })
 
     const handler = await importHandler()
+
     const res = await callRoute(handler, {
       params: { id: 'conn-1' },
       body: { sshEnabled: true, sshAuthMethod: 'password' },
@@ -343,6 +359,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
 
     expect(res.status).toBe(200)
     const json = await readJson<any>(res)
+
     expect(json.success).toBe(false)
     expect(json.nodes).toHaveLength(2)
     expect(json.nodes[0]).toMatchObject({ node: 'pve1', ip: '10.0.0.11', status: 'ok' })
@@ -362,6 +379,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
       sshPassEnc: 'enc-pw',
     })
     const connErr: any = new Error('fetch failed')
+
     connErr.cause = { code: 'ECONNREFUSED' }
     fetchMock.mockRejectedValueOnce(connErr)
 
@@ -371,6 +389,7 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
     executeSSHDirectMock.mockResolvedValueOnce({ success: true })
 
     const handler = await importHandler()
+
     await callRoute(handler, {
       params: { id: 'conn-1' },
       body: { sshEnabled: true, sshAuthMethod: 'password' },
